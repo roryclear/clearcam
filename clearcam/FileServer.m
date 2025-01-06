@@ -14,6 +14,10 @@
         NSLog(@"Error: Unable to create socket.");
         return;
     }
+    
+    // Disable SIGPIPE
+    int optval = 1;
+    setsockopt(self.serverSocket, SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval));
 
     struct sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
