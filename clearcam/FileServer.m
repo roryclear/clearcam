@@ -14,14 +14,14 @@
         NSLog(@"Error: Unable to create socket.");
         return;
     }
-    
+
     // Disable SIGPIPE
     int optval = 1;
     setsockopt(self.serverSocket, SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval));
 
     struct sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(8080); // Server will run on port 8080
+    serverAddress.sin_port = htons(8080);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(self.serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) < 0) {
@@ -39,6 +39,7 @@
     NSLog(@"FileServer started on port 8080. Access it at http://<your-ip>:8080/");
     [self handleConnections];
 }
+
 
 - (void)handleConnections {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -67,7 +68,8 @@
 
     if ([request containsString:@"GET /?file="]) {
         NSString *fileName = [self extractFileNameFromRequest:request];
-        [self serveFile:fileName toSocket:clientSocket];
+        BOOL isDownload = [self shouldDownloadFromRequest:request];
+        [self serveFile:fileName toSocket:clientSocket asDownload:isDownload];
     } else {
         [self serveFileListToSocket:clientSocket];
     }
@@ -76,19 +78,34 @@
 }
 
 - (NSString *)extractFileNameFromRequest:(NSString *)request {
-    NSRange range = [request rangeOfString:@"GET /?file="];
-    if (range.location != NSNotFound) {
-        NSString *partialRequest = [request substringFromIndex:(range.location + range.length)];
-        NSRange endRange = [partialRequest rangeOfString:@" "];
+    NSRange fileRange = [request rangeOfString:@"file="];
+    if (fileRange.location != NSNotFound) {
+        NSString *partialRequest = [request substringFromIndex:(fileRange.location + fileRange.length)];
+        NSRange endRange = [partialRequest rangeOfString:@"&"];
         if (endRange.location != NSNotFound) {
             NSString *fileName = [partialRequest substringToIndex:endRange.location];
             return [fileName stringByRemovingPercentEncoding];
+        } else {
+            return [partialRequest stringByRemovingPercentEncoding];
         }
     }
     return nil;
 }
 
-- (void)serveFile:(NSString *)fileName toSocket:(int)clientSocket {
+- (BOOL)shouldDownloadFromRequest:(NSString *)request {
+    NSRange actionRange = [request rangeOfString:@"action="];
+    if (actionRange.location != NSNotFound) {
+        NSString *partialRequest = [request substringFromIndex:(actionRange.location + actionRange.length)];
+        NSRange endRange = [partialRequest rangeOfString:@" "];
+        if (endRange.location != NSNotFound) {
+            NSString *action = [partialRequest substringToIndex:endRange.location];
+            return [action isEqualToString:@"download"];
+        }
+    }
+    return NO; // Default to view
+}
+
+- (void)serveFile:(NSString *)fileName toSocket:(int)clientSocket asDownload:(BOOL)isDownload {
     NSString *decodedFileName = [fileName stringByRemovingPercentEncoding];
     NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     NSString *filePath = [documentsPath stringByAppendingPathComponent:decodedFileName];
@@ -103,15 +120,17 @@
         return;
     }
 
+    NSString *contentDisposition = isDownload ? @"attachment" : @"inline";
     NSString *contentType = [self contentTypeForFileAtPath:filePath];
+
     NSString *header = [NSString stringWithFormat:
                         @"HTTP/1.1 200 OK\r\n"
-                        "Content-Disposition: inline; filename=\"%@\"\r\n"
+                        "Content-Disposition: %@; filename=\"%@\"\r\n"
                         "Content-Length: %lu\r\n"
                         "Content-Type: %@\r\n"
                         "Content-Transfer-Encoding: binary\r\n"
                         "Accept-Ranges: bytes\r\n\r\n",
-                        decodedFileName, (unsigned long)[fileData length], contentType];
+                        contentDisposition, decodedFileName, (unsigned long)[fileData length], contentType];
 
     send(clientSocket, [header UTF8String], [header length], 0);
     send(clientSocket, [fileData bytes], [fileData length], 0);
@@ -122,6 +141,8 @@
 
     if ([extension isEqualToString:@"mov"]) {
         return @"video/quicktime";
+    } else if ([extension isEqualToString:@"mp4"]) {
+        return @"video/mp4";
     } else if ([extension isEqualToString:@"txt"]) {
         return @"text/plain";
     }
@@ -136,7 +157,9 @@
     NSArray *documentFiles = [self listFilesInDocumentsFolder];
     for (NSString *fileName in documentFiles) {
         NSString *encodedFileName = [fileName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-        html = [html stringByAppendingFormat:@"<li><a href=\"/?file=%@\">%@</a></li>", encodedFileName, fileName];
+        html = [html stringByAppendingFormat:
+                @"<li>%@ - <a href=\"/?file=%@&action=view\">View</a> | <a href=\"/?file=%@&action=download\">Download</a></li>",
+                fileName, encodedFileName, encodedFileName];
     }
 
     html = [html stringByAppendingString:@"</ul></body></html>"];
@@ -165,7 +188,3 @@
 }
 
 @end
-
-
-
-
