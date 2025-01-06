@@ -112,13 +112,16 @@
 
     NSLog(@"Attempting to serve file at path: %@", filePath);
 
-    NSData *fileData = [NSData dataWithContentsOfFile:filePath];
-    if (!fileData) {
+    NSFileHandle *fileHandle = [NSFileHandle fileHandleForReadingAtPath:filePath];
+    if (!fileHandle) {
         NSLog(@"Error: File not found at path: %@", filePath);
         NSString *response = @"HTTP/1.1 404 Not Found\r\n\r\nFile not found.";
         send(clientSocket, [response UTF8String], [response length], 0);
         return;
     }
+
+    NSDictionary *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
+    NSUInteger fileSize = [fileAttributes fileSize];
 
     NSString *contentDisposition = isDownload ? @"attachment" : @"inline";
     NSString *contentType = [self contentTypeForFileAtPath:filePath];
@@ -130,10 +133,33 @@
                         "Content-Type: %@\r\n"
                         "Content-Transfer-Encoding: binary\r\n"
                         "Accept-Ranges: bytes\r\n\r\n",
-                        contentDisposition, decodedFileName, (unsigned long)[fileData length], contentType];
-
+                        contentDisposition, decodedFileName, (unsigned long)fileSize, contentType];
     send(clientSocket, [header UTF8String], [header length], 0);
-    send(clientSocket, [fileData bytes], [fileData length], 0);
+
+    size_t bufferSize = 8192; // 8 KB
+    NSUInteger bytesSent = 0;
+
+    while (bytesSent < fileSize) {
+        @autoreleasepool {
+            [fileHandle seekToFileOffset:bytesSent];
+            NSData *dataChunk = [fileHandle readDataOfLength:bufferSize];
+            if (dataChunk.length == 0) {
+                break; // EOF reached
+            }
+
+            ssize_t sent = send(clientSocket, [dataChunk bytes], dataChunk.length, 0);
+            if (sent <= 0) {
+                NSLog(@"Error: Failed to send data.");
+                break;
+            }
+
+            bytesSent += sent;
+        }
+    }
+
+    [fileHandle closeFile];
+    close(clientSocket);
+    NSLog(@"Finished serving file: %@", filePath);
 }
 
 - (NSString *)contentTypeForFileAtPath:(NSString *)filePath {
