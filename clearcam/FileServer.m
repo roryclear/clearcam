@@ -61,7 +61,6 @@
         close(clientSocket);
         return;
     }
-
     buffer[receivedBytes] = '\0';
     NSString *request = [NSString stringWithUTF8String:buffer];
     NSLog(@"Request: %@", request);
@@ -102,7 +101,7 @@
             return [action isEqualToString:@"download"];
         }
     }
-    return NO; // Default to view
+    return NO;
 }
 
 - (void)serveFile:(NSString *)fileName toSocket:(int)clientSocket asDownload:(BOOL)isDownload {
@@ -143,36 +142,19 @@
         @autoreleasepool {
             [fileHandle seekToFileOffset:bytesSent];
             NSData *dataChunk = [fileHandle readDataOfLength:bufferSize];
-            if (dataChunk.length == 0) {
-                break; // EOF reached
-            }
-
+            if (dataChunk.length == 0) break;
             ssize_t sent = send(clientSocket, [dataChunk bytes], dataChunk.length, 0);
-            if (sent <= 0) {
-                NSLog(@"Error: Failed to send data.");
-                break;
-            }
-
+            if (sent <= 0) break;
             bytesSent += sent;
         }
     }
-
     [fileHandle closeFile];
     close(clientSocket);
-    NSLog(@"Finished serving file: %@", filePath);
 }
 
 - (NSString *)contentTypeForFileAtPath:(NSString *)filePath {
     NSString *extension = [filePath pathExtension].lowercaseString;
-
-    if ([extension isEqualToString:@"mov"]) {
-        return @"video/quicktime";
-    } else if ([extension isEqualToString:@"mp4"]) {
-        return @"video/mp4";
-    } else if ([extension isEqualToString:@"txt"]) {
-        return @"text/plain";
-    }
-
+    if ([extension isEqualToString:@"mp4"]) return @"video/mp4";
     return @"application/octet-stream";
 }
 
@@ -202,10 +184,7 @@
     NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     NSError *error;
     NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:documentsPath error:&error];
-    if (error) {
-        NSLog(@"Error listing files: %@", error.localizedDescription);
-        return @[];
-    }
+    if (error) return @[];
     return files;
 }
 
