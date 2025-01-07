@@ -1,195 +1,183 @@
-#import "FileServer.h"
-#include <netinet/in.h>
-#include <sys/socket.h>
+#import "fileserver.h"
+#import <sys/types.h>
+#import <sys/socket.h>
+#import <netinet/in.h>
+#import <arpa/inet.h>
+#import <unistd.h>
+#import <signal.h>
+#import <errno.h>
 
 @interface FileServer ()
-@property (nonatomic) int serverSocket;
+@property (nonatomic, strong) NSString *basePath;
 @end
 
 @implementation FileServer
 
 - (void)start {
-    self.serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (self.serverSocket < 0) {
-        NSLog(@"Error: Unable to create socket.");
-        return;
-    }
-
-    // Disable SIGPIPE
-    int optval = 1;
-    setsockopt(self.serverSocket, SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval));
-
-    struct sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(8080);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(self.serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) < 0) {
-        NSLog(@"Error: Unable to bind socket.");
-        close(self.serverSocket);
-        return;
-    }
-
-    if (listen(self.serverSocket, 5) < 0) {
-        NSLog(@"Error: Unable to listen on socket.");
-        close(self.serverSocket);
-        return;
-    }
-
-    NSLog(@"FileServer started on port 8080. Access it at http://<your-ip>:8080/");
-    [self handleConnections];
-}
-
-
-- (void)handleConnections {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        while (YES) {
-            struct sockaddr_in clientAddress;
-            socklen_t clientAddressLen = sizeof(clientAddress);
-            int clientSocket = accept(self.serverSocket, (struct sockaddr *)&clientAddress, &clientAddressLen);
-            if (clientSocket >= 0) {
-                [self handleClient:clientSocket];
-            }
-        }
+        self.basePath = [self getDocumentsDirectory];
+        [self startHTTPServerWithBasePath:self.basePath];
     });
 }
 
-- (void)handleClient:(int)clientSocket {
-    char buffer[1024];
-    ssize_t receivedBytes = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (receivedBytes <= 0) {
-        close(clientSocket);
-        return;
-    }
-    buffer[receivedBytes] = '\0';
-    NSString *request = [NSString stringWithUTF8String:buffer];
-    NSLog(@"Request: %@", request);
-
-    if ([request containsString:@"GET /?file="]) {
-        NSString *fileName = [self extractFileNameFromRequest:request];
-        BOOL isDownload = [self shouldDownloadFromRequest:request];
-        [self serveFile:fileName toSocket:clientSocket asDownload:isDownload];
-    } else {
-        [self serveFileListToSocket:clientSocket];
-    }
-
-    close(clientSocket);
+- (NSString *)getDocumentsDirectory {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    return [paths firstObject];
 }
 
-- (NSString *)extractFileNameFromRequest:(NSString *)request {
-    NSRange fileRange = [request rangeOfString:@"file="];
-    if (fileRange.location != NSNotFound) {
-        NSString *partialRequest = [request substringFromIndex:(fileRange.location + fileRange.length)];
-        NSRange endRange = [partialRequest rangeOfString:@"&"];
-        if (endRange.location != NSNotFound) {
-            NSString *fileName = [partialRequest substringToIndex:endRange.location];
-            return [fileName stringByRemovingPercentEncoding];
+- (void)startHTTPServerWithBasePath:(NSString *)basePath {
+    @try {
+        signal(SIGPIPE, SIG_IGN);
+
+        int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (serverSocket == -1) {
+            NSLog(@"Failed to create socket: %s", strerror(errno));
+            return;
+        }
+
+        struct sockaddr_in serverAddr;
+        memset(&serverAddr, 0, sizeof(serverAddr));
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_addr.s_addr = INADDR_ANY;
+        serverAddr.sin_port = htons(8080);
+
+        if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+            NSLog(@"Failed to bind socket: %s", strerror(errno));
+            close(serverSocket);
+            return;
+        }
+
+        if (listen(serverSocket, 5) == -1) {
+            NSLog(@"Failed to listen on socket: %s", strerror(errno));
+            close(serverSocket);
+            return;
+        }
+
+        NSLog(@"Serving files at http://localhost:8080/");
+
+        while (1) {
+            int clientSocket = accept(serverSocket, NULL, NULL);
+            if (clientSocket == -1) continue;
+
+            [self handleClientRequest:clientSocket withBasePath:basePath];
+            close(clientSocket);
+        }
+
+    } @catch (NSException *exception) {
+        NSLog(@"Exception: %@", exception);
+    }
+}
+
+- (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
+    char requestBuffer[1024];
+    ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
+    if (bytesRead < 0) {
+        NSLog(@"Failed to read request from client: %s", strerror(errno));
+        return;
+    }
+
+    requestBuffer[bytesRead] = '\0';
+    NSString *request = [NSString stringWithUTF8String:requestBuffer];
+    NSLog(@"Client request: %s", requestBuffer);
+
+    NSRange range = [request rangeOfString:@"GET /"];
+    if (range.location == NSNotFound) {
+        dprintf(clientSocket, "HTTP/1.1 400 Bad Request\r\n\r\n");
+        return;
+    }
+    NSString *filePath = [[request substringFromIndex:NSMaxRange(range)] componentsSeparatedByString:@" "][0];
+    filePath = [filePath stringByRemovingPercentEncoding];
+    if ([filePath isEqualToString:@"/"]) filePath = @"";
+    NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
+
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
+        dprintf(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
+        return;
+    }
+
+    if (isDirectory) {
+        NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:fullPath error:nil];
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
+        dprintf(clientSocket, "<html><body><h1>Directory Listing</h1><ul>");
+        for (NSString *file in files) {
+            NSString *fileLink = [file stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
+            dprintf(clientSocket, "<li>%s <a href=\"/%s\">Stream</a> <a href=\"/%s\" download>Download</a></li>", file.UTF8String, fileLink.UTF8String, fileLink.UTF8String);
+        }
+        dprintf(clientSocket, "</ul></body></html>");
+        return;
+    }
+
+    FILE *file = fopen([fullPath UTF8String], "rb");
+    if (!file) {
+        dprintf(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
+        return;
+    }
+
+    fseek(file, 0, SEEK_END);
+    NSUInteger fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    NSString *fileExtension = [[fullPath pathExtension] lowercaseString];
+    if ([fileExtension isEqualToString:@"mp4"]) {
+        range = [request rangeOfString:@"Range: bytes="];
+        if (range.location != NSNotFound) {
+            range = [request rangeOfString:@"bytes="];
+            NSString *byteRange = [request substringFromIndex:NSMaxRange(range)];
+            byteRange = [byteRange stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSArray<NSString *> *rangeParts = [byteRange componentsSeparatedByString:@"-"];
+            NSUInteger start = [rangeParts[0] integerValue];
+            NSUInteger end = (rangeParts.count > 1 && rangeParts[1].length > 0) ? [rangeParts[1] integerValue] : fileSize - 1;
+
+            if (start >= fileSize || end >= fileSize || start > end) {
+                dprintf(clientSocket, "HTTP/1.1 416 Requested Range Not Satisfiable\r\n");
+                dprintf(clientSocket, "Content-Range: bytes */%lu\r\n", fileSize);
+                dprintf(clientSocket, "\r\n");
+            } else {
+                fseek(file, start, SEEK_SET);
+                NSUInteger contentLength = end - start + 1;
+                dprintf(clientSocket, "HTTP/1.1 206 Partial Content\r\n");
+                dprintf(clientSocket, "Content-Type: video/mp4\r\n");
+                dprintf(clientSocket, "Content-Range: bytes %lu-%lu/%lu\r\n", start, end, fileSize);
+                dprintf(clientSocket, "Content-Length: %lu\r\n", contentLength);
+                dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
+                dprintf(clientSocket, "\r\n");
+                [self sendFileData:file toSocket:clientSocket withContentLength:contentLength];
+            }
         } else {
-            return [partialRequest stringByRemovingPercentEncoding];
+            dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+            dprintf(clientSocket, "Content-Type: video/mp4\r\n");
+            dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+            dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
+            dprintf(clientSocket, "\r\n");
+            [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
         }
+    } else {
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: application/octet-stream\r\n");
+        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s\"\r\n", [[fullPath lastPathComponent] UTF8String]);
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
-    return nil;
+
+    fclose(file);
 }
 
-- (BOOL)shouldDownloadFromRequest:(NSString *)request {
-    NSRange actionRange = [request rangeOfString:@"action="];
-    if (actionRange.location != NSNotFound) {
-        NSString *partialRequest = [request substringFromIndex:(actionRange.location + actionRange.length)];
-        NSRange endRange = [partialRequest rangeOfString:@" "];
-        if (endRange.location != NSNotFound) {
-            NSString *action = [partialRequest substringToIndex:endRange.location];
-            return [action isEqualToString:@"download"];
+- (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {
+    char buffer[64 * 1024];
+    size_t bytesToSend = contentLength;
+    while (bytesToSend > 0) {
+        size_t chunkSize = fread(buffer, 1, sizeof(buffer), file);
+        if (chunkSize == 0) break;
+        ssize_t bytesSent = send(socket, buffer, chunkSize, 0);
+        if (bytesSent < 0) {
+            NSLog(@"Failed to send data: %s", strerror(errno));
+            break;
         }
+        bytesToSend -= bytesSent;
     }
-    return NO;
-}
-
-- (void)serveFile:(NSString *)fileName toSocket:(int)clientSocket asDownload:(BOOL)isDownload {
-    NSString *decodedFileName = [fileName stringByRemovingPercentEncoding];
-    NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSString *filePath = [documentsPath stringByAppendingPathComponent:decodedFileName];
-
-    NSLog(@"Attempting to serve file at path: %@", filePath);
-
-    NSFileHandle *fileHandle = [NSFileHandle fileHandleForReadingAtPath:filePath];
-    if (!fileHandle) {
-        NSLog(@"Error: File not found at path: %@", filePath);
-        NSString *response = @"HTTP/1.1 404 Not Found\r\n\r\nFile not found.";
-        send(clientSocket, [response UTF8String], [response length], 0);
-        return;
-    }
-
-    NSDictionary *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
-    NSUInteger fileSize = [fileAttributes fileSize];
-
-    NSString *contentDisposition = isDownload ? @"attachment" : @"inline";
-    NSString *contentType = [self contentTypeForFileAtPath:filePath];
-
-    NSString *header = [NSString stringWithFormat:
-                        @"HTTP/1.1 200 OK\r\n"
-                        "Content-Disposition: %@; filename=\"%@\"\r\n"
-                        "Content-Length: %lu\r\n"
-                        "Content-Type: %@\r\n"
-                        "Content-Transfer-Encoding: binary\r\n"
-                        "Accept-Ranges: bytes\r\n\r\n",
-                        contentDisposition, decodedFileName, (unsigned long)fileSize, contentType];
-    send(clientSocket, [header UTF8String], [header length], 0);
-
-    size_t bufferSize = 8192; // 8 KB
-    NSUInteger bytesSent = 0;
-
-    while (bytesSent < fileSize) {
-        @autoreleasepool {
-            [fileHandle seekToFileOffset:bytesSent];
-            NSData *dataChunk = [fileHandle readDataOfLength:bufferSize];
-            if (dataChunk.length == 0) break;
-            ssize_t sent = send(clientSocket, [dataChunk bytes], dataChunk.length, 0);
-            if (sent <= 0) break;
-            bytesSent += sent;
-        }
-    }
-    [fileHandle closeFile];
-    close(clientSocket);
-}
-
-- (NSString *)contentTypeForFileAtPath:(NSString *)filePath {
-    NSString *extension = [filePath pathExtension].lowercaseString;
-    if ([extension isEqualToString:@"mp4"]) return @"video/mp4";
-    return @"application/octet-stream";
-}
-
-- (void)serveFileListToSocket:(int)clientSocket {
-    NSString *html = @"<html><head><title>Documents Folder</title></head><body>";
-    html = [html stringByAppendingString:@"<h1>Files in Documents Folder:</h1><ul>"];
-
-    NSArray *documentFiles = [self listFilesInDocumentsFolder];
-    for (NSString *fileName in documentFiles) {
-        NSString *encodedFileName = [fileName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-        html = [html stringByAppendingFormat:
-                @"<li>%@ - <a href=\"/?file=%@&action=view\">View</a> | <a href=\"/?file=%@&action=download\">Download</a></li>",
-                fileName, encodedFileName, encodedFileName];
-    }
-
-    html = [html stringByAppendingString:@"</ul></body></html>"];
-    NSString *response = [NSString stringWithFormat:
-                          @"HTTP/1.1 200 OK\r\n"
-                          "Content-Type: text/html\r\n"
-                          "Content-Length: %lu\r\n\r\n"
-                          "%@", (unsigned long)[html length], html];
-
-    send(clientSocket, [response UTF8String], [response length], 0);
-}
-
-- (NSArray *)listFilesInDocumentsFolder {
-    NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSError *error;
-    NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:documentsPath error:&error];
-    if (error) return @[];
-    return files;
-}
-
-- (void)dealloc {
-    close(self.serverSocket);
 }
 
 @end
+
