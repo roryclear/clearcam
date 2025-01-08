@@ -286,15 +286,16 @@ NSMutableDictionary *classColorMap;
             CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
             
             BOOL success = NO;
-            int retryCount = 3; //TODO, will this stop the crash?
+            int retryCount = 3;
+
             while (!success && retryCount > 0) {
                 success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
                 if (!success) {
-                    NSLog(@"Error appending pixel buffer (remaining retries: %d): %@", retryCount - 1, self.assetWriter.error.localizedDescription);
                     retryCount--;
                     [NSThread sleepForTimeInterval:0.01];
                 }
             }
+            if (!success) [self finishRecording];
         }
         NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
         if (elapsedTime >= 60.0) {
@@ -317,8 +318,7 @@ NSMutableDictionary *classColorMap;
         size_t height = CVPixelBufferGetHeight(imageBuffer);
         CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
         CGFloat targetWidth = self.yolo.yolo_res;
-        CGFloat aspectRatio = (CGFloat)width / (CGFloat)height;
-        CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspectRatio);
+        CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
 
         CGFloat scaleX = targetSize.width / width;
         CGFloat scaleY = targetSize.height / height;
