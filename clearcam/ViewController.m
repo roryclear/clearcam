@@ -22,6 +22,8 @@
 @property (nonatomic, strong) AVAssetWriterInput *videoWriterInput;
 @property (nonatomic, strong) AVAssetWriterInputPixelBufferAdaptor *adaptor;
 @property (nonatomic, strong) FileServer *fileServer;
+@property (nonatomic, strong) NSURL *tempURL;
+@property (nonatomic, strong) NSURL *outputURL;
 
 @end
 
@@ -33,6 +35,10 @@ NSMutableDictionary *classColorMap;
     [super viewDidLoad];
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss"];
+    NSString *timestamp = [formatter stringFromDate:[NSDate date]];
+    self.outputURL = [[[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject] URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", timestamp]];
     [self setupCamera];
     [self setupFPSLabel];
     self.fileServer = [[FileServer alloc] init];
@@ -103,15 +109,12 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)startNewRecording {
-    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-    [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss"];
-    NSString *timestamp = [formatter stringFromDate:[NSDate date]];
-
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *outputURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", timestamp]];
+    //self.tempURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", timestamp]];
+    self.tempURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"temp.mp4"]];
 
     NSError *error = nil;
-    self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
+    self.assetWriter = [AVAssetWriter assetWriterWithURL:self.tempURL fileType:AVFileTypeMPEG4 error:&error];
     if (error) {
         NSLog(@"Error creating asset writer: %@", error.localizedDescription);
         return;
@@ -265,6 +268,8 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         [self.assetWriter finishWritingWithCompletionHandler:^{
             NSLog(@"Finished recording and saving file");
+            [self concatTwoVideos:self.tempURL];
+            [[NSFileManager defaultManager] removeItemAtURL:self.tempURL error:nil];
             [self startNewRecording];
         }];
     } else {
@@ -364,7 +369,86 @@ NSMutableDictionary *classColorMap;
         self.lastFrameTime = currentTime;
     }
 }
+
+- (void)concatTwoVideos:(NSURL *)secondVideoURL {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:[self.outputURL path]]) {
+        NSError *copyError = nil;
+        [[NSFileManager defaultManager] copyItemAtURL:secondVideoURL toURL:self.outputURL error:&copyError];
+        if (copyError) {
+            NSLog(@"Error copying second video to video1.mp4: %@", copyError.localizedDescription);
+        } else {
+            NSLog(@"video1.mp4 created by copying second video.");
+        }
+        return;
+    }
+    
+    AVMutableComposition *composition = [AVMutableComposition composition];
+
+    AVAsset *firstVideoAsset = [AVAsset assetWithURL:self.outputURL];
+    AVMutableCompositionTrack *videoTrack = [composition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+    AVMutableCompositionTrack *audioTrack = [composition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+    
+    AVAssetTrack *firstVideoAssetTrack = [[firstVideoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+    AVAssetTrack *firstAudioAssetTrack = [[firstVideoAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
+    
+    NSError *error = nil;
+    CMTime currentDuration = kCMTimeZero;
+    
+    if (firstVideoAssetTrack) {
+        [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, firstVideoAsset.duration) ofTrack:firstVideoAssetTrack atTime:currentDuration error:&error];
+        if (error) {
+            NSLog(@"Error adding first video track: %@", error.localizedDescription);
+        }
+    }
+    
+    if (firstAudioAssetTrack) {
+        [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, firstVideoAsset.duration) ofTrack:firstAudioAssetTrack atTime:currentDuration error:&error];
+        if (error) {
+            NSLog(@"Error adding first audio track: %@", error.localizedDescription);
+        }
+    }
+    
+    currentDuration = CMTimeAdd(currentDuration, firstVideoAsset.duration);
+    
+    // Add the second video to the composition
+    AVAsset *secondVideoAsset = [AVAsset assetWithURL:secondVideoURL];
+    AVAssetTrack *secondVideoAssetTrack = [[secondVideoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+    AVAssetTrack *secondAudioAssetTrack = [[secondVideoAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
+    
+    if (secondVideoAssetTrack) {
+        [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, secondVideoAsset.duration) ofTrack:secondVideoAssetTrack atTime:currentDuration error:&error];
+        if (error) {
+            NSLog(@"Error adding second video track: %@", error.localizedDescription);
+        }
+    }
+    
+    if (secondAudioAssetTrack) {
+        [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, secondVideoAsset.duration) ofTrack:secondAudioAssetTrack atTime:currentDuration error:&error];
+        if (error) {
+            NSLog(@"Error adding second audio track: %@", error.localizedDescription);
+        }
+    }
+    
+    // Export the combined video
+    if ([[NSFileManager defaultManager] fileExistsAtPath:[self.outputURL path]]) {
+        [[NSFileManager defaultManager] removeItemAtURL:self.outputURL error:nil];
+    }
+    
+    AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:composition presetName:AVAssetExportPresetPassthrough];
+    exportSession.outputURL = self.outputURL;
+    exportSession.outputFileType = AVFileTypeMPEG4;
+    exportSession.shouldOptimizeForNetworkUse = YES;
+    
+    [exportSession exportAsynchronouslyWithCompletionHandler:^{
+        if (exportSession.status == AVAssetExportSessionStatusCompleted) {
+            NSLog(@"Combined video export completed successfully.");
+        } else {
+            NSLog(@"Error exporting combined video: %@", exportSession.error.localizedDescription);
+        }
+    }];
+}
+
+
+
 @end
-
-
 
