@@ -39,6 +39,8 @@ NSMutableDictionary *classColorMap;
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss"];
     NSString *timestamp = [formatter stringFromDate:[NSDate date]];
     self.outputURL = [[[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject] URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", timestamp]];
+    self.tempURL = [[[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject] URLByAppendingPathComponent:[NSString stringWithFormat:@"temp.mp4"]];
+    [[NSFileManager defaultManager] removeItemAtURL:self.tempURL error:nil];
     [self setupCamera];
     [self setupFPSLabel];
     self.fileServer = [[FileServer alloc] init];
@@ -111,7 +113,6 @@ NSMutableDictionary *classColorMap;
 - (void)startNewRecording {
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
     //self.tempURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", timestamp]];
-    self.tempURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"temp.mp4"]];
 
     NSError *error = nil;
     self.assetWriter = [AVAssetWriter assetWriterWithURL:self.tempURL fileType:AVFileTypeMPEG4 error:&error];
