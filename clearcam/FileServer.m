@@ -59,8 +59,11 @@
             int clientSocket = accept(serverSocket, NULL, NULL);
             if (clientSocket == -1) continue;
 
-            [self handleClientRequest:clientSocket withBasePath:basePath];
-            close(clientSocket);
+            // Create a new thread or dispatch queue for each client connection
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [self handleClientRequest:clientSocket withBasePath:basePath];
+                close(clientSocket);
+            });
         }
 
     } @catch (NSException *exception) {
