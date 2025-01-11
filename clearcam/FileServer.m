@@ -156,6 +156,12 @@
             dprintf(clientSocket, "\r\n");
             [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
         }
+    } else if ([fileExtension isEqualToString:@"txt"]) {
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: text/plain\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     } else {
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: application/octet-stream\r\n");
@@ -182,6 +188,6 @@
         bytesToSend -= bytesSent;
     }
 }
-
+    
 @end
 
