@@ -59,7 +59,7 @@
     </div>
 
     <script>
-        let segments = ["0.mp4", "1.mp4"]; // Initially available segments
+        let segments = ["0.mp4"]; // Initially available segments
         const segmentDuration = 60; // Duration of each segment (in seconds)
         let totalDuration = segments.length * segmentDuration;
 
@@ -123,7 +123,6 @@
             });
         }
 
-
         function playSegment() {
             currentVideo.src = segments[currentSegment];
             currentVideo.currentTime = 0;
@@ -133,7 +132,10 @@
             currentVideo.play();
             isPlaying = true;
             playPauseBtn.innerText = "Pause";
-            preloadNextSegment();
+
+            if (segments.length > 1) {
+                preloadNextSegment();
+            }
         }
 
         function switchToNextSegment() {
@@ -162,7 +164,7 @@
                 .then(response => {
                     if (response.ok) {
                         segments.push(nextSegment);
-                        totalDuration = segments.length * segmentDuration;
+                        totalDuration = segments.length * segmentDuration; // Update total duration
                     }
                 })
                 .catch(() => {
