@@ -101,9 +101,10 @@
 
     if (isDirectory) {
         NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:fullPath error:nil];
+        NSArray *sortedFiles = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
         dprintf(clientSocket, "<html><body><h1>Directory Listing</h1><ul>");
-        for (NSString *file in files) {
+        for (NSString *file in sortedFiles) {
             NSString *fileLink = [file stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
             dprintf(clientSocket, "<li>%s <a href=\"/%s\">Stream</a> <a href=\"/%s\" download>Download</a></li>", file.UTF8String, fileLink.UTF8String, fileLink.UTF8String);
         }
