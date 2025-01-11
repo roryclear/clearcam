@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live MP4 Stream Player</title>
+    <style>
+        #videoContainer {
+            position: relative;
+            width: 640px;
+            height: 360px;
+            background: black;
+        }
+        video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #controls {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        #progress {
+            flex: 1;
+            height: 5px;
+            background-color: #ccc;
+            margin: 0 10px;
+            cursor: pointer;
+            position: relative;
+        }
+        #progress-bar {
+            width: 0;
+            height: 100%;
+            background-color: #007bff;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 0 5px;
+        }
+        #timeDisplay {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live MP4 Stream Player</h1>
+    <div id="videoContainer">
+        <video id="videoPlayer1" playsinline></video>
+        <video id="videoPlayer2" playsinline style="display: none;"></video>
+    </div>
+    <div id="controls">
+        <button id="playPauseBtn">Play</button>
+        <div id="progress">
+            <div id="progress-bar"></div>
+        </div>
+        <div id="timeDisplay">0:00 / 0:00</div>
+    </div>
+
+    <script>
+        let segments = ["0.mp4", "1.mp4"]; // Initially available segments
+        const segmentDuration = 60; // Duration of each segment (in seconds)
+        let totalDuration = segments.length * segmentDuration;
+
+        const videoPlayer1 = document.getElementById('videoPlayer1');
+        const videoPlayer2 = document.getElementById('videoPlayer2');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const progressBar = document.getElementById('progress-bar');
+        const timeDisplay = document.getElementById('timeDisplay');
+
+        let currentVideo = videoPlayer1;
+        let nextVideo = videoPlayer2;
+        let currentSegment = 0;
+        let isPlaying = false;
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${minutes}:${secs}`;
+        }
+
+        function updateTimeline() {
+            const currentTime = currentSegment * segmentDuration + currentVideo.currentTime;
+            progressBar.style.width = `${(currentTime / totalDuration) * 100}%`;
+            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(totalDuration)}`;
+        }
+
+        function preloadNextSegment() {
+            if (currentSegment + 1 < segments.length) {
+                nextVideo.src = segments[currentSegment + 1];
+                nextVideo.load();
+            } else {
+                // Check periodically if the next segment becomes available
+                const nextSegmentIndex = currentSegment + 1;
+                const nextSegment = `${nextSegmentIndex}.mp4`;
+
+                const preloadCheck = setInterval(() => {
+                    fetch(nextSegment, { method: 'HEAD' })
+                        .then(response => {
+                            if (response.ok) {
+                                segments.push(nextSegment);
+                                totalDuration = segments.length * segmentDuration;
+                                nextVideo.src = nextSegment;
+                                nextVideo.load();
+                                clearInterval(preloadCheck);
+                            }
+                        })
+                        .catch(() => {
+                            // Segment not available; retry later
+                        });
+                }, 2000); // Retry every 2 seconds
+            }
+        }
+
+        function monitorSegmentProgress() {
+            // Start preloading the next segment 10 seconds before the current one ends
+            const preloadThreshold = segmentDuration - 30;
+            currentVideo.addEventListener("timeupdate", () => {
+                if (currentVideo.currentTime >= preloadThreshold && !nextVideo.src) {
+                    preloadNextSegment();
+                }
+            });
+        }
+
+
+        function playSegment() {
+            currentVideo.src = segments[currentSegment];
+            currentVideo.currentTime = 0;
+            currentVideo.style.display = "block";
+            nextVideo.style.display = "none";
+
+            currentVideo.play();
+            isPlaying = true;
+            playPauseBtn.innerText = "Pause";
+            preloadNextSegment();
+        }
+
+        function switchToNextSegment() {
+            if (currentSegment + 1 < segments.length) {
+                currentSegment++;
+                const temp = currentVideo;
+                currentVideo = nextVideo;
+                nextVideo = temp;
+
+                nextVideo.style.display = "none";
+                currentVideo.style.display = "block";
+
+                currentVideo.play();
+                preloadNextSegment();
+            } else {
+                isPlaying = false;
+                playPauseBtn.innerText = "Play";
+            }
+        }
+
+        function checkForNewSegments() {
+            const nextSegmentIndex = segments.length;
+            const nextSegment = `${nextSegmentIndex}.mp4`;
+
+            fetch(nextSegment, { method: 'HEAD' })
+                .then(response => {
+                    if (response.ok) {
+                        segments.push(nextSegment);
+                        totalDuration = segments.length * segmentDuration;
+                    }
+                })
+                .catch(() => {
+                    // Segment not available; do nothing.
+                });
+        }
+
+        // Handle time updates and expand timeline dynamically
+        setInterval(() => {
+            checkForNewSegments(); // Check for new segments periodically
+        }, 5000);
+
+        videoPlayer1.addEventListener("timeupdate", updateTimeline);
+        videoPlayer2.addEventListener("timeupdate", updateTimeline);
+
+        videoPlayer1.addEventListener("ended", switchToNextSegment);
+        videoPlayer2.addEventListener("ended", switchToNextSegment);
+
+        playPauseBtn.addEventListener("click", () => {
+            if (isPlaying) {
+                currentVideo.pause();
+                playPauseBtn.innerText = "Play";
+            } else {
+                currentVideo.play();
+                playPauseBtn.innerText = "Pause";
+            }
+            isPlaying = !isPlaying;
+        });
+
+        // Initialize player
+        playSegment();
+        monitorSegmentProgress();
+    </script>
+</body>
+</html>
