@@ -74,18 +74,24 @@
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
     char requestBuffer[1024];
     ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
-    if (bytesRead < 0) return;
+    if (bytesRead < 0) {
+        NSLog(@"Failed to read request from client: %s", strerror(errno));
+        return;
+    }
 
     requestBuffer[bytesRead] = '\0';
     NSString *request = [NSString stringWithUTF8String:requestBuffer];
-    if (![request containsString:@"GET /"]) {
+    NSLog(@"Client request: %s", requestBuffer);
+
+    NSRange range = [request rangeOfString:@"GET /"];
+    if (range.location == NSNotFound) {
         dprintf(clientSocket, "HTTP/1.1 400 Bad Request\r\n\r\n");
         return;
     }
-    
-    NSString *filePath = [[request componentsSeparatedByString:@" "] objectAtIndex:1];
+    NSString *filePath = [[request substringFromIndex:NSMaxRange(range)] componentsSeparatedByString:@" "][0];
     filePath = [filePath stringByRemovingPercentEncoding];
-    NSString *fullPath = [basePath stringByAppendingPathComponent:[filePath isEqualToString:@"/"] ? @"" : filePath];
+    if ([filePath isEqualToString:@"/"]) filePath = @"";
+    NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
 
     BOOL isDirectory = NO;
     if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
@@ -94,9 +100,11 @@
     }
 
     if (isDirectory) {
-        NSArray *files = [[[NSFileManager defaultManager] contentsOfDirectoryAtPath:fullPath error:nil] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>Directory Listing</h1><ul>");
-        for (NSString *file in files) {
+        NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:fullPath error:nil];
+        NSArray *sortedFiles = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
+        dprintf(clientSocket, "<html><body><h1>Directory Listing</h1><ul>");
+        for (NSString *file in sortedFiles) {
             NSString *fileLink = [file stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
             dprintf(clientSocket, "<li>%s <a href=\"/%s\">Stream</a> <a href=\"/%s\" download>Download</a></li>", file.UTF8String, fileLink.UTF8String, fileLink.UTF8String);
         }
@@ -115,36 +123,51 @@
     fseek(file, 0, SEEK_SET);
 
     NSString *fileExtension = [[fullPath pathExtension] lowercaseString];
-    NSString *contentType, *contentDisposition;
-
     if ([fileExtension isEqualToString:@"mp4"]) {
-        if ([request containsString:@"Range: bytes="]) {
-            NSRange range = [request rangeOfString:@"bytes="];
-            NSString *byteRange = [[request substringFromIndex:NSMaxRange(range)] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            NSUInteger start = [[byteRange componentsSeparatedByString:@"-"].firstObject integerValue];
-            NSUInteger end = [[byteRange componentsSeparatedByString:@"-"].lastObject integerValue] ?: fileSize - 1;
+        range = [request rangeOfString:@"Range: bytes="];
+        if (range.location != NSNotFound) {
+            range = [request rangeOfString:@"bytes="];
+            NSString *byteRange = [request substringFromIndex:NSMaxRange(range)];
+            byteRange = [byteRange stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSArray<NSString *> *rangeParts = [byteRange componentsSeparatedByString:@"-"];
+            NSUInteger start = [rangeParts[0] integerValue];
+            NSUInteger end = (rangeParts.count > 1 && rangeParts[1].length > 0) ? [rangeParts[1] integerValue] : fileSize - 1;
 
             if (start >= fileSize || end >= fileSize || start > end) {
-                dprintf(clientSocket, "HTTP/1.1 416 Requested Range Not Satisfiable\r\nContent-Range: bytes */%lu\r\n\r\n", fileSize);
+                dprintf(clientSocket, "HTTP/1.1 416 Requested Range Not Satisfiable\r\n");
+                dprintf(clientSocket, "Content-Range: bytes */%lu\r\n", fileSize);
+                dprintf(clientSocket, "\r\n");
             } else {
-                dprintf(clientSocket, "HTTP/1.1 206 Partial Content\r\nContent-Type: video/mp4\r\nContent-Range: bytes %lu-%lu/%lu\r\nContent-Length: %lu\r\nAccept-Ranges: bytes\r\n\r\n", start, end, fileSize, end - start + 1);
                 fseek(file, start, SEEK_SET);
-                [self sendFileData:file toSocket:clientSocket withContentLength:end - start + 1];
+                NSUInteger contentLength = end - start + 1;
+                dprintf(clientSocket, "HTTP/1.1 206 Partial Content\r\n");
+                dprintf(clientSocket, "Content-Type: video/mp4\r\n");
+                dprintf(clientSocket, "Content-Range: bytes %lu-%lu/%lu\r\n", start, end, fileSize);
+                dprintf(clientSocket, "Content-Length: %lu\r\n", contentLength);
+                dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
+                dprintf(clientSocket, "\r\n");
+                [self sendFileData:file toSocket:clientSocket withContentLength:contentLength];
             }
         } else {
-            contentType = @"video/mp4";
-            contentDisposition = @"";
+            dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+            dprintf(clientSocket, "Content-Type: video/mp4\r\n");
+            dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+            dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
+            dprintf(clientSocket, "\r\n");
+            [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
         }
     } else if ([fileExtension isEqualToString:@"txt"]) {
-        contentType = @"text/plain";
-        contentDisposition = @"";
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: text/plain\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     } else {
-        contentType = @"application/octet-stream";
-        contentDisposition = [NSString stringWithFormat:@"attachment; filename=\"%s\"", [[fullPath lastPathComponent] UTF8String]];
-    }
-
-    if (contentType) {
-        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Disposition: %s\r\nContent-Length: %lu\r\n\r\n", [contentType UTF8String], [contentDisposition UTF8String], fileSize);
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: application/octet-stream\r\n");
+        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s\"\r\n", [[fullPath lastPathComponent] UTF8String]);
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
 
@@ -167,4 +190,5 @@
 }
     
 @end
+
 
