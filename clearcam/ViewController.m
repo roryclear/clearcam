@@ -22,6 +22,7 @@
 @property (nonatomic, strong) AVAssetWriterInput *videoWriterInput;
 @property (nonatomic, strong) AVAssetWriterInputPixelBufferAdaptor *adaptor;
 @property (nonatomic, strong) FileServer *fileServer;
+@property (nonatomic, assign) int seg_number;
 
 @end
 
@@ -33,6 +34,7 @@ NSMutableDictionary *classColorMap;
     [super viewDidLoad];
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
+    self.seg_number = 0;
     [self setupCamera];
     [self setupFPSLabel];
     self.fileServer = [[FileServer alloc] init];
@@ -106,10 +108,14 @@ NSMutableDictionary *classColorMap;
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss"];
     NSString *timestamp = [formatter stringFromDate:[NSDate date]];
-
+    NSString *segNumberString = [NSString stringWithFormat:@"_%05ld_", (long)self.seg_number];
+    self.seg_number += 1;
+    NSString *finalTimestamp = [NSString stringWithFormat:@"%@%@%@",
+                                [[timestamp componentsSeparatedByString:@"_"] firstObject],
+                                segNumberString,
+                                [[timestamp componentsSeparatedByString:@"_"] lastObject]];
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *outputURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", timestamp]];
-
+    NSURL *outputURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
     NSError *error = nil;
     self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
     if (error) {
@@ -298,7 +304,7 @@ NSMutableDictionary *classColorMap;
             if (!success) [self finishRecording];
         }
         NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-        if (elapsedTime >= 60.0) {
+        if (elapsedTime >= 60.0) { // todo, takes a little time to change
             [self finishRecording];
         }
     }
@@ -365,6 +371,7 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
 
 
