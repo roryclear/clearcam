@@ -62,8 +62,8 @@
     </div>
 
     <script>
-        let segments = ["0.mp4"]; // Initially available segments
-        const segmentDuration = 60; // Duration of each segment (in seconds)
+        let segments = ["0.mp4"]; // Initial segment
+        const segmentDuration = 60; // Duration of each segment in seconds
         let totalDuration = segments.length * segmentDuration;
 
         const videoPlayer1 = document.getElementById('videoPlayer1');
@@ -96,97 +96,65 @@
             const targetSegment = Math.floor(scrubTime / segmentDuration);
             const targetTime = scrubTime % segmentDuration;
 
-            // Set the visual feedback immediately
-            progressBar.style.width = `${(scrubTime / totalDuration) * 100}%`;
-
-            // Load the correct segment if necessary
-            if (targetSegment !== currentSegment) {
+            if (targetSegment >= 0 && targetSegment < segments.length) {
                 currentSegment = targetSegment;
                 currentVideo.src = segments[currentSegment];
                 currentVideo.currentTime = targetTime;
                 currentVideo.play();
-            } else {
-                currentVideo.currentTime = targetTime;
+
+                // Preload the next segment after scrubbing
+                preloadNextSegment();
             }
 
-            if (!isPlaying) {
-                playPauseBtn.innerText = "Play";
-            }
+            updateTimeline();
         }
+
 
         function startScrubbing(e) {
             isScrubbing = true;
-            scrub(e); // Scrub immediately on touchstart or mousedown
+            scrub(e);
             document.addEventListener("mousemove", scrubWhileDragging);
             document.addEventListener("mouseup", stopScrubbing);
-            document.addEventListener("mouseleave", stopScrubbing); // Handle if mouse leaves the window
-
-            // For touch, prevent default to avoid unwanted scrolling behavior
-            if (e.touches) e.preventDefault();
-            document.addEventListener("touchmove", scrubWhileDragging);
-            document.addEventListener("touchend", stopScrubbing);
-            document.addEventListener("touchcancel", stopScrubbing);
         }
 
         function scrubWhileDragging(e) {
             if (isScrubbing) {
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const progressRect = progress.getBoundingClientRect();
-                const offsetX = clientX - progressRect.left;
-                const normalizedX = Math.min(Math.max(offsetX, 0), progressRect.width);
-                scrub({ offsetX: normalizedX });
+                const offsetX = Math.min(Math.max(e.clientX - progressRect.left, 0), progressRect.width);
+                scrub({ offsetX });
             }
         }
 
         function stopScrubbing() {
-            if (isScrubbing) {
-                isScrubbing = false;
-                document.removeEventListener("mousemove", scrubWhileDragging);
-                document.removeEventListener("mouseup", stopScrubbing);
-                document.removeEventListener("mouseleave", stopScrubbing);
-                document.removeEventListener("touchmove", scrubWhileDragging);
-                document.removeEventListener("touchend", stopScrubbing);
-                document.removeEventListener("touchcancel", stopScrubbing);
-
-                // After scrubbing, set the video to the new time
-                const newTime = (parseFloat(progressBar.style.width) / 100) * totalDuration;
-                const targetSegment = Math.floor(newTime / segmentDuration);
-                currentSegment = targetSegment;
-                currentVideo.currentTime = newTime % segmentDuration;
-            }
+            isScrubbing = false;
+            document.removeEventListener("mousemove", scrubWhileDragging);
+            document.removeEventListener("mouseup", stopScrubbing);
         }
 
         function preloadNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 nextVideo.src = segments[currentSegment + 1];
                 nextVideo.load();
-            } else {
-                const nextSegmentIndex = currentSegment + 1;
-                const nextSegment = `${nextSegmentIndex}.mp4`;
-
-                const preloadCheck = setInterval(() => {
-                    fetch(nextSegment, { method: 'HEAD' })
-                        .then(response => {
-                            if (response.ok) {
-                                segments.push(nextSegment);
-                                totalDuration = segments.length * segmentDuration;
-                                nextVideo.src = nextSegment;
-                                nextVideo.load();
-                                clearInterval(preloadCheck);
-                            }
-                        })
-                        .catch(() => {});
-                }, 2000);
             }
         }
 
-        function monitorSegmentProgress() {
-            const preloadThreshold = segmentDuration - 30;
-            currentVideo.addEventListener("timeupdate", () => {
-                if (currentVideo.currentTime >= preloadThreshold && !nextVideo.src) {
-                    preloadNextSegment();
-                }
-            });
+        function checkForNewSegments() {
+            const nextSegmentIndex = segments.length;
+            const nextSegment = `${nextSegmentIndex}.mp4`;
+
+            fetch(nextSegment, { method: 'HEAD' })
+                .then(response => {
+                    if (response.ok) {
+                        segments.push(nextSegment);
+                        totalDuration = segments.length * segmentDuration;
+
+                        // Update preloaded video if needed
+                        if (currentSegment + 1 === segments.length - 1) {
+                            preloadNextSegment();
+                        }
+                    }
+                })
+                .catch(() => {});
         }
 
         function playSegment() {
@@ -199,9 +167,7 @@
             isPlaying = true;
             playPauseBtn.innerText = "Pause";
 
-            if (segments.length > 1) {
-                preloadNextSegment();
-            }
+            preloadNextSegment();
         }
 
         function switchToNextSegment() {
@@ -222,27 +188,12 @@
             }
         }
 
-        function checkForNewSegments() {
-            const nextSegmentIndex = segments.length;
-            const nextSegment = `${nextSegmentIndex}.mp4`;
-
-            fetch(nextSegment, { method: 'HEAD' })
-                .then(response => {
-                    if (response.ok) {
-                        segments.push(nextSegment);
-                        totalDuration = segments.length * segmentDuration;
-                    }
-                })
-                .catch(() => {});
-        }
-
-        progress.addEventListener("click", scrub);
         progress.addEventListener("mousedown", startScrubbing);
-        progress.addEventListener("touchstart", startScrubbing);
+        document.addEventListener("mouseup", stopScrubbing);
 
         setInterval(() => {
             checkForNewSegments();
-        }, 5000);
+        }, 3000);
 
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
@@ -262,7 +213,6 @@
         });
 
         playSegment();
-        monitorSegmentProgress();
     </script>
 </body>
 </html>
