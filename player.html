@@ -79,6 +79,31 @@
         let isPlaying = false;
         let isScrubbing = false;
 
+        async function fetchSegments() {
+            try {
+                const response = await fetch('/get-segments');
+                if (response.ok) {
+                    const newSegments = await response.json();
+
+                    if (Array.isArray(newSegments)) {
+                        const oldTotalDuration = totalDuration;
+
+                        // Update segments list and total duration
+                        segments = newSegments;
+                        totalDuration = segments.length * segmentDuration;
+
+                        // If the total duration changes, update UI
+                        if (totalDuration !== oldTotalDuration) {
+                            updateTimeline();
+                            preloadNextSegment();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch segments:', error);
+            }
+        }
+
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
@@ -109,7 +134,6 @@
             updateTimeline();
         }
 
-
         function startScrubbing(e) {
             isScrubbing = true;
             scrub(e);
@@ -136,25 +160,6 @@
                 nextVideo.src = segments[currentSegment + 1];
                 nextVideo.load();
             }
-        }
-
-        function checkForNewSegments() {
-            const nextSegmentIndex = segments.length;
-            const nextSegment = `${nextSegmentIndex}.mp4`;
-
-            fetch(nextSegment, { method: 'HEAD' })
-                .then(response => {
-                    if (response.ok) {
-                        segments.push(nextSegment);
-                        totalDuration = segments.length * segmentDuration;
-
-                        // Update preloaded video if needed
-                        if (currentSegment + 1 === segments.length - 1) {
-                            preloadNextSegment();
-                        }
-                    }
-                })
-                .catch(() => {});
         }
 
         function playSegment() {
@@ -192,8 +197,8 @@
         document.addEventListener("mouseup", stopScrubbing);
 
         setInterval(() => {
-            checkForNewSegments();
-        }, 3000);
+            fetchSegments();
+        }, 3000); // Poll every 3 seconds for new segments
 
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
