@@ -123,7 +123,7 @@
         }
     
         function scrub(e) {
-            const scrubTime = (e.offsetX / progress.offsetWidth) * totalDuration;
+            const scrubTime = ((e.offsetX || e.touches[0].clientX - progress.getBoundingClientRect().left) / progress.offsetWidth) * totalDuration;
             const targetSegment = Math.floor(scrubTime / segmentDuration);
             const targetTime = scrubTime % segmentDuration;
     
@@ -145,12 +145,14 @@
             scrub(e);
             document.addEventListener("mousemove", scrubWhileDragging);
             document.addEventListener("mouseup", stopScrubbing);
+            document.addEventListener("touchmove", scrubWhileDragging);
+            document.addEventListener("touchend", stopScrubbing);
         }
     
         function scrubWhileDragging(e) {
             if (isScrubbing) {
                 const progressRect = progress.getBoundingClientRect();
-                const offsetX = Math.min(Math.max(e.clientX - progressRect.left, 0), progressRect.width);
+                const offsetX = Math.min(Math.max((e.clientX || e.touches[0].clientX) - progressRect.left, 0), progressRect.width);
                 scrub({ offsetX });
             }
         }
@@ -159,6 +161,8 @@
             isScrubbing = false;
             document.removeEventListener("mousemove", scrubWhileDragging);
             document.removeEventListener("mouseup", stopScrubbing);
+            document.removeEventListener("touchmove", scrubWhileDragging);
+            document.removeEventListener("touchend", stopScrubbing);
         }
     
         function preloadNextSegment() {
@@ -212,6 +216,8 @@
     
         progress.addEventListener("mousedown", startScrubbing);
         document.addEventListener("mouseup", stopScrubbing);
+        progress.addEventListener("touchstart", startScrubbing);
+        document.addEventListener("touchend", stopScrubbing);
     
         setInterval(() => {
             fetchSegments();
@@ -240,6 +246,5 @@
         // Initially fetch segments and start playing
         fetchSegments();
     </script>
-    
 </body>
 </html>
