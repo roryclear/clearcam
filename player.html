@@ -20,23 +20,32 @@
         }
         #controls {
             display: flex;
+            flex-direction: column;
             align-items: center;
             margin-top: 10px;
             width: 100%;
             max-width: 640px;
         }
+        .top-controls {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            justify-content: space-between;
+        }
         #progress {
-            flex: 1;
-            height: 5px;
+            width: 100%;
+            height: 10px;
             background-color: #ccc;
-            margin: 0 10px;
+            margin: 10px 0;
             cursor: pointer;
             position: relative;
+            border-radius: 5px;
         }
         #progress-bar {
             width: 0;
             height: 100%;
             background-color: #007bff;
+            border-radius: 5px;
         }
         button {
             padding: 5px 10px;
@@ -54,18 +63,20 @@
         <video id="videoPlayer2" playsinline style="display: none;"></video>
     </div>
     <div id="controls">
-        <button id="playPauseBtn">Play</button>
+        <div class="top-controls">
+            <button id="playPauseBtn">Play</button>
+            <div id="timeDisplay">0:00 / 0:00</div>
+        </div>
         <div id="progress">
             <div id="progress-bar"></div>
         </div>
-        <div id="timeDisplay">0:00 / 0:00</div>
     </div>
 
     <script>
-        let segments = []; // Initially empty, will be populated from the server
-        const segmentDuration = 60; // Duration of each segment in seconds
+        let segments = [];
+        const segmentDuration = 60; 
         let totalDuration = 0;
-        let retryTimeout = 2000; // Retry interval in milliseconds
+        let retryTimeout = 2000; 
     
         const videoPlayer1 = document.getElementById('videoPlayer1');
         const videoPlayer2 = document.getElementById('videoPlayer2');
@@ -85,20 +96,13 @@
                 const response = await fetch('/get-segments');
                 if (response.ok) {
                     const newSegments = await response.json();
-    
                     if (Array.isArray(newSegments)) {
                         const oldTotalDuration = totalDuration;
-    
-                        // Update segments list and total duration
                         segments = newSegments;
                         totalDuration = segments.length * segmentDuration;
-    
-                        // If the total duration changes, update UI
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegment();
-    
-                            // Start playing the first segment if the list changes
                             if (!isPlaying && segments.length > 0) {
                                 playSegment();
                             }
@@ -132,8 +136,6 @@
                 currentVideo.src = segments[currentSegment];
                 currentVideo.currentTime = targetTime;
                 currentVideo.play();
-    
-                // Preload the next segment after scrubbing
                 preloadNextSegment();
             }
     
@@ -215,13 +217,9 @@
         }
     
         progress.addEventListener("mousedown", startScrubbing);
-        document.addEventListener("mouseup", stopScrubbing);
         progress.addEventListener("touchstart", startScrubbing);
-        document.addEventListener("touchend", stopScrubbing);
     
-        setInterval(() => {
-            fetchSegments();
-        }, 3000); // Poll every 3 seconds for new segments
+        setInterval(fetchSegments, 3000); 
     
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
@@ -243,7 +241,6 @@
             isPlaying = !isPlaying;
         });
     
-        // Initially fetch segments and start playing
         fetchSegments();
     </script>
 </body>

@@ -101,7 +101,9 @@
 
         // Sort .mp4 files by numeric values
         NSArray *sortedFiles = [mp4Files sortedArrayUsingComparator:^NSComparisonResult(NSString *file1, NSString *file2) {
-            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(\\d+)" options:0 error:nil];
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"_(\\d+)_"
+                                                                                   options:0
+                                                                                     error:nil];
             NSTextCheckingResult *match1 = [regex firstMatchInString:file1 options:0 range:NSMakeRange(0, file1.length)];
             NSTextCheckingResult *match2 = [regex firstMatchInString:file2 options:0 range:NSMakeRange(0, file2.length)];
 
@@ -212,7 +214,6 @@
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
-
     fclose(file);
 }
 
