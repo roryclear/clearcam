@@ -62,40 +62,46 @@
     </div>
 
     <script>
-        let segments = ["0.mp4"]; // Initial segment
+        let segments = []; // Initially empty, will be populated from the server
         const segmentDuration = 60; // Duration of each segment in seconds
-        let totalDuration = segments.length * segmentDuration;
-
+        let totalDuration = 0;
+        let retryTimeout = 2000; // Retry interval in milliseconds
+    
         const videoPlayer1 = document.getElementById('videoPlayer1');
         const videoPlayer2 = document.getElementById('videoPlayer2');
         const playPauseBtn = document.getElementById('playPauseBtn');
         const progressBar = document.getElementById('progress-bar');
         const progress = document.getElementById('progress');
         const timeDisplay = document.getElementById('timeDisplay');
-
+    
         let currentVideo = videoPlayer1;
         let nextVideo = videoPlayer2;
         let currentSegment = 0;
         let isPlaying = false;
         let isScrubbing = false;
-
+    
         async function fetchSegments() {
             try {
                 const response = await fetch('/get-segments');
                 if (response.ok) {
                     const newSegments = await response.json();
-
+    
                     if (Array.isArray(newSegments)) {
                         const oldTotalDuration = totalDuration;
-
+    
                         // Update segments list and total duration
                         segments = newSegments;
                         totalDuration = segments.length * segmentDuration;
-
+    
                         // If the total duration changes, update UI
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegment();
+    
+                            // Start playing the first segment if the list changes
+                            if (!isPlaying && segments.length > 0) {
+                                playSegment();
+                            }
                         }
                     }
                 }
@@ -103,44 +109,44 @@
                 console.error('Failed to fetch segments:', error);
             }
         }
-
+    
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
             return `${minutes}:${secs}`;
         }
-
+    
         function updateTimeline() {
             const currentTime = currentSegment * segmentDuration + currentVideo.currentTime;
             progressBar.style.width = `${(currentTime / totalDuration) * 100}%`;
             timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(totalDuration)}`;
         }
-
+    
         function scrub(e) {
             const scrubTime = (e.offsetX / progress.offsetWidth) * totalDuration;
             const targetSegment = Math.floor(scrubTime / segmentDuration);
             const targetTime = scrubTime % segmentDuration;
-
+    
             if (targetSegment >= 0 && targetSegment < segments.length) {
                 currentSegment = targetSegment;
                 currentVideo.src = segments[currentSegment];
                 currentVideo.currentTime = targetTime;
                 currentVideo.play();
-
+    
                 // Preload the next segment after scrubbing
                 preloadNextSegment();
             }
-
+    
             updateTimeline();
         }
-
+    
         function startScrubbing(e) {
             isScrubbing = true;
             scrub(e);
             document.addEventListener("mousemove", scrubWhileDragging);
             document.addEventListener("mouseup", stopScrubbing);
         }
-
+    
         function scrubWhileDragging(e) {
             if (isScrubbing) {
                 const progressRect = progress.getBoundingClientRect();
@@ -148,43 +154,54 @@
                 scrub({ offsetX });
             }
         }
-
+    
         function stopScrubbing() {
             isScrubbing = false;
             document.removeEventListener("mousemove", scrubWhileDragging);
             document.removeEventListener("mouseup", stopScrubbing);
         }
-
+    
         function preloadNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 nextVideo.src = segments[currentSegment + 1];
                 nextVideo.load();
             }
         }
-
+    
         function playSegment() {
-            currentVideo.src = segments[currentSegment];
-            currentVideo.currentTime = 0;
-            currentVideo.style.display = "block";
-            nextVideo.style.display = "none";
-
-            currentVideo.play();
-            isPlaying = true;
-            playPauseBtn.innerText = "Pause";
-
-            preloadNextSegment();
+            if (segments.length > 0) {
+                currentVideo.src = segments[currentSegment];
+                currentVideo.currentTime = 0;
+                currentVideo.style.display = "block";
+                nextVideo.style.display = "none";
+    
+                currentVideo.play();
+                isPlaying = true;
+                playPauseBtn.innerText = "Pause";
+    
+                preloadNextSegment();
+            }
         }
-
+    
+        function retrySegment(videoElement) {
+            console.warn(`Retrying segment: ${segments[currentSegment]}`);
+            setTimeout(() => {
+                videoElement.src = segments[currentSegment];
+                videoElement.load();
+                videoElement.play();
+            }, retryTimeout);
+        }
+    
         function switchToNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 currentSegment++;
                 const temp = currentVideo;
                 currentVideo = nextVideo;
                 nextVideo = temp;
-
+    
                 nextVideo.style.display = "none";
                 currentVideo.style.display = "block";
-
+    
                 currentVideo.play();
                 preloadNextSegment();
             } else {
@@ -192,20 +209,23 @@
                 playPauseBtn.innerText = "Play";
             }
         }
-
+    
         progress.addEventListener("mousedown", startScrubbing);
         document.addEventListener("mouseup", stopScrubbing);
-
+    
         setInterval(() => {
             fetchSegments();
         }, 3000); // Poll every 3 seconds for new segments
-
+    
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
-
+    
         videoPlayer1.addEventListener("ended", switchToNextSegment);
         videoPlayer2.addEventListener("ended", switchToNextSegment);
-
+    
+        videoPlayer1.addEventListener("error", () => retrySegment(videoPlayer1));
+        videoPlayer2.addEventListener("error", () => retrySegment(videoPlayer2));
+    
         playPauseBtn.addEventListener("click", () => {
             if (isPlaying) {
                 currentVideo.pause();
@@ -216,8 +236,10 @@
             }
             isPlaying = !isPlaying;
         });
-
-        playSegment();
+    
+        // Initially fetch segments and start playing
+        fetchSegments();
     </script>
+    
 </body>
 </html>
