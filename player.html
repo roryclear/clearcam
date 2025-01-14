@@ -74,23 +74,22 @@
 
     <script>
         let segments = [];
-        const segmentDuration = 60; 
         let totalDuration = 0;
-        let retryTimeout = 2000; 
-    
+        let retryTimeout = 2000;
+
         const videoPlayer1 = document.getElementById('videoPlayer1');
         const videoPlayer2 = document.getElementById('videoPlayer2');
         const playPauseBtn = document.getElementById('playPauseBtn');
         const progressBar = document.getElementById('progress-bar');
         const progress = document.getElementById('progress');
         const timeDisplay = document.getElementById('timeDisplay');
-    
+
         let currentVideo = videoPlayer1;
         let nextVideo = videoPlayer2;
         let currentSegment = 0;
         let isPlaying = false;
         let isScrubbing = false;
-    
+
         async function fetchSegments() {
             try {
                 const response = await fetch('/get-segments');
@@ -98,8 +97,12 @@
                     const newSegments = await response.json();
                     if (Array.isArray(newSegments)) {
                         const oldTotalDuration = totalDuration;
-                        segments = newSegments;
-                        totalDuration = segments.length * segmentDuration;
+                        segments = newSegments.map((segment, index) => ({
+                            ...segment,
+                            cumulativeStart: index === 0 ? 0 : segments[index - 1].cumulativeStart + segments[index - 1].duration
+                        }));
+                        totalDuration = segments.reduce((sum, seg) => sum + seg.duration, 0);
+
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegment();
@@ -113,35 +116,38 @@
                 console.error('Failed to fetch segments:', error);
             }
         }
-    
+
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
             return `${minutes}:${secs}`;
         }
-    
+
         function updateTimeline() {
-            const currentTime = currentSegment * segmentDuration + currentVideo.currentTime;
+            const currentTime = currentVideo.currentTime + segments[currentSegment].cumulativeStart;
             progressBar.style.width = `${(currentTime / totalDuration) * 100}%`;
             timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(totalDuration)}`;
         }
-    
+
         function scrub(e) {
             const scrubTime = ((e.offsetX || e.touches[0].clientX - progress.getBoundingClientRect().left) / progress.offsetWidth) * totalDuration;
-            const targetSegment = Math.floor(scrubTime / segmentDuration);
-            const targetTime = scrubTime % segmentDuration;
-    
+
+            let targetSegment = segments.findIndex(segment => scrubTime < segment.cumulativeStart + segment.duration);
+            targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
+
+            const targetTime = scrubTime - segments[targetSegment].cumulativeStart;
+
             if (targetSegment >= 0 && targetSegment < segments.length) {
                 currentSegment = targetSegment;
-                currentVideo.src = segments[currentSegment];
+                currentVideo.src = segments[currentSegment].url;
                 currentVideo.currentTime = targetTime;
                 currentVideo.play();
                 preloadNextSegment();
             }
-    
+
             updateTimeline();
         }
-    
+
         function startScrubbing(e) {
             isScrubbing = true;
             scrub(e);
@@ -150,15 +156,13 @@
             document.addEventListener("touchmove", scrubWhileDragging);
             document.addEventListener("touchend", stopScrubbing);
         }
-    
+
         function scrubWhileDragging(e) {
             if (isScrubbing) {
-                const progressRect = progress.getBoundingClientRect();
-                const offsetX = Math.min(Math.max((e.clientX || e.touches[0].clientX) - progressRect.left, 0), progressRect.width);
-                scrub({ offsetX });
+                scrub(e);
             }
         }
-    
+
         function stopScrubbing() {
             isScrubbing = false;
             document.removeEventListener("mousemove", scrubWhileDragging);
@@ -166,48 +170,48 @@
             document.removeEventListener("touchmove", scrubWhileDragging);
             document.removeEventListener("touchend", stopScrubbing);
         }
-    
+
         function preloadNextSegment() {
             if (currentSegment + 1 < segments.length) {
-                nextVideo.src = segments[currentSegment + 1];
+                nextVideo.src = segments[currentSegment + 1].url;
                 nextVideo.load();
             }
         }
-    
+
         function playSegment() {
             if (segments.length > 0) {
-                currentVideo.src = segments[currentSegment];
+                currentVideo.src = segments[currentSegment].url;
                 currentVideo.currentTime = 0;
                 currentVideo.style.display = "block";
                 nextVideo.style.display = "none";
-    
+
                 currentVideo.play();
                 isPlaying = true;
                 playPauseBtn.innerText = "Pause";
-    
+
                 preloadNextSegment();
             }
         }
-    
+
         function retrySegment(videoElement) {
-            console.warn(`Retrying segment: ${segments[currentSegment]}`);
+            console.warn(`Retrying segment: ${segments[currentSegment].url}`);
             setTimeout(() => {
-                videoElement.src = segments[currentSegment];
+                videoElement.src = segments[currentSegment].url;
                 videoElement.load();
                 videoElement.play();
             }, retryTimeout);
         }
-    
+
         function switchToNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 currentSegment++;
                 const temp = currentVideo;
                 currentVideo = nextVideo;
                 nextVideo = temp;
-    
+
                 nextVideo.style.display = "none";
                 currentVideo.style.display = "block";
-    
+
                 currentVideo.play();
                 preloadNextSegment();
             } else {
@@ -215,21 +219,21 @@
                 playPauseBtn.innerText = "Play";
             }
         }
-    
+
         progress.addEventListener("mousedown", startScrubbing);
         progress.addEventListener("touchstart", startScrubbing);
-    
-        setInterval(fetchSegments, 3000); 
-    
+
+        setInterval(fetchSegments, 3000);
+
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
-    
+
         videoPlayer1.addEventListener("ended", switchToNextSegment);
         videoPlayer2.addEventListener("ended", switchToNextSegment);
-    
+
         videoPlayer1.addEventListener("error", () => retrySegment(videoPlayer1));
         videoPlayer2.addEventListener("error", () => retrySegment(videoPlayer2));
-    
+
         playPauseBtn.addEventListener("click", () => {
             if (isPlaying) {
                 currentVideo.pause();
@@ -240,7 +244,7 @@
             }
             isPlaying = !isPlaying;
         });
-    
+
         fetchSegments();
     </script>
 </body>
