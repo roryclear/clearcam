@@ -97,12 +97,30 @@
                     const newSegments = await response.json();
                     if (Array.isArray(newSegments)) {
                         const oldTotalDuration = totalDuration;
-                        segments = newSegments.map((segment, index) => ({
-                            ...segment,
-                            cumulativeStart: index === 0 ? 0 : segments[index - 1].cumulativeStart + segments[index - 1].duration
-                        }));
+
+                        // Calculate cumulativeStart correctly by summing durations of previous segments
+                        let cumulativeStart = 0;
+                        segments = newSegments.map((segment, index) => {
+                            // Store the cumulative start for the current segment
+                            const currentCumulativeStart = cumulativeStart;
+
+                            // Update cumulativeStart for the next segment by adding the current segment's duration
+                            cumulativeStart += segment.duration;
+
+                            // Log for debugging
+                            //console.log(`Segment ${index}: cumulativeStart = ${currentCumulativeStart}`);
+
+                            // Return the segment with the updated cumulativeStart
+                            return {
+                                ...segment,
+                                cumulativeStart: currentCumulativeStart
+                            };
+                        });
+
+                        // Calculate total duration
                         totalDuration = segments.reduce((sum, seg) => sum + seg.duration, 0);
 
+                        // If total duration changed, update the timeline and preload next segment
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegment();
@@ -116,6 +134,7 @@
                 console.error('Failed to fetch segments:', error);
             }
         }
+
 
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
