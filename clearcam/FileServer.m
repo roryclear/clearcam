@@ -91,8 +91,45 @@
     NSString *filePath = [[request substringFromIndex:NSMaxRange(range)] componentsSeparatedByString:@" "][0];
     filePath = [filePath stringByRemovingPercentEncoding];
     if ([filePath isEqualToString:@"/"]) filePath = @"";
-    NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
 
+    // Handle /get-segments API endpoint
+    if ([filePath isEqualToString:@"get-segments"]) {
+        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+        NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:documentsPath error:nil];
+        NSPredicate *mp4Filter = [NSPredicate predicateWithFormat:@"SELF ENDSWITH '.mp4'"];
+        NSArray *mp4Files = [files filteredArrayUsingPredicate:mp4Filter];
+
+        // Sort .mp4 files by numeric values
+        NSArray *sortedFiles = [mp4Files sortedArrayUsingComparator:^NSComparisonResult(NSString *file1, NSString *file2) {
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"_(\\d+)_"
+                                                                                   options:0
+                                                                                     error:nil];
+            NSTextCheckingResult *match1 = [regex firstMatchInString:file1 options:0 range:NSMakeRange(0, file1.length)];
+            NSTextCheckingResult *match2 = [regex firstMatchInString:file2 options:0 range:NSMakeRange(0, file2.length)];
+
+            NSInteger num1 = match1 ? [[file1 substringWithRange:[match1 rangeAtIndex:1]] integerValue] : 0;
+            NSInteger num2 = match2 ? [[file2 substringWithRange:[match2 rangeAtIndex:1]] integerValue] : 0;
+
+            return [@(num1) compare:@(num2)];
+        }];
+
+        // Exclude the last segment from the list
+        if (sortedFiles.count > 0) {
+            sortedFiles = [sortedFiles subarrayWithRange:NSMakeRange(0, sortedFiles.count - 1)];
+        }
+
+        // Send JSON response
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n");
+        NSMutableArray *responseArray = [NSMutableArray array];
+        for (NSString *file in sortedFiles) {
+            [responseArray addObject:file];
+        }
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:responseArray options:0 error:nil];
+        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+        return;
+    }
+
+    NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     BOOL isDirectory = NO;
     if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
         dprintf(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
@@ -100,6 +137,7 @@
     }
 
     if (isDirectory) {
+        // Directory listing
         NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:fullPath error:nil];
         NSArray *sortedFiles = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
@@ -162,6 +200,12 @@
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
+    } else if ([fileExtension isEqualToString:@"html"]) {
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: text/html\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     } else {
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: application/octet-stream\r\n");
@@ -170,9 +214,9 @@
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
-
     fclose(file);
 }
+
 
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {
     char buffer[64 * 1024];
@@ -190,5 +234,3 @@
 }
     
 @end
-
-

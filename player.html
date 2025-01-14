@@ -10,7 +10,7 @@
             width: 100%;
             max-width: 640px;
             background: black;
-            aspect-ratio: 16 / 9;
+            aspect-ratio: 4 / 3;
         }
         video {
             position: absolute;
@@ -20,23 +20,32 @@
         }
         #controls {
             display: flex;
+            flex-direction: column;
             align-items: center;
             margin-top: 10px;
             width: 100%;
             max-width: 640px;
         }
+        .top-controls {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            justify-content: space-between;
+        }
         #progress {
-            flex: 1;
-            height: 5px;
+            width: 100%;
+            height: 10px;
             background-color: #ccc;
-            margin: 0 10px;
+            margin: 10px 0;
             cursor: pointer;
             position: relative;
+            border-radius: 5px;
         }
         #progress-bar {
             width: 0;
             height: 100%;
             background-color: #007bff;
+            border-radius: 5px;
         }
         button {
             padding: 5px 10px;
@@ -54,132 +63,151 @@
         <video id="videoPlayer2" playsinline style="display: none;"></video>
     </div>
     <div id="controls">
-        <button id="playPauseBtn">Play</button>
+        <div class="top-controls">
+            <button id="playPauseBtn">Play</button>
+            <div id="timeDisplay">0:00 / 0:00</div>
+        </div>
         <div id="progress">
             <div id="progress-bar"></div>
         </div>
-        <div id="timeDisplay">0:00 / 0:00</div>
     </div>
 
     <script>
-        let segments = ["0.mp4"]; // Initial segment
-        const segmentDuration = 60; // Duration of each segment in seconds
-        let totalDuration = segments.length * segmentDuration;
-
+        let segments = [];
+        const segmentDuration = 60; 
+        let totalDuration = 0;
+        let retryTimeout = 2000; 
+    
         const videoPlayer1 = document.getElementById('videoPlayer1');
         const videoPlayer2 = document.getElementById('videoPlayer2');
         const playPauseBtn = document.getElementById('playPauseBtn');
         const progressBar = document.getElementById('progress-bar');
         const progress = document.getElementById('progress');
         const timeDisplay = document.getElementById('timeDisplay');
-
+    
         let currentVideo = videoPlayer1;
         let nextVideo = videoPlayer2;
         let currentSegment = 0;
         let isPlaying = false;
         let isScrubbing = false;
-
+    
+        async function fetchSegments() {
+            try {
+                const response = await fetch('/get-segments');
+                if (response.ok) {
+                    const newSegments = await response.json();
+                    if (Array.isArray(newSegments)) {
+                        const oldTotalDuration = totalDuration;
+                        segments = newSegments;
+                        totalDuration = segments.length * segmentDuration;
+                        if (totalDuration !== oldTotalDuration) {
+                            updateTimeline();
+                            preloadNextSegment();
+                            if (!isPlaying && segments.length > 0) {
+                                playSegment();
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch segments:', error);
+            }
+        }
+    
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
             return `${minutes}:${secs}`;
         }
-
+    
         function updateTimeline() {
             const currentTime = currentSegment * segmentDuration + currentVideo.currentTime;
             progressBar.style.width = `${(currentTime / totalDuration) * 100}%`;
             timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(totalDuration)}`;
         }
-
+    
         function scrub(e) {
-            const scrubTime = (e.offsetX / progress.offsetWidth) * totalDuration;
+            const scrubTime = ((e.offsetX || e.touches[0].clientX - progress.getBoundingClientRect().left) / progress.offsetWidth) * totalDuration;
             const targetSegment = Math.floor(scrubTime / segmentDuration);
             const targetTime = scrubTime % segmentDuration;
-
+    
             if (targetSegment >= 0 && targetSegment < segments.length) {
                 currentSegment = targetSegment;
                 currentVideo.src = segments[currentSegment];
                 currentVideo.currentTime = targetTime;
                 currentVideo.play();
-
-                // Preload the next segment after scrubbing
                 preloadNextSegment();
             }
-
+    
             updateTimeline();
         }
-
-
+    
         function startScrubbing(e) {
             isScrubbing = true;
             scrub(e);
             document.addEventListener("mousemove", scrubWhileDragging);
             document.addEventListener("mouseup", stopScrubbing);
+            document.addEventListener("touchmove", scrubWhileDragging);
+            document.addEventListener("touchend", stopScrubbing);
         }
-
+    
         function scrubWhileDragging(e) {
             if (isScrubbing) {
                 const progressRect = progress.getBoundingClientRect();
-                const offsetX = Math.min(Math.max(e.clientX - progressRect.left, 0), progressRect.width);
+                const offsetX = Math.min(Math.max((e.clientX || e.touches[0].clientX) - progressRect.left, 0), progressRect.width);
                 scrub({ offsetX });
             }
         }
-
+    
         function stopScrubbing() {
             isScrubbing = false;
             document.removeEventListener("mousemove", scrubWhileDragging);
             document.removeEventListener("mouseup", stopScrubbing);
+            document.removeEventListener("touchmove", scrubWhileDragging);
+            document.removeEventListener("touchend", stopScrubbing);
         }
-
+    
         function preloadNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 nextVideo.src = segments[currentSegment + 1];
                 nextVideo.load();
             }
         }
-
-        function checkForNewSegments() {
-            const nextSegmentIndex = segments.length;
-            const nextSegment = `${nextSegmentIndex}.mp4`;
-
-            fetch(nextSegment, { method: 'HEAD' })
-                .then(response => {
-                    if (response.ok) {
-                        segments.push(nextSegment);
-                        totalDuration = segments.length * segmentDuration;
-
-                        // Update preloaded video if needed
-                        if (currentSegment + 1 === segments.length - 1) {
-                            preloadNextSegment();
-                        }
-                    }
-                })
-                .catch(() => {});
-        }
-
+    
         function playSegment() {
-            currentVideo.src = segments[currentSegment];
-            currentVideo.currentTime = 0;
-            currentVideo.style.display = "block";
-            nextVideo.style.display = "none";
-
-            currentVideo.play();
-            isPlaying = true;
-            playPauseBtn.innerText = "Pause";
-
-            preloadNextSegment();
+            if (segments.length > 0) {
+                currentVideo.src = segments[currentSegment];
+                currentVideo.currentTime = 0;
+                currentVideo.style.display = "block";
+                nextVideo.style.display = "none";
+    
+                currentVideo.play();
+                isPlaying = true;
+                playPauseBtn.innerText = "Pause";
+    
+                preloadNextSegment();
+            }
         }
-
+    
+        function retrySegment(videoElement) {
+            console.warn(`Retrying segment: ${segments[currentSegment]}`);
+            setTimeout(() => {
+                videoElement.src = segments[currentSegment];
+                videoElement.load();
+                videoElement.play();
+            }, retryTimeout);
+        }
+    
         function switchToNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 currentSegment++;
                 const temp = currentVideo;
                 currentVideo = nextVideo;
                 nextVideo = temp;
-
+    
                 nextVideo.style.display = "none";
                 currentVideo.style.display = "block";
-
+    
                 currentVideo.play();
                 preloadNextSegment();
             } else {
@@ -187,20 +215,21 @@
                 playPauseBtn.innerText = "Play";
             }
         }
-
+    
         progress.addEventListener("mousedown", startScrubbing);
-        document.addEventListener("mouseup", stopScrubbing);
-
-        setInterval(() => {
-            checkForNewSegments();
-        }, 3000);
-
+        progress.addEventListener("touchstart", startScrubbing);
+    
+        setInterval(fetchSegments, 3000); 
+    
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
-
+    
         videoPlayer1.addEventListener("ended", switchToNextSegment);
         videoPlayer2.addEventListener("ended", switchToNextSegment);
-
+    
+        videoPlayer1.addEventListener("error", () => retrySegment(videoPlayer1));
+        videoPlayer2.addEventListener("error", () => retrySegment(videoPlayer2));
+    
         playPauseBtn.addEventListener("click", () => {
             if (isPlaying) {
                 currentVideo.pause();
@@ -211,8 +240,8 @@
             }
             isPlaying = !isPlaying;
         });
-
-        playSegment();
+    
+        fetchSegments();
     </script>
 </body>
 </html>
