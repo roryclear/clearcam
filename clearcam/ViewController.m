@@ -279,80 +279,84 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
-    if (self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
-        CMTime timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
-        if (CMTIME_IS_INVALID(self.startTime)) {
-            self.startTime = timestamp;
-            self.currentTime = kCMTimeZero;
-        } else {
-            self.currentTime = CMTimeSubtract(timestamp, self.startTime);
-        }
+    @try {
+        if (self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
+            CMTime timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
+            if (CMTIME_IS_INVALID(self.startTime)) {
+                self.startTime = timestamp;
+                self.currentTime = kCMTimeZero;
+            } else {
+                self.currentTime = CMTimeSubtract(timestamp, self.startTime);
+            }
 
-        if (self.videoWriterInput.readyForMoreMediaData) {
-            CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-            
-            BOOL success = NO;
-            int retryCount = 3;
+            if (self.videoWriterInput.readyForMoreMediaData) {
+                CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+                
+                BOOL success = NO;
+                int retryCount = 3;
 
-            while (!success && retryCount > 0) {
-                success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
-                if (!success) {
-                    retryCount--;
-                    [NSThread sleepForTimeInterval:0.01];
+                while (!success && retryCount > 0) {
+                    success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
+                    if (!success) {
+                        retryCount--;
+                        [NSThread sleepForTimeInterval:0.01];
+                    }
                 }
+                if (!success) [self finishRecording];
             }
-            if (!success) [self finishRecording];
-        }
-        NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-        if (elapsedTime >= 60.0) { // todo, takes a little time to change
-            [self finishRecording];
-        }
-    }
-
-    AVCaptureVideoOrientation videoOrientation = self.previewLayer.connection.videoOrientation;
-    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-    CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
-
-    if (self.isProcessing) {
-        return;
-    }
-
-    self.isProcessing = YES;
-
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        size_t width = CVPixelBufferGetWidth(imageBuffer);
-        size_t height = CVPixelBufferGetHeight(imageBuffer);
-        CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
-        CGFloat targetWidth = self.yolo.yolo_res;
-        CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
-
-        CGFloat scaleX = targetSize.width / width;
-        CGFloat scaleY = targetSize.height / height;
-        CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
-        
-        CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
-        CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
-        
-        CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
-        
-        NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-        CGImageRelease(cgImage);
-        
-        __weak typeof(self) weak_self = self;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weak_self resetSquares];
-            for (int i = 0; i < output.count; i++) {
-                [weak_self drawSquareWithTopLeftX:[output[i][0] floatValue]
-                                          topLeftY:[output[i][1] floatValue]
-                                      bottomRightX:[output[i][2] floatValue]
-                                      bottomRightY:[output[i][3] floatValue]
-                                        classIndex:[output[i][4] intValue]
-                                       aspectRatio:aspect_ratio];
+            NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
+            if (elapsedTime >= 10.0) { // todo, takes a little time to change
+                [self finishRecording];
             }
-            [weak_self updateFPS];
-            weak_self.isProcessing = NO;
+        }
+
+        AVCaptureVideoOrientation videoOrientation = self.previewLayer.connection.videoOrientation;
+        CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+        CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
+
+        if (self.isProcessing) {
+            return;
+        }
+
+        self.isProcessing = YES;
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+            size_t width = CVPixelBufferGetWidth(imageBuffer);
+            size_t height = CVPixelBufferGetHeight(imageBuffer);
+            CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
+            CGFloat targetWidth = self.yolo.yolo_res;
+            CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
+
+            CGFloat scaleX = targetSize.width / width;
+            CGFloat scaleY = targetSize.height / height;
+            CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
+            
+            CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
+            CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
+            
+            CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
+            
+            NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
+            CGImageRelease(cgImage);
+            
+            __weak typeof(self) weak_self = self;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [weak_self resetSquares];
+                for (int i = 0; i < output.count; i++) {
+                    [weak_self drawSquareWithTopLeftX:[output[i][0] floatValue]
+                                              topLeftY:[output[i][1] floatValue]
+                                          bottomRightX:[output[i][2] floatValue]
+                                          bottomRightY:[output[i][3] floatValue]
+                                            classIndex:[output[i][4] intValue]
+                                           aspectRatio:aspect_ratio];
+                }
+                [weak_self updateFPS];
+                weak_self.isProcessing = NO;
+            });
         });
-    });
+    } @catch (NSException *exception) {
+            NSLog(@"Exception occurred: %@, %@", exception, [exception callStackSymbols]);
+    }
 }
 
 - (void)updateFPS {

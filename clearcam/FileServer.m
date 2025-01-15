@@ -6,9 +6,11 @@
 #import <unistd.h>
 #import <signal.h>
 #import <errno.h>
+#import <AVFoundation/AVFoundation.h>
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
+@property (nonatomic, strong) NSMutableDictionary *durationCache;
 @end
 
 @implementation FileServer
@@ -16,6 +18,7 @@
 - (void)start {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.basePath = [self getDocumentsDirectory];
+        self.durationCache = [[NSMutableDictionary alloc] init];
         [self startHTTPServerWithBasePath:self.basePath];
     });
 }
@@ -39,7 +42,7 @@
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = INADDR_ANY;
-        serverAddr.sin_port = htons(8080);
+        serverAddr.sin_port = htons(8081);
 
         if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
             NSLog(@"Failed to bind socket: %s", strerror(errno));
@@ -53,7 +56,7 @@
             return;
         }
 
-        NSLog(@"Serving files at http://localhost:8080/");
+        NSLog(@"Serving files at http://localhost:8081/");
 
         while (1) {
             int clientSocket = accept(serverSocket, NULL, NULL);
@@ -118,16 +121,43 @@
             sortedFiles = [sortedFiles subarrayWithRange:NSMakeRange(0, sortedFiles.count - 1)];
         }
 
-        // Send JSON response
-        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n");
+        // Prepare JSON response
         NSMutableArray *responseArray = [NSMutableArray array];
         for (NSString *file in sortedFiles) {
-            [responseArray addObject:file];
+            NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
+
+            NSNumber *cachedDuration = self.durationCache[file];
+            Float64 duration;
+            if (cachedDuration) {
+                duration = [cachedDuration doubleValue];
+            } else {
+                // Get duration using AVAsset
+                AVAsset *asset = [AVAsset assetWithURL:[NSURL fileURLWithPath:filePath]];
+                CMTime time = asset.duration;
+                duration = CMTimeGetSeconds(time);
+
+                if (isfinite(duration)) {
+                    duration = round(duration * 1000) / 1000.0;  // Round to 3 decimal places
+                    self.durationCache[file] = @(duration);
+                }
+            }
+
+            if (isfinite(duration)) {
+                [responseArray addObject:@{
+                    @"url": file,
+                    @"duration": @(duration)
+                }];
+            }
         }
+
+        // Send JSON response
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:responseArray options:0 error:nil];
+        NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
         send(clientSocket, jsonData.bytes, jsonData.length, 0);
         return;
     }
+
 
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     BOOL isDirectory = NO;
