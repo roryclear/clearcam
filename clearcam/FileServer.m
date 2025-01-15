@@ -10,6 +10,7 @@
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
+@property (nonatomic, strong) NSMutableDictionary *durationCache;
 @end
 
 @implementation FileServer
@@ -17,6 +18,7 @@
 - (void)start {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.basePath = [self getDocumentsDirectory];
+        self.durationCache = [[NSMutableDictionary alloc] init];
         [self startHTTPServerWithBasePath:self.basePath];
     });
 }
@@ -40,7 +42,7 @@
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = INADDR_ANY;
-        serverAddr.sin_port = htons(8080);
+        serverAddr.sin_port = htons(8081);
 
         if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
             NSLog(@"Failed to bind socket: %s", strerror(errno));
@@ -54,7 +56,7 @@
             return;
         }
 
-        NSLog(@"Serving files at http://localhost:8080/");
+        NSLog(@"Serving files at http://localhost:8081/");
 
         while (1) {
             int clientSocket = accept(serverSocket, NULL, NULL);
@@ -123,16 +125,24 @@
         NSMutableArray *responseArray = [NSMutableArray array];
         for (NSString *file in sortedFiles) {
             NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
-            
-            // Get duration using AVAsset
-            AVAsset *asset = [AVAsset assetWithURL:[NSURL fileURLWithPath:filePath]];
-            CMTime time = asset.duration;
-            Float64 duration = CMTimeGetSeconds(time);
-            
-            // Round the duration to 3 decimal places
+
+            NSNumber *cachedDuration = self.durationCache[file];
+            Float64 duration;
+            if (cachedDuration) {
+                duration = [cachedDuration doubleValue];
+            } else {
+                // Get duration using AVAsset
+                AVAsset *asset = [AVAsset assetWithURL:[NSURL fileURLWithPath:filePath]];
+                CMTime time = asset.duration;
+                duration = CMTimeGetSeconds(time);
+
+                if (isfinite(duration)) {
+                    duration = round(duration * 1000) / 1000.0;  // Round to 3 decimal places
+                    self.durationCache[file] = @(duration);
+                }
+            }
+
             if (isfinite(duration)) {
-                duration = round(duration * 1000) / 1000.0;  // Round to 3 decimal places
-                
                 [responseArray addObject:@{
                     @"url": file,
                     @"duration": @(duration)
