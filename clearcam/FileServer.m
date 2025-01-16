@@ -85,7 +85,6 @@
 
     requestBuffer[bytesRead] = '\0';
     NSString *request = [NSString stringWithUTF8String:requestBuffer];
-    NSLog(@"Client request: %s", requestBuffer);
 
     NSRange range = [request rangeOfString:@"GET /"];
     if (range.location == NSNotFound) {
