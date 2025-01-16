@@ -106,7 +106,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)startNewRecording {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-    [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss"];
+    [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
     NSString *timestamp = [formatter stringFromDate:[NSDate date]];
     NSString *segNumberString = [NSString stringWithFormat:@"_%05ld_", (long)self.seg_number];
     self.seg_number += 1;

@@ -89,7 +89,6 @@
         let currentSegment = 0;
         let isPlaying = false;
         let isScrubbing = false;
-
         async function fetchSegments() {
             try {
                 const response = await fetch('/get-segments');
@@ -98,27 +97,25 @@
                     if (Array.isArray(newSegments)) {
                         const oldTotalDuration = totalDuration;
 
-                        // Calculate cumulativeStart correctly by summing durations of previous segments
+                        // Calculate cumulativeStart with lost frames adjustment
                         let cumulativeStart = 0;
                         segments = newSegments.map((segment, index) => {
-                            // Store the cumulative start for the current segment
+                            const timeDifference = segment.timeDifference || segment.duration;
+                            const lostFrames = timeDifference - segment.duration;
+
+                            // Store cumulativeStart including lost frames
                             const currentCumulativeStart = cumulativeStart;
+                            cumulativeStart += timeDifference; // Add full time difference to cumulative start
 
-                            // Update cumulativeStart for the next segment by adding the current segment's duration
-                            cumulativeStart += segment.duration;
-
-                            // Log for debugging
-                            //console.log(`Segment ${index}: cumulativeStart = ${currentCumulativeStart}`);
-
-                            // Return the segment with the updated cumulativeStart
                             return {
                                 ...segment,
-                                cumulativeStart: currentCumulativeStart
+                                cumulativeStart: currentCumulativeStart,
+                                lostFrames: lostFrames > 0 ? lostFrames : 0,
                             };
                         });
 
-                        // Calculate total duration
-                        totalDuration = segments.reduce((sum, seg) => sum + seg.duration, 0);
+                        // Calculate total duration including lost frames
+                        totalDuration = segments.reduce((sum, seg) => sum + (seg.timeDifference || seg.duration), 0);
 
                         // If total duration changed, update the timeline and preload next segment
                         if (totalDuration !== oldTotalDuration) {
@@ -135,7 +132,7 @@
             }
         }
 
-
+        
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
@@ -143,6 +140,7 @@
         }
 
         function updateTimeline() {
+            // Calculate the current time including lost frames
             const currentTime = currentVideo.currentTime + segments[currentSegment].cumulativeStart;
             progressBar.style.width = `${(currentTime / totalDuration) * 100}%`;
             timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(totalDuration)}`;
@@ -166,6 +164,7 @@
 
             updateTimeline();
         }
+
 
         function startScrubbing(e) {
             isScrubbing = true;
@@ -242,7 +241,7 @@
         progress.addEventListener("mousedown", startScrubbing);
         progress.addEventListener("touchstart", startScrubbing);
 
-        setInterval(fetchSegments, 3000);
+        setInterval(fetchSegments, 1000);
 
         videoPlayer1.addEventListener("timeupdate", updateTimeline);
         videoPlayer2.addEventListener("timeupdate", updateTimeline);
