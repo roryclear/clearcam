@@ -97,106 +97,26 @@
     if ([filePath isEqualToString:@"/"]) filePath = @"";
 
     // Handle /get-segments API endpoint
-    if ([filePath isEqualToString:@"get-segments"]) { //TODO, this gets very slow I think, just use a txt file
+    if ([filePath isEqualToString:@"get-segments"]) {
         NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:documentsPath error:nil];
-        NSPredicate *mp4Filter = [NSPredicate predicateWithFormat:@"SELF ENDSWITH '.mp4'"];
-        NSArray *mp4Files = [files filteredArrayUsingPredicate:mp4Filter];
+        NSString *segmentsFilePath = [documentsPath stringByAppendingPathComponent:@"segments.txt"];
 
-        // Sort .mp4 files by numeric values
-        NSArray *sortedFiles = [mp4Files sortedArrayUsingComparator:^NSComparisonResult(NSString *file1, NSString *file2) {
-            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"_(\\d+)_"
-                                                                                   options:0
-                                                                                     error:nil];
-            NSTextCheckingResult *match1 = [regex firstMatchInString:file1 options:0 range:NSMakeRange(0, file1.length)];
-            NSTextCheckingResult *match2 = [regex firstMatchInString:file2 options:0 range:NSMakeRange(0, file2.length)];
-
-            NSInteger num1 = match1 ? [[file1 substringWithRange:[match1 rangeAtIndex:1]] integerValue] : 0;
-            NSInteger num2 = match2 ? [[file2 substringWithRange:[match2 rangeAtIndex:1]] integerValue] : 0;
-
-            return [@(num1) compare:@(num2)];
-        }];
-
-        if (sortedFiles.count > 1) { // Exclude last 2 files
-            sortedFiles = [sortedFiles subarrayWithRange:NSMakeRange(0, sortedFiles.count - 2)];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
+            // Read contents of segments.txt
+            NSData *jsonData = [NSData dataWithContentsOfFile:segmentsFilePath];
+            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, jsonData.bytes, jsonData.length, 0);
+            return;
+        } else {
+            // If file does not exist, send an empty response
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"segments.txt not found\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
         }
-
-        // Prepare JSON response
-        NSMutableArray *responseArray = [NSMutableArray array];
-        NSString *lastFile = nil;
-        for (NSString *file in sortedFiles) {
-            NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
-
-            // Retrieve cached duration or calculate it
-            NSNumber *cachedDuration = self.durationCache[file];
-            Float64 duration;
-            if (cachedDuration) {
-                duration = [cachedDuration doubleValue];
-            } else {
-                // Get duration using AVAsset
-                AVAsset *asset = [AVAsset assetWithURL:[NSURL fileURLWithPath:filePath]];
-                CMTime time = asset.duration;
-                duration = CMTimeGetSeconds(time);
-
-                if (isfinite(duration)) {
-                    duration = round(duration * 1000) / 1000.0;  // Round to 3 decimal places
-                    self.durationCache[file] = @(duration);
-                }
-            }
-
-            // Retrieve cached timeDifference or calculate it
-            Float64 timeDifference = 0;
-            if (lastFile) {
-                NSNumber *cachedTimeDifference = self.timeDifferenceCache[lastFile];
-                if (cachedTimeDifference) {
-                    timeDifference = [cachedTimeDifference doubleValue];
-                } else {
-                    // Extract timestamps
-                    NSRegularExpression *timestampRegex = [NSRegularExpression regularExpressionWithPattern:@"_(\\d{2}:\\d{2}:\\d{2}:\\d{3})\\.mp4$"
-                                                                                                    options:0
-                                                                                                      error:nil];
-                    NSTextCheckingResult *lastMatch = [timestampRegex firstMatchInString:lastFile options:0 range:NSMakeRange(0, lastFile.length)];
-                    NSTextCheckingResult *currentMatch = [timestampRegex firstMatchInString:file options:0 range:NSMakeRange(0, file.length)];
-
-                    NSString *lastTimestamp = lastMatch ? [lastFile substringWithRange:[lastMatch rangeAtIndex:1]] : nil;
-                    NSString *currentTimestamp = currentMatch ? [file substringWithRange:[currentMatch rangeAtIndex:1]] : nil;
-
-                    if (lastTimestamp && currentTimestamp) {
-                        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-                        [formatter setDateFormat:@"HH:mm:ss:SSS"];
-                        NSDate *lastDate = [formatter dateFromString:lastTimestamp];
-                        NSDate *currentDate = [formatter dateFromString:currentTimestamp];
-
-                        if (lastDate && currentDate) {
-                            timeDifference = [currentDate timeIntervalSinceDate:lastDate];
-                            self.timeDifferenceCache[lastFile] = @(timeDifference);
-                        }
-                    }
-                }
-            }
-
-            // Prepare segment data
-            NSMutableDictionary *segmentData = [@{
-                @"url": file,
-                @"duration": @(duration)
-            } mutableCopy];
-            if (timeDifference > 0) {
-                segmentData[@"timeDifference"] = @(timeDifference);
-            }
-
-            [responseArray addObject:segmentData];
-            lastFile = file; // Update last file
-        }
-
-        // Send JSON response
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:responseArray options:0 error:nil];
-        NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        send(clientSocket, jsonData.bytes, jsonData.length, 0);
-        return;
     }
-
-
 
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     BOOL isDirectory = NO;
