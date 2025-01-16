@@ -43,7 +43,7 @@
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = INADDR_ANY;
-        serverAddr.sin_port = htons(8081);
+        serverAddr.sin_port = htons(8080);
 
         if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
             NSLog(@"Failed to bind socket: %s", strerror(errno));
@@ -57,7 +57,7 @@
             return;
         }
 
-        NSLog(@"Serving files at http://localhost:8081/");
+        NSLog(@"Serving files at http://localhost:8080/");
 
         while (1) {
             int clientSocket = accept(serverSocket, NULL, NULL);
