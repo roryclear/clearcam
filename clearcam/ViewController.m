@@ -23,6 +23,11 @@
 @property (nonatomic, strong) AVAssetWriterInputPixelBufferAdaptor *adaptor;
 @property (nonatomic, strong) FileServer *fileServer;
 @property (nonatomic, assign) int seg_number;
+@property (nonatomic, strong) NSURL *last_file_url;
+@property (nonatomic, assign) CMTime last_file_duration;
+@property (nonatomic, assign) NSDate *last_file_timestamp;
+@property (nonatomic, assign) NSDate *current_file_timestamp;
+
 
 @end
 
@@ -107,7 +112,8 @@ NSMutableDictionary *classColorMap;
 - (void)startNewRecording {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
-    NSString *timestamp = [formatter stringFromDate:[NSDate date]];
+    self.current_file_timestamp = [NSDate date];
+    NSString *timestamp = [formatter stringFromDate:self.current_file_timestamp];
     NSString *segNumberString = [NSString stringWithFormat:@"_%05ld_", (long)self.seg_number];
     self.seg_number += 1;
     NSString *finalTimestamp = [NSString stringWithFormat:@"%@%@%@",
@@ -271,10 +277,64 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         [self.assetWriter finishWritingWithCompletionHandler:^{
             NSLog(@"Finished recording and saving file");
+            
+            NSString *fileName = [self.assetWriter.outputURL lastPathComponent];
+            NSLog(@"File saved is %@", fileName);
+            
+            AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
+            CMTime time = asset.duration;
+            
+            // Path to segments file
+            NSString *segmentsFilePath = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
+                                          stringByAppendingPathComponent:@"segments.txt"];
+            
+            static NSMutableArray *segmentsArray = nil;
+            if (!segmentsArray) {
+                segmentsArray = [NSMutableArray array];
+            }
+            
+            if (CMTIME_IS_INVALID(self.last_file_duration)) {
+                self.last_file_duration = time;
+                self.last_file_url = [self.assetWriter.outputURL copy];
+                self.last_file_timestamp = self.current_file_timestamp;
+            } else {
+                // Calculate the time difference
+                CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
+                
+                // Create a dictionary entry with numeric values
+                NSDictionary *segmentEntry = @{
+                    @"url": self.last_file_url.lastPathComponent,
+                    @"duration": @(CMTimeGetSeconds(self.last_file_duration)),   // Now stored as NSNumber
+                    @"timeDifference": @(CMTimeGetSeconds(timeDifference))      // Now stored as NSNumber
+                };
+                
+                // Add the entry to the array
+                [segmentsArray addObject:segmentEntry];
+                
+                // Write array to file as JSON
+                [self saveSegmentsArray:segmentsArray toFile:segmentsFilePath];
+                
+                // Update last file details
+                self.last_file_duration = time;
+                self.last_file_url = [self.assetWriter.outputURL copy];
+                self.last_file_timestamp = self.current_file_timestamp;
+            }
+            
+            NSLog(@"Duration is %f seconds", CMTimeGetSeconds(time));
             [self startNewRecording];
         }];
     } else {
         NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
+    }
+}
+
+- (void)saveSegmentsArray:(NSMutableArray *)segmentsArray toFile:(NSString *)filePath {
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:segmentsArray options:NSJSONWritingPrettyPrinted error:&error];
+    if (!error) {
+        [jsonData writeToFile:filePath atomically:YES];
+    } else {
+        NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
     }
 }
 
@@ -375,7 +435,4 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-
-
-
 
