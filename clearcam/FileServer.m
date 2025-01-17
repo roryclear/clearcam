@@ -168,17 +168,25 @@
         return;
     }
 
-    if (isDirectory) {
-        // Directory listing
-        NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:fullPath error:nil];
-        NSArray *sortedFiles = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-        dprintf(clientSocket, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
-        dprintf(clientSocket, "<html><body><h1>Directory Listing</h1><ul>");
-        for (NSString *file in sortedFiles) {
-            NSString *fileLink = [file stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
-            dprintf(clientSocket, "<li>%s <a href=\"/%s\">Stream</a> <a href=\"/%s\" download>Download</a></li>", file.UTF8String, fileLink.UTF8String, fileLink.UTF8String);
+    if (isDirectory) { //todo, change url maybe
+        NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"player" ofType:@"html"];
+        if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
+            FILE *file = fopen([playerFilePath UTF8String], "rb");
+            if (file) {
+                fseek(file, 0, SEEK_END);
+                NSUInteger fileSize = ftell(file);
+                fseek(file, 0, SEEK_SET);
+
+                dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+                dprintf(clientSocket, "Content-Type: text/html\r\n");
+                dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+                dprintf(clientSocket, "\r\n");
+                [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
+                fclose(file);
+                return;
+            }
         }
-        dprintf(clientSocket, "</ul></body></html>");
+        dprintf(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
         return;
     }
 
