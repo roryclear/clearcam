@@ -122,9 +122,23 @@ NSMutableDictionary *classColorMap;
                                 [[timestamp componentsSeparatedByString:@"_"] firstObject],
                                 segNumberString,
                                 [[timestamp componentsSeparatedByString:@"_"] lastObject]];
+    // Create a folder for the day within the documents directory
+    [formatter setDateFormat:@"yyyy-MM-dd"];
+    NSString *dateFolderName = [formatter stringFromDate:self.current_file_timestamp];
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *outputURL = [documentsDirectory URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
+    NSURL *dayFolderURL = [documentsDirectory URLByAppendingPathComponent:dateFolderName];
+
+    // Ensure the directory exists
     NSError *error = nil;
+    if (![[NSFileManager defaultManager] fileExistsAtPath:dayFolderURL.path]) {
+        [[NSFileManager defaultManager] createDirectoryAtURL:dayFolderURL withIntermediateDirectories:YES attributes:nil error:&error];
+        if (error) {
+            NSLog(@"Error creating day folder: %@", error.localizedDescription);
+            return;
+        }
+    }
+
+    NSURL *outputURL = [dayFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
     self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
     if (error) {
         NSLog(@"Error creating asset writer: %@", error.localizedDescription);
@@ -286,7 +300,6 @@ NSMutableDictionary *classColorMap;
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
             
-            // Path to segments file
             NSString *segmentsFilePath = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
                                           stringByAppendingPathComponent:@"segments.txt"];
             
@@ -295,31 +308,24 @@ NSMutableDictionary *classColorMap;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
             } else {
-                // Calculate the time difference
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
                 
-                // Create a dictionary entry with numeric values
                 NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
-                    @"url": self.last_file_url.lastPathComponent,
+                    @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
                     @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
                     @"timeDifference": @(CMTimeGetSeconds(timeDifference))
                 }];
                 
-                // Add the "timeStamp" field if segmentsArray is empty
                 if (self.fileServer.segmentsArray.count == 0) {
-                    // Calculate timeStamp in seconds since midnight of the same day
                     NSCalendar *calendar = [NSCalendar currentCalendar];
                     NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
                     NSDate *midnight = [calendar dateFromComponents:components];
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
-                    
                     segmentEntry[@"timeStamp"] = @(timeStamp);
                 }
                 
-                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Save to file (not used yet)
+                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; //not used yet
                 [self.fileServer.segmentsArray addObject:segmentEntry];
-                
-                // Update last file details
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
@@ -466,4 +472,5 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
