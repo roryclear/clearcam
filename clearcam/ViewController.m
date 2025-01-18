@@ -41,8 +41,6 @@ NSMutableDictionary *classColorMap;
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
     self.seg_number = 0;
-    [self setupCamera];
-    [self setupFPSLabel];
     self.fileServer = [[FileServer alloc] init];
     [self.fileServer start];
     self.fileServer.segmentsArray = [[NSMutableArray alloc] init];
@@ -54,6 +52,8 @@ NSMutableDictionary *classColorMap;
     
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
     [self handleDeviceOrientationChange];
+    [self setupCamera];
+    [self setupFPSLabel];
 }
 
 - (void)dealloc {

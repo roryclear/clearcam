@@ -168,7 +168,8 @@
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegments();
-                            if (!isPlaying && segments.length > 0 && !isWaitingForNextSegment) {
+                            //todo, bad autoplay at the start logic
+                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart == 0 || (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
                                 playSegment();
                             }
                             if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
