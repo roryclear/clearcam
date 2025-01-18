@@ -11,6 +11,9 @@
             background: black;
             aspect-ratio: 4 / 3;
         }
+        #videoContainer:hover #controls {
+            opacity: 1;
+        }
         video {
             position: absolute;
             width: 100%;
@@ -18,12 +21,20 @@
             object-fit: contain;
         }
         #controls {
+            position: absolute;
+            bottom: 0;
+            width: calc(100% - 20px);
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-top: 10px;
-            width: 100%;
-            max-width: 640px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #controls.show {
+            opacity: 1;
         }
         .top-controls {
             display: flex;
@@ -52,6 +63,7 @@
         }
         #timeDisplay {
             margin-left: 10px;
+            color: white;
         }
     </style>
 </head>
@@ -59,14 +71,14 @@
     <div id="videoContainer">
         <video id="videoPlayer1" playsinline webkit-playsinline muted></video>
         <video id="videoPlayer2" playsinline webkit-playsinline muted style="display: none;"></video>
-    </div>
-    <div id="controls">
-        <div class="top-controls">
-            <button id="playPauseBtn">Play</button>
-            <div id="timeDisplay">0:00 / 0:00</div>
-        </div>
-        <div id="progress">
-            <div id="progress-bar"></div>
+        <div id="controls">
+            <div class="top-controls">
+                <button id="playPauseBtn">Play</button>
+                <div id="timeDisplay">0:00 / 0:00</div>
+            </div>
+            <div id="progress">
+                <div id="progress-bar"></div>
+            </div>
         </div>
     </div>
     <script>
@@ -87,6 +99,38 @@
     let isPlaying = false;
     let isScrubbing = false;
     let isWaitingForNextSegment = false;
+
+    let hideControlsTimeout;
+    const controls = document.getElementById('controls');
+    const videoContainer = document.getElementById('videoContainer');
+
+    function showControls() {
+        controls.classList.add('show');
+        clearTimeout(hideControlsTimeout);
+        hideControlsTimeout = setTimeout(() => {
+            controls.classList.remove('show');
+        }, 4000);
+    }
+
+    function hideControls() {
+        controls.classList.remove('show');
+        clearTimeout(hideControlsTimeout);
+    }
+
+    function toggleControls() {
+        if (controls.classList.contains('show')) {
+            hideControls();
+        } else {
+            showControls();
+        }
+    }
+
+    videoContainer.addEventListener('mousemove', showControls);
+    videoContainer.addEventListener('mouseleave', hideControls);
+    videoContainer.addEventListener('touchend', toggleControls);
+    videoContainer.addEventListener('click', toggleControls);
+
+
 
     async function fetchSegments() {
         try {
@@ -275,9 +319,7 @@
             isPlaying = true;
         }
     });
-
     fetchSegments();
     </script>
-    
 </body>
 </html>
