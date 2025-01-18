@@ -139,6 +139,15 @@
         videoContainer.addEventListener('touchend', toggleControls);
         videoContainer.addEventListener('click', toggleControls);
 
+        document.addEventListener("visibilitychange", () => {
+            if (isPlaying && !document.hidden && segments.length > 0) {
+                currentSegment = segments.length - 1;
+                currentVideo.src = segments[currentSegment].url;
+                currentVideo.currentTime = segments[currentSegment].duration;
+                currentVideo.play().catch(() => {});
+            }
+        });
+
         async function fetchSegments() {
             try {
                 const startParam = segments.length;
@@ -332,6 +341,6 @@
         });
 
         fetchSegments();
-    </script>
+        </script>
 </body>
 </html>
