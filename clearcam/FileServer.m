@@ -32,42 +32,31 @@
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
     @try {
         signal(SIGPIPE, SIG_IGN);
-
-        int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-        if (serverSocket == -1) {
-            NSLog(@"Failed to create socket: %s", strerror(errno));
-            return;
-        }
-
+        
+        int serverSocket = -1;
         struct sockaddr_in serverAddr;
+        
+        while (serverSocket == -1) {
+            serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+        }
+        
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = INADDR_ANY;
         serverAddr.sin_port = htons(8080);
-
-        if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
-            NSLog(@"Failed to bind socket: %s", strerror(errno));
-            close(serverSocket);
-            return;
-        }
-
-        if (listen(serverSocket, 5) == -1) {
-            NSLog(@"Failed to listen on socket: %s", strerror(errno));
-            close(serverSocket);
-            return;
-        }
-
-        NSLog(@"Serving files at http://localhost:8080/");
+        
+        while (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) { }
+        
+        while (listen(serverSocket, 5) == -1) { }
 
         while (1) {
             int clientSocket = accept(serverSocket, NULL, NULL);
-            if (clientSocket == -1) continue;
-
-            // Create a new thread or dispatch queue for each client connection
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                [self handleClientRequest:clientSocket withBasePath:basePath];
-                close(clientSocket);
-            });
+            if (clientSocket != -1) {
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    [self handleClientRequest:clientSocket withBasePath:basePath];
+                    close(clientSocket);
+                });
+            }
         }
 
     } @catch (NSException *exception) {
