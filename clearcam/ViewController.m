@@ -37,6 +37,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
     self.seg_number = 0;
@@ -44,6 +45,7 @@ NSMutableDictionary *classColorMap;
     [self setupFPSLabel];
     self.fileServer = [[FileServer alloc] init];
     [self.fileServer start];
+    self.fileServer.segmentsArray = [[NSMutableArray alloc] init];
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDeviceOrientationChange)
@@ -288,11 +290,6 @@ NSMutableDictionary *classColorMap;
             NSString *segmentsFilePath = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
                                           stringByAppendingPathComponent:@"segments.txt"];
             
-            static NSMutableArray *segmentsArray = nil;
-            if (!segmentsArray) {
-                segmentsArray = [NSMutableArray array];
-            }
-            
             if (CMTIME_IS_INVALID(self.last_file_duration)) {
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
@@ -304,15 +301,12 @@ NSMutableDictionary *classColorMap;
                 // Create a dictionary entry with numeric values
                 NSDictionary *segmentEntry = @{
                     @"url": self.last_file_url.lastPathComponent,
-                    @"duration": @(CMTimeGetSeconds(self.last_file_duration)),   // Now stored as NSNumber
-                    @"timeDifference": @(CMTimeGetSeconds(timeDifference))      // Now stored as NSNumber
+                    @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
+                    @"timeDifference": @(CMTimeGetSeconds(timeDifference))
                 };
                 
-                // Add the entry to the array
-                [segmentsArray addObject:segmentEntry];
-                
-                // Write array to file as JSON
-                [self saveSegmentsArray:segmentsArray toFile:segmentsFilePath];
+                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; //todo, not using this yet
+                [self.fileServer.segmentsArray addObject:segmentEntry];
                 
                 // Update last file details
                 self.last_file_duration = time;
@@ -328,15 +322,41 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)saveSegmentsArray:(NSMutableArray *)segmentsArray toFile:(NSString *)filePath {
-    NSError *error;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:segmentsArray options:NSJSONWritingPrettyPrinted error:&error];
-    if (!error) {
-        [jsonData writeToFile:filePath atomically:YES];
+- (void)saveSegmentEntry:(NSDictionary *)segmentEntry toFile:(NSString *)filePath {
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if (![fileManager fileExistsAtPath:filePath]) {
+        NSError *error;
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry] options:NSJSONWritingPrettyPrinted error:&error];
+        if (!error) {
+            [jsonData writeToFile:filePath atomically:YES];
+        } else {
+            NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
+        }
     } else {
-        NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
+        NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
+        if (fileHandle) {
+            [fileHandle seekToEndOfFile];
+            [fileHandle truncateFileAtOffset:[fileHandle offsetInFile] - 1];
+            NSString *entryString = [NSString stringWithFormat:@", %@]", [self jsonStringFromDictionary:segmentEntry]];
+            [fileHandle writeData:[entryString dataUsingEncoding:NSUTF8StringEncoding]];
+            [fileHandle closeFile];
+        } else {
+            NSLog(@"Error opening file for writing.");
+        }
     }
 }
+
+- (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dictionary options:0 error:&error];
+    if (!error) {
+        return [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    } else {
+        NSLog(@"Error converting dictionary to JSON string: %@", error.localizedDescription);
+        return nil;
+    }
+}
+
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {

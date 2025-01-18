@@ -3,5 +3,6 @@
 @interface FileServer : NSObject
 
 - (void)start;
+@property (nonatomic, strong) NSMutableArray *segmentsArray;
 
 @end

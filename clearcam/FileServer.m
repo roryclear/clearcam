@@ -84,7 +84,6 @@
     filePath = [filePath stringByRemovingPercentEncoding];
     if ([filePath isEqualToString:@"/"]) filePath = @"";
 
-    // Handle /get-segments API endpoint
     if ([filePath hasPrefix:@"get-segments"]) {
         // Extract the query string if present
         NSString *startParam = nil;
@@ -105,50 +104,27 @@
         NSInteger start = startParam ? [startParam integerValue] : 0;
         
         NSLog(@"START PARAM = %ld", (long)start);
-        
-        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        NSString *segmentsFilePath = [documentsPath stringByAppendingPathComponent:@"segments.txt"];
 
-        if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
-            // Read contents of segments.txt
-            NSData *jsonData = [NSData dataWithContentsOfFile:segmentsFilePath];
-            NSError *jsonError = nil;
-            NSArray *segmentsArray = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
-            if (jsonError) {
-                NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n";
-                NSString *errorMessage = [NSString stringWithFormat:@"{\"error\": \"Failed to parse segments.txt: %@\"}", jsonError.localizedDescription];
-                send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-                send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-                return;
-            }
-            
-            // Slice the array starting from the 'start' index
-            if (start >= segmentsArray.count) {
-                NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-                NSString *errorMessage = @"{\"error\": \"Start index is out of range\"}";
-                send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-                send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-                return;
-            }
-            
-            NSArray *slicedSegments = [segmentsArray subarrayWithRange:NSMakeRange(start, segmentsArray.count - start)];
-            
-            // Convert the sliced array back to JSON
-            NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:slicedSegments options:0 error:nil];
-            
-            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
-            return;
-        } else {
-            // If file does not exist, send an empty response
+        // Use self.segmentsArray instead of reading from a file
+        if (start >= self.segmentsArray.count) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"segments.txt not found\"}";
+            NSString *errorMessage = @"{\"error\": \"Start index is out of range\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
+        
+        NSArray *slicedSegments = [self.segmentsArray subarrayWithRange:NSMakeRange(start, self.segmentsArray.count - start)];
+        
+        // Convert the sliced array back to JSON
+        NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:slicedSegments options:0 error:nil];
+        
+        NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
+        return;
     }
+
 
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     BOOL isDirectory = NO;
