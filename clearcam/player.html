@@ -194,15 +194,17 @@
         }
 
         function formatTime(seconds) {
-            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
+            const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
             const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${minutes}:${secs}`;
+            return `${hours}:${minutes}:${secs}`;
         }
 
         function updateTimeline() {
-            const currentTime = currentVideo.currentTime + segments[currentSegment].cumulativeStart;
-            progressBar.style.width = `${(currentTime / totalDuration) * 100}%`;
-            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(totalDuration)}`;
+            const startTimestamp = segments[0].timeStamp;
+            const currentTime = startTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+            progressBar.style.width = `${(currentTime - startTimestamp) / totalDuration * 100}%`;
+            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(startTimestamp + totalDuration)}`;
         }
 
         function scrub(e) {

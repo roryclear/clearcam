@@ -299,13 +299,24 @@ NSMutableDictionary *classColorMap;
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
                 
                 // Create a dictionary entry with numeric values
-                NSDictionary *segmentEntry = @{
+                NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
                     @"url": self.last_file_url.lastPathComponent,
                     @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
                     @"timeDifference": @(CMTimeGetSeconds(timeDifference))
-                };
+                }];
                 
-                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; //todo, not using this yet
+                // Add the "timeStamp" field if segmentsArray is empty
+                if (self.fileServer.segmentsArray.count == 0) {
+                    // Calculate timeStamp in seconds since midnight of the same day
+                    NSCalendar *calendar = [NSCalendar currentCalendar];
+                    NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+                    NSDate *midnight = [calendar dateFromComponents:components];
+                    NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
+                    
+                    segmentEntry[@"timeStamp"] = @(timeStamp);
+                }
+                
+                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Save to file (not used yet)
                 [self.fileServer.segmentsArray addObject:segmentEntry];
                 
                 // Update last file details
