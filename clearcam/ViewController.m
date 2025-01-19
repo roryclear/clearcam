@@ -111,6 +111,9 @@ NSMutableDictionary *classColorMap;
 
 - (void)startNewRecording {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"yyyy-MM-dd_HH"];
+    NSString *hourFolderName = [formatter stringFromDate:[NSDate date]];
+    
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
     self.current_file_timestamp = [NSDate date];
     NSString *timestamp = [formatter stringFromDate:self.current_file_timestamp];
@@ -120,29 +123,28 @@ NSMutableDictionary *classColorMap;
                                 [[timestamp componentsSeparatedByString:@"_"] firstObject],
                                 segNumberString,
                                 [[timestamp componentsSeparatedByString:@"_"] lastObject]];
-    // Create a folder for the day within the documents directory
-    [formatter setDateFormat:@"yyyy-MM-dd"];
-    NSString *dateFolderName = [formatter stringFromDate:self.current_file_timestamp];
+    
+    // Create a folder for the hour within the documents directory
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *dayFolderURL = [documentsDirectory URLByAppendingPathComponent:dateFolderName];
-
+    NSURL *hourFolderURL = [documentsDirectory URLByAppendingPathComponent:hourFolderName];
+    
     // Ensure the directory exists
     NSError *error = nil;
-    if (![[NSFileManager defaultManager] fileExistsAtPath:dayFolderURL.path]) {
-        [[NSFileManager defaultManager] createDirectoryAtURL:dayFolderURL withIntermediateDirectories:YES attributes:nil error:&error];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:hourFolderURL.path]) {
+        [[NSFileManager defaultManager] createDirectoryAtURL:hourFolderURL withIntermediateDirectories:YES attributes:nil error:&error];
         if (error) {
-            NSLog(@"Error creating day folder: %@", error.localizedDescription);
+            NSLog(@"Error creating hour folder: %@", error.localizedDescription);
             return;
         }
     }
-
-    NSURL *outputURL = [dayFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
+    
+    NSURL *outputURL = [hourFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
     self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
     if (error) {
         NSLog(@"Error creating asset writer: %@", error.localizedDescription);
         return;
     }
-
+    
     NSDictionary *videoSettings = @{
         AVVideoCodecKey: AVVideoCodecTypeH264,
         AVVideoWidthKey: @640,
@@ -151,28 +153,28 @@ NSMutableDictionary *classColorMap;
     };
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
     self.videoWriterInput.expectsMediaDataInRealTime = YES;
-
+    
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
         (NSString *)kCVPixelBufferWidthKey: @640,
         (NSString *)kCVPixelBufferHeightKey: @480
     };
     self.adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:sourcePixelBufferAttributes];
-
+    
     if ([self.assetWriter canAddInput:self.videoWriterInput]) {
         [self.assetWriter addInput:self.videoWriterInput];
     } else {
         NSLog(@"Cannot add video writer input");
         return;
     }
-
+    
     self.startTime = kCMTimeInvalid;
     self.currentTime = kCMTimeZero;
     self.isRecording = YES;
-
+    
     [self.assetWriter startWriting];
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
-
+    
     NSLog(@"Started new recording");
 }
 
@@ -298,19 +300,35 @@ NSMutableDictionary *classColorMap;
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
 
-            NSString *segmentsFilePath = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
-                                          stringByAppendingPathComponent:@"segments.txt"];
+            // Use self.current_file_timestamp to get the date and hour without minutes and seconds
+            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+            [dateFormatter setDateFormat:@"yyyy-MM-dd_HH"];
+            NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
+
+            // Get the documents directory
+            NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateFolderName];
+
+            // Create the folder if it doesn't exist
+            NSError *error = nil;
+            if (![[NSFileManager defaultManager] fileExistsAtPath:segmentsDirectory]) {
+                [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error];
+                if (error) {
+                    NSLog(@"Error creating directory: %@", error);
+                }
+            }
+
+            // Path to segments.txt in the date folder
+            NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
             NSDate *midnight = [calendar dateFromComponents:components];
-            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
+            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld_%02ld", (long)components.year, (long)components.month, (long)components.day, (long)components.hour];
 
             if (!self.fileServer.segmentsDict[dateKey]) {
                 self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
             }
-
-            NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
 
             if (CMTIME_IS_INVALID(self.last_file_duration)) {
                 self.last_file_duration = time;
@@ -325,6 +343,7 @@ NSMutableDictionary *classColorMap;
                     @"timeDifference": @(CMTimeGetSeconds(timeDifference))
                 }];
 
+                NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
                 // If this is the first entry of the day, store a timestamp relative to midnight
                 if (segmentsForDate.count == 0) {
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
@@ -332,7 +351,7 @@ NSMutableDictionary *classColorMap;
                 }
 
                 [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
-                [segmentsForDate addObject:segmentEntry];
+                [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
 
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];

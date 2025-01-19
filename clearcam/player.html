@@ -272,8 +272,13 @@
             try {
                 const startParam = segments.length;
 
-                // Get the current date in YYYY-MM-DD format
-                const currentDate = new Date().toISOString().split('T')[0];
+                // Get the current date and hour in YYYY-MM-DD_HH format
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hour = String(now.getHours()).padStart(2, '0');
+                const currentDate = `${year}-${month}-${day}_${hour}`;
 
                 const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
                 if (response.ok) {

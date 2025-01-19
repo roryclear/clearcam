@@ -105,13 +105,11 @@
             }
         }
         
-        // Default start to 0 if not provided
         NSInteger start = startParam ? [startParam integerValue] : 0;
 
         NSLog(@"START PARAM = %ld", (long)start);
         NSLog(@"DATE PARAM = %@", dateParam);
 
-        // Validate the date parameter
         if (!dateParam || !self.segmentsDict[dateParam]) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
