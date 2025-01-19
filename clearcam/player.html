@@ -151,7 +151,11 @@
         async function fetchSegments() {
             try {
                 const startParam = segments.length;
-                const response = await fetch(`/get-segments?start=${startParam}`);
+
+                // Get the current date in YYYY-MM-DD format
+                const currentDate = new Date().toISOString().split('T')[0];
+
+                const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
                 if (response.ok) {
                     const newSegments = await response.json();
                     if (Array.isArray(newSegments)) {
@@ -177,8 +181,10 @@
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegments();
-                            //todo, bad autoplay at the start logic
-                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart == 0 || (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
+                            
+                            // TODO: Improve autoplay logic
+                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart == 0 ||
+                                (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
                                 playSegment();
                             }
                             if (isWaitingForNextSegment && segments.length > currentSegment + 1) {

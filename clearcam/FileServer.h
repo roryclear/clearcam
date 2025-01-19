@@ -3,6 +3,6 @@
 @interface FileServer : NSObject
 
 - (void)start;
-@property (nonatomic, strong) NSMutableArray *segmentsArray;
+@property (nonatomic, strong) NSMutableDictionary *segmentsDict;
 
 @end

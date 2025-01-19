@@ -28,7 +28,6 @@
 @property (nonatomic, assign) NSDate *last_file_timestamp;
 @property (nonatomic, assign) NSDate *current_file_timestamp;
 
-
 @end
 
 @implementation ViewController
@@ -43,7 +42,6 @@ NSMutableDictionary *classColorMap;
     self.seg_number = 0;
     self.fileServer = [[FileServer alloc] init];
     [self.fileServer start];
-    self.fileServer.segmentsArray = [[NSMutableArray alloc] init];
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDeviceOrientationChange)
@@ -293,44 +291,54 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         [self.assetWriter finishWritingWithCompletionHandler:^{
             NSLog(@"Finished recording and saving file");
-            
+
             NSString *fileName = [self.assetWriter.outputURL lastPathComponent];
             NSLog(@"File saved is %@", fileName);
-            
+
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
-            
+
             NSString *segmentsFilePath = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]
                                           stringByAppendingPathComponent:@"segments.txt"];
-            
+
+            NSCalendar *calendar = [NSCalendar currentCalendar];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+            NSDate *midnight = [calendar dateFromComponents:components];
+            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
+
+            if (!self.fileServer.segmentsDict[dateKey]) {
+                self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
+            }
+
+            NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
+
             if (CMTIME_IS_INVALID(self.last_file_duration)) {
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
             } else {
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
-                
+
                 NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
                     @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
                     @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
                     @"timeDifference": @(CMTimeGetSeconds(timeDifference))
                 }];
-                
-                if (self.fileServer.segmentsArray.count == 0) {
-                    NSCalendar *calendar = [NSCalendar currentCalendar];
-                    NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
-                    NSDate *midnight = [calendar dateFromComponents:components];
+
+                // If this is the first entry of the day, store a timestamp relative to midnight
+                if (segmentsForDate.count == 0) {
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
                     segmentEntry[@"timeStamp"] = @(timeStamp);
                 }
-                
-                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; //not used yet
-                [self.fileServer.segmentsArray addObject:segmentEntry];
+
+                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
+                [segmentsForDate addObject:segmentEntry];
+
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
             }
-            
+
             NSLog(@"Duration is %f seconds", CMTimeGetSeconds(time));
             [self startNewRecording];
         }];

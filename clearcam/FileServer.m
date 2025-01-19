@@ -18,6 +18,7 @@
 
 - (void)start {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        self.segmentsDict = [[NSMutableDictionary alloc] init];
         self.basePath = [self getDocumentsDirectory];
         self.durationCache = [[NSMutableDictionary alloc] init];
         [self startHTTPServerWithBasePath:self.basePath];
@@ -85,40 +86,51 @@
     if ([filePath isEqualToString:@"/"]) filePath = @"";
 
     if ([filePath hasPrefix:@"get-segments"]) {
-        // Extract the query string if present
         NSString *startParam = nil;
+        NSString *dateParam = nil;
+        
         NSRange queryRange = [filePath rangeOfString:@"?"];
         if (queryRange.location != NSNotFound) {
             NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
             NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
             for (NSString *item in queryItems) {
                 NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"start"]) {
-                    startParam = keyValue[1];
-                    break;
+                if (keyValue.count == 2) {
+                    if ([keyValue[0] isEqualToString:@"start"]) {
+                        startParam = keyValue[1];
+                    } else if ([keyValue[0] isEqualToString:@"date"]) {
+                        dateParam = keyValue[1];
+                    }
                 }
             }
         }
         
-        // Default to 0 if "start" is not provided
+        // Default start to 0 if not provided
         NSInteger start = startParam ? [startParam integerValue] : 0;
-        
-        NSLog(@"START PARAM = %ld", (long)start);
 
-        // Use self.segmentsArray instead of reading from a file
-        if (start >= self.segmentsArray.count) {
+        NSLog(@"START PARAM = %ld", (long)start);
+        NSLog(@"DATE PARAM = %@", dateParam);
+
+        // Validate the date parameter
+        if (!dateParam || !self.segmentsDict[dateParam]) {
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        NSArray *segmentsForDate = self.segmentsDict[dateParam];
+        if (start >= segmentsForDate.count) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Start index is out of range\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-        
-        NSArray *slicedSegments = [self.segmentsArray subarrayWithRange:NSMakeRange(start, self.segmentsArray.count - start)];
-        
-        // Convert the sliced array back to JSON
+        NSArray *slicedSegments = [segmentsForDate subarrayWithRange:NSMakeRange(start, segmentsForDate.count - start)];
         NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:slicedSegments options:0 error:nil];
-        
+
         NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
         send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
