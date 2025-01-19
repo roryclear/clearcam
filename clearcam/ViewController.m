@@ -322,7 +322,7 @@ NSMutableDictionary *classColorMap;
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.last_file_timestamp];
             NSDate *midnight = [calendar dateFromComponents:components];
             NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld_%02ld", (long)components.year, (long)components.month, (long)components.day, (long)components.hour];
 
@@ -344,7 +344,6 @@ NSMutableDictionary *classColorMap;
                 }];
 
                 NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
-                // If this is the first entry of the day, store a timestamp relative to midnight
                 if (segmentsForDate.count == 0) {
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
                     segmentEntry[@"timeStamp"] = @(timeStamp);

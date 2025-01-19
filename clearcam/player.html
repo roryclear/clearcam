@@ -268,6 +268,7 @@
             }
         });
 
+        let lastFetchedHour = null;
         async function fetchSegments() {
             try {
                 const startParam = segments.length;
@@ -279,6 +280,13 @@
                 const day = String(now.getDate()).padStart(2, '0');
                 const hour = String(now.getHours()).padStart(2, '0');
                 const currentDate = `${year}-${month}-${day}_${hour}`;
+
+                // Check if the hour has changed
+                if (lastFetchedHour !== hour) {
+                    segments = []; // Reset segments if the hour has changed
+                    totalDuration = 0; // Reset totalDuration
+                    lastFetchedHour = hour;
+                }
 
                 const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
                 if (response.ok) {
@@ -308,7 +316,7 @@
                             preloadNextSegments();
                             
                             // TODO: Improve autoplay logic
-                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart == 0 ||
+                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart === 0 ||
                                 (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
                                 playSegment();
                             }
@@ -323,6 +331,7 @@
                 console.error('Failed to fetch segments:', error);
             }
         }
+
 
         function formatTime(seconds) {
             const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
