@@ -174,6 +174,37 @@
         nextVideo.addEventListener('click', togglePlayPause);
         playPauseBtn.addEventListener('click', togglePlayPause);
 
+        videoContainer.addEventListener('dblclick', (e) => {
+            const containerWidth = videoContainer.clientWidth;
+            const x = e.clientX;
+            const currentTime = currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+
+            if (x > containerWidth / 2) {
+                // Double-tap/click on the right side to skip forward 10s
+                let newTime = Math.min(currentTime + 10, totalDuration);
+                seekToTime(newTime);
+            } else {
+                // Double-tap/click on the left side to rewind 10s
+                let newTime = Math.max(currentTime - 10, 0);
+                seekToTime(newTime);
+            }
+
+            updateTimeline();
+        });
+
+        function seekToTime(time) {
+            let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
+            targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
+            currentSegment = targetSegment;
+
+            currentVideo.src = segments[currentSegment].url;
+            currentVideo.currentTime = time - segments[currentSegment].cumulativeStart;
+
+            if (isPlaying) {
+                currentVideo.play();
+            }
+        }
+
         document.addEventListener("visibilitychange", () => {
             if (isPlaying && !document.hidden && segments.length > 0) {
                 currentSegment = segments.length - 1;
