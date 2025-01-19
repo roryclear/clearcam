@@ -14,6 +14,11 @@
         #videoContainer:hover #controls {
             opacity: 1;
         }
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
         video {
             position: absolute;
             width: 100%;
@@ -23,7 +28,7 @@
         #controls {
             position: absolute;
             bottom: 0;
-            width: calc(100% - 20px);
+            width: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -31,8 +36,8 @@
             padding: 10px;
             opacity: 0;
             transition: opacity 0.3s;
+            box-sizing: border-box;
         }
-
         #controls.show {
             opacity: 1;
         }
@@ -41,15 +46,17 @@
             align-items: center;
             width: 100%;
             justify-content: space-between;
+            margin-bottom: 10px;
+            box-sizing: border-box;
         }
         #progress {
             width: 100%;
             height: 10px;
             background-color: #ccc;
-            margin: 10px 0;
             cursor: pointer;
             position: relative;
             border-radius: 5px;
+            box-sizing: border-box;
         }
         #progress-bar {
             width: 0;
@@ -58,33 +65,79 @@
             border-radius: 5px;
         }
         button {
-            padding: 5px 10px;
-            margin: 0 5px;
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0;
         }
         #timeDisplay {
-            margin-left: 10px;
             color: white;
+            margin-left: 10px;
         }
+        #fullscreenBtn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            padding: 8px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            outline: none;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+            box-sizing: border-box;
+        }
+
+        #controls.show {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease-in-out;
+        }
+
     </style>
 </head>
 <body>
     <div id="videoContainer">
-        <video id="videoPlayer1" playsinline webkit-playsinline muted></video>
-        <video id="videoPlayer2" playsinline webkit-playsinline muted style="display: none;"></video>
-        <div id="controls">
-            <div class="top-controls">
-                <button id="playPauseBtn" style="background: none; border: none;">
-                    <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
-                        <path d="M8 5v14l11-7z"/>
-                    </svg>
-                    <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
-                        <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
-                    </svg>
-                </button>
-                <div id="timeDisplay">0:00 / 0:00</div>
-            </div>
-            <div id="progress">
-                <div id="progress-bar"></div>
+        <div class="video-wrapper">
+            <video id="videoPlayer1" playsinline webkit-playsinline muted></video>
+            <video id="videoPlayer2" playsinline webkit-playsinline muted style="display: none;"></video>
+            <div id="controls">
+                <div class="top-controls">
+                    <button id="playPauseBtn">
+                        <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
+                            <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
+                        </svg>
+                    </button>
+                    <div style="display: flex; align-items: center;">
+                        <div id="timeDisplay">0:00 / 0:00</div>
+                        <button id="fullscreenBtn" style="margin-left: 10px;">
+                            <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                                <path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm6 12v6h-6v-2h4v-4zm-12 6H3v-6h2v4h4z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="progress">
+                    <div id="progress-bar"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -119,12 +172,13 @@
             clearTimeout(hideControlsTimeout);
             hideControlsTimeout = setTimeout(() => {
                 controls.classList.remove('show');
+                controls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
             }, 4000);
         }
 
         function hideControls() {
             controls.classList.remove('show');
-            clearTimeout(hideControlsTimeout);
+            controls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
         }
 
         function toggleControls() {
@@ -390,6 +444,41 @@
         currentVideo.addEventListener("error", () => retrySegment(currentVideo));
         nextVideo.addEventListener("error", () => retrySegment(nextVideo));
 
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+                fullscreenBtn.addEventListener('click', () => {
+                    if (!document.fullscreenElement) {
+                        if (videoContainer.requestFullscreen) {
+                            videoContainer.requestFullscreen();
+                        } else if (videoContainer.mozRequestFullScreen) { /* Firefox */
+                            videoContainer.mozRequestFullScreen();
+                        } else if (videoContainer.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
+                            videoContainer.webkitRequestFullscreen();
+                        } else if (videoContainer.msRequestFullscreen) { /* IE/Edge */
+                            videoContainer.msRequestFullscreen();
+                        }
+                    } else {
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        } else if (document.mozCancelFullScreen) { /* Firefox */
+                            document.mozCancelFullScreen();
+                        } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
+                            document.webkitExitFullscreen();
+                        } else if (document.msExitFullscreen) { /* IE/Edge */
+                            document.msExitFullscreen();
+                        }
+                    }
+                });
+        
+        function isMobile() {
+            return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        }
+
+        if (isMobile()) {
+            document.getElementById('fullscreenBtn').style.display = 'none';
+        }
+
+        
         fetchSegments();
     </script>
 </body>
