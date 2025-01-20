@@ -303,7 +303,7 @@ NSMutableDictionary *classColorMap;
             // Use self.current_file_timestamp to get the date and hour without minutes and seconds
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
             [dateFormatter setDateFormat:@"yyyy-MM-dd_HH"];
-            NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
+            NSString *dateFolderName = [dateFormatter stringFromDate:self.last_file_timestamp];
 
             // Get the documents directory
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
@@ -322,7 +322,8 @@ NSMutableDictionary *classColorMap;
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.last_file_timestamp];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.last_file_timestamp]; //todo, this the first segment?
+            //NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp]; //this fucking breaks it
             NSDate *midnight = [calendar dateFromComponents:components];
             NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld_%02ld", (long)components.year, (long)components.month, (long)components.day, (long)components.hour];
 
@@ -348,8 +349,9 @@ NSMutableDictionary *classColorMap;
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
                     segmentEntry[@"timeStamp"] = @(timeStamp);
                 }
-
+                
                 [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
+                NSLog(@"adding %@ to date %@ in dict",segmentEntry,dateKey);
                 [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
 
                 self.last_file_duration = time;

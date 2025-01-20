@@ -107,9 +107,6 @@
 
         NSInteger start = startParam ? [startParam integerValue] : 0;
 
-        NSLog(@"START PARAM = %ld", (long)start);
-        NSLog(@"DATE PARAM = %@", dateParam);
-
         if (!dateParam || !self.segmentsDict[dateParam]) {
             // Check for segments.txt file in the folder for the given date and time
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
