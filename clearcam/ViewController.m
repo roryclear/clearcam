@@ -338,8 +338,8 @@ NSMutableDictionary *classColorMap;
             } else {
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
 
-                NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
-                    @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
+                NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
+                    @"url": [NSString stringWithFormat:@"%@/%@", [[self.last_file_url URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
                     @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
                     @"timeDifference": @(CMTimeGetSeconds(timeDifference))
                 }];

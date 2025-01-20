@@ -200,11 +200,19 @@
 
         function updateTimeline() {
             const startTimestamp = segments[0].timeStamp;
-            const currentTime = startTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
-            progressBar.style.width = `${(currentTime - startTimestamp) / totalDuration * 100}%`;
-            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(startTimestamp + totalDuration)}`;
-        }
+            let adjustedStartTimestamp;
 
+            if (startTimestamp < 0) {
+                adjustedStartTimestamp = (24 * 3600) + startTimestamp; //todo hack?
+            } else {
+                adjustedStartTimestamp = startTimestamp;
+            }
+
+            const currentTime = adjustedStartTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+            progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
+            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
+        }
+        
         videoContainer.addEventListener('mousemove', showControls);
         videoContainer.addEventListener('mouseleave', hideControls);
         videoContainer.addEventListener('touchend', toggleControls);
