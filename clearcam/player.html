@@ -268,25 +268,20 @@
             }
         });
 
-        let lastFetchedHour = null;
+        const fetchStartTime = new Date(); // Capture the time once and never change it
+        const currentDate = formatDate(fetchStartTime); // Compute the date once
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            return `${year}-${month}-${day}_${hour}`;
+        }
+
         async function fetchSegments() {
             try {
                 const startParam = segments.length;
-
-                // Get the current date and hour in YYYY-MM-DD_HH format
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const hour = String(now.getHours()).padStart(2, '0');
-                const currentDate = `${year}-${month}-${day}_${hour}`;
-
-                // Check if the hour has changed
-                if (lastFetchedHour !== hour) {
-                    segments = []; // Reset segments if the hour has changed
-                    totalDuration = 0; // Reset totalDuration
-                    lastFetchedHour = hour;
-                }
 
                 const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
                 if (response.ok) {
@@ -314,8 +309,7 @@
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegments();
-                            
-                            // TODO: Improve autoplay logic
+
                             if (currentVideo.currentTime + segments[currentSegment].cumulativeStart === 0 ||
                                 (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
                                 playSegment();
@@ -331,7 +325,6 @@
                 console.error('Failed to fetch segments:', error);
             }
         }
-
 
         function formatTime(seconds) {
             const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
