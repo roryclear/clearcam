@@ -200,11 +200,19 @@
 
         function updateTimeline() {
             const startTimestamp = segments[0].timeStamp;
-            const currentTime = startTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
-            progressBar.style.width = `${(currentTime - startTimestamp) / totalDuration * 100}%`;
-            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(startTimestamp + totalDuration)}`;
-        }
+            let adjustedStartTimestamp;
 
+            if (startTimestamp < 0) {
+                adjustedStartTimestamp = (24 * 3600) + startTimestamp; //todo hack?
+            } else {
+                adjustedStartTimestamp = startTimestamp;
+            }
+
+            const currentTime = adjustedStartTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+            progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
+            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
+        }
+        
         videoContainer.addEventListener('mousemove', showControls);
         videoContainer.addEventListener('mouseleave', hideControls);
         videoContainer.addEventListener('touchend', toggleControls);
@@ -268,12 +276,19 @@
             }
         });
 
+        const fetchStartTime = new Date(); // Capture the time once and never change it
+        const currentDate = formatDate(fetchStartTime); // Compute the date once
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
         async function fetchSegments() {
             try {
                 const startParam = segments.length;
-
-                // Get the current date in YYYY-MM-DD format
-                const currentDate = new Date().toISOString().split('T')[0];
 
                 const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
                 if (response.ok) {
@@ -301,9 +316,8 @@
                         if (totalDuration !== oldTotalDuration) {
                             updateTimeline();
                             preloadNextSegments();
-                            
-                            // TODO: Improve autoplay logic
-                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart == 0 ||
+
+                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart === 0 ||
                                 (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
                                 playSegment();
                             }

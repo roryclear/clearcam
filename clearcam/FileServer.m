@@ -88,7 +88,7 @@
     if ([filePath hasPrefix:@"get-segments"]) {
         NSString *startParam = nil;
         NSString *dateParam = nil;
-        
+
         NSRange queryRange = [filePath rangeOfString:@"?"];
         if (queryRange.location != NSNotFound) {
             NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
@@ -104,20 +104,35 @@
                 }
             }
         }
-        
-        // Default start to 0 if not provided
+
         NSInteger start = startParam ? [startParam integerValue] : 0;
 
-        NSLog(@"START PARAM = %ld", (long)start);
-        NSLog(@"DATE PARAM = %@", dateParam);
-
-        // Validate the date parameter
         if (!dateParam || !self.segmentsDict[dateParam]) {
-            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-            return;
+            // Check for segments.txt file in the folder for the given date and time
+            NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateParam];
+            NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
+
+            if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
+                NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
+                NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
+
+                if (fileSegments) {
+                    self.segmentsDict[dateParam] = [fileSegments mutableCopy];
+                } else {
+                    NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+                    NSString *errorMessage = @"{\"error\": \"Failed to read segments from file\"}";
+                    send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+                    send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+                    return;
+                }
+            } else {
+                NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+                NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
+                send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+                send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+                return;
+            }
         }
 
         NSArray *segmentsForDate = self.segmentsDict[dateParam];
@@ -136,6 +151,7 @@
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
         return;
     }
+
 
 
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
