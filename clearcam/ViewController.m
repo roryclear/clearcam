@@ -111,7 +111,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)startNewRecording {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-    [formatter setDateFormat:@"yyyy-MM-dd_HH"];
+    [formatter setDateFormat:@"yyyy-MM-dd"];
     NSString *hourFolderName = [formatter stringFromDate:[NSDate date]];
     
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
@@ -302,7 +302,7 @@ NSMutableDictionary *classColorMap;
 
             // Use self.current_file_timestamp to get the date and hour without minutes and seconds
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-            [dateFormatter setDateFormat:@"yyyy-MM-dd_HH"];
+            [dateFormatter setDateFormat:@"yyyy-MM-dd"];
             NSString *dateFolderName = [dateFormatter stringFromDate:self.last_file_timestamp];
 
             // Get the documents directory
@@ -322,10 +322,8 @@ NSMutableDictionary *classColorMap;
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.last_file_timestamp]; //todo, this the first segment?
-            //NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp]; //this fucking breaks it
-            NSDate *midnight = [calendar dateFromComponents:components];
-            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld_%02ld", (long)components.year, (long)components.month, (long)components.day, (long)components.hour];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.last_file_timestamp];
+            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
 
             if (!self.fileServer.segmentsDict[dateKey]) {
                 self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
@@ -346,6 +344,9 @@ NSMutableDictionary *classColorMap;
 
                 NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
                 if (segmentsForDate.count == 0) {
+                    NSCalendar *calendar = [NSCalendar currentCalendar];
+                    NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.last_file_timestamp];
+                    NSDate *midnight = [calendar dateFromComponents:components];
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
                     segmentEntry[@"timeStamp"] = @(timeStamp);
                 }
