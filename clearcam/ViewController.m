@@ -27,6 +27,7 @@
 @property (nonatomic, assign) CMTime last_file_duration;
 @property (nonatomic, assign) NSDate *last_file_timestamp;
 @property (nonatomic, assign) NSDate *current_file_timestamp;
+@property (nonatomic, strong) NSMutableDictionary *digits;
 
 @end
 
@@ -36,6 +37,19 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.digits = [NSMutableDictionary dictionary];
+    self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
+    self.digits[@"1"] = @[@[ @2, @0, @1, @5 ]];
+    self.digits[@"2"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @0, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
+    self.digits[@"3"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @3 ], @[ @0, @2, @3, @1 ], @[ @0, @4, @3, @1 ]];
+    self.digits[@"4"] = @[@[ @2, @0, @1, @5 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ]];
+    self.digits[@"5"] = @[@[ @0, @0, @3, @1 ], @[ @0, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @2, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
+    self.digits[@"6"] = @[@[ @0, @0, @1, @5 ], @[ @1, @2, @2, @1 ], @[ @1, @4, @2, @1 ], @[ @2, @3, @1, @1 ]];
+    self.digits[@"7"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @4 ]];
+    self.digits[@"8"] = @[@[ @0, @0, @1, @5 ], @[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @1, @2, @1, @1 ], @[ @1, @4, @1, @1 ]];
+    self.digits[@"9"] = @[@[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ]];
+    self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
+    self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
@@ -417,15 +431,13 @@ NSMutableDictionary *classColorMap;
 
             if (self.videoWriterInput.readyForMoreMediaData) {
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-
-                CVPixelBufferRef pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor redColor] originX:0 originY:0 width:400 height:50];
-                pixelBufferWithRedSquare = [self addTimeStampToPixelBuffer:pixelBuffer];
+                pixelBuffer = [self addTimeStampToPixelBuffer:pixelBuffer];
                 
                 BOOL success = NO;
                 int retryCount = 3;
 
                 while (!success && retryCount > 0) {
-                    success = [self.adaptor appendPixelBuffer:pixelBufferWithRedSquare withPresentationTime:self.currentTime];
+                    success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
                     if (!success) {
                         retryCount--;
                         [NSThread sleepForTimeInterval:0.01];
@@ -488,7 +500,7 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height {
+- (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height opacity:(CGFloat)opacity {
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
 
     CGContextRef context = [self createContextForPixelBuffer:pixelBuffer];
@@ -496,7 +508,10 @@ NSMutableDictionary *classColorMap;
     size_t pixelBufferHeight = CVPixelBufferGetHeight(pixelBuffer);
     // Adjust originY to be relative to the top-left corner
     CGRect rectangleRect = CGRectMake(originX, pixelBufferHeight - originY - height, width, height);
-    CGContextSetFillColorWithColor(context, color.CGColor);
+    
+    // Set the fill color with the adjusted opacity
+    UIColor *colorWithOpacity = [color colorWithAlphaComponent:opacity];
+    CGContextSetFillColorWithColor(context, colorWithOpacity.CGColor);
     CGContextFillRect(context, rectangleRect);
 
     CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
@@ -505,84 +520,20 @@ NSMutableDictionary *classColorMap;
     return pixelBuffer;
 }
 
+
 - (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
-    NSInteger digitOriginX = 3;
-    NSInteger digitOriginY = 10;
-    NSInteger pixelSize = 6;
-    NSInteger spaceSize = 3;
-    
-    NSMutableDictionary *digits = [NSMutableDictionary dictionary];
-    [digits setObject:@[
-        @[ @0, @0, @3, @1],
-        @[ @0, @1, @1 , @3],
-        @[ @2, @1, @1 , @3],
-        @[ @0, @4, @3 , @1]
-    ] forKey:@"0"];
-    [digits setObject:@[
-        @[ @2, @0, @1, @5 ],
-    ] forKey:@"1"];
-    [digits setObject:@[
-        @[ @0, @0, @3, @1 ],
-        @[ @2, @1, @1, @1 ],
-        @[ @0, @2, @3, @1 ],
-        @[ @0, @3, @1, @1 ],
-        @[ @0, @4, @3, @1 ]
-    ] forKey:@"2"];
-    [digits setObject:@[
-        @[ @0, @0, @3, @1 ],
-        @[ @2, @1, @1, @3 ],
-        @[ @0, @2, @3, @1 ],
-        @[ @0, @4, @3, @1 ]
-    ] forKey:@"3"];
-    [digits setObject:@[
-        @[ @2, @0, @1, @5 ],
-        @[ @0, @0, @1, @2 ],
-        @[ @0, @2, @3, @1 ],
-    ] forKey:@"4"];
-    [digits setObject:@[
-        @[ @0, @0, @3, @1 ],
-        @[ @0, @1, @1, @1 ],
-        @[ @0, @2, @3, @1 ],
-        @[ @2, @3, @1, @1 ],
-        @[ @0, @4, @3, @1 ]
-    ] forKey:@"5"];
-    [digits setObject:@[
-        @[ @0, @0, @1, @5 ],
-        @[ @1, @2, @2, @1 ],
-        @[ @1, @4, @2, @1 ],
-        @[ @2, @3, @1, @1 ],
-    ] forKey:@"6"];
-    [digits setObject:@[
-        @[ @0, @0, @3, @1 ],
-        @[ @2, @1, @1, @4 ],
-    ] forKey:@"7"];
-    [digits setObject:@[
-        @[ @0, @0, @1, @5 ],
-        @[ @2, @0, @1, @5 ],
-        @[ @1, @0, @1, @1 ],
-        @[ @1, @2, @1, @1 ],
-        @[ @1, @4, @1, @1 ]
-    ] forKey:@"8"];
-    [digits setObject:@[
-        @[ @2, @0, @1, @5 ],
-        @[ @1, @0, @1, @1 ],
-        @[ @0, @0, @1, @2 ],
-        @[ @0, @2, @3, @1 ],
-    ] forKey:@"9"];
-    [digits setObject:@[
-        @[ @0, @2, @3, @1 ]
-    ] forKey:@"-"];
-    [digits setObject:@[
-        @[ @1, @1, @1, @1 ],
-        @[ @1, @3, @1, @1 ]
-    ] forKey:@":"];
-    
+    NSInteger pixelSize = 4;
+    NSInteger spaceSize = 2;
+    NSInteger digitOriginX = spaceSize;
+    NSInteger digitOriginY = spaceSize;
+    NSInteger height = spaceSize*2 + pixelSize*5;
+
     NSDate *currentDate = [NSDate date];
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
     NSString *timestamp = [dateFormatter stringFromDate:currentDate];
-
-
+    pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:0 width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
+        
     for (NSUInteger k = 0; k < [timestamp length]; k++) {
         unichar character = [timestamp characterAtIndex:k];
         if(character == ' '){
@@ -590,13 +541,13 @@ NSMutableDictionary *classColorMap;
             continue;
         }
         NSString *key = [NSString stringWithFormat:@"%C", character];
-        for (int i = 0; i < [digits[key] count]; i++) {
+        for (int i = 0; i < [self.digits[key] count]; i++) {
             pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
-                                                                    withColor:[UIColor whiteColor]
-                                                                     originX:digitOriginX + [digits[key][i][0] doubleValue] * pixelSize
-                                                                     originY:digitOriginY + [digits[key][i][1] doubleValue] * pixelSize
-                                                                       width:[digits[key][i][2] doubleValue] * pixelSize
-                                                                      height:[digits[key][i][3] doubleValue] * pixelSize];
+                                                        withColor:[UIColor whiteColor]
+                                                         originX:digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize
+                                                         originY:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
+                                                           width:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                           height:[self.digits[key][i][3] doubleValue] * pixelSize opacity:1];
         }
         digitOriginX += pixelSize*3 + spaceSize;
     }
