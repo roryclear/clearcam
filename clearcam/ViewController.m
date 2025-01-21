@@ -419,109 +419,8 @@ NSMutableDictionary *classColorMap;
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
 
                 CVPixelBufferRef pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor redColor] originX:0 originY:0 width:400 height:50];
+                pixelBufferWithRedSquare = [self addTimeStampToPixelBuffer:pixelBuffer];
                 
-                //gonna try draw a 0 here
-                //pixels gonna be 6 pixels? (need 5 height 3 width for each digit) spaces will be 3 pixels?
-                NSInteger digitOriginX = 3;
-                NSInteger digitOriginY = 10;
-                NSInteger pixelSize = 6;
-                NSInteger spaceSize = 3;
-                //pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor whiteColor] originX:digitOriginX originY:digitOriginY width:pixelSize*3 height:pixelSize];
-                //pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor whiteColor] originX:digitOriginX originY:digitOriginY + pixelSize width:pixelSize height:pixelSize*4];
-                //pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor whiteColor] originX:digitOriginX + pixelSize*2 originY:digitOriginY + pixelSize width:pixelSize height:pixelSize*4];
-                //pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor whiteColor] originX:digitOriginX originY:digitOriginY + pixelSize*4 width:pixelSize*3 height:pixelSize];
-                
-                NSMutableDictionary *digits = [NSMutableDictionary dictionary];
-                [digits setObject:@[
-                    @[ @0, @0, @3, @1],
-                    @[ @0, @1, @1 , @3],
-                    @[ @2, @1, @1 , @3],
-                    @[ @0, @4, @3 , @1]
-                ] forKey:@"0"];
-                [digits setObject:@[
-                    @[ @2, @0, @1, @5 ],
-                ] forKey:@"1"];
-                [digits setObject:@[
-                    @[ @0, @0, @3, @1 ],
-                    @[ @2, @1, @1, @1 ],
-                    @[ @0, @2, @3, @1 ],
-                    @[ @0, @3, @1, @1 ],
-                    @[ @0, @4, @3, @1 ]
-                ] forKey:@"2"];
-                [digits setObject:@[
-                    @[ @0, @0, @3, @1 ],
-                    @[ @2, @1, @1, @3 ],
-                    @[ @0, @2, @3, @1 ],
-                    @[ @0, @4, @3, @1 ]
-                ] forKey:@"3"];
-                [digits setObject:@[
-                    @[ @2, @0, @1, @5 ],
-                    @[ @0, @0, @1, @2 ],
-                    @[ @0, @2, @3, @1 ],
-                ] forKey:@"4"];
-                [digits setObject:@[
-                    @[ @0, @0, @3, @1 ],
-                    @[ @0, @1, @1, @1 ],
-                    @[ @0, @2, @3, @1 ],
-                    @[ @2, @3, @1, @1 ],
-                    @[ @0, @4, @3, @1 ]
-                ] forKey:@"5"];
-                [digits setObject:@[
-                    @[ @0, @0, @1, @5 ],
-                    @[ @1, @2, @2, @1 ],
-                    @[ @1, @4, @2, @1 ],
-                    @[ @2, @3, @1, @1 ],
-                ] forKey:@"6"];
-                [digits setObject:@[
-                    @[ @0, @0, @3, @1 ],
-                    @[ @2, @1, @1, @4 ],
-                ] forKey:@"7"];
-                [digits setObject:@[
-                    @[ @0, @0, @1, @5 ],
-                    @[ @2, @0, @1, @5 ],
-                    @[ @1, @0, @1, @1 ],
-                    @[ @1, @2, @1, @1 ],
-                    @[ @1, @4, @1, @1 ]
-                ] forKey:@"8"];
-                [digits setObject:@[
-                    @[ @2, @0, @1, @5 ],
-                    @[ @1, @0, @1, @1 ],
-                    @[ @0, @0, @1, @2 ],
-                    @[ @0, @2, @3, @1 ],
-                ] forKey:@"9"];
-                [digits setObject:@[
-                    @[ @0, @2, @3, @1 ]
-                ] forKey:@"-"];
-                [digits setObject:@[
-                    @[ @1, @1, @1, @1 ],
-                    @[ @1, @3, @1, @1 ]
-                ] forKey:@":"];
-                
-                NSDate *currentDate = [NSDate date];
-                NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-                [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-                NSString *timestamp = [dateFormatter stringFromDate:currentDate];
-
-
-                for (NSUInteger k = 0; k < [timestamp length]; k++) {
-                    unichar character = [timestamp characterAtIndex:k];
-                    if(character == ' '){
-                        digitOriginX += pixelSize*3;
-                        continue;
-                    }
-                    NSString *key = [NSString stringWithFormat:@"%C", character];
-                    for (int i = 0; i < [digits[key] count]; i++) {
-                        pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer
-                                                                                withColor:[UIColor whiteColor]
-                                                                                 originX:digitOriginX + [digits[key][i][0] doubleValue] * pixelSize
-                                                                                 originY:digitOriginY + [digits[key][i][1] doubleValue] * pixelSize
-                                                                                   width:[digits[key][i][2] doubleValue] * pixelSize
-                                                                                  height:[digits[key][i][3] doubleValue] * pixelSize];
-                    }
-                    digitOriginX += pixelSize*3 + spaceSize;
-                }
-
-
                 BOOL success = NO;
                 int retryCount = 3;
 
@@ -603,6 +502,104 @@ NSMutableDictionary *classColorMap;
     CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
     CGContextRelease(context);
 
+    return pixelBuffer;
+}
+
+- (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
+    NSInteger digitOriginX = 3;
+    NSInteger digitOriginY = 10;
+    NSInteger pixelSize = 6;
+    NSInteger spaceSize = 3;
+    
+    NSMutableDictionary *digits = [NSMutableDictionary dictionary];
+    [digits setObject:@[
+        @[ @0, @0, @3, @1],
+        @[ @0, @1, @1 , @3],
+        @[ @2, @1, @1 , @3],
+        @[ @0, @4, @3 , @1]
+    ] forKey:@"0"];
+    [digits setObject:@[
+        @[ @2, @0, @1, @5 ],
+    ] forKey:@"1"];
+    [digits setObject:@[
+        @[ @0, @0, @3, @1 ],
+        @[ @2, @1, @1, @1 ],
+        @[ @0, @2, @3, @1 ],
+        @[ @0, @3, @1, @1 ],
+        @[ @0, @4, @3, @1 ]
+    ] forKey:@"2"];
+    [digits setObject:@[
+        @[ @0, @0, @3, @1 ],
+        @[ @2, @1, @1, @3 ],
+        @[ @0, @2, @3, @1 ],
+        @[ @0, @4, @3, @1 ]
+    ] forKey:@"3"];
+    [digits setObject:@[
+        @[ @2, @0, @1, @5 ],
+        @[ @0, @0, @1, @2 ],
+        @[ @0, @2, @3, @1 ],
+    ] forKey:@"4"];
+    [digits setObject:@[
+        @[ @0, @0, @3, @1 ],
+        @[ @0, @1, @1, @1 ],
+        @[ @0, @2, @3, @1 ],
+        @[ @2, @3, @1, @1 ],
+        @[ @0, @4, @3, @1 ]
+    ] forKey:@"5"];
+    [digits setObject:@[
+        @[ @0, @0, @1, @5 ],
+        @[ @1, @2, @2, @1 ],
+        @[ @1, @4, @2, @1 ],
+        @[ @2, @3, @1, @1 ],
+    ] forKey:@"6"];
+    [digits setObject:@[
+        @[ @0, @0, @3, @1 ],
+        @[ @2, @1, @1, @4 ],
+    ] forKey:@"7"];
+    [digits setObject:@[
+        @[ @0, @0, @1, @5 ],
+        @[ @2, @0, @1, @5 ],
+        @[ @1, @0, @1, @1 ],
+        @[ @1, @2, @1, @1 ],
+        @[ @1, @4, @1, @1 ]
+    ] forKey:@"8"];
+    [digits setObject:@[
+        @[ @2, @0, @1, @5 ],
+        @[ @1, @0, @1, @1 ],
+        @[ @0, @0, @1, @2 ],
+        @[ @0, @2, @3, @1 ],
+    ] forKey:@"9"];
+    [digits setObject:@[
+        @[ @0, @2, @3, @1 ]
+    ] forKey:@"-"];
+    [digits setObject:@[
+        @[ @1, @1, @1, @1 ],
+        @[ @1, @3, @1, @1 ]
+    ] forKey:@":"];
+    
+    NSDate *currentDate = [NSDate date];
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+    NSString *timestamp = [dateFormatter stringFromDate:currentDate];
+
+
+    for (NSUInteger k = 0; k < [timestamp length]; k++) {
+        unichar character = [timestamp characterAtIndex:k];
+        if(character == ' '){
+            digitOriginX += pixelSize*3;
+            continue;
+        }
+        NSString *key = [NSString stringWithFormat:@"%C", character];
+        for (int i = 0; i < [digits[key] count]; i++) {
+            pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                                    withColor:[UIColor whiteColor]
+                                                                     originX:digitOriginX + [digits[key][i][0] doubleValue] * pixelSize
+                                                                     originY:digitOriginY + [digits[key][i][1] doubleValue] * pixelSize
+                                                                       width:[digits[key][i][2] doubleValue] * pixelSize
+                                                                      height:[digits[key][i][3] doubleValue] * pixelSize];
+        }
+        digitOriginX += pixelSize*3 + spaceSize;
+    }
     return pixelBuffer;
 }
 
