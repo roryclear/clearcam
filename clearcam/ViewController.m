@@ -417,12 +417,14 @@ NSMutableDictionary *classColorMap;
 
             if (self.videoWriterInput.readyForMoreMediaData) {
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-                
+
+                CVPixelBufferRef pixelBufferWithRedSquare = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor redColor] originX:0 originY:0 width:250 height:50];
+
                 BOOL success = NO;
                 int retryCount = 3;
 
                 while (!success && retryCount > 0) {
-                    success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
+                    success = [self.adaptor appendPixelBuffer:pixelBufferWithRedSquare withPresentationTime:self.currentTime];
                     if (!success) {
                         retryCount--;
                         [NSThread sleepForTimeInterval:0.01];
@@ -485,6 +487,40 @@ NSMutableDictionary *classColorMap;
     }
 }
 
+- (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height {
+    CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+
+    CGContextRef context = [self createContextForPixelBuffer:pixelBuffer];
+
+    size_t pixelBufferHeight = CVPixelBufferGetHeight(pixelBuffer);
+    // Adjust originY to be relative to the top-left corner
+    CGRect rectangleRect = CGRectMake(originX, pixelBufferHeight - originY - height, width, height);
+    CGContextSetFillColorWithColor(context, color.CGColor);
+    CGContextFillRect(context, rectangleRect);
+
+    CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+    CGContextRelease(context);
+
+    return pixelBuffer;
+}
+
+
+// Helper method to create a CGContext for a CVPixelBufferRef
+- (CGContextRef)createContextForPixelBuffer:(CVPixelBufferRef)pixelBuffer {
+    size_t width = CVPixelBufferGetWidth(pixelBuffer);
+    size_t height = CVPixelBufferGetHeight(pixelBuffer);
+    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
+
+    void *baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer);
+    
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(baseAddress, width, height, 8, bytesPerRow, colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGColorSpaceRelease(colorSpace);
+
+    return context;
+}
+
+
 - (void)updateFPS {
     CFTimeInterval currentTime = CACurrentMediaTime();
     if (self.lastFrameTime > 0) {
@@ -501,5 +537,6 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
 
