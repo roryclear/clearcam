@@ -267,15 +267,6 @@
             }
         }
 
-        document.addEventListener("visibilitychange", () => {
-            if (isPlaying && !document.hidden && segments.length > 0) {
-                currentSegment = segments.length - 1;
-                currentVideo.src = segments[currentSegment].url;
-                currentVideo.currentTime = segments[currentSegment].duration;
-                currentVideo.play().catch(() => {});
-            }
-        });
-
         const fetchStartTime = new Date(); // Capture the time once and never change it
         const currentDate = formatDate(fetchStartTime); // Compute the date once
 
@@ -493,7 +484,32 @@
         }
 
         
-        fetchSegments();
+        async function fetchSegmentsAndHandleVisibilityAndLoad() {
+            await fetchSegments();
+            handleVisibilityAndLoad();
+        }
+
+        function handleVisibilityAndLoad() {
+            if (isPlaying && segments.length > 0) {
+                alert(segments.length);
+                currentSegment = segments.length - 1;
+                currentVideo.src = segments[currentSegment].url;
+                currentVideo.currentTime = segments[currentSegment].duration;
+                currentVideo.play().catch(() => {});
+            }
+        }
+
+        // Handle visibility change
+        document.addEventListener("visibilitychange", async () => {
+            if (!document.hidden) {
+                await fetchSegmentsAndHandleVisibilityAndLoad();
+            }
+        });
+
+        // Handle page load/refresh
+        window.addEventListener("load", async () => {
+            await fetchSegmentsAndHandleVisibilityAndLoad();
+        });
     </script>
 </body>
 </html>
