@@ -491,7 +491,6 @@
 
         function handleVisibilityAndLoad() {
             if (isPlaying && segments.length > 0) {
-                alert(segments.length);
                 currentSegment = segments.length - 1;
                 currentVideo.src = segments[currentSegment].url;
                 currentVideo.currentTime = segments[currentSegment].duration;
