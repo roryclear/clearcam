@@ -161,7 +161,7 @@ UInt8 *rgbData;
     return self;
 }
 
-- (NSArray *)processOutput:(const float *)output outputLength:(int)outputLength imgWidth:(float)imgWidth imgHeight:(float)imgHeight {
+- (NSArray *)processOutput:(const float *)output {
     NSMutableArray *boxes = [NSMutableArray array];
     int modelInputSize = self.yolo_res;
     int numPredictions = pow(modelInputSize / 32, 2) * 21;
@@ -185,10 +185,10 @@ UInt8 *rgbData;
         float w = output[2 * numPredictions + index];
         float h = output[3 * numPredictions + index];
 
-        float x1 = (xc - w / 2) / modelInputSize * imgWidth;
-        float y1 = (yc - h / 2) / modelInputSize * imgHeight;
-        float x2 = (xc + w / 2) / modelInputSize * imgWidth;
-        float y2 = (yc + h / 2) / modelInputSize * imgHeight;
+        float x1 = (xc - w / 2);
+        float y1 = (yc - h / 2);
+        float x2 = (xc + w / 2);
+        float y2 = (yc + h / 2);
 
         [boxes addObject:@[@(x1), @(y1), @(x2), @(y2), @(classId), @(prob)]];
     }
@@ -356,7 +356,7 @@ UInt8 *rgbData;
     }
 
     memcpy(floatArray, bufferPointer, buffer.length);
-    NSArray *output = [self processOutput:floatArray outputLength:buffer.length / 4 imgWidth:self.yolo_res imgHeight:self.yolo_res];
+    NSArray *output = [self processOutput:floatArray];
 
     NSMutableString *classNamesString = [NSMutableString string];
     for (int i = 0; i < output.count; i++) {
