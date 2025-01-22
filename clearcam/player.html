@@ -509,6 +509,38 @@
         window.addEventListener("load", async () => {
             await fetchSegmentsAndHandleVisibilityAndLoad();
         });
+        
+        function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
+            const container = document.getElementById("videoContainer");
+
+            // Create the bounding box
+            let box = document.createElement("div");
+            box.style.position = "absolute";
+            box.style.left = `${relativeX * 100}%`;
+            box.style.top = `${relativeY * 100}%`;
+            box.style.width = `${relativeWidth * 100}%`;
+            box.style.height = `${relativeHeight * 100}%`;
+            box.style.border = `2px solid ${color}`;
+            box.style.boxSizing = "border-box";
+
+            // Create the label
+            let labelDiv = document.createElement("span");
+            labelDiv.textContent = label;
+            labelDiv.style.position = "absolute";
+            labelDiv.style.top = "-20px"; // Position above the box
+            labelDiv.style.left = "0";
+            labelDiv.style.background = color;
+            labelDiv.style.color = "white";
+            labelDiv.style.padding = "2px 5px";
+            labelDiv.style.fontSize = "12px";
+            labelDiv.style.fontFamily = "Arial, sans-serif";
+            labelDiv.style.whiteSpace = "nowrap";
+
+            box.appendChild(labelDiv);
+            container.appendChild(box);
+        }
+        drawBoundingBox(0.1, 0.2, 0.3, 0.25, "red", "Person");
+        
     </script>
 </body>
 </html>
