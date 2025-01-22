@@ -27,6 +27,7 @@
 @property (nonatomic, assign) CMTime last_file_duration;
 @property (nonatomic, assign) NSDate *last_file_timestamp;
 @property (nonatomic, assign) NSDate *current_file_timestamp;
+@property (nonatomic, strong) NSMutableDictionary *digits;
 
 @end
 
@@ -36,6 +37,19 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.digits = [NSMutableDictionary dictionary];
+    self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
+    self.digits[@"1"] = @[@[ @2, @0, @1, @5 ]];
+    self.digits[@"2"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @0, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
+    self.digits[@"3"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @3 ], @[ @0, @2, @3, @1 ], @[ @0, @4, @3, @1 ]];
+    self.digits[@"4"] = @[@[ @2, @0, @1, @5 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ]];
+    self.digits[@"5"] = @[@[ @0, @0, @3, @1 ], @[ @0, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @2, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
+    self.digits[@"6"] = @[@[ @0, @0, @1, @5 ], @[ @1, @2, @2, @1 ], @[ @1, @4, @2, @1 ], @[ @2, @3, @1, @1 ]];
+    self.digits[@"7"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @4 ]];
+    self.digits[@"8"] = @[@[ @0, @0, @1, @5 ], @[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @1, @2, @1, @1 ], @[ @1, @4, @1, @1 ]];
+    self.digits[@"9"] = @[@[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ]];
+    self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
+    self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
@@ -417,6 +431,7 @@ NSMutableDictionary *classColorMap;
 
             if (self.videoWriterInput.readyForMoreMediaData) {
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+                pixelBuffer = [self addTimeStampToPixelBuffer:pixelBuffer];
                 
                 BOOL success = NO;
                 int retryCount = 3;
@@ -485,6 +500,77 @@ NSMutableDictionary *classColorMap;
     }
 }
 
+- (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height opacity:(CGFloat)opacity {
+    CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+
+    CGContextRef context = [self createContextForPixelBuffer:pixelBuffer];
+
+    size_t pixelBufferHeight = CVPixelBufferGetHeight(pixelBuffer);
+    // Adjust originY to be relative to the top-left corner
+    CGRect rectangleRect = CGRectMake(originX, pixelBufferHeight - originY - height, width, height);
+    
+    // Set the fill color with the adjusted opacity
+    UIColor *colorWithOpacity = [color colorWithAlphaComponent:opacity];
+    CGContextSetFillColorWithColor(context, colorWithOpacity.CGColor);
+    CGContextFillRect(context, rectangleRect);
+
+    CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+    CGContextRelease(context);
+
+    return pixelBuffer;
+}
+
+
+- (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
+    NSInteger pixelSize = 4;
+    NSInteger spaceSize = 2;
+    NSInteger digitOriginX = spaceSize;
+    NSInteger digitOriginY = spaceSize;
+    NSInteger height = spaceSize*2 + pixelSize*5;
+
+    NSDate *currentDate = [NSDate date];
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+    NSString *timestamp = [dateFormatter stringFromDate:currentDate];
+    pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:0 width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
+        
+    for (NSUInteger k = 0; k < [timestamp length]; k++) {
+        unichar character = [timestamp characterAtIndex:k];
+        if(character == ' '){
+            digitOriginX += pixelSize*3;
+            continue;
+        }
+        NSString *key = [NSString stringWithFormat:@"%C", character];
+        for (int i = 0; i < [self.digits[key] count]; i++) {
+            pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                        withColor:[UIColor whiteColor]
+                                                         originX:digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize
+                                                         originY:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
+                                                           width:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                           height:[self.digits[key][i][3] doubleValue] * pixelSize opacity:1];
+        }
+        digitOriginX += pixelSize*3 + spaceSize;
+    }
+    return pixelBuffer;
+}
+
+
+// Helper method to create a CGContext for a CVPixelBufferRef
+- (CGContextRef)createContextForPixelBuffer:(CVPixelBufferRef)pixelBuffer {
+    size_t width = CVPixelBufferGetWidth(pixelBuffer);
+    size_t height = CVPixelBufferGetHeight(pixelBuffer);
+    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
+
+    void *baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer);
+    
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(baseAddress, width, height, 8, bytesPerRow, colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGColorSpaceRelease(colorSpace);
+
+    return context;
+}
+
+
 - (void)updateFPS {
     CFTimeInterval currentTime = CACurrentMediaTime();
     if (self.lastFrameTime > 0) {
@@ -501,5 +587,6 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
 
