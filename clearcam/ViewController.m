@@ -478,10 +478,13 @@ NSMutableDictionary *classColorMap;
             NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];;
             NSMutableArray *frameSquares = [[NSMutableArray alloc] init];;
             
-            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-            [dateFormatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
-            NSString *formattedDate = [dateFormatter stringFromDate:[NSDate date]];
-            frame[@"timeStamp"] = formattedDate;
+
+            NSCalendar *calendar = [NSCalendar currentCalendar];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.last_file_timestamp];
+            NSDate *midnight = [calendar dateFromComponents:components];
+            NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
+            
+            frame[@"timeStamp"] = @(timeStamp);
             frame[@"res"] = @(self.yolo.yolo_res);
             frame[@"aspect_ratio"] = @(aspect_ratio);
             
