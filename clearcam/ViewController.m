@@ -480,9 +480,10 @@ NSMutableDictionary *classColorMap;
             
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.last_file_timestamp];
+            NSDate *now = [NSDate date];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
             NSDate *midnight = [calendar dateFromComponents:components];
-            NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
+            NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
             
             frame[@"timeStamp"] = @(timeStamp);
             frame[@"res"] = @(self.yolo.yolo_res);
