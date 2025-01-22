@@ -163,8 +163,7 @@ UInt8 *rgbData;
 
 - (NSArray *)processOutput:(const float *)output {
     NSMutableArray *boxes = [NSMutableArray array];
-    int modelInputSize = self.yolo_res;
-    int numPredictions = pow(modelInputSize / 32, 2) * 21;
+    int numPredictions = pow(self.yolo_res / 32, 2) * 21;
 
     for (int index = 0; index < numPredictions; index++) {
         int classId = 0;
@@ -213,7 +212,7 @@ UInt8 *rgbData;
         }
         boxes = filteredBoxes;
     }
-    return [result copy];
+    return result;
 }
 
 // Calculate intersection between two boxes
