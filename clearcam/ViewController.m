@@ -359,7 +359,7 @@ NSMutableDictionary *classColorMap;
                     @"url": [NSString stringWithFormat:@"%@/%@", [[self.last_file_url URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
                     @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
                     @"timeDifference": @(CMTimeGetSeconds(timeDifference)),
-                    @"squares":self.last_segment_squares
+                    @"frames":self.last_segment_squares
                 }];
 
                 NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
