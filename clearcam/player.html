@@ -348,11 +348,15 @@
             return `${year}-${month}-${day}`;
         }
 
+        let isFetchingSegments = false;
         async function fetchSegments() {
+            if (isFetchingSegments) return;
+            isFetchingSegments = true;
+
             try {
                 const startParam = segments.length;
-
                 const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
+
                 if (response.ok) {
                     const newSegments = await response.json();
                     if (Array.isArray(newSegments)) {
@@ -392,8 +396,11 @@
                 }
             } catch (error) {
                 console.error('Failed to fetch segments:', error);
+            } finally {
+                isFetchingSegments = false;
             }
         }
+
 
         function formatTime(seconds) {
             const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
