@@ -55,6 +55,34 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
+    
+    //TODO REMOVE THIS
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+    NSString *documentsPath = [documentsURL path];
+    
+    NSError *error;
+    NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
+    
+    if (error) {
+        NSLog(@"Failed to get contents of Documents directory: %@", error.localizedDescription);
+        return;
+    }
+    
+    // Loop through and delete each item
+    for (NSString *file in contents) {
+        NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
+        BOOL success = [fileManager removeItemAtPath:filePath error:&error];
+        
+        if (!success) {
+            NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
+        } else {
+            NSLog(@"Deleted: %@", file);
+        }
+    }
+    
+    ///TODO
+    
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
     self.seg_number = 0;
@@ -351,7 +379,7 @@ NSMutableDictionary *classColorMap;
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
-                self.last_segment_squares = self.current_segment_squares; //todo, clean
+                self.last_segment_squares = [self.current_segment_squares copy]; //todo, clean
             } else {
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
 
@@ -378,7 +406,7 @@ NSMutableDictionary *classColorMap;
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
-                self.last_segment_squares = self.current_segment_squares;
+                self.last_segment_squares = [self.current_segment_squares copy];
             }
             [self.current_segment_squares removeAllObjects];
 
