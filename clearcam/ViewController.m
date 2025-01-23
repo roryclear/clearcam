@@ -547,7 +547,7 @@ NSMutableDictionary *classColorMap;
                     frameSquare[@"length"] = output[i][2];
                     frameSquare[@"height"] = output[i][3];
                     frameSquare[@"classIndex"] = output[i][4];
-                    [frameSquares addObject:frameSquare];
+                    [frameSquares addObject:[frameSquare copy]];
                 }
                 frame[@"squares"] = frameSquares;
                 [self.current_segment_squares addObject:frame];
