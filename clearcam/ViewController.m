@@ -60,27 +60,28 @@ NSMutableDictionary *classColorMap;
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
     NSString *documentsPath = [documentsURL path];
-    
+
     NSError *error;
     NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
-    
+
     if (error) {
         NSLog(@"Failed to get contents of Documents directory: %@", error.localizedDescription);
         return;
     }
-    
-    // Loop through and delete each item
+
     for (NSString *file in contents) {
+        if ([file hasPrefix:@"batch_req"]) continue;
+
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
         BOOL success = [fileManager removeItemAtPath:filePath error:&error];
-        
+
         if (!success) {
             NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
         } else {
             NSLog(@"Deleted: %@", file);
         }
     }
-    
+
     ///TODO
     
     self.ciContext = [CIContext context];
