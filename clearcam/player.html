@@ -271,8 +271,8 @@
                     let originX = (frames[shape_idx].squares[i].originX / res);
                     let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
                     //todo these are named wrong
-                    let length = ((frames[shape_idx].squares[i].length - frames[shape_idx].squares[i].originX) / res);
-                    let height = ((frames[shape_idx].squares[i].height - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
+                    let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
+                    let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
                     //alert(`${frames[shape_idx].squares[i].originY} ${originY}`);
                     drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
                 }
@@ -508,7 +508,7 @@
         }
 
         currentVideo.addEventListener("timeupdate", handleTimeUpdate);
-        setInterval(handleTimeUpdate, 100);
+        setInterval(handleTimeUpdate, 50);
         nextVideo.addEventListener("timeupdate", handleTimeUpdate);
 
         progress.addEventListener("mousedown", startScrubbing);
@@ -586,8 +586,6 @@
         function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
             const container = document.getElementById("videoContainer");
             const video = container.querySelector("video");
-
-            // Get the actual displayed dimensions of the video
             const containerAspectRatio = container.clientWidth / container.clientHeight;
             const videoAspectRatio = video.videoWidth / video.videoHeight;
 
@@ -607,7 +605,6 @@
                 offsetY = (container.clientHeight - videoHeight) / 2;
             }
 
-            // Create a wrapper div for easy removal later
             let boxWrapper = document.createElement("div");
             boxWrapper.classList.add("bounding-box");
 
@@ -620,13 +617,13 @@
             box.style.height = `${relativeHeight * videoHeight}px`;
             box.style.border = `2px solid ${color}`;
             box.style.boxSizing = "border-box";
-            box.style.pointerEvents = "none"; // 👈 FIX: Allows clicks to pass through
+            box.style.pointerEvents = "none";
 
             // Create the label (interactive)
             let labelDiv = document.createElement("span");
             labelDiv.textContent = label;
             labelDiv.style.position = "absolute";
-            labelDiv.style.top = "-20px"; // Position above the box
+            labelDiv.style.top = "-20px";
             labelDiv.style.left = "0";
             labelDiv.style.background = color;
             labelDiv.style.color = "white";
@@ -634,7 +631,7 @@
             labelDiv.style.fontSize = "12px";
             labelDiv.style.fontFamily = "Arial, sans-serif";
             labelDiv.style.whiteSpace = "nowrap";
-            labelDiv.style.pointerEvents = "auto"; // 👈 Keeps label clickable if needed
+            labelDiv.style.pointerEvents = "auto"; //Keeps label clickable if needed
 
             box.appendChild(labelDiv);
             boxWrapper.appendChild(box);

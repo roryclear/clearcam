@@ -545,8 +545,8 @@ NSMutableDictionary *classColorMap;
                                            aspectRatio:aspect_ratio];
                     frameSquare[@"originX"] = output[i][0];
                     frameSquare[@"originY"] = output[i][1];
-                    frameSquare[@"length"] = output[i][2];
-                    frameSquare[@"height"] = output[i][3];
+                    frameSquare[@"bottomRightX"] = output[i][2];
+                    frameSquare[@"bottomRightY"] = output[i][3];
                     frameSquare[@"classIndex"] = output[i][4];
                     [frameSquares addObject:[frameSquare copy]];
                 }
