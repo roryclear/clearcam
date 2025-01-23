@@ -609,7 +609,7 @@
 
             // Create a wrapper div for easy removal later
             let boxWrapper = document.createElement("div");
-            boxWrapper.classList.add("bounding-box"); // Add a class for removal
+            boxWrapper.classList.add("bounding-box");
 
             // Create the bounding box
             let box = document.createElement("div");
@@ -620,8 +620,9 @@
             box.style.height = `${relativeHeight * videoHeight}px`;
             box.style.border = `2px solid ${color}`;
             box.style.boxSizing = "border-box";
+            box.style.pointerEvents = "none"; // 👈 FIX: Allows clicks to pass through
 
-            // Create the label
+            // Create the label (interactive)
             let labelDiv = document.createElement("span");
             labelDiv.textContent = label;
             labelDiv.style.position = "absolute";
@@ -633,11 +634,13 @@
             labelDiv.style.fontSize = "12px";
             labelDiv.style.fontFamily = "Arial, sans-serif";
             labelDiv.style.whiteSpace = "nowrap";
+            labelDiv.style.pointerEvents = "auto"; // 👈 Keeps label clickable if needed
 
             box.appendChild(labelDiv);
             boxWrapper.appendChild(box);
             container.appendChild(boxWrapper);
         }
+
         function clearBoundingBoxes() {
             document.querySelectorAll(".bounding-box").forEach(box => box.remove());
         }
