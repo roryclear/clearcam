@@ -162,6 +162,7 @@
         let isScrubbing = false;
         let isWaitingForNextSegment = false;
         let wasPlayingBeforeScrub = false;
+        let shape_idx = -1;
 
         let hideControlsTimeout;
         const controls = document.getElementById('controls');
@@ -207,8 +208,34 @@
             } else {
                 adjustedStartTimestamp = startTimestamp;
             }
-
+            
             const currentTime = adjustedStartTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+            
+            let frames = segments[currentSegment].frames;
+            let show_new = false;
+            //alert(`${currentTime} ${frames[shape_idx+1].timeStamp}`);
+            while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].timeStamp)) {
+                shape_idx += 1;
+                show_new = true;
+            }
+            
+            if(show_new == true){
+                //alert("here");
+                clearBoundingBoxes();
+                let aspect_ratio = frames[shape_idx].aspect_ratio;
+                let res = frames[shape_idx].res;
+                //alert(`${frames[shape_idx].squares.length}`);
+                for(let i = 0; i < frames[shape_idx].squares.length; i++){
+                    let originX = (frames[shape_idx].squares[i].originX / res);
+                    let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
+                    //todo these are named wrong
+                    let length = ((frames[shape_idx].squares[i].length - frames[shape_idx].squares[i].originX) / res);
+                    let height = ((frames[shape_idx].squares[i].height - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
+                    //alert(`${frames[shape_idx].squares[i].originY} ${originY}`);
+                    drawBoundingBox(originX, originY, length, height,"blue","thing");
+                }
+            }
+            
             progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
             timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
         }
@@ -425,6 +452,7 @@
             } else {
                 isWaitingForNextSegment = true;
             }
+            shape_idx = -1;
         }
 
         function handleTimeUpdate() {
@@ -513,6 +541,10 @@
         function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
             const container = document.getElementById("videoContainer");
 
+            // Create a wrapper div for easy removal later
+            let boxWrapper = document.createElement("div");
+            boxWrapper.classList.add("bounding-box"); // Add a class for removal
+
             // Create the bounding box
             let box = document.createElement("div");
             box.style.position = "absolute";
@@ -537,10 +569,20 @@
             labelDiv.style.whiteSpace = "nowrap";
 
             box.appendChild(labelDiv);
-            container.appendChild(box);
+            boxWrapper.appendChild(box);
+            container.appendChild(boxWrapper);
         }
+
+        // Function to remove all bounding boxes
+        function clearBoundingBoxes() {
+            document.querySelectorAll(".bounding-box").forEach(box => box.remove());
+        }
+
+        // Example usage:
         drawBoundingBox(0.1, 0.2, 0.3, 0.25, "red", "Person");
-        
+        drawBoundingBox(0.5, 0.0, 0.2, 1.0, "blue", "Car");
+
+        //clearBoundingBoxes();
     </script>
 </body>
 </html>
