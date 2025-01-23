@@ -540,6 +540,27 @@
         
         function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
             const container = document.getElementById("videoContainer");
+            const video = container.querySelector("video");
+
+            // Get the actual displayed dimensions of the video
+            const containerAspectRatio = container.clientWidth / container.clientHeight;
+            const videoAspectRatio = video.videoWidth / video.videoHeight;
+
+            let videoWidth, videoHeight, offsetX, offsetY;
+
+            if (containerAspectRatio > videoAspectRatio) {
+                // Video is pillarboxed
+                videoHeight = container.clientHeight;
+                videoWidth = videoHeight * videoAspectRatio;
+                offsetX = (container.clientWidth - videoWidth) / 2;
+                offsetY = 0;
+            } else {
+                // Video is letterboxed
+                videoWidth = container.clientWidth;
+                videoHeight = videoWidth / videoAspectRatio;
+                offsetX = 0;
+                offsetY = (container.clientHeight - videoHeight) / 2;
+            }
 
             // Create a wrapper div for easy removal later
             let boxWrapper = document.createElement("div");
@@ -548,10 +569,10 @@
             // Create the bounding box
             let box = document.createElement("div");
             box.style.position = "absolute";
-            box.style.left = `${relativeX * 100}%`;
-            box.style.top = `${relativeY * 100}%`;
-            box.style.width = `${relativeWidth * 100}%`;
-            box.style.height = `${relativeHeight * 100}%`;
+            box.style.left = `${offsetX + relativeX * videoWidth}px`;
+            box.style.top = `${offsetY + relativeY * videoHeight}px`;
+            box.style.width = `${relativeWidth * videoWidth}px`;
+            box.style.height = `${relativeHeight * videoHeight}px`;
             box.style.border = `2px solid ${color}`;
             box.style.boxSizing = "border-box";
 
@@ -572,17 +593,9 @@
             boxWrapper.appendChild(box);
             container.appendChild(boxWrapper);
         }
-
-        // Function to remove all bounding boxes
         function clearBoundingBoxes() {
             document.querySelectorAll(".bounding-box").forEach(box => box.remove());
         }
-
-        // Example usage:
-        drawBoundingBox(0.1, 0.2, 0.3, 0.25, "red", "Person");
-        drawBoundingBox(0.5, 0.0, 0.2, 1.0, "blue", "Car");
-
-        //clearBoundingBoxes();
     </script>
 </body>
 </html>
