@@ -28,6 +28,8 @@
 @property (nonatomic, assign) NSDate *last_file_timestamp;
 @property (nonatomic, assign) NSDate *current_file_timestamp;
 @property (nonatomic, strong) NSMutableDictionary *digits;
+@property (nonatomic, strong) NSMutableArray *last_segment_squares;
+@property (nonatomic, strong) NSMutableArray *current_segment_squares;
 
 @end
 
@@ -37,6 +39,8 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.last_segment_squares = [[NSMutableArray alloc] init];
+    self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
     self.digits[@"1"] = @[@[ @2, @0, @1, @5 ]];
@@ -51,6 +55,35 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
+    
+    //TODO REMOVE THIS
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+    NSString *documentsPath = [documentsURL path];
+
+    NSError *error;
+    NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
+
+    if (error) {
+        NSLog(@"Failed to get contents of Documents directory: %@", error.localizedDescription);
+        return;
+    }
+
+    for (NSString *file in contents) {
+        if ([file hasPrefix:@"batch_req"]) continue;
+
+        NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
+        BOOL success = [fileManager removeItemAtPath:filePath error:&error];
+
+        if (!success) {
+            NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
+        } else {
+            NSLog(@"Deleted: %@", file);
+        }
+    }
+
+    ///TODO
+    
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
     self.seg_number = 0;
@@ -347,13 +380,15 @@ NSMutableDictionary *classColorMap;
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
+                self.last_segment_squares = [self.current_segment_squares copy]; //todo, clean
             } else {
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
 
                 NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
                     @"url": [NSString stringWithFormat:@"%@/%@", [[self.last_file_url URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
                     @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
-                    @"timeDifference": @(CMTimeGetSeconds(timeDifference))
+                    @"timeDifference": @(CMTimeGetSeconds(timeDifference)),
+                    @"frames":self.last_segment_squares
                 }];
 
                 NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
@@ -372,7 +407,9 @@ NSMutableDictionary *classColorMap;
                 self.last_file_duration = time;
                 self.last_file_url = [self.assetWriter.outputURL copy];
                 self.last_file_timestamp = self.current_file_timestamp;
+                self.last_segment_squares = [self.current_segment_squares copy];
             }
+            [self.current_segment_squares removeAllObjects];
 
             NSLog(@"Duration is %f seconds", CMTimeGetSeconds(time));
             [self startNewRecording];
@@ -465,6 +502,22 @@ NSMutableDictionary *classColorMap;
             size_t width = CVPixelBufferGetWidth(imageBuffer);
             size_t height = CVPixelBufferGetHeight(imageBuffer);
             CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
+            
+            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];//todo, init elsewhere
+            NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];;
+            NSMutableArray *frameSquares = [[NSMutableArray alloc] init];;
+            
+
+            NSCalendar *calendar = [NSCalendar currentCalendar];
+            NSDate *now = [NSDate date];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
+            NSDate *midnight = [calendar dateFromComponents:components];
+            NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
+            
+            frame[@"timeStamp"] = @(timeStamp);
+            frame[@"res"] = @(self.yolo.yolo_res);
+            frame[@"aspect_ratio"] = @(aspect_ratio);
+            
             CGFloat targetWidth = self.yolo.yolo_res;
             CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
 
@@ -490,7 +543,15 @@ NSMutableDictionary *classColorMap;
                                           bottomRightY:[output[i][3] floatValue]
                                             classIndex:[output[i][4] intValue]
                                            aspectRatio:aspect_ratio];
+                    frameSquare[@"originX"] = output[i][0];
+                    frameSquare[@"originY"] = output[i][1];
+                    frameSquare[@"bottomRightX"] = output[i][2];
+                    frameSquare[@"bottomRightY"] = output[i][3];
+                    frameSquare[@"classIndex"] = output[i][4];
+                    [frameSquares addObject:[frameSquare copy]];
                 }
+                frame[@"squares"] = frameSquares;
+                [self.current_segment_squares addObject:frame];
                 [weak_self updateFPS];
                 weak_self.isProcessing = NO;
             });
