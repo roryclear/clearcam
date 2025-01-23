@@ -142,6 +142,48 @@
         </div>
     </div>
     <script>
+        const yolo_classes = [
+            ["person", "red"], ["bicycle", "green"], ["car", "blue"],
+            ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
+            ["train", "orange"], ["truck", "purple"], ["boat", "brown"],
+            ["traffic light", "rgb(128, 179, 51)"], ["fire hydrant", "rgb(204, 26, 26)"],
+            ["stop sign", "rgb(77, 77, 204)"], ["parking meter", "rgb(179, 128, 77)"],
+            ["bench", "rgb(102, 102, 51)"], ["bird", "rgb(26, 128, 230)"],
+            ["cat", "rgb(204, 51, 153)"], ["dog", "rgb(230, 77, 77)"],
+            ["horse", "rgb(51, 153, 179)"], ["sheep", "rgb(179, 77, 128)"],
+            ["cow", "rgb(102, 204, 102)"], ["elephant", "rgb(77, 102, 230)"],
+            ["bear", "rgb(153, 51, 204)"], ["zebra", "rgb(204, 128, 51)"],
+            ["giraffe", "rgb(128, 230, 26)"], ["backpack", "rgb(77, 179, 102)"],
+            ["umbrella", "rgb(102, 153, 230)"], ["handbag", "rgb(230, 51, 128)"],
+            ["tie", "rgb(128, 77, 179)"], ["suitcase", "rgb(153, 179, 51)"],
+            ["frisbee", "rgb(179, 51, 102)"], ["skis", "rgb(77, 230, 77)"],
+            ["snowboard", "rgb(204, 26, 153)"], ["sports ball", "rgb(102, 77, 204)"],
+            ["kite", "rgb(51, 128, 179)"], ["baseball bat", "rgb(153, 102, 51)"],
+            ["baseball glove", "rgb(179, 26, 102)"], ["skateboard", "rgb(128, 204, 128)"],
+            ["surfboard", "rgb(204, 77, 153)"], ["tennis racket", "rgb(51, 179, 230)"],
+            ["bottle", "rgb(230, 51, 77)"], ["wine glass", "rgb(153, 153, 77)"],
+            ["cup", "rgb(77, 102, 230)"], ["fork", "rgb(102, 179, 51)"],
+            ["knife", "rgb(204, 51, 128)"], ["spoon", "rgb(153, 77, 179)"],
+            ["bowl", "rgb(51, 204, 102)"], ["banana", "rgb(179, 179, 26)"],
+            ["apple", "rgb(230, 26, 102)"], ["sandwich", "rgb(102, 128, 204)"],
+            ["orange", "rgb(204, 153, 51)"], ["broccoli", "rgb(77, 204, 77)"],
+            ["carrot", "rgb(179, 51, 153)"], ["hot dog", "rgb(230, 77, 128)"],
+            ["pizza", "rgb(128, 77, 204)"], ["donut", "rgb(204, 26, 102)"],
+            ["cake", "rgb(179, 128, 26)"], ["chair", "rgb(153, 51, 102)"],
+            ["couch", "rgb(102, 153, 51)"], ["potted plant", "rgb(204, 102, 128)"],
+            ["bed", "rgb(77, 179, 179)"], ["dining table", "rgb(128, 204, 77)"],
+            ["toilet", "rgb(179, 102, 153)"], ["tv", "rgb(230, 128, 51)"],
+            ["laptop", "rgb(153, 77, 179)"], ["mouse", "rgb(51, 230, 128)"],
+            ["remote", "rgb(204, 102, 77)"], ["keyboard", "rgb(77, 153, 204)"],
+            ["cell phone", "rgb(179, 77, 230)"], ["microwave", "rgb(102, 230, 102)"],
+            ["oven", "rgb(128, 179, 51)"], ["toaster", "rgb(230, 51, 77)"],
+            ["sink", "rgb(153, 204, 77)"], ["refrigerator", "rgb(204, 102, 179)"],
+            ["book", "rgb(77, 128, 230)"], ["clock", "rgb(179, 179, 51)"],
+            ["vase", "rgb(230, 102, 128)"], ["scissors", "rgb(51, 179, 204)"],
+            ["teddy bear", "rgb(153, 77, 230)"], ["hair drier", "rgb(204, 51, 77)"],
+            ["toothbrush", "rgb(102, 179, 153)"]
+        ];
+        
         let segments = [];
         let totalDuration = 0;
         let retryTimeout = 2000;
@@ -232,7 +274,7 @@
                     let length = ((frames[shape_idx].squares[i].length - frames[shape_idx].squares[i].originX) / res);
                     let height = ((frames[shape_idx].squares[i].height - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
                     //alert(`${frames[shape_idx].squares[i].originY} ${originY}`);
-                    drawBoundingBox(originX, originY, length, height,"blue","thing");
+                    drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
                 }
             }
             
