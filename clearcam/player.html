@@ -327,9 +327,11 @@
             let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
             targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
             currentSegment = targetSegment;
-
             currentVideo.src = segments[currentSegment].url;
             currentVideo.currentTime = time - segments[currentSegment].cumulativeStart;
+            
+            shape_idx = 0;
+            clearBoundingBoxes();
 
             if (isPlaying) {
                 currentVideo.play();
@@ -506,6 +508,7 @@
         }
 
         currentVideo.addEventListener("timeupdate", handleTimeUpdate);
+        setInterval(handleTimeUpdate, 100);
         nextVideo.addEventListener("timeupdate", handleTimeUpdate);
 
         progress.addEventListener("mousedown", startScrubbing);
