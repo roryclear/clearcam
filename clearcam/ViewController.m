@@ -376,12 +376,7 @@ NSMutableDictionary *classColorMap;
                 self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
             }
 
-            if (CMTIME_IS_INVALID(self.last_file_duration)) {
-                self.last_file_duration = time;
-                self.last_file_url = [self.assetWriter.outputURL copy];
-                self.last_file_timestamp = self.current_file_timestamp;
-                self.last_segment_squares = [self.current_segment_squares copy]; //todo, clean
-            } else {
+            if (CMTIME_IS_VALID(self.last_file_duration)) {
                 CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
 
                 NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
@@ -403,14 +398,12 @@ NSMutableDictionary *classColorMap;
                 [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
                 NSLog(@"adding %@ to date %@ in dict",segmentEntry,dateKey);
                 [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-
-                self.last_file_duration = time;
-                self.last_file_url = [self.assetWriter.outputURL copy];
-                self.last_file_timestamp = self.current_file_timestamp;
-                self.last_segment_squares = [self.current_segment_squares copy];
             }
+            self.last_file_duration = time;
+            self.last_file_url = [self.assetWriter.outputURL copy];
+            self.last_file_timestamp = self.current_file_timestamp;
+            self.last_segment_squares = [self.current_segment_squares copy];
             [self.current_segment_squares removeAllObjects];
-
             NSLog(@"Duration is %f seconds", CMTimeGetSeconds(time));
             [self startNewRecording];
         }];
