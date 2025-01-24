@@ -363,19 +363,17 @@ UInt8 *rgbData;
         if (i < output.count - 1) [classNamesString appendString:@", "];
     }
     //NSLog(@"Class Names: %@", classNamesString);
-
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-    NSString *currentTimestamp = [dateFormatter stringFromDate:[NSDate date]];
-
-    NSString *logEntry = [NSString stringWithFormat:@"%@ - Class Names: %@", currentTimestamp, classNamesString];
-    //NSLog(@"%@", logEntry);
-
-    NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] stringByAppendingPathComponent:@"logs.txt"];
-    NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath] ?: [NSFileHandle fileHandleForWritingAtPath:([[NSFileManager defaultManager] createFileAtPath:filePath contents:nil attributes:nil], filePath)];
-    [fileHandle seekToEndOfFile];
-    [fileHandle writeData:[[logEntry stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
-    [fileHandle closeFile];
+    if(output.count > 0){
+        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+        [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+        NSString *currentTimestamp = [dateFormatter stringFromDate:[NSDate date]];
+        NSString *logEntry = [NSString stringWithFormat:@"%@ - Class Names: %@", currentTimestamp, classNamesString];
+        NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] stringByAppendingPathComponent:@"logs.txt"];
+        NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath] ?: [NSFileHandle fileHandleForWritingAtPath:([[NSFileManager defaultManager] createFileAtPath:filePath contents:nil attributes:nil], filePath)];
+        [fileHandle seekToEndOfFile];
+        [fileHandle writeData:[[logEntry stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
+        [fileHandle closeFile];
+    }
 
     free(floatArray);
 
