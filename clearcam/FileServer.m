@@ -72,10 +72,8 @@
         NSLog(@"Failed to read request from client: %s", strerror(errno));
         return;
     }
-
     requestBuffer[bytesRead] = '\0';
     NSString *request = [NSString stringWithUTF8String:requestBuffer];
-
     NSRange range = [request rangeOfString:@"GET /"];
     if (range.location == NSNotFound) {
         dprintf(clientSocket, "HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -88,7 +86,6 @@
     if ([filePath hasPrefix:@"get-segments"]) {
         NSString *startParam = nil;
         NSString *dateParam = nil;
-
         NSRange queryRange = [filePath rangeOfString:@"?"];
         if (queryRange.location != NSNotFound) {
             NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
@@ -105,14 +102,19 @@
             }
         }
 
+        if(!dateParam){
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+        
         NSInteger start = startParam ? [startParam integerValue] : 0;
-
-        if (!dateParam || !self.segmentsDict[dateParam]) {
-            // Check for segments.txt file in the folder for the given date and time
+        if (!self.segmentsDict[dateParam]) {
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
             NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateParam];
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-
             if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
                 NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
                 NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
@@ -126,12 +128,6 @@
                     send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
                     return;
                 }
-            } else {
-                NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
-                NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
-                send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-                send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-                return;
             }
         }
 
@@ -145,7 +141,6 @@
         }
         NSArray *slicedSegments = [segmentsForDate subarrayWithRange:NSMakeRange(start, segmentsForDate.count - start)];
         NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:slicedSegments options:0 error:nil];
-
         NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
         send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
@@ -169,7 +164,6 @@
                 fseek(file, 0, SEEK_END);
                 NSUInteger fileSize = ftell(file);
                 fseek(file, 0, SEEK_SET);
-
                 dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
                 dprintf(clientSocket, "Content-Type: text/html\r\n");
                 dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
@@ -188,7 +182,6 @@
         dprintf(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
         return;
     }
-
     fseek(file, 0, SEEK_END);
     NSUInteger fileSize = ftell(file);
     fseek(file, 0, SEEK_SET);
