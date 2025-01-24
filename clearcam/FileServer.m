@@ -39,16 +39,15 @@
         
         while (serverSocket == -1) {
             serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+            [NSThread sleepForTimeInterval:0.1];
         }
         
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = INADDR_ANY;
         serverAddr.sin_port = htons(8080);
-        
-        while (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) { }
-        
-        while (listen(serverSocket, 5) == -1) { }
+        while (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) [NSThread sleepForTimeInterval:0.1];
+        while (listen(serverSocket, 5) == -1) [NSThread sleepForTimeInterval:0.1];
 
         while (1) {
             int clientSocket = accept(serverSocket, NULL, NULL);
@@ -212,37 +211,16 @@
                 dprintf(clientSocket, "\r\n");
                 [self sendFileData:file toSocket:clientSocket withContentLength:contentLength];
             }
-        } else {
-            dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
-            dprintf(clientSocket, "Content-Type: video/mp4\r\n");
-            dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
-            dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
-            dprintf(clientSocket, "\r\n");
-            [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
         }
-    } else if ([fileExtension isEqualToString:@"txt"]) {
+    } else { //.txt
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: text/plain\r\n");
-        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
-        dprintf(clientSocket, "\r\n");
-        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
-    } else if ([fileExtension isEqualToString:@"html"]) {
-        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
-        dprintf(clientSocket, "Content-Type: text/html\r\n");
-        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
-        dprintf(clientSocket, "\r\n");
-        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
-    } else {
-        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
-        dprintf(clientSocket, "Content-Type: application/octet-stream\r\n");
-        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s\"\r\n", [[fullPath lastPathComponent] UTF8String]);
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
     fclose(file);
 }
-
 
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {
     char buffer[64 * 1024];
