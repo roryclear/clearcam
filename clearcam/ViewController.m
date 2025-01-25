@@ -476,7 +476,7 @@ NSMutableDictionary *classColorMap;
                 if (!success) [self finishRecording];
             }
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (elapsedTime >= 10.0) { // todo, takes a little time to change
+            if (elapsedTime >= 1.0) { // todo, takes a little time to change
                 [self finishRecording];
             }
         }
