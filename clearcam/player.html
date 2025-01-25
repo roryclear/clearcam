@@ -116,6 +116,9 @@
             <video class="videoPlayer" playsinline webkit-playsinline muted></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <div id="controls">
                 <div class="top-controls">
                     <button id="playPauseBtn">
@@ -423,10 +426,10 @@
                 if (wasPlayingBeforeScrub) {
                     videoPlayers[video_index].play();
                 }
-                preloadNextSegments();
             }
 
             updateTimeline();
+            preloadNextSegments();
         }
 
         function startScrubbing(e) {
@@ -458,23 +461,25 @@
         }
         
         function preloadNextSegments() {
+            console.log("preload start");
             let x = 1;
             while(x < videoPlayers.length){
                 let current_x = x;
                 if (currentSegment + x < segments.length) {
-                    if(is_prepared[(video_index + x) % videoPlayers.length] === false){
-                        videoPlayers[(video_index + x) % videoPlayers.length].src = segments[currentSegment + x].url;
-                        videoPlayers[(video_index + x) % videoPlayers.length].load();  // Force load for mobile
-                        videoPlayers[(video_index + x) % videoPlayers.length].preload = 'auto';
-                        videoPlayers[(video_index + x) % videoPlayers.length].play().then(() => {
-                            videoPlayers[(video_index + current_x) % videoPlayers.length].pause();
-                            videoPlayers[(video_index + current_x) % videoPlayers.length].currentTime = 0;
-                            is_prepared[(video_index + x) % videoPlayers.length] = true;
-                        }).catch(err => console.warn("Preload error:", err));
+                    console.log(x);
+                    if(!videoPlayers[(video_index + current_x) % videoPlayers.length].src.endsWith(segments[currentSegment + current_x].url)){
+                        console.log(videoPlayers[(video_index + current_x) % videoPlayers.length].src);
+                        console.log(segments[currentSegment + current_x].url);
+                        videoPlayers[(video_index + current_x) % videoPlayers.length].src = segments[currentSegment + current_x].url;
+                        videoPlayers[(video_index + current_x) % videoPlayers.length].load();
+                        videoPlayers[(video_index + current_x) % videoPlayers.length].preload = 'auto';
+                    } else{
+                        console.log("dont need to load");
                     }
                 }
                 x++;
             }
+            console.log("preload DONE");
         }
         
         function playSegment() {
@@ -505,19 +510,16 @@
                 videoPlayers[video_index].play().catch(() => {
                     retrySegment(videoPlayers[video_index]);
                 });
-                setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
+                //setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
             } else {
                 isWaitingForNextSegment = true;
             }
             shape_idx = -1;
+            preloadNextSegments();
         }
 
         function handleTimeUpdate() {
             updateTimeline();
-            if (!preloading && videoPlayers[video_index].currentTime > videoPlayers[video_index].duration - 5) {
-                preloading = true;
-                preloadNextSegments();
-            }
         }
 
         setInterval(handleTimeUpdate, 50);
@@ -674,3 +676,4 @@
     </script>
 </body>
 </html>
+
