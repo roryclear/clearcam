@@ -269,18 +269,14 @@
             }
             
             if(show_new == true){
-                //alert("here");
                 clearBoundingBoxes();
                 let aspect_ratio = frames[shape_idx].aspect_ratio;
                 let res = frames[shape_idx].res;
-                //alert(`${frames[shape_idx].squares.length}`);
                 for(let i = 0; i < frames[shape_idx].squares.length; i++){
                     let originX = (frames[shape_idx].squares[i].originX / res);
                     let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
-                    //todo these are named wrong
                     let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
                     let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
-                    //alert(`${frames[shape_idx].squares[i].originY} ${originY}`);
                     drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
                 }
             }
@@ -329,6 +325,7 @@
         });
 
         function seekToTime(time) {
+            clearBoundingBoxes();
             is_prepared = new Array(videoPlayers.length).fill(false);
             let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
             targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
@@ -337,8 +334,6 @@
             videoPlayers[video_index].currentTime = time - segments[currentSegment].cumulativeStart;
             
             shape_idx = 0;
-            clearBoundingBoxes();
-
             if (isPlaying) {
                 videoPlayers[video_index].play();
             }
@@ -453,6 +448,7 @@
         }
 
         function stopScrubbing() {
+            clearBoundingBoxes();
             isScrubbing = false;
             if (!wasPlayingBeforeScrub) {
                 videoPlayers[video_index].pause();
