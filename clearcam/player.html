@@ -116,12 +116,6 @@
             <video class="videoPlayer" playsinline webkit-playsinline muted></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <div id="controls">
                 <div class="top-controls">
                     <button id="playPauseBtn">
@@ -496,6 +490,7 @@
         }
 
         function switchToNextSegment() {
+            hideBoundingBoxes();
             if (currentSegment + 1 < segments.length) {
                 currentSegment++;
                 is_prepared[video_index] = false;
@@ -512,6 +507,7 @@
                 isWaitingForNextSegment = true;
             }
             shape_idx = -1;
+            showBoundingBoxes();
         }
 
         function handleTimeUpdate() {
@@ -605,9 +601,9 @@
             const videoAspectRatio = video.videoWidth / video.videoHeight;
 
             let videoWidth, videoHeight, offsetX, offsetY;
-
+            
             if (containerAspectRatio > videoAspectRatio) {
-                // Video is pillarboxed
+                // Video is pillarboxed	
                 videoHeight = container.clientHeight;
                 videoWidth = videoHeight * videoAspectRatio;
                 offsetX = (container.clientWidth - videoWidth) / 2;
@@ -633,6 +629,10 @@
             box.style.border = `2px solid ${color}`;
             box.style.boxSizing = "border-box";
             box.style.pointerEvents = "none";
+            
+            if (box.style.height === "") {
+                return; //todo, move up
+            }
 
             // Create the label (interactive)
             let labelDiv = document.createElement("span");
@@ -655,6 +655,13 @@
 
         function clearBoundingBoxes() {
             document.querySelectorAll(".bounding-box").forEach(box => box.remove());
+        }
+        
+        function hideBoundingBoxes() {
+            document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "none");
+        }
+        function showBoundingBoxes() {
+            document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "");
         }
     </script>
 </body>
