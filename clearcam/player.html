@@ -113,8 +113,12 @@
 <body>
     <div id="videoContainer">
         <div class="video-wrapper">
-            <video id="videoPlayer1" playsinline webkit-playsinline muted></video>
-            <video id="videoPlayer2" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <div id="controls">
                 <div class="top-controls">
                     <button id="playPauseBtn">
@@ -141,6 +145,7 @@
             </div>
         </div>
     </div>
+
     <script>
         const yolo_classes = [
             ["person", "red"], ["bicycle", "green"], ["car", "blue"],
@@ -188,17 +193,17 @@
         let totalDuration = 0;
         let retryTimeout = 2000;
 
-        const videoPlayer1 = document.getElementById('videoPlayer1');
-        const videoPlayer2 = document.getElementById('videoPlayer2');
+        
+        const videoPlayers = document.querySelectorAll(".videoPlayer");
+        let is_prepared = new Array(videoPlayers.length).fill(false); //todo, store in one obj
         const playPauseBtn = document.getElementById('playPauseBtn');
         const playIcon = document.getElementById('playIcon');
         const pauseIcon = document.getElementById('pauseIcon');
         const progressBar = document.getElementById('progress-bar');
         const progress = document.getElementById('progress');
         const timeDisplay = document.getElementById('timeDisplay');
-
-        let currentVideo = videoPlayer1;
-        let nextVideo = videoPlayer2;
+        
+        let video_index = 0;
         let currentSegment = 0;
         let isPlaying = false;
         let isScrubbing = false;
@@ -251,30 +256,29 @@
                 adjustedStartTimestamp = startTimestamp;
             }
             
-            const currentTime = adjustedStartTimestamp + currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+            const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
             
             let frames = segments[currentSegment].frames;
             let show_new = false;
-            //alert(`${currentTime} ${frames[shape_idx+1].timeStamp}`);
             while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].timeStamp)) {
                 shape_idx += 1;
                 show_new = true;
             }
             
             if(show_new == true){
-                //alert("here");
-                clearBoundingBoxes();
+                let n_boxes = document.querySelectorAll(".bounding-box").length;
                 let aspect_ratio = frames[shape_idx].aspect_ratio;
                 let res = frames[shape_idx].res;
-                //alert(`${frames[shape_idx].squares.length}`);
                 for(let i = 0; i < frames[shape_idx].squares.length; i++){
                     let originX = (frames[shape_idx].squares[i].originX / res);
                     let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
-                    //todo these are named wrong
                     let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
                     let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
-                    //alert(`${frames[shape_idx].squares[i].originY} ${originY}`);
                     drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                }
+                let boundingBoxes = document.querySelectorAll(".bounding-box");
+                for (let i = 0; i < n_boxes; i++) {
+                    boundingBoxes[i].remove();
                 }
             }
             
@@ -289,26 +293,24 @@
 
         function togglePlayPause() {
             if (isPlaying) {
-                currentVideo.pause();
+                videoPlayers[video_index].pause();
                 playIcon.style.display = 'block';
                 pauseIcon.style.display = 'none';
                 isPlaying = false;
             } else {
-                currentVideo.play();
+                videoPlayers[video_index].play();
                 playIcon.style.display = 'none';
                 pauseIcon.style.display = 'block';
                 isPlaying = true;
             }
         }
 
-        currentVideo.addEventListener('click', togglePlayPause);
-        nextVideo.addEventListener('click', togglePlayPause);
         playPauseBtn.addEventListener('click', togglePlayPause);
 
         videoContainer.addEventListener('dblclick', (e) => {
             const containerWidth = videoContainer.clientWidth;
             const x = e.clientX;
-            const currentTime = currentVideo.currentTime + segments[currentSegment].cumulativeStart;
+            const currentTime = videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
 
             if (x > containerWidth / 2) {
                 // Double-tap/click on the right side to skip forward 10s
@@ -324,17 +326,17 @@
         });
 
         function seekToTime(time) {
+            clearBoundingBoxes();
+            is_prepared = new Array(videoPlayers.length).fill(false);
             let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
             targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
             currentSegment = targetSegment;
-            currentVideo.src = segments[currentSegment].url;
-            currentVideo.currentTime = time - segments[currentSegment].cumulativeStart;
+            videoPlayers[video_index].src = segments[currentSegment].url;
+            videoPlayers[video_index].currentTime = time - segments[currentSegment].cumulativeStart;
             
             shape_idx = 0;
-            clearBoundingBoxes();
-
             if (isPlaying) {
-                currentVideo.play();
+                videoPlayers[video_index].play();
             }
         }
 
@@ -383,7 +385,7 @@
                             updateTimeline();
                             preloadNextSegments();
 
-                            if (currentVideo.currentTime + segments[currentSegment].cumulativeStart === 0 ||
+                            if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
                                 (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
                                 playSegment();
                             }
@@ -419,19 +421,19 @@
 
             if (targetSegment >= 0 && targetSegment < segments.length) {
                 currentSegment = targetSegment;
-                currentVideo.src = segments[currentSegment].url;
-                currentVideo.currentTime = targetTime;
+                videoPlayers[video_index].src = segments[currentSegment].url;
+                videoPlayers[video_index].currentTime = targetTime;
                 if (wasPlayingBeforeScrub) {
-                    currentVideo.play();
+                    videoPlayers[video_index].play();
                 }
-                preloadNextSegments();
             }
 
             updateTimeline();
+            preloadNextSegments();
         }
 
         function startScrubbing(e) {
-            wasPlayingBeforeScrub = !currentVideo.paused;
+            wasPlayingBeforeScrub = !videoPlayers[video_index].paused;
             isScrubbing = true;
             scrub(e);
             document.addEventListener("mousemove", scrubWhileDragging);
@@ -447,40 +449,51 @@
         }
 
         function stopScrubbing() {
+            clearBoundingBoxes();
             isScrubbing = false;
             if (!wasPlayingBeforeScrub) {
-                currentVideo.pause();
+                videoPlayers[video_index].pause();
             }
             document.removeEventListener("mousemove", scrubWhileDragging);
             document.removeEventListener("mouseup", stopScrubbing);
             document.removeEventListener("touchmove", scrubWhileDragging);
             document.removeEventListener("touchend", stopScrubbing);
         }
-
+        
         function preloadNextSegments() {
-            if (currentSegment + 1 < segments.length) {
-                nextVideo.src = segments[currentSegment + 1].url;
-                nextVideo.load();  // Force load for mobile
-                nextVideo.preload = 'auto';
-                nextVideo.play().then(() => {
-                    nextVideo.pause();
-                    nextVideo.currentTime = 0;  // Ensure it's ready to start instantly
-                }).catch(err => console.warn("Preload error:", err));
+            console.log("preload start");
+            let x = 1;
+            while(x < videoPlayers.length){
+                let current_x = x;
+                if (currentSegment + x < segments.length) {
+                    console.log(x);
+                    if(!videoPlayers[(video_index + current_x) % videoPlayers.length].src.endsWith(segments[currentSegment + current_x].url)){
+                        console.log(videoPlayers[(video_index + current_x) % videoPlayers.length].src);
+                        console.log(segments[currentSegment + current_x].url);
+                        videoPlayers[(video_index + current_x) % videoPlayers.length].src = segments[currentSegment + current_x].url;
+                        videoPlayers[(video_index + current_x) % videoPlayers.length].load();
+                        videoPlayers[(video_index + current_x) % videoPlayers.length].preload = 'auto';
+                    } else{
+                        console.log("dont need to load");
+                    }
+                }
+                x++;
             }
+            console.log("preload DONE");
         }
-
+        
         function playSegment() {
             if (segments.length > 0) {
-                currentVideo.src = segments[currentSegment].url;
-                currentVideo.currentTime = 0;
-                currentVideo.style.display = "block";
-                nextVideo.style.display = "none";
-
-                currentVideo.play();
+                videoPlayers[video_index].src = segments[currentSegment].url;
+                videoPlayers[video_index].currentTime = 0;
+                videoPlayers[video_index].style.display = "block";
+                for(let i = 1; i < videoPlayers.length; i++){
+                    videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                }
+                videoPlayers[video_index].play();
                 isPlaying = true;
                 playIcon.style.display = "none";
                 pauseIcon.style.display = "block";
-
                 preloadNextSegments();
             }
         }
@@ -488,46 +501,41 @@
         function switchToNextSegment() {
             if (currentSegment + 1 < segments.length) {
                 currentSegment++;
-                let temp = currentVideo;
-                currentVideo = nextVideo;
-                nextVideo = temp;
-
-                nextVideo.style.display = "none";
-                currentVideo.style.display = "block";
-                
-                currentVideo.play().catch(() => {
-                    retrySegment(currentVideo);
+                is_prepared[video_index] = false;
+                video_index = (video_index + 1) % videoPlayers.length;
+                for(let i = 1; i < videoPlayers.length; i++){
+                    videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                }
+                videoPlayers[video_index].style.display = "block";
+                videoPlayers[video_index].play().catch(() => {
+                    retrySegment(videoPlayers[video_index]);
                 });
-
-                setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
+                //setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
             } else {
                 isWaitingForNextSegment = true;
             }
             shape_idx = -1;
+            preloadNextSegments();
         }
 
         function handleTimeUpdate() {
             updateTimeline();
-            if (!preloading && currentVideo.currentTime > currentVideo.duration - 5) {
-                preloading = true;
-                preloadNextSegments();
-            }
         }
 
-        currentVideo.addEventListener("timeupdate", handleTimeUpdate);
         setInterval(handleTimeUpdate, 50);
-        nextVideo.addEventListener("timeupdate", handleTimeUpdate);
+        
+        for(let i = 0; i < videoPlayers.length; i++) {
+            videoPlayers[i].addEventListener("timeupdate", handleTimeUpdate);
+            videoPlayers[i].addEventListener("ended", switchToNextSegment);
+            videoPlayers[i].addEventListener("ended", switchToNextSegment);
+            videoPlayers[i].addEventListener("error", () => retrySegment(videoPlayers[i]));
+            videoPlayers[i].addEventListener('click', togglePlayPause);
+        }
 
         progress.addEventListener("mousedown", startScrubbing);
         progress.addEventListener("touchstart", startScrubbing);
 
-        setInterval(fetchSegments, 1000);
-
-        currentVideo.addEventListener("ended", switchToNextSegment);
-        nextVideo.addEventListener("ended", switchToNextSegment);
-
-        currentVideo.addEventListener("error", () => retrySegment(currentVideo));
-        nextVideo.addEventListener("error", () => retrySegment(nextVideo));
+        setInterval(fetchSegments, 500);
 
         const fullscreenBtn = document.getElementById('fullscreenBtn');
 
@@ -572,9 +580,9 @@
         function handleVisibilityAndLoad() {
             if (isPlaying && segments.length > 0) {
                 currentSegment = segments.length - 1;
-                currentVideo.src = segments[currentSegment].url;
-                currentVideo.currentTime = segments[currentSegment].duration;
-                currentVideo.play().catch(() => {});
+                videoPlayers[video_index].src = segments[currentSegment].url;
+                videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                videoPlayers[video_index].play().catch(() => {});
             }
         }
 
@@ -593,11 +601,19 @@
         function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
             const container = document.getElementById("videoContainer");
             const video = container.querySelector("video");
+            
+            if (video.videoWidth === 0) {
+                alert(videoAspectRatio);
+                alert(video.videoWidth);
+                alert(video.videoHeight);
+                alert("ZERO");
+            }
+            
             const containerAspectRatio = container.clientWidth / container.clientHeight;
             const videoAspectRatio = video.videoWidth / video.videoHeight;
 
             let videoWidth, videoHeight, offsetX, offsetY;
-
+            
             if (containerAspectRatio > videoAspectRatio) {
                 // Video is pillarboxed
                 videoHeight = container.clientHeight;
@@ -625,7 +641,7 @@
             box.style.border = `2px solid ${color}`;
             box.style.boxSizing = "border-box";
             box.style.pointerEvents = "none";
-
+            
             // Create the label (interactive)
             let labelDiv = document.createElement("span");
             labelDiv.textContent = label;
@@ -639,6 +655,8 @@
             labelDiv.style.fontFamily = "Arial, sans-serif";
             labelDiv.style.whiteSpace = "nowrap";
             labelDiv.style.pointerEvents = "auto"; //Keeps label clickable if needed
+            box.style.zIndex = "1000";
+            labelDiv.style.zIndex = "1001";
 
             box.appendChild(labelDiv);
             boxWrapper.appendChild(box);
@@ -648,6 +666,14 @@
         function clearBoundingBoxes() {
             document.querySelectorAll(".bounding-box").forEach(box => box.remove());
         }
+        
+        function hideBoundingBoxes() {
+            document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "none");
+        }
+        function showBoundingBoxes() {
+            document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "");
+        }
     </script>
 </body>
 </html>
+

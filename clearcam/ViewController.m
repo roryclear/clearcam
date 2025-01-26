@@ -402,7 +402,7 @@ NSMutableDictionary *classColorMap;
             self.last_file_duration = time;
             self.last_file_url = [self.assetWriter.outputURL copy];
             self.last_file_timestamp = self.current_file_timestamp;
-            self.last_segment_squares = [self.current_segment_squares copy];
+            self.last_segment_squares = [self.current_segment_squares mutableCopy];
             [self.current_segment_squares removeAllObjects];
             NSLog(@"Duration is %f seconds", CMTimeGetSeconds(time));
             [self startNewRecording];
@@ -476,7 +476,7 @@ NSMutableDictionary *classColorMap;
                 if (!success) [self finishRecording];
             }
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (elapsedTime >= 10.0) { // todo, takes a little time to change
+            if (elapsedTime >= 1.0) {
                 [self finishRecording];
             }
         }
