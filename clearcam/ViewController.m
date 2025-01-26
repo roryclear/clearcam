@@ -476,7 +476,10 @@ NSMutableDictionary *classColorMap;
                 if (!success) [self finishRecording];
             }
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (elapsedTime >= 1.0) {
+            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60){
+                self.fileServer.segment_length = 60;
+            }
+            if (elapsedTime >= self.fileServer.segment_length) {
                 [self finishRecording];
             }
         }

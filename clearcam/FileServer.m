@@ -18,6 +18,8 @@
 
 - (void)start {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        self.segment_length = 60;
+        self.last_req_time = [NSDate now];
         self.segmentsDict = [[NSMutableDictionary alloc] init];
         self.basePath = [self getDocumentsDirectory];
         self.durationCache = [[NSMutableDictionary alloc] init];
@@ -65,6 +67,11 @@
 }
 
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
+    if(self.segment_length == 60){
+        self.segment_length = 1;
+        sleep(2); //todo, this is bad
+    }
+    self.last_req_time = [NSDate now];
     char requestBuffer[1024];
     ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
     if (bytesRead < 0) {
