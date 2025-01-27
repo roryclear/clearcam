@@ -153,14 +153,18 @@
         return;
     }
 
-
-
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
+    NSRange queryRange = [fullPath rangeOfString:@"?"];
+    if (queryRange.location != NSNotFound) {
+        fullPath = [fullPath substringToIndex:queryRange.location];
+    }
+
     BOOL isDirectory = NO;
     if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
         dprintf(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
         return;
     }
+
 
     if (isDirectory) { //todo, change url maybe
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"player" ofType:@"html"];
