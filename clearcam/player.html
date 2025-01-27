@@ -108,6 +108,48 @@
             transition: opacity 0.3s ease-in-out;
         }
 
+        #playPauseBtn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s, background 0.3s;
+            opacity: 0; /* Start hidden */
+            visibility: hidden; /* Start hidden */
+        }
+
+        #playPauseBtn.show {
+            opacity: 1; /* Show when .show is added */
+            visibility: visible; /* Show when .show is added */
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #playPauseBtn:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        #playPauseBtn svg {
+            width: 30px;
+            height: 30px;
+        }
+
+        /* Adjust the top controls to align time and fullscreen button to the right */
+        .top-controls {
+            justify-content: flex-end;
+        }
+
+        .top-controls #timeDisplay {
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
@@ -121,14 +163,6 @@
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <div id="controls">
                 <div class="top-controls">
-                    <button id="playPauseBtn">
-                        <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
-                            <path d="M8 5v14l11-7z"/>
-                        </svg>
-                        <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
-                            <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
-                        </svg>
-                    </button>
                     <div style="display: flex; align-items: center;">
                         <div id="timeDisplay">0:00 / 0:00</div>
                         <button id="fullscreenBtn" style="margin-left: 10px;">
@@ -143,6 +177,15 @@
                     <div id="progress-bar"></div>
                 </div>
             </div>
+            <!-- Play/Pause button moved outside of #controls -->
+            <button id="playPauseBtn">
+                <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
+                    <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
+                </svg>
+            </button>
         </div>
     </div>
     <div style="margin-top: 20px;">
@@ -151,549 +194,552 @@
     </div>
     <script>
         const yolo_classes = [
-            ["person", "red"], ["bicycle", "green"], ["car", "blue"],
-            ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
-            ["train", "orange"], ["truck", "purple"], ["boat", "brown"],
-            ["traffic light", "rgb(128, 179, 51)"], ["fire hydrant", "rgb(204, 26, 26)"],
-            ["stop sign", "rgb(77, 77, 204)"], ["parking meter", "rgb(179, 128, 77)"],
-            ["bench", "rgb(102, 102, 51)"], ["bird", "rgb(26, 128, 230)"],
-            ["cat", "rgb(204, 51, 153)"], ["dog", "rgb(230, 77, 77)"],
-            ["horse", "rgb(51, 153, 179)"], ["sheep", "rgb(179, 77, 128)"],
-            ["cow", "rgb(102, 204, 102)"], ["elephant", "rgb(77, 102, 230)"],
-            ["bear", "rgb(153, 51, 204)"], ["zebra", "rgb(204, 128, 51)"],
-            ["giraffe", "rgb(128, 230, 26)"], ["backpack", "rgb(77, 179, 102)"],
-            ["umbrella", "rgb(102, 153, 230)"], ["handbag", "rgb(230, 51, 128)"],
-            ["tie", "rgb(128, 77, 179)"], ["suitcase", "rgb(153, 179, 51)"],
-            ["frisbee", "rgb(179, 51, 102)"], ["skis", "rgb(77, 230, 77)"],
-            ["snowboard", "rgb(204, 26, 153)"], ["sports ball", "rgb(102, 77, 204)"],
-            ["kite", "rgb(51, 128, 179)"], ["baseball bat", "rgb(153, 102, 51)"],
-            ["baseball glove", "rgb(179, 26, 102)"], ["skateboard", "rgb(128, 204, 128)"],
-            ["surfboard", "rgb(204, 77, 153)"], ["tennis racket", "rgb(51, 179, 230)"],
-            ["bottle", "rgb(230, 51, 77)"], ["wine glass", "rgb(153, 153, 77)"],
-            ["cup", "rgb(77, 102, 230)"], ["fork", "rgb(102, 179, 51)"],
-            ["knife", "rgb(204, 51, 128)"], ["spoon", "rgb(153, 77, 179)"],
-            ["bowl", "rgb(51, 204, 102)"], ["banana", "rgb(179, 179, 26)"],
-            ["apple", "rgb(230, 26, 102)"], ["sandwich", "rgb(102, 128, 204)"],
-            ["orange", "rgb(204, 153, 51)"], ["broccoli", "rgb(77, 204, 77)"],
-            ["carrot", "rgb(179, 51, 153)"], ["hot dog", "rgb(230, 77, 128)"],
-            ["pizza", "rgb(128, 77, 204)"], ["donut", "rgb(204, 26, 102)"],
-            ["cake", "rgb(179, 128, 26)"], ["chair", "rgb(153, 51, 102)"],
-            ["couch", "rgb(102, 153, 51)"], ["potted plant", "rgb(204, 102, 128)"],
-            ["bed", "rgb(77, 179, 179)"], ["dining table", "rgb(128, 204, 77)"],
-            ["toilet", "rgb(179, 102, 153)"], ["tv", "rgb(230, 128, 51)"],
-            ["laptop", "rgb(153, 77, 179)"], ["mouse", "rgb(51, 230, 128)"],
-            ["remote", "rgb(204, 102, 77)"], ["keyboard", "rgb(77, 153, 204)"],
-            ["cell phone", "rgb(179, 77, 230)"], ["microwave", "rgb(102, 230, 102)"],
-            ["oven", "rgb(128, 179, 51)"], ["toaster", "rgb(230, 51, 77)"],
-            ["sink", "rgb(153, 204, 77)"], ["refrigerator", "rgb(204, 102, 179)"],
-            ["book", "rgb(77, 128, 230)"], ["clock", "rgb(179, 179, 51)"],
-            ["vase", "rgb(230, 102, 128)"], ["scissors", "rgb(51, 179, 204)"],
-            ["teddy bear", "rgb(153, 77, 230)"], ["hair drier", "rgb(204, 51, 77)"],
-            ["toothbrush", "rgb(102, 179, 153)"]
-        ];
-        
-        let currentDate = "";
-        const dateParam = getQueryParam("date");
-        if (!dateParam) {
-            const fetchStartTime = new Date();
-            currentDate = formatDate(fetchStartTime);
-        } else{
-            currentDate = dateParam;
-        }
-        
-        let segments = [];
-        let totalDuration = 0;
-        let retryTimeout = 2000;
-
-        
-        const videoPlayers = document.querySelectorAll(".videoPlayer");
-        let is_prepared = new Array(videoPlayers.length).fill(false); //todo, store in one obj
-        const playPauseBtn = document.getElementById('playPauseBtn');
-        const playIcon = document.getElementById('playIcon');
-        const pauseIcon = document.getElementById('pauseIcon');
-        const progressBar = document.getElementById('progress-bar');
-        const progress = document.getElementById('progress');
-        const timeDisplay = document.getElementById('timeDisplay');
-        
-        let video_index = 0;
-        let currentSegment = 0;
-        let isPlaying = false;
-        let isScrubbing = false;
-        let isWaitingForNextSegment = false;
-        let wasPlayingBeforeScrub = false;
-        let shape_idx = -1;
-
-        let hideControlsTimeout;
-        const controls = document.getElementById('controls');
-        const videoContainer = document.getElementById('videoContainer');
-
-        function showControls() {
-            controls.classList.add('show');
-            clearTimeout(hideControlsTimeout);
-            hideControlsTimeout = setTimeout(() => {
-                controls.classList.remove('show');
-                controls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
-            }, 4000);
-        }
-
-        function hideControls() {
-            controls.classList.remove('show');
-            controls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
-        }
-
-        function toggleControls() {
-            if (controls.classList.contains('show')) {
-                hideControls();
-            } else {
-                showControls();
-            }
-        }
-        
-        function retrySegment(videoElement) {
-            console.warn(`Retrying segment: ${segments[currentSegment].url}`);
-            setTimeout(() => {
-                videoElement.src = segments[currentSegment].url;
-                videoElement.load();
-                videoElement.play();
-            }, retryTimeout);
-        }
-
-        function updateTimeline() {
-            const startTimestamp = segments[0].timeStamp;
-            let adjustedStartTimestamp;
-
-            if (startTimestamp < 0) {
-                adjustedStartTimestamp = (24 * 3600) + startTimestamp; //todo hack?
-            } else {
-                adjustedStartTimestamp = startTimestamp;
-            }
-            
-            const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
-            
-            let frames = segments[currentSegment].frames;
-            let show_new = false;
-            while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].timeStamp)) {
-                shape_idx += 1;
-                show_new = true;
-            }
-            
-            if(show_new == true){
-                let n_boxes = document.querySelectorAll(".bounding-box").length;
-                let aspect_ratio = frames[shape_idx].aspect_ratio;
-                let res = frames[shape_idx].res;
-                for(let i = 0; i < frames[shape_idx].squares.length; i++){
-                    let originX = (frames[shape_idx].squares[i].originX / res);
-                    let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
-                    let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
-                    let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
-                    drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
-                }
-                let boundingBoxes = document.querySelectorAll(".bounding-box");
-                for (let i = 0; i < n_boxes; i++) {
-                    boundingBoxes[i].remove();
-                }
-            }
-            
-            progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
-            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
-        }
-        
-        videoContainer.addEventListener('mousemove', showControls);
-        videoContainer.addEventListener('mouseleave', hideControls);
-        videoContainer.addEventListener('touchend', toggleControls);
-        videoContainer.addEventListener('click', toggleControls);
-
-        function togglePlayPause() {
-            if (isPlaying) {
-                videoPlayers[video_index].pause();
-                playIcon.style.display = 'block';
-                pauseIcon.style.display = 'none';
-                isPlaying = false;
-            } else {
-                videoPlayers[video_index].play();
-                playIcon.style.display = 'none';
-                pauseIcon.style.display = 'block';
-                isPlaying = true;
-            }
-            updateTimeline();
-        }
-
-        playPauseBtn.addEventListener('click', togglePlayPause);
-
-        
-        videoContainer.addEventListener('dblclick', (e) => {
-            const containerWidth = videoContainer.clientWidth;
-            const x = e.clientX;
-            const currentTime = videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
-
-            if (x > containerWidth * 0.6) {
-                // Double-tap/click on the right side to skip forward 10s
-                let newTime = Math.min(currentTime + 10, totalDuration);
-                seekToTime(newTime);
-            } else if (x < containerWidth * 0.4) {
-                // Double-tap/click on the left side to rewind 10s
-                let newTime = Math.max(currentTime - 10, 0);
-                seekToTime(newTime);
-            }
-
-            updateTimeline();
-        });
-        
-        
-        function seekToTime(time) {
-            clearBoundingBoxes();
-            is_prepared = new Array(videoPlayers.length).fill(false);
-            let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
-            targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
-            currentSegment = targetSegment;
-            videoPlayers[video_index].src = segments[currentSegment].url;
-            videoPlayers[video_index].currentTime = time - segments[currentSegment].cumulativeStart;
-            
-            shape_idx = 0;
-            if (isPlaying) {
-                videoPlayers[video_index].play();
-            }
-        }
-
-        function getQueryParam(name) {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get(name);
-        }
+                    ["person", "red"], ["bicycle", "green"], ["car", "blue"],
+                    ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
+                    ["train", "orange"], ["truck", "purple"], ["boat", "brown"],
+                    ["traffic light", "rgb(128, 179, 51)"], ["fire hydrant", "rgb(204, 26, 26)"],
+                    ["stop sign", "rgb(77, 77, 204)"], ["parking meter", "rgb(179, 128, 77)"],
+                    ["bench", "rgb(102, 102, 51)"], ["bird", "rgb(26, 128, 230)"],
+                    ["cat", "rgb(204, 51, 153)"], ["dog", "rgb(230, 77, 77)"],
+                    ["horse", "rgb(51, 153, 179)"], ["sheep", "rgb(179, 77, 128)"],
+                    ["cow", "rgb(102, 204, 102)"], ["elephant", "rgb(77, 102, 230)"],
+                    ["bear", "rgb(153, 51, 204)"], ["zebra", "rgb(204, 128, 51)"],
+                    ["giraffe", "rgb(128, 230, 26)"], ["backpack", "rgb(77, 179, 102)"],
+                    ["umbrella", "rgb(102, 153, 230)"], ["handbag", "rgb(230, 51, 128)"],
+                    ["tie", "rgb(128, 77, 179)"], ["suitcase", "rgb(153, 179, 51)"],
+                    ["frisbee", "rgb(179, 51, 102)"], ["skis", "rgb(77, 230, 77)"],
+                    ["snowboard", "rgb(204, 26, 153)"], ["sports ball", "rgb(102, 77, 204)"],
+                    ["kite", "rgb(51, 128, 179)"], ["baseball bat", "rgb(153, 102, 51)"],
+                    ["baseball glove", "rgb(179, 26, 102)"], ["skateboard", "rgb(128, 204, 128)"],
+                    ["surfboard", "rgb(204, 77, 153)"], ["tennis racket", "rgb(51, 179, 230)"],
+                    ["bottle", "rgb(230, 51, 77)"], ["wine glass", "rgb(153, 153, 77)"],
+                    ["cup", "rgb(77, 102, 230)"], ["fork", "rgb(102, 179, 51)"],
+                    ["knife", "rgb(204, 51, 128)"], ["spoon", "rgb(153, 77, 179)"],
+                    ["bowl", "rgb(51, 204, 102)"], ["banana", "rgb(179, 179, 26)"],
+                    ["apple", "rgb(230, 26, 102)"], ["sandwich", "rgb(102, 128, 204)"],
+                    ["orange", "rgb(204, 153, 51)"], ["broccoli", "rgb(77, 204, 77)"],
+                    ["carrot", "rgb(179, 51, 153)"], ["hot dog", "rgb(230, 77, 128)"],
+                    ["pizza", "rgb(128, 77, 204)"], ["donut", "rgb(204, 26, 102)"],
+                    ["cake", "rgb(179, 128, 26)"], ["chair", "rgb(153, 51, 102)"],
+                    ["couch", "rgb(102, 153, 51)"], ["potted plant", "rgb(204, 102, 128)"],
+                    ["bed", "rgb(77, 179, 179)"], ["dining table", "rgb(128, 204, 77)"],
+                    ["toilet", "rgb(179, 102, 153)"], ["tv", "rgb(230, 128, 51)"],
+                    ["laptop", "rgb(153, 77, 179)"], ["mouse", "rgb(51, 230, 128)"],
+                    ["remote", "rgb(204, 102, 77)"], ["keyboard", "rgb(77, 153, 204)"],
+                    ["cell phone", "rgb(179, 77, 230)"], ["microwave", "rgb(102, 230, 102)"],
+                    ["oven", "rgb(128, 179, 51)"], ["toaster", "rgb(230, 51, 77)"],
+                    ["sink", "rgb(153, 204, 77)"], ["refrigerator", "rgb(204, 102, 179)"],
+                    ["book", "rgb(77, 128, 230)"], ["clock", "rgb(179, 179, 51)"],
+                    ["vase", "rgb(230, 102, 128)"], ["scissors", "rgb(51, 179, 204)"],
+                    ["teddy bear", "rgb(153, 77, 230)"], ["hair drier", "rgb(204, 51, 77)"],
+                    ["toothbrush", "rgb(102, 179, 153)"]
+                ];
                 
-        function formatDate(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
-        
-        document.addEventListener('DOMContentLoaded', function() {
-            const datePicker = document.getElementById('datePicker');
-            datePicker.value = currentDate;
-            datePicker.addEventListener('change', function() {
-                const selectedDate = new Date(this.value);
-                const formattedDate = formatDate(selectedDate);
-                window.location.href = `${window.location.pathname}?date=${formattedDate}`;
-            });
-        });
-
-        let isFetchingSegments = false;
-        async function fetchSegments() {
-            if (isFetchingSegments) return;
-            isFetchingSegments = true;
-
-            try {
-                const startParam = segments.length;
-                const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
-
-                if (response.ok) {
-                    const newSegments = await response.json();
-                    if (Array.isArray(newSegments)) {
-                        const oldTotalDuration = totalDuration;
-
-                        let cumulativeStart = totalDuration;
-                        newSegments.forEach((segment) => {
-                            const timeDifference = segment.timeDifference || segment.duration;
-                            const lostFrames = timeDifference - segment.duration;
-
-                            const currentCumulativeStart = cumulativeStart;
-                            cumulativeStart += timeDifference;
-
-                            segments.push({
-                                ...segment,
-                                cumulativeStart: currentCumulativeStart,
-                                lostFrames: lostFrames > 0 ? lostFrames : 0,
-                            });
-                        });
-
-                        totalDuration = segments.reduce((sum, seg) => sum + (seg.timeDifference || seg.duration), 0);
-
-                        if (totalDuration !== oldTotalDuration) {
-                            updateTimeline();
-                            preloadNextSegments();
-
-                            if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
-                                (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
-                                playSegment();
-                            }
-                            if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
-                                isWaitingForNextSegment = false;
-                                switchToNextSegment();
-                            }
-                        }
-                    }
+                let currentDate = "";
+                const dateParam = getQueryParam("date");
+                if (!dateParam) {
+                    const fetchStartTime = new Date();
+                    currentDate = formatDate(fetchStartTime);
+                } else{
+                    currentDate = dateParam;
                 }
-            } catch (error) {
-                console.error('Failed to fetch segments:', error);
-            } finally {
-                isFetchingSegments = false;
-            }
-        }
+                
+                let segments = [];
+                let totalDuration = 0;
+                let retryTimeout = 2000;
 
+                
+                const videoPlayers = document.querySelectorAll(".videoPlayer");
+                let is_prepared = new Array(videoPlayers.length).fill(false); //todo, store in one obj
+                const playPauseBtn = document.getElementById('playPauseBtn');
+                const playIcon = document.getElementById('playIcon');
+                const pauseIcon = document.getElementById('pauseIcon');
+                const progressBar = document.getElementById('progress-bar');
+                const progress = document.getElementById('progress');
+                const timeDisplay = document.getElementById('timeDisplay');
+                
+                let video_index = 0;
+                let currentSegment = 0;
+                let isPlaying = false;
+                let isScrubbing = false;
+                let isWaitingForNextSegment = false;
+                let wasPlayingBeforeScrub = false;
+                let shape_idx = -1;
 
-        function formatTime(seconds) {
-            const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
-            const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-            const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${hours}:${minutes}:${secs}`;
-        }
+                let hideControlsTimeout;
+                const controls = document.getElementById('controls');
+                const videoContainer = document.getElementById('videoContainer');
 
-        function scrub(e) {
-            const scrubTime = Math.min(((e.offsetX || e.touches[0].clientX - progress.getBoundingClientRect().left) / progress.offsetWidth) * totalDuration, totalDuration - 1);
-
-            let targetSegment = segments.findIndex(segment => scrubTime < segment.cumulativeStart + segment.duration);
-            targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
-
-            const targetTime = scrubTime - segments[targetSegment].cumulativeStart;
-
-            if (targetSegment >= 0 && targetSegment < segments.length) {
-                currentSegment = targetSegment;
-                videoPlayers[video_index].src = segments[currentSegment].url;
-                videoPlayers[video_index].currentTime = targetTime;
-                if (wasPlayingBeforeScrub) {
-                    videoPlayers[video_index].play();
+                function showControls() {
+                    controls.classList.add('show');
+                    playPauseBtn.classList.add('show'); // Show the play/pause button
+                    clearTimeout(hideControlsTimeout);
+                    hideControlsTimeout = setTimeout(() => {
+                        controls.classList.remove('show');
+                        playPauseBtn.classList.remove('show'); // Hide the play/pause button
+                        controls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
+                    }, 4000);
                 }
-            }
 
-            updateTimeline();
-            preloadNextSegments();
-        }
-
-        function startScrubbing(e) {
-            wasPlayingBeforeScrub = !videoPlayers[video_index].paused;
-            isScrubbing = true;
-            scrub(e);
-            document.addEventListener("mousemove", scrubWhileDragging);
-            document.addEventListener("mouseup", stopScrubbing);
-            document.addEventListener("touchmove", scrubWhileDragging);
-            document.addEventListener("touchend", stopScrubbing);
-        }
-
-        function scrubWhileDragging(e) {
-            if (isScrubbing) {
-                scrub(e);
-            }
-        }
-
-        function stopScrubbing() {
-            clearBoundingBoxes();
-            isScrubbing = false;
-            if (!wasPlayingBeforeScrub) {
-                videoPlayers[video_index].pause();
-            }
-            document.removeEventListener("mousemove", scrubWhileDragging);
-            document.removeEventListener("mouseup", stopScrubbing);
-            document.removeEventListener("touchmove", scrubWhileDragging);
-            document.removeEventListener("touchend", stopScrubbing);
-        }
-        
-        function preloadNextSegments() {
-            console.log("preload start");
-            let x = 1;
-            while(x < videoPlayers.length){
-                let current_x = x;
-                if (currentSegment + x < segments.length) {
-                    console.log(x);
-                    if(!videoPlayers[(video_index + current_x) % videoPlayers.length].src.endsWith(segments[currentSegment + current_x].url)){
-                        console.log(videoPlayers[(video_index + current_x) % videoPlayers.length].src);
-                        console.log(segments[currentSegment + current_x].url);
-                        videoPlayers[(video_index + current_x) % videoPlayers.length].src = segments[currentSegment + current_x].url;
-                        videoPlayers[(video_index + current_x) % videoPlayers.length].load();
-                        videoPlayers[(video_index + current_x) % videoPlayers.length].preload = 'auto';
-                    } else{
-                        console.log("dont need to load");
-                    }
+                function hideControls() {
+                    controls.classList.remove('show');
+                    playPauseBtn.classList.remove('show'); // Hide the play/pause button
+                    controls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
                 }
-                x++;
-            }
-            console.log("preload DONE");
-        }
-        
-        function playSegment() {
-            if (segments.length > 0) {
-                videoPlayers[video_index].src = segments[currentSegment].url;
-                videoPlayers[video_index].currentTime = 0;
-                videoPlayers[video_index].style.display = "block";
-                for(let i = 1; i < videoPlayers.length; i++){
-                    videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
-                }
-                videoPlayers[video_index].play();
-                isPlaying = true;
-                playIcon.style.display = "none";
-                pauseIcon.style.display = "block";
-                preloadNextSegments();
-            }
-        }
 
-        function switchToNextSegment() {
-            if (currentSegment + 1 < segments.length) {
-                currentSegment++;
-                is_prepared[video_index] = false;
-                video_index = (video_index + 1) % videoPlayers.length;
-                for(let i = 1; i < videoPlayers.length; i++){
-                    videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
-                }
-                videoPlayers[video_index].style.display = "block";
-                videoPlayers[video_index].play().catch(() => {
-                    retrySegment(videoPlayers[video_index]);
-                });
-                //setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
-            } else {
-                isWaitingForNextSegment = true;
-            }
-            shape_idx = -1;
-            preloadNextSegments();
-        }
-
-        setInterval(updateTimeline, 50);
-        
-        for(let i = 0; i < videoPlayers.length; i++) {
-            videoPlayers[i].addEventListener("timeupdate", updateTimeline);
-            videoPlayers[i].addEventListener("ended", switchToNextSegment);
-            videoPlayers[i].addEventListener("error", () => retrySegment(videoPlayers[i]));
-        }
-
-        progress.addEventListener("mousedown", startScrubbing);
-        progress.addEventListener("touchstart", startScrubbing);
-
-        setInterval(fetchSegments, 500);
-
-        const fullscreenBtn = document.getElementById('fullscreenBtn');
-                fullscreenBtn.addEventListener('click', () => {
-                    clearBoundingBoxes(); //todo, redraw instead?
-                    if (!document.fullscreenElement) {
-                        if (videoContainer.requestFullscreen) {
-                            videoContainer.requestFullscreen();
-                        } else if (videoContainer.mozRequestFullScreen) { /* Firefox */
-                            videoContainer.mozRequestFullScreen();
-                        } else if (videoContainer.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
-                            videoContainer.webkitRequestFullscreen();
-                        } else if (videoContainer.msRequestFullscreen) { /* IE/Edge */
-                            videoContainer.msRequestFullscreen();
-                        }
+                function toggleControls() {
+                    if (controls.classList.contains('show')) {
+                        hideControls();
                     } else {
-                        if (document.exitFullscreen) {
-                            document.exitFullscreen();
-                        } else if (document.mozCancelFullScreen) { /* Firefox */
-                            document.mozCancelFullScreen();
-                        } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
-                            document.webkitExitFullscreen();
-                        } else if (document.msExitFullscreen) { /* IE/Edge */
-                            document.msExitFullscreen();
+                        showControls();
+                    }
+                }
+
+                // Event listeners to show/hide controls
+                videoContainer.addEventListener('mousemove', showControls);
+                videoContainer.addEventListener('mouseleave', hideControls);
+                videoContainer.addEventListener('touchend', toggleControls);
+                videoContainer.addEventListener('click', toggleControls);
+                
+                function retrySegment(videoElement) {
+                    console.warn(`Retrying segment: ${segments[currentSegment].url}`);
+                    setTimeout(() => {
+                        videoElement.src = segments[currentSegment].url;
+                        videoElement.load();
+                        videoElement.play();
+                    }, retryTimeout);
+                }
+
+                function updateTimeline() {
+                    const startTimestamp = segments[0].timeStamp;
+                    let adjustedStartTimestamp;
+
+                    if (startTimestamp < 0) {
+                        adjustedStartTimestamp = (24 * 3600) + startTimestamp; //todo hack?
+                    } else {
+                        adjustedStartTimestamp = startTimestamp;
+                    }
+                    
+                    const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
+                    
+                    let frames = segments[currentSegment].frames;
+                    let show_new = false;
+                    while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].timeStamp)) {
+                        shape_idx += 1;
+                        show_new = true;
+                    }
+                    
+                    if(show_new == true){
+                        let n_boxes = document.querySelectorAll(".bounding-box").length;
+                        let aspect_ratio = frames[shape_idx].aspect_ratio;
+                        let res = frames[shape_idx].res;
+                        for(let i = 0; i < frames[shape_idx].squares.length; i++){
+                            let originX = (frames[shape_idx].squares[i].originX / res);
+                            let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
+                            let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
+                            let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
+                            drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                        }
+                        let boundingBoxes = document.querySelectorAll(".bounding-box");
+                        for (let i = 0; i < n_boxes; i++) {
+                            boundingBoxes[i].remove();
                         }
                     }
-                });
-        
-        function isMobile() {
-            return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        }
-
-        if (isMobile()) {
-            document.getElementById('fullscreenBtn').style.display = 'none';
-        }
-
-        
-        async function fetchSegmentsAndHandleVisibilityAndLoad() {
-            await fetchSegments();
-            handleVisibilityAndLoad();
-        }
-
-        function handleVisibilityAndLoad() { //todo, clean
-            let currentDate = "";
-            const dateParam = getQueryParam("date");
-            const fetchStartTime = new Date();
-            currentDate = formatDate(fetchStartTime);
-            if(currentDate == dateParam || !dateParam) {
-                if (isPlaying && segments.length > 0) {
-                    currentSegment = segments.length - 1;
-                    videoPlayers[video_index].src = segments[currentSegment].url;
-                    videoPlayers[video_index].currentTime = segments[currentSegment].duration;
-                    videoPlayers[video_index].play().catch(() => {});
+                    
+                    progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
+                    timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
                 }
-            }
-        }
+                
+                function togglePlayPause() {
+                    if (isPlaying) {
+                        videoPlayers[video_index].pause();
+                        playIcon.style.display = 'block';
+                        pauseIcon.style.display = 'none';
+                        isPlaying = false;
+                    } else {
+                        videoPlayers[video_index].play();
+                        playIcon.style.display = 'none';
+                        pauseIcon.style.display = 'block';
+                        isPlaying = true;
+                    }
+                    updateTimeline();
+                }
 
-        // Handle visibility change
-        document.addEventListener("visibilitychange", async () => {
-            if (!document.hidden) {
-                await fetchSegmentsAndHandleVisibilityAndLoad();
-            }
-        });
+                playPauseBtn.addEventListener('click', togglePlayPause);
 
-        // Handle page load/refresh
-        window.addEventListener("load", async () => {
-            await fetchSegmentsAndHandleVisibilityAndLoad();
-        });
-        
-        function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
-            const container = document.getElementById("videoContainer");
-            const video = container.querySelector("video");
+                
+                videoContainer.addEventListener('dblclick', (e) => {
+                    const containerWidth = videoContainer.clientWidth;
+                    const x = e.clientX;
+                    const currentTime = videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
+
+                    if (x > containerWidth * 0.6) {
+                        // Double-tap/click on the right side to skip forward 10s
+                        let newTime = Math.min(currentTime + 10, totalDuration);
+                        seekToTime(newTime);
+                    } else if (x < containerWidth * 0.4) {
+                        // Double-tap/click on the left side to rewind 10s
+                        let newTime = Math.max(currentTime - 10, 0);
+                        seekToTime(newTime);
+                    }
+
+                    updateTimeline();
+                });
+                
+                
+                function seekToTime(time) {
+                    clearBoundingBoxes();
+                    is_prepared = new Array(videoPlayers.length).fill(false);
+                    let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
+                    targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
+                    currentSegment = targetSegment;
+                    videoPlayers[video_index].src = segments[currentSegment].url;
+                    videoPlayers[video_index].currentTime = time - segments[currentSegment].cumulativeStart;
+                    
+                    shape_idx = 0;
+                    if (isPlaying) {
+                        videoPlayers[video_index].play();
+                    }
+                }
+
+                function getQueryParam(name) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get(name);
+                }
                         
-            const containerAspectRatio = container.clientWidth / container.clientHeight;
-            const videoAspectRatio = video.videoWidth / video.videoHeight;
+                function formatDate(date) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+                
+                document.addEventListener('DOMContentLoaded', function() {
+                    const datePicker = document.getElementById('datePicker');
+                    datePicker.value = currentDate;
+                    datePicker.addEventListener('change', function() {
+                        const selectedDate = new Date(this.value);
+                        const formattedDate = formatDate(selectedDate);
+                        window.location.href = `${window.location.pathname}?date=${formattedDate}`;
+                    });
+                });
 
-            let videoWidth, videoHeight, offsetX, offsetY;
-            
-            if (containerAspectRatio > videoAspectRatio) {
-                // Video is pillarboxed
-                videoHeight = container.clientHeight;
-                videoWidth = videoHeight * videoAspectRatio;
-                offsetX = (container.clientWidth - videoWidth) / 2;
-                offsetY = 0;
-            } else {
-                // Video is letterboxed
-                videoWidth = container.clientWidth;
-                videoHeight = videoWidth / videoAspectRatio;
-                offsetX = 0;
-                offsetY = (container.clientHeight - videoHeight) / 2;
-            }
+                let isFetchingSegments = false;
+                async function fetchSegments() {
+                    if (isFetchingSegments) return;
+                    isFetchingSegments = true;
 
-            let boxWrapper = document.createElement("div");
-            boxWrapper.classList.add("bounding-box");
+                    try {
+                        const startParam = segments.length;
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
 
-            // Create the bounding box
-            let box = document.createElement("div");
-            box.style.position = "absolute";
-            box.style.left = `${offsetX + relativeX * videoWidth}px`;
-            box.style.top = `${offsetY + relativeY * videoHeight}px`;
-            box.style.width = `${relativeWidth * videoWidth}px`;
-            box.style.height = `${relativeHeight * videoHeight}px`;
-            box.style.border = `2px solid ${color}`;
-            box.style.boxSizing = "border-box";
-            box.style.pointerEvents = "none";
-            
-            // Create the label (interactive)
-            let labelDiv = document.createElement("span");
-            labelDiv.textContent = label;
-            labelDiv.style.position = "absolute";
-            labelDiv.style.top = "-20px";
-            labelDiv.style.left = "0";
-            labelDiv.style.background = color;
-            labelDiv.style.color = "white";
-            labelDiv.style.padding = "2px 5px";
-            labelDiv.style.fontSize = "12px";
-            labelDiv.style.fontFamily = "Arial, sans-serif";
-            labelDiv.style.whiteSpace = "nowrap";
-            labelDiv.style.pointerEvents = "auto"; //Keeps label clickable if needed
-            box.style.zIndex = "1000";
-            labelDiv.style.zIndex = "1001";
+                        if (response.ok) {
+                            const newSegments = await response.json();
+                            if (Array.isArray(newSegments)) {
+                                const oldTotalDuration = totalDuration;
 
-            box.appendChild(labelDiv);
-            boxWrapper.appendChild(box);
-            container.appendChild(boxWrapper);
-        }
+                                let cumulativeStart = totalDuration;
+                                newSegments.forEach((segment) => {
+                                    const timeDifference = segment.timeDifference || segment.duration;
+                                    const lostFrames = timeDifference - segment.duration;
 
-        function clearBoundingBoxes() {
-            document.querySelectorAll(".bounding-box").forEach(box => box.remove());
-        }
-        
-        function hideBoundingBoxes() {
-            document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "none");
-        }
-        function showBoundingBoxes() {
-            document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "");
-        }
+                                    const currentCumulativeStart = cumulativeStart;
+                                    cumulativeStart += timeDifference;
+
+                                    segments.push({
+                                        ...segment,
+                                        cumulativeStart: currentCumulativeStart,
+                                        lostFrames: lostFrames > 0 ? lostFrames : 0,
+                                    });
+                                });
+
+                                totalDuration = segments.reduce((sum, seg) => sum + (seg.timeDifference || seg.duration), 0);
+
+                                if (totalDuration !== oldTotalDuration) {
+                                    updateTimeline();
+                                    preloadNextSegments();
+
+                                    if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
+                                        (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
+                                        playSegment();
+                                    }
+                                    if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
+                                        isWaitingForNextSegment = false;
+                                        switchToNextSegment();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch segments:', error);
+                    } finally {
+                        isFetchingSegments = false;
+                    }
+                }
+
+
+                function formatTime(seconds) {
+                    const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
+                    const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+                    const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+                    return `${hours}:${minutes}:${secs}`;
+                }
+
+                function scrub(e) {
+                    const scrubTime = Math.min(((e.offsetX || e.touches[0].clientX - progress.getBoundingClientRect().left) / progress.offsetWidth) * totalDuration, totalDuration - 1);
+
+                    let targetSegment = segments.findIndex(segment => scrubTime < segment.cumulativeStart + segment.duration);
+                    targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
+
+                    const targetTime = scrubTime - segments[targetSegment].cumulativeStart;
+
+                    if (targetSegment >= 0 && targetSegment < segments.length) {
+                        currentSegment = targetSegment;
+                        videoPlayers[video_index].src = segments[currentSegment].url;
+                        videoPlayers[video_index].currentTime = targetTime;
+                        if (wasPlayingBeforeScrub) {
+                            videoPlayers[video_index].play();
+                        }
+                    }
+
+                    updateTimeline();
+                    preloadNextSegments();
+                }
+
+                function startScrubbing(e) {
+                    wasPlayingBeforeScrub = !videoPlayers[video_index].paused;
+                    isScrubbing = true;
+                    scrub(e);
+                    document.addEventListener("mousemove", scrubWhileDragging);
+                    document.addEventListener("mouseup", stopScrubbing);
+                    document.addEventListener("touchmove", scrubWhileDragging);
+                    document.addEventListener("touchend", stopScrubbing);
+                }
+
+                function scrubWhileDragging(e) {
+                    if (isScrubbing) {
+                        scrub(e);
+                    }
+                }
+
+                function stopScrubbing() {
+                    clearBoundingBoxes();
+                    isScrubbing = false;
+                    if (!wasPlayingBeforeScrub) {
+                        videoPlayers[video_index].pause();
+                    }
+                    document.removeEventListener("mousemove", scrubWhileDragging);
+                    document.removeEventListener("mouseup", stopScrubbing);
+                    document.removeEventListener("touchmove", scrubWhileDragging);
+                    document.removeEventListener("touchend", stopScrubbing);
+                }
+                
+                function preloadNextSegments() {
+                    console.log("preload start");
+                    let x = 1;
+                    while(x < videoPlayers.length){
+                        let current_x = x;
+                        if (currentSegment + x < segments.length) {
+                            console.log(x);
+                            if(!videoPlayers[(video_index + current_x) % videoPlayers.length].src.endsWith(segments[currentSegment + current_x].url)){
+                                console.log(videoPlayers[(video_index + current_x) % videoPlayers.length].src);
+                                console.log(segments[currentSegment + current_x].url);
+                                videoPlayers[(video_index + current_x) % videoPlayers.length].src = segments[currentSegment + current_x].url;
+                                videoPlayers[(video_index + current_x) % videoPlayers.length].load();
+                                videoPlayers[(video_index + current_x) % videoPlayers.length].preload = 'auto';
+                            } else{
+                                console.log("dont need to load");
+                            }
+                        }
+                        x++;
+                    }
+                    console.log("preload DONE");
+                }
+                
+                function playSegment() {
+                    if (segments.length > 0) {
+                        videoPlayers[video_index].src = segments[currentSegment].url;
+                        videoPlayers[video_index].currentTime = 0;
+                        videoPlayers[video_index].style.display = "block";
+                        for(let i = 1; i < videoPlayers.length; i++){
+                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                        }
+                        videoPlayers[video_index].play();
+                        isPlaying = true;
+                        playIcon.style.display = "none";
+                        pauseIcon.style.display = "block";
+                        preloadNextSegments();
+                    }
+                }
+
+                function switchToNextSegment() {
+                    if (currentSegment + 1 < segments.length) {
+                        currentSegment++;
+                        is_prepared[video_index] = false;
+                        video_index = (video_index + 1) % videoPlayers.length;
+                        for(let i = 1; i < videoPlayers.length; i++){
+                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                        }
+                        videoPlayers[video_index].style.display = "block";
+                        videoPlayers[video_index].play().catch(() => {
+                            retrySegment(videoPlayers[video_index]);
+                        });
+                        //setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
+                    } else {
+                        isWaitingForNextSegment = true;
+                    }
+                    shape_idx = -1;
+                    preloadNextSegments();
+                }
+
+                setInterval(updateTimeline, 50);
+                
+                for(let i = 0; i < videoPlayers.length; i++) {
+                    videoPlayers[i].addEventListener("timeupdate", updateTimeline);
+                    videoPlayers[i].addEventListener("ended", switchToNextSegment);
+                    videoPlayers[i].addEventListener("error", () => retrySegment(videoPlayers[i]));
+                }
+
+                progress.addEventListener("mousedown", startScrubbing);
+                progress.addEventListener("touchstart", startScrubbing);
+
+                setInterval(fetchSegments, 500);
+
+                const fullscreenBtn = document.getElementById('fullscreenBtn');
+                        fullscreenBtn.addEventListener('click', () => {
+                            clearBoundingBoxes(); //todo, redraw instead?
+                            if (!document.fullscreenElement) {
+                                if (videoContainer.requestFullscreen) {
+                                    videoContainer.requestFullscreen();
+                                } else if (videoContainer.mozRequestFullScreen) { /* Firefox */
+                                    videoContainer.mozRequestFullScreen();
+                                } else if (videoContainer.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
+                                    videoContainer.webkitRequestFullscreen();
+                                } else if (videoContainer.msRequestFullscreen) { /* IE/Edge */
+                                    videoContainer.msRequestFullscreen();
+                                }
+                            } else {
+                                if (document.exitFullscreen) {
+                                    document.exitFullscreen();
+                                } else if (document.mozCancelFullScreen) { /* Firefox */
+                                    document.mozCancelFullScreen();
+                                } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
+                                    document.webkitExitFullscreen();
+                                } else if (document.msExitFullscreen) { /* IE/Edge */
+                                    document.msExitFullscreen();
+                                }
+                            }
+                        });
+                
+                function isMobile() {
+                    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                }
+
+                if (isMobile()) {
+                    document.getElementById('fullscreenBtn').style.display = 'none';
+                }
+
+                
+                async function fetchSegmentsAndHandleVisibilityAndLoad() {
+                    await fetchSegments();
+                    handleVisibilityAndLoad();
+                }
+
+                function handleVisibilityAndLoad() { //todo, clean
+                    let currentDate = "";
+                    const dateParam = getQueryParam("date");
+                    const fetchStartTime = new Date();
+                    currentDate = formatDate(fetchStartTime);
+                    if(currentDate == dateParam || !dateParam) {
+                        if (isPlaying && segments.length > 0) {
+                            currentSegment = segments.length - 1;
+                            videoPlayers[video_index].src = segments[currentSegment].url;
+                            videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                            videoPlayers[video_index].play().catch(() => {});
+                        }
+                    }
+                }
+
+                // Handle visibility change
+                document.addEventListener("visibilitychange", async () => {
+                    if (!document.hidden) {
+                        await fetchSegmentsAndHandleVisibilityAndLoad();
+                    }
+                });
+
+                // Handle page load/refresh
+                window.addEventListener("load", async () => {
+                    await fetchSegmentsAndHandleVisibilityAndLoad();
+                });
+                
+                function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
+                    const container = document.getElementById("videoContainer");
+                    const video = container.querySelector("video");
+                                
+                    const containerAspectRatio = container.clientWidth / container.clientHeight;
+                    const videoAspectRatio = video.videoWidth / video.videoHeight;
+
+                    let videoWidth, videoHeight, offsetX, offsetY;
+                    
+                    if (containerAspectRatio > videoAspectRatio) {
+                        // Video is pillarboxed
+                        videoHeight = container.clientHeight;
+                        videoWidth = videoHeight * videoAspectRatio;
+                        offsetX = (container.clientWidth - videoWidth) / 2;
+                        offsetY = 0;
+                    } else {
+                        // Video is letterboxed
+                        videoWidth = container.clientWidth;
+                        videoHeight = videoWidth / videoAspectRatio;
+                        offsetX = 0;
+                        offsetY = (container.clientHeight - videoHeight) / 2;
+                    }
+
+                    let boxWrapper = document.createElement("div");
+                    boxWrapper.classList.add("bounding-box");
+
+                    // Create the bounding box
+                    let box = document.createElement("div");
+                    box.style.position = "absolute";
+                    box.style.left = `${offsetX + relativeX * videoWidth}px`;
+                    box.style.top = `${offsetY + relativeY * videoHeight}px`;
+                    box.style.width = `${relativeWidth * videoWidth}px`;
+                    box.style.height = `${relativeHeight * videoHeight}px`;
+                    box.style.border = `2px solid ${color}`;
+                    box.style.boxSizing = "border-box";
+                    box.style.pointerEvents = "none";
+                    
+                    // Create the label (interactive)
+                    let labelDiv = document.createElement("span");
+                    labelDiv.textContent = label;
+                    labelDiv.style.position = "absolute";
+                    labelDiv.style.top = "-20px";
+                    labelDiv.style.left = "0";
+                    labelDiv.style.background = color;
+                    labelDiv.style.color = "white";
+                    labelDiv.style.padding = "2px 5px";
+                    labelDiv.style.fontSize = "12px";
+                    labelDiv.style.fontFamily = "Arial, sans-serif";
+                    labelDiv.style.whiteSpace = "nowrap";
+                    labelDiv.style.pointerEvents = "auto"; //Keeps label clickable if needed
+                    box.style.zIndex = "1000";
+                    labelDiv.style.zIndex = "1001";
+
+                    box.appendChild(labelDiv);
+                    boxWrapper.appendChild(box);
+                    container.appendChild(boxWrapper);
+                }
+
+                function clearBoundingBoxes() {
+                    document.querySelectorAll(".bounding-box").forEach(box => box.remove());
+                }
+                
+                function hideBoundingBoxes() {
+                    document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "none");
+                }
+                function showBoundingBoxes() {
+                    document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "");
+                }
     </script>
 </body>
 </html>
-
