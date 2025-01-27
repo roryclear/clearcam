@@ -145,7 +145,10 @@
             </div>
         </div>
     </div>
-
+    <div style="margin-top: 20px;">
+        <label for="datePicker">Select Date:</label>
+        <input type="date" id="datePicker" name="datePicker">
+    </div>
     <script>
         const yolo_classes = [
             ["person", "red"], ["bicycle", "green"], ["car", "blue"],
@@ -188,6 +191,15 @@
             ["teddy bear", "rgb(153, 77, 230)"], ["hair drier", "rgb(204, 51, 77)"],
             ["toothbrush", "rgb(102, 179, 153)"]
         ];
+        
+        let currentDate = "";
+        const dateParam = getQueryParam("date");
+        if (!dateParam) {
+            const fetchStartTime = new Date();
+            currentDate = formatDate(fetchStartTime);
+        } else{
+            currentDate = dateParam;
+        }
         
         let segments = [];
         let totalDuration = 0;
@@ -340,15 +352,27 @@
             }
         }
 
-        const fetchStartTime = new Date(); // Capture the time once and never change it
-        const currentDate = formatDate(fetchStartTime); // Compute the date once
-
+        function getQueryParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+                
         function formatDate(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
         }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const datePicker = document.getElementById('datePicker');
+            datePicker.value = currentDate;
+            datePicker.addEventListener('change', function() {
+                const selectedDate = new Date(this.value);
+                const formattedDate = formatDate(selectedDate);
+                window.location.href = `${window.location.pathname}?date=${formattedDate}`;
+            });
+        });
 
         let isFetchingSegments = false;
         async function fetchSegments() {
@@ -577,12 +601,18 @@
             handleVisibilityAndLoad();
         }
 
-        function handleVisibilityAndLoad() {
-            if (isPlaying && segments.length > 0) {
-                currentSegment = segments.length - 1;
-                videoPlayers[video_index].src = segments[currentSegment].url;
-                videoPlayers[video_index].currentTime = segments[currentSegment].duration;
-                videoPlayers[video_index].play().catch(() => {});
+        function handleVisibilityAndLoad() { //todo, clean
+            let currentDate = "";
+            const dateParam = getQueryParam("date");
+            const fetchStartTime = new Date();
+            currentDate = formatDate(fetchStartTime);
+            if(currentDate == dateParam || !dateParam) {
+                if (isPlaying && segments.length > 0) {
+                    currentSegment = segments.length - 1;
+                    videoPlayers[video_index].src = segments[currentSegment].url;
+                    videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                    videoPlayers[video_index].play().catch(() => {});
+                }
             }
         }
 
@@ -601,14 +631,7 @@
         function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
             const container = document.getElementById("videoContainer");
             const video = container.querySelector("video");
-            
-            if (video.videoWidth === 0) {
-                alert(videoAspectRatio);
-                alert(video.videoWidth);
-                alert(video.videoHeight);
-                alert("ZERO");
-            }
-            
+                        
             const containerAspectRatio = container.clientWidth / container.clientHeight;
             const videoAspectRatio = video.videoWidth / video.videoHeight;
 
