@@ -319,16 +319,17 @@
 
         playPauseBtn.addEventListener('click', togglePlayPause);
 
+        
         videoContainer.addEventListener('dblclick', (e) => {
             const containerWidth = videoContainer.clientWidth;
             const x = e.clientX;
             const currentTime = videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
 
-            if (x > containerWidth / 2) {
+            if (x > containerWidth * 0.6) {
                 // Double-tap/click on the right side to skip forward 10s
                 let newTime = Math.min(currentTime + 10, totalDuration);
                 seekToTime(newTime);
-            } else {
+            } else if (x < containerWidth * 0.4) {
                 // Double-tap/click on the left side to rewind 10s
                 let newTime = Math.max(currentTime - 10, 0);
                 seekToTime(newTime);
@@ -553,7 +554,6 @@
             videoPlayers[i].addEventListener("ended", switchToNextSegment);
             videoPlayers[i].addEventListener("ended", switchToNextSegment);
             videoPlayers[i].addEventListener("error", () => retrySegment(videoPlayers[i]));
-            videoPlayers[i].addEventListener('click', togglePlayPause);
         }
 
         progress.addEventListener("mousedown", startScrubbing);

@@ -67,7 +67,7 @@
 }
 
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
-    if(self.segment_length == 60){
+    if(self.segment_length == 60){ //todo, only for live req
         self.segment_length = 1;
         sleep(2); //todo, this is bad
     }
