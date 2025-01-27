@@ -71,6 +71,7 @@ NSMutableDictionary *classColorMap;
 
     for (NSString *file in contents) {
         if ([file hasPrefix:@"batch_req"]) continue;
+        if ([file hasPrefix:@"2025-01-26"]) continue;
 
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
         BOOL success = [fileManager removeItemAtPath:filePath error:&error];
@@ -194,8 +195,8 @@ NSMutableDictionary *classColorMap;
     
     NSDictionary *videoSettings = @{
         AVVideoCodecKey: AVVideoCodecTypeH264,
-        AVVideoWidthKey: @640,
-        AVVideoHeightKey: @480,
+        AVVideoWidthKey: @1280,
+        AVVideoHeightKey: @960,
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -203,8 +204,8 @@ NSMutableDictionary *classColorMap;
     
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
-        (NSString *)kCVPixelBufferWidthKey: @640,
-        (NSString *)kCVPixelBufferHeightKey: @480
+        (NSString *)kCVPixelBufferWidthKey: @1280,
+        (NSString *)kCVPixelBufferHeightKey: @960
     };
     self.adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:sourcePixelBufferAttributes];
     
@@ -531,25 +532,38 @@ NSMutableDictionary *classColorMap;
             
             __weak typeof(self) weak_self = self;
             dispatch_async(dispatch_get_main_queue(), ^{
-                [weak_self resetSquares];
-                for (int i = 0; i < output.count; i++) {
-                    [weak_self drawSquareWithTopLeftX:[output[i][0] floatValue]
-                                              topLeftY:[output[i][1] floatValue]
-                                          bottomRightX:[output[i][2] floatValue]
-                                          bottomRightY:[output[i][3] floatValue]
-                                            classIndex:[output[i][4] intValue]
-                                           aspectRatio:aspect_ratio];
-                    frameSquare[@"originX"] = output[i][0];
-                    frameSquare[@"originY"] = output[i][1];
-                    frameSquare[@"bottomRightX"] = output[i][2];
-                    frameSquare[@"bottomRightY"] = output[i][3];
-                    frameSquare[@"classIndex"] = output[i][4];
-                    [frameSquares addObject:[frameSquare copy]];
+                @try {
+                    [weak_self resetSquares];
+                    for (int i = 0; i < output.count; i++) {
+                        [weak_self drawSquareWithTopLeftX:[output[i][0] floatValue]
+                                                  topLeftY:[output[i][1] floatValue]
+                                              bottomRightX:[output[i][2] floatValue]
+                                              bottomRightY:[output[i][3] floatValue]
+                                                classIndex:[output[i][4] intValue]
+                                               aspectRatio:aspect_ratio];
+                        frameSquare[@"originX"] = output[i][0];
+                        frameSquare[@"originY"] = output[i][1];
+                        frameSquare[@"bottomRightX"] = output[i][2];
+                        frameSquare[@"bottomRightY"] = output[i][3];
+                        frameSquare[@"classIndex"] = output[i][4];
+                        [frameSquares addObject:[frameSquare copy]];
+                    }
+                    frame[@"squares"] = frameSquares;
+
+                    // Ensure thread safety and check for nil
+                    @synchronized(weak_self) {
+                        if (frame) {
+                            [weak_self.current_segment_squares addObject:frame];
+                        } else {
+                            NSLog(@"Warning: Attempted to insert nil frame into array.");
+                        }
+                    }
+
+                    [weak_self updateFPS];
+                    weak_self.isProcessing = NO;
+                } @catch (NSException *exception) {
+                    NSLog(@"Exception in main queue block: %@", exception);
                 }
-                frame[@"squares"] = frameSquares;
-                [self.current_segment_squares addObject:frame];
-                [weak_self updateFPS];
-                weak_self.isProcessing = NO;
             });
         });
     } @catch (NSException *exception) {
