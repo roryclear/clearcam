@@ -149,7 +149,7 @@
         <label for="datePicker">Select Date:</label>
         <input type="date" id="datePicker" name="datePicker">
     </div>
-    <script>        
+    <script>
         const yolo_classes = [
             ["person", "red"], ["bicycle", "green"], ["car", "blue"],
             ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
@@ -191,6 +191,15 @@
             ["teddy bear", "rgb(153, 77, 230)"], ["hair drier", "rgb(204, 51, 77)"],
             ["toothbrush", "rgb(102, 179, 153)"]
         ];
+        
+        let currentDate = "";
+        const dateParam = getQueryParam("date");
+        if (!dateParam) {
+            const fetchStartTime = new Date();
+            currentDate = formatDate(fetchStartTime);
+        } else{
+            currentDate = dateParam;
+        }
         
         let segments = [];
         let totalDuration = 0;
@@ -347,17 +356,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get(name);
         }
-        
-        let currentDate = "";
-        
-        const dateParam = getQueryParam("date");
-        if (!dateParam) {
-            const fetchStartTime = new Date();
-            currentDate = formatDate(fetchStartTime);
-        } else{
-            currentDate = dateParam;
-        }
-        
+                
         function formatDate(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -611,12 +610,18 @@
             handleVisibilityAndLoad();
         }
 
-        function handleVisibilityAndLoad() {
-            if (isPlaying && segments.length > 0) {
-                currentSegment = segments.length - 1;
-                videoPlayers[video_index].src = segments[currentSegment].url;
-                videoPlayers[video_index].currentTime = segments[currentSegment].duration;
-                videoPlayers[video_index].play().catch(() => {});
+        function handleVisibilityAndLoad() { //todo, clean
+            let currentDate = "";
+            const dateParam = getQueryParam("date");
+            const fetchStartTime = new Date();
+            currentDate = formatDate(fetchStartTime);
+            if(currentDate == dateParam || !dateParam) {
+                if (isPlaying && segments.length > 0) {
+                    currentSegment = segments.length - 1;
+                    videoPlayers[video_index].src = segments[currentSegment].url;
+                    videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                    videoPlayers[video_index].play().catch(() => {});
+                }
             }
         }
 
