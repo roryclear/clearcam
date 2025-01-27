@@ -562,8 +562,8 @@
         setInterval(fetchSegments, 500);
 
         const fullscreenBtn = document.getElementById('fullscreenBtn');
-
                 fullscreenBtn.addEventListener('click', () => {
+                    clearBoundingBoxes(); //todo, redraw instead?
                     if (!document.fullscreenElement) {
                         if (videoContainer.requestFullscreen) {
                             videoContainer.requestFullscreen();
