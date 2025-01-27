@@ -149,18 +149,7 @@
         <label for="datePicker">Select Date:</label>
         <input type="date" id="datePicker" name="datePicker">
     </div>
-    <script>
-        function alertQueryParams() {
-            const urlParams = new URLSearchParams(window.location.search);
-            let params = '';
-            urlParams.forEach((value, key) => {
-                params += `${key}: ${value}\n`;
-            });
-            alert(params);
-        }
-        
-        window.onload = alertQueryParams;
-        
+    <script>        
         const yolo_classes = [
             ["person", "red"], ["bicycle", "green"], ["car", "blue"],
             ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
@@ -382,11 +371,8 @@
 
             // Add an event listener to handle date changes
             datePicker.addEventListener('change', function() {
-                alert("data changed");
                 const selectedDate = new Date(this.value);
                 const formattedDate = formatDate(selectedDate);
-                alert(formattedDate);
-                console.log('Selected Date:', formattedDate);
                 window.location.href = `${window.location.pathname}?date=${formattedDate}`;
             });
 
@@ -649,14 +635,7 @@
         function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
             const container = document.getElementById("videoContainer");
             const video = container.querySelector("video");
-            
-            if (video.videoWidth === 0) {
-                alert(videoAspectRatio);
-                alert(video.videoWidth);
-                alert(video.videoHeight);
-                alert("ZERO");
-            }
-            
+                        
             const containerAspectRatio = container.clientWidth / container.clientHeight;
             const videoAspectRatio = video.videoWidth / video.videoHeight;
 
