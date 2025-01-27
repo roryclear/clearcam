@@ -71,7 +71,6 @@ NSMutableDictionary *classColorMap;
 
     for (NSString *file in contents) {
         if ([file hasPrefix:@"batch_req"]) continue;
-        if ([file hasPrefix:@"2025-01-26"]) continue;
         //if ([file hasPrefix:@"2025-01-27"]) continue;
 
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
@@ -380,10 +379,9 @@ NSMutableDictionary *classColorMap;
                     if (fileSegments) {
                         self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
                         NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
-                    } else {
-                        self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
                     }
                 }
+                if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
             }
 
             if (CMTIME_IS_VALID(self.last_file_duration)) {
