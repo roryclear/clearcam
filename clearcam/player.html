@@ -324,7 +324,7 @@
                     
                     let frames = segments[currentSegment].frames;
                     let show_new = false;
-                    while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].timeStamp)) {
+                    while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].frame_timeStamp)) {
                         shape_idx += 1;
                         show_new = true;
                     }

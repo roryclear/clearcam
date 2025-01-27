@@ -72,6 +72,7 @@ NSMutableDictionary *classColorMap;
     for (NSString *file in contents) {
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-26"]) continue;
+        //if ([file hasPrefix:@"2025-01-27"]) continue;
 
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
         BOOL success = [fileManager removeItemAtPath:filePath error:&error];
@@ -222,8 +223,6 @@ NSMutableDictionary *classColorMap;
     
     [self.assetWriter startWriting];
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
-    
-    NSLog(@"Started new recording");
 }
 
 - (void)drawSquareWithTopLeftX:(CGFloat)xOrigin topLeftY:(CGFloat)yOrigin bottomRightX:(CGFloat)bottomRightX bottomRightY:(CGFloat)bottomRightY classIndex:(int)classIndex aspectRatio:(float)aspectRatio {
@@ -340,10 +339,8 @@ NSMutableDictionary *classColorMap;
         self.isRecording = NO;
         [self.videoWriterInput markAsFinished];
         [self.assetWriter finishWritingWithCompletionHandler:^{
-            NSLog(@"Finished recording and saving file");
 
             NSString *fileName = [self.assetWriter.outputURL lastPathComponent];
-            NSLog(@"File saved is %@", fileName);
 
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
@@ -374,7 +371,19 @@ NSMutableDictionary *classColorMap;
             NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
 
             if (!self.fileServer.segmentsDict[dateKey]) {
-                self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
+                NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+                NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateKey];
+                NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
+                if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
+                    NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
+                    NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
+                    if (fileSegments) {
+                        self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
+                        NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
+                    } else {
+                        self.fileServer.segmentsDict[dateKey] = [NSMutableArray array];
+                    }
+                }
             }
 
             if (CMTIME_IS_VALID(self.last_file_duration)) {
@@ -394,10 +403,10 @@ NSMutableDictionary *classColorMap;
                     NSDate *midnight = [calendar dateFromComponents:components];
                     NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
                     segmentEntry[@"timeStamp"] = @(timeStamp);
+                    NSLog(@"TIMESTAMP??");
                 }
                 
                 [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
-                NSLog(@"adding %@ to date %@ in dict",segmentEntry,dateKey);
                 [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
             }
             self.last_file_duration = time;
@@ -405,7 +414,6 @@ NSMutableDictionary *classColorMap;
             self.last_file_timestamp = self.current_file_timestamp;
             self.last_segment_squares = [self.current_segment_squares mutableCopy];
             [self.current_segment_squares removeAllObjects];
-            NSLog(@"Duration is %f seconds", CMTimeGetSeconds(time));
             [self startNewRecording];
         }];
     } else {
@@ -511,7 +519,7 @@ NSMutableDictionary *classColorMap;
             NSDate *midnight = [calendar dateFromComponents:components];
             NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
             
-            frame[@"timeStamp"] = @(timeStamp);
+            frame[@"frame_timeStamp"] = @(timeStamp);
             frame[@"res"] = @(self.yolo.yolo_res);
             frame[@"aspect_ratio"] = @(aspect_ratio);
             

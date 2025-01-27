@@ -127,6 +127,7 @@
 
                 if (fileSegments) {
                     self.segmentsDict[dateParam] = [fileSegments mutableCopy];
+                    NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
                 } else {
                     NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
                     NSString *errorMessage = @"{\"error\": \"Failed to read segments from file\"}";
