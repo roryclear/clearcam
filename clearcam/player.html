@@ -315,6 +315,7 @@
                 pauseIcon.style.display = 'block';
                 isPlaying = true;
             }
+            updateTimeline();
         }
 
         playPauseBtn.addEventListener('click', togglePlayPause);
@@ -337,7 +338,8 @@
 
             updateTimeline();
         });
-
+        
+        
         function seekToTime(time) {
             clearBoundingBoxes();
             is_prepared = new Array(videoPlayers.length).fill(false);
@@ -543,15 +545,10 @@
             preloadNextSegments();
         }
 
-        function handleTimeUpdate() {
-            updateTimeline();
-        }
-
-        setInterval(handleTimeUpdate, 50);
+        setInterval(updateTimeline, 50);
         
         for(let i = 0; i < videoPlayers.length; i++) {
-            videoPlayers[i].addEventListener("timeupdate", handleTimeUpdate);
-            videoPlayers[i].addEventListener("ended", switchToNextSegment);
+            videoPlayers[i].addEventListener("timeupdate", updateTimeline);
             videoPlayers[i].addEventListener("ended", switchToNextSegment);
             videoPlayers[i].addEventListener("error", () => retrySegment(videoPlayers[i]));
         }
