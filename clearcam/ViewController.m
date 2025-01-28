@@ -71,7 +71,7 @@ NSMutableDictionary *classColorMap;
 
     for (NSString *file in contents) {
         if ([file hasPrefix:@"batch_req"]) continue;
-        //if ([file hasPrefix:@"2025-01-27"]) continue;
+        if ([file hasPrefix:@"2025-01-27"]) continue;
 
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
         BOOL success = [fileManager removeItemAtPath:filePath error:&error];
@@ -395,14 +395,13 @@ NSMutableDictionary *classColorMap;
                 }];
 
                 NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
-                if (segmentsForDate.count == 0) {
-                    NSCalendar *calendar = [NSCalendar currentCalendar];
-                    NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.last_file_timestamp];
-                    NSDate *midnight = [calendar dateFromComponents:components];
-                    NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
-                    segmentEntry[@"timeStamp"] = @(timeStamp);
-                    NSLog(@"TIMESTAMP??");
-                }
+                
+                //timestamp of every segment now
+                NSCalendar *calendar = [NSCalendar currentCalendar];
+                NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.last_file_timestamp];
+                NSDate *midnight = [calendar dateFromComponents:components];
+                NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
+                segmentEntry[@"timeStamp"] = @(timeStamp);
                 
                 [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
                 [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
