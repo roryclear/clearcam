@@ -11,7 +11,6 @@
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
 @property (nonatomic, strong) NSMutableDictionary *durationCache;
-@property (nonatomic, strong) NSMutableDictionary *timeDifferenceCache;
 @end
 
 @implementation FileServer

@@ -439,10 +439,11 @@
                                 const oldTotalDuration = totalDuration;
 
                                 let cumulativeStart = totalDuration;
-                                for (let i = 0; i < newSegments.length; i++) {
+                                for (let i = 0; i < newSegments.length - 1; i++) {
                                     const segment = newSegments[i];
-                                    const timeDifference = segment.timeDifference || segment.duration;
+                                    const timeDifference = newSegments[i+1].timeStamp - newSegments[i].timeStamp;
                                     const lostFrames = timeDifference - segment.duration;
+                                    totalDuration += timeDifference;
 
                                     const currentCumulativeStart = cumulativeStart;
                                     cumulativeStart += timeDifference;
@@ -453,9 +454,6 @@
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
                                 }
-
-
-                                totalDuration = segments.reduce((sum, seg) => sum + (seg.timeDifference || seg.duration), 0);
 
                                 if (totalDuration !== oldTotalDuration) {
                                     updateTimeline();
