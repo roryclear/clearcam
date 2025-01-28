@@ -439,7 +439,8 @@
                                 const oldTotalDuration = totalDuration;
 
                                 let cumulativeStart = totalDuration;
-                                newSegments.forEach((segment) => {
+                                for (let i = 0; i < newSegments.length; i++) {
+                                    const segment = newSegments[i];
                                     const timeDifference = segment.timeDifference || segment.duration;
                                     const lostFrames = timeDifference - segment.duration;
 
@@ -451,7 +452,8 @@
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
-                                });
+                                }
+
 
                                 totalDuration = segments.reduce((sum, seg) => sum + (seg.timeDifference || seg.duration), 0);
 
