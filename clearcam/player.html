@@ -443,17 +443,16 @@
                                     const segment = newSegments[i];
                                     const timeDifference = newSegments[i+1].timeStamp - newSegments[i].timeStamp;
                                     const lostFrames = timeDifference - segment.duration;
-                                    totalDuration += timeDifference;
 
                                     const currentCumulativeStart = cumulativeStart;
                                     cumulativeStart += timeDifference;
-
                                     segments.push({
                                         ...segment,
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
                                 }
+                                totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
 
                                 if (totalDuration !== oldTotalDuration) {
                                     updateTimeline();
