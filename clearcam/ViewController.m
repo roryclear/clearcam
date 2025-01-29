@@ -23,12 +23,8 @@
 @property (nonatomic, strong) AVAssetWriterInputPixelBufferAdaptor *adaptor;
 @property (nonatomic, strong) FileServer *fileServer;
 @property (nonatomic, assign) int seg_number;
-@property (nonatomic, strong) NSURL *last_file_url;
-@property (nonatomic, assign) CMTime last_file_duration;
-@property (nonatomic, assign) NSDate *last_file_timestamp;
 @property (nonatomic, assign) NSDate *current_file_timestamp;
 @property (nonatomic, strong) NSMutableDictionary *digits;
-@property (nonatomic, strong) NSMutableArray *last_segment_squares;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 
 @end
@@ -39,7 +35,6 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.last_segment_squares = [[NSMutableArray alloc] init];
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -71,7 +66,7 @@ NSMutableDictionary *classColorMap;
 
     for (NSString *file in contents) {
         if ([file hasPrefix:@"batch_req"]) continue;
-        //if ([file hasPrefix:@"2025-01-27"]) continue;
+        if ([file hasPrefix:@"2025-01-27"]) continue;
 
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
         BOOL success = [fileManager removeItemAtPath:filePath error:&error];
@@ -347,7 +342,7 @@ NSMutableDictionary *classColorMap;
             // Use self.current_file_timestamp to get the date and hour without minutes and seconds
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
             [dateFormatter setDateFormat:@"yyyy-MM-dd"];
-            NSString *dateFolderName = [dateFormatter stringFromDate:self.last_file_timestamp];
+            NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
 
             // Get the documents directory
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
@@ -366,7 +361,7 @@ NSMutableDictionary *classColorMap;
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.last_file_timestamp];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
             NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
 
             if (!self.fileServer.segmentsDict[dateKey]) {
@@ -384,33 +379,25 @@ NSMutableDictionary *classColorMap;
                 if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
             }
 
-            if (CMTIME_IS_VALID(self.last_file_duration)) {
-                CMTime timeDifference = CMTimeMakeWithSeconds([self.current_file_timestamp timeIntervalSinceDate:self.last_file_timestamp], NSEC_PER_SEC);
 
-                NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
-                    @"url": [NSString stringWithFormat:@"%@/%@", [[self.last_file_url URLByDeletingLastPathComponent] lastPathComponent], self.last_file_url.lastPathComponent],
-                    @"duration": @(CMTimeGetSeconds(self.last_file_duration)),
-                    @"timeDifference": @(CMTimeGetSeconds(timeDifference)),
-                    @"frames":self.last_segment_squares
-                }];
+            NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
+                @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent],
+                @"duration": @(CMTimeGetSeconds(time)),
+                @"frames":[self.current_segment_squares copy]
+            }];
 
-                NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
-                if (segmentsForDate.count == 0) {
-                    NSCalendar *calendar = [NSCalendar currentCalendar];
-                    NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.last_file_timestamp];
-                    NSDate *midnight = [calendar dateFromComponents:components];
-                    NSTimeInterval timeStamp = [self.last_file_timestamp timeIntervalSinceDate:midnight];
-                    segmentEntry[@"timeStamp"] = @(timeStamp);
-                    NSLog(@"TIMESTAMP??");
-                }
-                
-                [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
-                [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-            }
-            self.last_file_duration = time;
-            self.last_file_url = [self.assetWriter.outputURL copy];
-            self.last_file_timestamp = self.current_file_timestamp;
-            self.last_segment_squares = [self.current_segment_squares mutableCopy];
+            NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
+            
+            //timestamp of every segment now
+            calendar = [NSCalendar currentCalendar];
+            components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+            NSDate *midnight = [calendar dateFromComponents:components];
+            NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
+            segmentEntry[@"timeStamp"] = @(timeStamp);
+            
+            [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
+            [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
+        
             [self.current_segment_squares removeAllObjects];
             [self startNewRecording];
         }];

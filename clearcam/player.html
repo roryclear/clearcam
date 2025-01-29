@@ -57,13 +57,33 @@
             position: relative;
             border-radius: 5px;
             box-sizing: border-box;
+            overflow: hidden;
         }
+
         #progress-bar {
-            width: 0;
             height: 100%;
             background-color: #007bff;
             border-radius: 5px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
         }
+
+        .gap-indicator {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: repeating-linear-gradient(
+                -45deg,
+                black,
+                black 3px,
+                grey 3px,
+                grey 6px
+            );
+            pointer-events: none;
+        }
+
         button {
             background: none;
             border: none;
@@ -175,6 +195,7 @@
                 </div>
                 <div id="progress">
                     <div id="progress-bar"></div>
+                    <div id="gaps-container"></div>
                 </div>
             </div>
             <!-- Play/Pause button moved outside of #controls -->
@@ -245,6 +266,7 @@
                 }
                 
                 let segments = [];
+                let gaps = [];
                 let totalDuration = 0;
                 let retryTimeout = 2000;
 
@@ -348,8 +370,28 @@
                     
                     progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
                     timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
+                    updateGaps();
                 }
-                
+        
+                function updateGaps() {
+                    const progressBar = document.getElementById("progress");
+                    const gapsContainer = document.getElementById("gaps-container");
+                    gapsContainer.innerHTML = ''; // Clear existing gaps
+
+                    gaps.forEach(([start, duration]) => {
+                        const gapElement = document.createElement("div");
+                        gapElement.classList.add("gap-indicator");
+
+                        const gapStartPercent = (start / totalDuration) * 100;
+                        const gapWidthPercent = (duration / totalDuration) * 100;
+
+                        gapElement.style.left = `${gapStartPercent}%`;
+                        gapElement.style.width = `${gapWidthPercent}%`;
+
+                        gapsContainer.appendChild(gapElement);
+                    });
+                }
+
                 function togglePlayPause() {
                     if (isPlaying) {
                         videoPlayers[video_index].pause();
@@ -439,21 +481,26 @@
                                 const oldTotalDuration = totalDuration;
 
                                 let cumulativeStart = totalDuration;
-                                newSegments.forEach((segment) => {
-                                    const timeDifference = segment.timeDifference || segment.duration;
+                                for (let i = 0; i < newSegments.length - 1; i++) {
+                                    const segment = newSegments[i];
+                                    const timeDifference = newSegments[i+1].timeStamp - newSegments[i].timeStamp;
                                     const lostFrames = timeDifference - segment.duration;
-
                                     const currentCumulativeStart = cumulativeStart;
                                     cumulativeStart += timeDifference;
-
                                     segments.push({
                                         ...segment,
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
-                                });
-
-                                totalDuration = segments.reduce((sum, seg) => sum + (seg.timeDifference || seg.duration), 0);
+                                    if(lostFrames > 60){ //todo why 60
+                                        gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
+                                    }
+                                }
+                                totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
+                                if(gaps.length > 0){
+                                    console.log("gaps!");
+                                    console.log(gaps);
+                                }
 
                                 if (totalDuration !== oldTotalDuration) {
                                     updateTimeline();
