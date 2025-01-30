@@ -170,34 +170,153 @@
         .top-controls #timeDisplay {
             margin-right: 10px;
         }
+        /* Existing styles remain the same until .top-controls */
+
+
+
+        #classSelector {
+            margin-right: 0; /* Remove margin for the last element */
+        }
+
+        /* Adjust the bottom controls to remove the date picker and select dropdown */
+        #controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+            box-sizing: border-box;
+        }
+
+        #controls.show {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* Adjust the time display and fullscreen button container */
+        .top-controls {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            justify-content: flex-end; /* Align to the right */
+            gap: 10px; /* Add gap between elements */
+        }
+
+        #timeDisplay {
+            font-size: 14px; /* Smaller font size for compactness */
+            white-space: nowrap; /* Prevent wrapping */
+            color: white; /* White text */
+        }
+
+        #fullscreenBtn {
+            width: 30px; /* Smaller button for compactness */
+            height: 30px;
+            padding: 5px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
+        #topControls {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; /* Align items to the right */
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            box-sizing: border-box;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+            z-index: 5; /* Ensure it's above the video */
+            gap: 10px; /* Add gap between elements */
+        }
+
+        #topControls.show {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #datePicker, #classSelector {
+            flex: 0 1 auto; /* Don't grow, but allow shrinking */
+            min-width: 120px; /* Set a minimum width */
+            max-width: 200px; /* Set a maximum width */
+            font-size: 14px; /* Smaller font size for compactness */
+            padding: 5px; /* Smaller padding for compactness */
+            background: rgba(255, 255, 255, 0.1); /* Slightly transparent background */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* Light border */
+            color: white; /* White text */
+            border-radius: 4px; /* Rounded corners */
+        }
+        
+        /* Media query for smaller screens */
+        @media (max-width: 600px) {
+            #datePicker, #classSelector {
+                min-width: 100px; /* Smaller minimum width for mobile */
+                max-width: 150px; /* Smaller maximum width for mobile */
+                font-size: 12px; /* Even smaller font size for mobile */
+                padding: 4px; /* Even smaller padding for mobile */
+            }
+
+            #timeDisplay {
+                font-size: 12px; /* Smaller font size for mobile */
+            }
+
+            #fullscreenBtn {
+                width: 24px; /* Smaller button for mobile */
+                height: 24px;
+                padding: 4px;
+            }
+        }
+        
     </style>
 </head>
 <body>
     <div id="videoContainer">
         <div class="video-wrapper">
+            <!-- Video elements remain the same -->
             <video class="videoPlayer" playsinline webkit-playsinline muted></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
             <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+
+            <!-- New top controls bar -->
+            <div id="topControls">
+                <input type="date" id="datePicker" name="datePicker">
+                <select id="classSelector" name="classSelector" onchange="changeClasses()">
+                    <option value="all">Detect All</option>
+                    <option value="vehiclesPeople">People+Vehicles</option>
+                </select>
+            </div>
+            <!-- Bottom controls (progress bar, time display, fullscreen button) -->
             <div id="controls">
                 <div class="top-controls">
-                    <div style="display: flex; align-items: center;">
-                        <div id="timeDisplay">0:00 / 0:00</div>
-                        <button id="fullscreenBtn" style="margin-left: 10px;">
-                            <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
-                                <path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm6 12v6h-6v-2h4v-4zm-12 6H3v-6h2v4h4z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <div id="timeDisplay">0:00 / 0:00</div>
+                    <button id="fullscreenBtn">
+                        <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                            <path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm6 12v6h-6v-2h4v-4zm-12 6H3v-6h2v4h4z"/>
+                        </svg>
+                    </button>
                 </div>
                 <div id="progress">
                     <div id="progress-bar"></div>
                     <div id="gaps-container"></div>
                 </div>
             </div>
-            <!-- Play/Pause button moved outside of #controls -->
+
+            <!-- Play/Pause button -->
             <button id="playPauseBtn">
                 <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
                     <path d="M8 5v14l11-7z"/>
@@ -207,13 +326,6 @@
                 </svg>
             </button>
         </div>
-    </div>
-    <div style="margin-top: 20px;">
-        <input type="date" id="datePicker" name="datePicker">
-        <select id="classSelector" name="classSelector" onchange="changeClasses()">
-            <option value="all">Detect All</option>
-            <option value="vehiclesPeople">People and Vehicles Only</option>
-        </select>
     </div>
     <script>
         const yolo_classes = [
@@ -342,23 +454,37 @@
 
                 let hideControlsTimeout;
                 const controls = document.getElementById('controls');
+                const topControls = document.getElementById('topControls');
                 const videoContainer = document.getElementById('videoContainer');
+                
+                //todo
+                topControls.addEventListener('focusin', showControls);
+                topControls.addEventListener('focusout', hideControls);
+                controls.addEventListener('focusin', showControls);
+                controls.addEventListener('focusout', hideControls);
 
                 function showControls() {
                     controls.classList.add('show');
+                    topControls.classList.add('show');
                     playPauseBtn.classList.add('show'); // Show the play/pause button
                     clearTimeout(hideControlsTimeout);
                     hideControlsTimeout = setTimeout(() => {
+                        topControls.classList.remove('show');
                         controls.classList.remove('show');
                         playPauseBtn.classList.remove('show'); // Hide the play/pause button
                         controls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
+                        topControls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
                     }, 4000);
                 }
 
                 function hideControls() {
-                    controls.classList.remove('show');
-                    playPauseBtn.classList.remove('show'); // Hide the play/pause button
-                    controls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
+                    if (!document.activeElement.closest('#topControls') && !document.activeElement.closest('#controls')) {
+                        topControls.classList.remove('show');
+                        controls.classList.remove('show');
+                        playPauseBtn.classList.remove('show'); // Hide the play/pause button
+                        topControls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
+                        controls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
+                    }
                 }
 
                 function toggleControls() {
