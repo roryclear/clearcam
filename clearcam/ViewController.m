@@ -200,7 +200,10 @@ NSMutableDictionary *classColorMap;
     self.videoWriterInput.expectsMediaDataInRealTime = YES;
     if(self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationPortrait){
         self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI_2);//does this work?
+    } else if (self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationLandscapeLeft) {
+        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI);
     }
+    
     
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
@@ -665,6 +668,4 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-
-
 
