@@ -2,6 +2,7 @@
 #import <Metal/Metal.h>
 #import <UIKit/UIKit.h>
 #import <sys/utsname.h>
+#import "SettingsManager.h"
 
 @implementation Yolo
 
@@ -28,6 +29,7 @@ UInt8 *rgbData;
     self.mtl_buffers_in_flight = [[NSMutableArray alloc] init];
     self.yolo_res = 640;
     self.rgbData = (UInt8 *)malloc(self.yolo_res * self.yolo_res * 3);
+    
     self.yolo_classes = @[
         @[@"person", [UIColor redColor]],@[@"bicycle", [UIColor greenColor]],@[@"car", [UIColor blueColor]],
         @[@"motorcycle", [UIColor cyanColor]],@[@"airplane", [UIColor magentaColor]],@[@"bus", [UIColor yellowColor]],
@@ -162,14 +164,17 @@ UInt8 *rgbData;
 }
 
 - (NSArray *)processOutput:(const float *)output {
+    NSArray<NSNumber *> *yoloIndexes = [SettingsManager sharedManager].yolo_indexes;
     NSMutableArray *boxes = [NSMutableArray array];
     int numPredictions = pow(self.yolo_res / 32, 2) * 21;
 
     for (int index = 0; index < numPredictions; index++) {
         int classId = 0;
         float prob = 0.0;
-
-        for (int col = 0; col < self.yolo_classes.count; col++) {
+        
+        for (int i = 0; i < yoloIndexes.count; i++) {
+            NSNumber *indexNumber = yoloIndexes[i];
+            int col = [indexNumber intValue];
             float confidence = output[numPredictions * (col + 4) + index];
             if (confidence > prob) {
                 prob = confidence;
