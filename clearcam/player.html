@@ -3,22 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        #videoContainer {
-            position: relative;
-            width: 100%;
-            max-width: 640px;
-            background: black;
-            aspect-ratio: 4 / 3;
-        }
-        #videoContainer:hover #controls {
-            opacity: 1;
-        }
-        .video-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
+        <style>
+            #videoContainer {
+                position: relative;
+                width: 100%;
+                max-width: 640px;
+                background: black;
+                aspect-ratio: 4 / 3;
+                max-height: 100vh; /* Ensure the container does not exceed the viewport height */
+                overflow: hidden;  /* Prevents overflow when the aspect ratio is applied */
+            }
+
+            .video-wrapper {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                width: 100%;
+                height: 100%;
+            }
+
+            .videoPlayer {
+                width: 100%;
+                height: auto; /* Adjust height to maintain aspect ratio */
+            }
+
+            #videoContainer:hover #controls {
+                opacity: 1;
+            }
+
         video {
             position: absolute;
             width: 100%;
