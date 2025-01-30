@@ -783,6 +783,9 @@
                 
                 function playSegment() {
                     if (segments.length > 0) {
+                        if(segments[currentSegment].orientation){
+                            alert("ROTATED?");
+                        }
                         videoPlayers[video_index].src = segments[currentSegment].url;
                         videoPlayers[video_index].currentTime = 0;
                         videoPlayers[video_index].style.display = "block";
@@ -800,6 +803,9 @@
                 function switchToNextSegment() {
                     if (currentSegment + 1 < segments.length) {
                         currentSegment++;
+                        if(segments[currentSegment].orientation){
+                            alert("ROTATED???");
+                        }
                         is_prepared[video_index] = false;
                         video_index = (video_index + 1) % videoPlayers.length;
                         for(let i = 1; i < videoPlayers.length; i++){

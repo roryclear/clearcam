@@ -16,6 +16,7 @@
 
 @property (atomic, assign) BOOL isProcessing;
 @property (nonatomic, assign) BOOL isRecording;
+@property (nonatomic, assign) BOOL orientation_changed;
 @property (nonatomic, assign) CMTime startTime;
 @property (nonatomic, assign) CMTime currentTime;
 @property (nonatomic, strong) AVAssetWriter *assetWriter;
@@ -50,6 +51,7 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
+    self.orientation_changed = FALSE;
     
     //TODO REMOVE THIS
     NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -102,9 +104,9 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)handleDeviceOrientationChange {
+    self.orientation_changed = TRUE;
     UIDeviceOrientation deviceOrientation = [[UIDevice currentDevice] orientation];
     AVCaptureVideoOrientation videoOrientation;
-    
     switch (deviceOrientation) {
         case UIDeviceOrientationLandscapeLeft:
             videoOrientation = AVCaptureVideoOrientationLandscapeRight;
@@ -385,8 +387,17 @@ NSMutableDictionary *classColorMap;
                 @"duration": @(CMTimeGetSeconds(time)),
                 @"frames":[self.current_segment_squares copy]
             }];
-
-            NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
+            
+            if(self.orientation_changed){
+                if(self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationLandscapeRight){
+                    segmentEntry[@"orientation"] = @"landscape_right";
+                } else if(self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationLandscapeLeft){
+                    segmentEntry[@"orientation"] = @"landscape_left";
+                } else { //todo upside down!
+                    segmentEntry[@"orientation"] = @"portait";
+                }
+                self.orientation_changed = FALSE;
+            }
             
             //timestamp of every segment now
             calendar = [NSCalendar currentCalendar];
