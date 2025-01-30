@@ -7,5 +7,6 @@
 + (instancetype)sharedManager;
 - (void)saveYoloIndexes;
 - (void)loadYoloIndexes;
+- (void)updateYoloIndexes:(NSArray<NSNumber *> *)newIndexes;
 
 @end

@@ -7,6 +7,7 @@
 #import <signal.h>
 #import <errno.h>
 #import <AVFoundation/AVFoundation.h>
+#import "SettingsManager.h"
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
@@ -87,7 +88,13 @@
     NSString *filePath = [[request substringFromIndex:NSMaxRange(range)] componentsSeparatedByString:@" "][0];
     filePath = [filePath stringByRemovingPercentEncoding];
     if ([filePath isEqualToString:@"/"]) filePath = @"";
-
+    if ([filePath hasPrefix:@"change-classes"]) {
+        NSArray<NSNumber *> *newIndexes = @[@0, @1, @2, @3, @5, @7]; //vehicles+people preset for now (person, bicycle, car, motorcycle, bus, truck)
+        [[SettingsManager sharedManager] updateYoloIndexes:newIndexes];
+        NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        return;
+    }
     if ([filePath hasPrefix:@"get-segments"]) {
         NSString *startParam = nil;
         NSString *dateParam = nil;
