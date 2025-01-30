@@ -209,9 +209,7 @@
         </div>
     </div>
     <div style="margin-top: 20px;">
-        <label for="datePicker">Select Date:</label>
         <input type="date" id="datePicker" name="datePicker">
-        <label for="classSelector" style="margin-left: 10px;">Select Detection Mode:</label>
         <select id="classSelector" name="classSelector" onchange="changeClasses()">
             <option value="all">Detect All</option>
             <option value="vehiclesPeople">People and Vehicles Only</option>
@@ -282,6 +280,33 @@
                             console.error('There was a problem with the fetch operation:', error);
                         });
                 }
+        
+            function fetchCurrentClasses() {
+                fetch('get-classes')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (Array.isArray(data)) {
+                            updateDropdown(data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching current classes:', error);
+                    });
+            }
+
+        function updateDropdown(currentClasses) {
+            const selector = document.getElementById('classSelector');
+            if (currentClasses.length === 80) { //todo, will need to change with more presets + custom !
+                selector.value = 'all';
+            } else if (JSON.stringify(currentClasses) === JSON.stringify([0, 1, 2, 3, 5, 7])) {
+                selector.value = 'vehiclesPeople';
+            }
+        }
+
+        // Call fetchCurrentClasses on page load and every minute
+        window.addEventListener('load', fetchCurrentClasses);
+        setInterval(fetchCurrentClasses, 60000); // Every minute
+
                 
                 let currentDate = "";
                 const dateParam = getQueryParam("date");

@@ -112,13 +112,28 @@
                 NSNumber *index = @([indexString intValue]);
                 [newIndexes addObject:index];
             }
-
             [[SettingsManager sharedManager] updateYoloIndexes:[newIndexes copy]];
-
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             return;
         }
+    }
+    if ([filePath hasPrefix:@"get-classes"]) {
+        NSArray<NSNumber *> *currentClasses = [SettingsManager sharedManager].yolo_indexes;
+        NSError *error;
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:currentClasses options:0 error:&error];
+        
+        if (!jsonData) {
+            NSLog(@"Error serializing JSON: %@", error);
+            NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            return;
+        }
+        
+        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+        return;
     }
     if ([filePath hasPrefix:@"get-segments"]) {
         NSString *startParam = nil;
