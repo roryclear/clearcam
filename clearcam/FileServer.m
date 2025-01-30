@@ -89,11 +89,36 @@
     filePath = [filePath stringByRemovingPercentEncoding];
     if ([filePath isEqualToString:@"/"]) filePath = @"";
     if ([filePath hasPrefix:@"change-classes"]) {
-        NSArray<NSNumber *> *newIndexes = @[@0, @1, @2, @3, @5, @7]; //vehicles+people preset for now (person, bicycle, car, motorcycle, bus, truck)
-        [[SettingsManager sharedManager] updateYoloIndexes:newIndexes];
-        NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        return;
+        NSString *indexesParam = nil;
+        NSRange queryRange = [filePath rangeOfString:@"?"];
+        if (queryRange.location != NSNotFound) {
+            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
+            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
+            for (NSString *item in queryItems) {
+                NSArray *keyValue = [item componentsSeparatedByString:@"="];
+                if (keyValue.count == 2) {
+                    if ([keyValue[0] isEqualToString:@"indexes"]) {
+                        indexesParam = keyValue[1];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (indexesParam) {
+            NSMutableArray<NSNumber *> *newIndexes = [NSMutableArray array];
+            NSArray *indexesArray = [indexesParam componentsSeparatedByString:@","];
+            for (NSString *indexString in indexesArray) {
+                NSNumber *index = @([indexString intValue]);
+                [newIndexes addObject:index];
+            }
+
+            [[SettingsManager sharedManager] updateYoloIndexes:[newIndexes copy]];
+
+            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            return;
+        }
     }
     if ([filePath hasPrefix:@"get-segments"]) {
         NSString *startParam = nil;
