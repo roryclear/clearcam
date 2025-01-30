@@ -784,7 +784,7 @@
                 function playSegment() {
                     if (segments.length > 0) {
                         if(segments[currentSegment].orientation){
-                            alert("ROTATED?");
+                            setVideoOrientation(segments[currentSegment].orientation);
                         }
                         videoPlayers[video_index].src = segments[currentSegment].url;
                         videoPlayers[video_index].currentTime = 0;
@@ -804,7 +804,7 @@
                     if (currentSegment + 1 < segments.length) {
                         currentSegment++;
                         if(segments[currentSegment].orientation){
-                            alert("ROTATED???");
+                            setVideoOrientation(segments[currentSegment].orientation);
                         }
                         is_prepared[video_index] = false;
                         video_index = (video_index + 1) % videoPlayers.length;
@@ -971,6 +971,31 @@
                 function showBoundingBoxes() {
                     document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "");
                 }
+        
+        let rotationAngle = 0;
+
+        // Function to rotate the video container based on orientation
+        function setVideoOrientation(orientation) {
+            let rotationAngle = 0; // Default to landscape_right (0°)
+            switch (orientation) {
+                case 'landscape_left':
+                    rotationAngle = 180;
+                    break;
+                case 'portrait':
+                    rotationAngle = 90;
+                    break;
+            }
+            const videoContainer = document.getElementById('videoContainer');
+            for(let i = 0; i < document.querySelectorAll(".videoPlayer").length; i++){
+                document.querySelectorAll(".videoPlayer")[i].style.transform = `rotate(${rotationAngle}deg)`;
+            }
+            //videoContainer.style.transform = `rotate(${rotationAngle}deg)`;
+            if (rotationAngle % 180 !== 0) {
+                videoContainer.style.aspectRatio = '3 / 4'; // Portrait orientation
+            } else {
+                videoContainer.style.aspectRatio = '4 / 3'; // Landscape orientation
+            }
+        }
     </script>
 </body>
 </html>
