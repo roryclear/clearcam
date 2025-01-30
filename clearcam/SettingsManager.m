@@ -36,10 +36,13 @@
 }
 
 - (NSArray<NSNumber *> *)generateDefaultYoloIndexes {
+    /*
     NSMutableArray<NSNumber *> *defaultIndexes = [NSMutableArray array];
     for (int i = 0; i < 80; i++) { //todo unhardcode 80
         [defaultIndexes addObject:@(i)];
     }
+    */
+    NSArray<NSNumber *> *defaultIndexes = @[@0, @1, @2, @3, @5, @7]; //vehicles+people preset for now (person, bicycle, car, motorcycle, bus, truck)
     return [defaultIndexes copy];
 }
 
