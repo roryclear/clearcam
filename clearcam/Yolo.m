@@ -173,12 +173,10 @@ UInt8 *rgbData;
         float prob = 0.0;
         
         for (int i = 0; i < yoloIndexes.count; i++) {
-            NSNumber *indexNumber = yoloIndexes[i];
-            int col = [indexNumber intValue];
-            float confidence = output[numPredictions * (col + 4) + index];
+            float confidence = output[numPredictions * ([yoloIndexes[i] intValue] + 4) + index];
             if (confidence > prob) {
                 prob = confidence;
-                classId = col;
+                classId = [yoloIndexes[i] intValue];
             }
         }
 
