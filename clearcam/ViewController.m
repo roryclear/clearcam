@@ -378,7 +378,6 @@ NSMutableDictionary *classColorMap;
                     NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
                     if (fileSegments) {
                         self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
-                        NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
                     }
                 }
                 if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
@@ -609,9 +608,6 @@ NSMutableDictionary *classColorMap;
     
     size_t width_res = CVPixelBufferGetWidth(pixelBuffer);
     size_t height_res = CVPixelBufferGetHeight(pixelBuffer);
-
-    NSLog(@"Resolution: %zu x %zu", width_res, height_res);
-
     if (degrees == 90 || degrees == -90) {
         pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:height_res-(pixelSize*3+spaceSize)*timestamp.length width:height height:(pixelSize*3+spaceSize)*timestamp.length opacity:0.4];
     } else if (degrees == 180 || degrees == -180) {
@@ -631,7 +627,6 @@ NSMutableDictionary *classColorMap;
         NSString *key = [NSString stringWithFormat:@"%C", character];
         for (int i = 0; i < [self.digits[key] count]; i++) {
             if (degrees == 90 || degrees == -90) {
-                NSLog(@"Video is rotated by 90 degrees");
                 pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
                                                             withColor:[UIColor whiteColor]
                                                             originX:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
