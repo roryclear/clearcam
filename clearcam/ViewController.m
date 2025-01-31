@@ -129,7 +129,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)setupCamera {
     self.captureSession = [[AVCaptureSession alloc] init];
-    self.captureSession.sessionPreset = AVCaptureSessionPresetPhoto;
+    self.captureSession.sessionPreset = AVCaptureSessionPreset1920x1080;
     AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
     NSError *error = nil;
     AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
@@ -190,7 +190,7 @@ NSMutableDictionary *classColorMap;
     NSDictionary *videoSettings = @{
         AVVideoCodecKey: AVVideoCodecTypeH264,
         AVVideoWidthKey: @1280,
-        AVVideoHeightKey: @960,
+        AVVideoHeightKey: @720,
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -205,7 +205,7 @@ NSMutableDictionary *classColorMap;
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
         (NSString *)kCVPixelBufferWidthKey: @1280,
-        (NSString *)kCVPixelBufferHeightKey: @960
+        (NSString *)kCVPixelBufferHeightKey: @720
     };
     self.adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:sourcePixelBufferAttributes];
     
@@ -587,8 +587,8 @@ NSMutableDictionary *classColorMap;
 }
 
 - (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
-    NSInteger pixelSize = 4;
-    NSInteger spaceSize = 2;
+    NSInteger pixelSize = 6;
+    NSInteger spaceSize = 3;
     NSInteger digitOriginX = spaceSize;
     NSInteger digitOriginY = spaceSize;
     NSInteger height = spaceSize*2 + pixelSize*5;

@@ -9,7 +9,7 @@
             width: 100%;
             max-width: 640px; /* Default max-width for landscape */
             background: black;
-            aspect-ratio: 4 / 3; /* Default aspect ratio for landscape */
+            aspect-ratio: 16 / 9; /* Default aspect ratio for landscape */
             overflow: hidden; /* Prevent overflow */
             transition: max-width 0.3s ease-in-out, aspect-ratio 0.3s ease-in-out; /* Smooth transitions */
         }
@@ -810,12 +810,12 @@
                         portrait = true;
                         // Portrait mode: set container to 480x640
                         videoContainer.style.maxWidth = '480px';
-                        videoContainer.style.aspectRatio = '3 / 4'; // 480:640 simplifies to 3:4
+                        videoContainer.style.aspectRatio = '9 / 16'; // 480:640 simplifies to 3:4
                     } else {
                         portrait = false;
                         // Landscape mode: set container to 640x480
                         videoContainer.style.maxWidth = '640px';
-                        videoContainer.style.aspectRatio = '4 / 3'; // 640:480 simplifies to 4:3
+                        videoContainer.style.aspectRatio = '16 / 9'; // 640:480 simplifies to 4:3
                     }
                 }
 
