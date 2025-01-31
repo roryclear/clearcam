@@ -104,7 +104,6 @@ NSMutableDictionary *classColorMap;
 - (void)handleDeviceOrientationChange {
     UIDeviceOrientation deviceOrientation = [[UIDevice currentDevice] orientation];
     AVCaptureVideoOrientation videoOrientation;
-    
     switch (deviceOrientation) {
         case UIDeviceOrientationLandscapeLeft:
             videoOrientation = AVCaptureVideoOrientationLandscapeRight;
@@ -196,6 +195,12 @@ NSMutableDictionary *classColorMap;
     };
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
     self.videoWriterInput.expectsMediaDataInRealTime = YES;
+    if(self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationPortrait){
+        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI_2);//does this work?
+    } else if (self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationLandscapeLeft) {
+        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI);
+    }
+    
     
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
@@ -385,9 +390,7 @@ NSMutableDictionary *classColorMap;
                 @"duration": @(CMTimeGetSeconds(time)),
                 @"frames":[self.current_segment_squares copy]
             }];
-
-            NSMutableArray *segmentsForDate = self.fileServer.segmentsDict[dateKey];
-            
+                        
             //timestamp of every segment now
             calendar = [NSCalendar currentCalendar];
             components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
@@ -584,7 +587,6 @@ NSMutableDictionary *classColorMap;
     return pixelBuffer;
 }
 
-
 - (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
     NSInteger pixelSize = 4;
     NSInteger spaceSize = 2;
@@ -596,8 +598,30 @@ NSMutableDictionary *classColorMap;
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
     NSString *timestamp = [dateFormatter stringFromDate:currentDate];
-    pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:0 width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
         
+    
+    //check roatation
+    CGAffineTransform transform = self.videoWriterInput.transform;
+    CGFloat angle = atan2(transform.b, transform.a);
+
+    // Convert radians to degrees
+    CGFloat degrees = angle * (180.0 / M_PI);
+    
+    size_t width_res = CVPixelBufferGetWidth(pixelBuffer);
+    size_t height_res = CVPixelBufferGetHeight(pixelBuffer);
+
+    NSLog(@"Resolution: %zu x %zu", width_res, height_res);
+
+    if (degrees == 90 || degrees == -90) {
+        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:height_res-(pixelSize*3+spaceSize)*timestamp.length width:height height:(pixelSize*3+spaceSize)*timestamp.length opacity:0.4];
+    } else if (degrees == 180 || degrees == -180) {
+        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:width_res-(pixelSize*3+spaceSize)*timestamp.length originY:height_res-height width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
+    } else {
+        //no rotation
+        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:0 width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
+    }
+    
+    
     for (NSUInteger k = 0; k < [timestamp length]; k++) {
         unichar character = [timestamp characterAtIndex:k];
         if(character == ' '){
@@ -606,12 +630,32 @@ NSMutableDictionary *classColorMap;
         }
         NSString *key = [NSString stringWithFormat:@"%C", character];
         for (int i = 0; i < [self.digits[key] count]; i++) {
-            pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
-                                                        withColor:[UIColor whiteColor]
-                                                         originX:digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize
-                                                         originY:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
-                                                           width:[self.digits[key][i][2] doubleValue] * pixelSize
-                                                           height:[self.digits[key][i][3] doubleValue] * pixelSize opacity:1];
+            if (degrees == 90 || degrees == -90) {
+                NSLog(@"Video is rotated by 90 degrees");
+                pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                            withColor:[UIColor whiteColor]
+                                                            originX:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
+                                                             originY:height_res - (digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize) - ([self.digits[key][i][2] doubleValue] * pixelSize)
+                                                            width:[self.digits[key][i][3] doubleValue] * pixelSize
+                                                            height:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                            opacity:1];
+            } else if (degrees == 180 || degrees == -180) {
+                pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                            withColor:[UIColor whiteColor]
+                                                            originX: width_res - (digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize) - ([self.digits[key][i][2] doubleValue] * pixelSize)
+                                                            originY: height_res - (digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize) - ([self.digits[key][i][3] doubleValue] * pixelSize)
+                                                            width:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                            height:[self.digits[key][i][3] doubleValue] * pixelSize
+                                                            opacity:1];
+            } else {
+                pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                            withColor:[UIColor whiteColor]
+                                                             originX:digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize
+                                                             originY:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
+                                                               width:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                               height:[self.digits[key][i][3] doubleValue] * pixelSize
+                                                             opacity:1];
+            }
         }
         digitOriginX += pixelSize*3 + spaceSize;
     }
@@ -651,6 +695,4 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-
-
 

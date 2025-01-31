@@ -7,12 +7,17 @@
         #videoContainer {
             position: relative;
             width: 100%;
-            max-width: 640px;
+            max-width: 640px; /* Default max-width for landscape */
             background: black;
-            aspect-ratio: 4 / 3;
+            aspect-ratio: 4 / 3; /* Default aspect ratio for landscape */
+            overflow: hidden; /* Prevent overflow */
+            transition: max-width 0.3s ease-in-out, aspect-ratio 0.3s ease-in-out; /* Smooth transitions */
         }
-        #videoContainer:hover #controls {
-            opacity: 1;
+
+        .videoPlayer {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensure video fits within the container */
         }
         .video-wrapper {
             position: relative;
@@ -534,11 +539,19 @@
                         let aspect_ratio = frames[shape_idx].aspect_ratio;
                         let res = frames[shape_idx].res;
                         for(let i = 0; i < frames[shape_idx].squares.length; i++){
-                            let originX = (frames[shape_idx].squares[i].originX / res);
-                            let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
-                            let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
-                            let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
-                            drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                            if(portrait){ //todo, can just send the correct aspect ratio instead?
+                                let originX = (frames[shape_idx].squares[i].originX / (res / aspect_ratio));
+                                let originY = (frames[shape_idx].squares[i].originY / res);
+                                let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / (res / aspect_ratio));
+                                let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / res);
+                                drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                            } else {
+                                let originX = (frames[shape_idx].squares[i].originX / res);
+                                let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
+                                let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
+                                let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
+                                drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                            }
                         }
                         let boundingBoxes = document.querySelectorAll(".bounding-box");
                         for (let i = 0; i < n_boxes; i++) {
@@ -550,6 +563,7 @@
                     timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
                     updateGaps();
                 }
+            
         
                 function updateGaps() {
                     const progressBar = document.getElementById("progress");
@@ -780,19 +794,54 @@
                     }
                     console.log("preload DONE");
                 }
-                
+                let portrait = false;
+                function adjustContainerForOrientation(videoElement) {
+                    const videoContainer = document.getElementById('videoContainer');
+
+                    // Get the video's dimensions
+                    const videoWidth = videoElement.videoWidth;
+                    const videoHeight = videoElement.videoHeight;
+
+                    // Determine if the video is in portrait mode
+                    const isPortrait = videoHeight > videoWidth;
+
+                    // Adjust the container's dimensions based on the video's orientation
+                    if (isPortrait) {
+                        portrait = true;
+                        // Portrait mode: set container to 480x640
+                        videoContainer.style.maxWidth = '480px';
+                        videoContainer.style.aspectRatio = '3 / 4'; // 480:640 simplifies to 3:4
+                    } else {
+                        portrait = false;
+                        // Landscape mode: set container to 640x480
+                        videoContainer.style.maxWidth = '640px';
+                        videoContainer.style.aspectRatio = '4 / 3'; // 640:480 simplifies to 4:3
+                    }
+                }
+
                 function playSegment() {
                     if (segments.length > 0) {
-                        videoPlayers[video_index].src = segments[currentSegment].url;
-                        videoPlayers[video_index].currentTime = 0;
-                        videoPlayers[video_index].style.display = "block";
-                        for(let i = 1; i < videoPlayers.length; i++){
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.src = segments[currentSegment].url;
+                        currentVideo.currentTime = 0;
+                        currentVideo.style.display = "block";
+
+                        // Hide other video players
+                        for (let i = 1; i < videoPlayers.length; i++) {
                             videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
                         }
-                        videoPlayers[video_index].play();
+
+                        // Play the video
+                        currentVideo.play();
                         isPlaying = true;
                         playIcon.style.display = "none";
                         pauseIcon.style.display = "block";
+
+                        // Adjust container dimensions based on video orientation
+                        currentVideo.addEventListener('loadedmetadata', () => {
+                            adjustContainerForOrientation(currentVideo);
+                        });
+
                         preloadNextSegments();
                     }
                 }
@@ -802,19 +851,31 @@
                         currentSegment++;
                         is_prepared[video_index] = false;
                         video_index = (video_index + 1) % videoPlayers.length;
-                        for(let i = 1; i < videoPlayers.length; i++){
+
+                        // Hide other video players
+                        for (let i = 1; i < videoPlayers.length; i++) {
                             videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
                         }
-                        videoPlayers[video_index].style.display = "block";
-                        videoPlayers[video_index].play().catch(() => {
-                            retrySegment(videoPlayers[video_index]);
+
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.style.display = "block";
+
+                        // Play the video
+                        currentVideo.play().catch(() => {
+                            retrySegment(currentVideo);
                         });
-                        //setTimeout(() => preloadNextSegments(), 500); // Slightly earlier preloading for mobile
+
+                        // Adjust container dimensions based on video orientation
+                        currentVideo.addEventListener('loadedmetadata', () => {
+                            adjustContainerForOrientation(currentVideo);
+                        });
+
+                        // Preload the next segments
+                        preloadNextSegments();
                     } else {
                         isWaitingForNextSegment = true;
                     }
                     shape_idx = -1;
-                    preloadNextSegments();
                 }
 
                 setInterval(updateTimeline, 50);
