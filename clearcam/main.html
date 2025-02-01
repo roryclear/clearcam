@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resizable & Draggable Dynamic Aspect Ratio Rectangle</title>
+    <title>Resizable & Draggable Rectangle</title>
     <style>
         body {
             margin: 0;
@@ -65,47 +65,11 @@
     </div>
 
     <script>
-        let isPortrait = false; // Track the video's orientation
+        let isPortrait = false; // Track the current orientation
 
         function loadPage() {
             const url = document.getElementById('urlInput').value;
-            const iframe = document.getElementById('contentFrame');
-            iframe.src = url;
-
-            // Listen for the iframe's load event to detect aspect ratio changes
-            iframe.onload = () => {
-                detectAspectRatio(iframe);
-            };
-        }
-
-        // Detect the aspect ratio of the iframe's content
-        function detectAspectRatio(iframe) {
-            const rectangle = document.getElementById('rectangle');
-            const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-
-            // Check if the iframe contains a video element
-            const videoElement = iframeDocument.querySelector('video');
-            if (videoElement) {
-                const videoWidth = videoElement.videoWidth;
-                const videoHeight = videoElement.videoHeight;
-
-                // Determine if the video is in portrait mode
-                isPortrait = videoHeight > videoWidth;
-
-                // Adjust the rectangle's aspect ratio
-                updateRectangleAspectRatio(rectangle);
-            }
-        }
-
-        // Update the rectangle's aspect ratio based on the video's orientation
-        function updateRectangleAspectRatio(rectangle) {
-            if (isPortrait) {
-                // Portrait mode: 9:16 aspect ratio
-                rectangle.style.height = `${rectangle.offsetWidth * (16 / 9)}px`;
-            } else {
-                // Landscape mode: 16:9 aspect ratio
-                rectangle.style.height = `${rectangle.offsetWidth * (9 / 16)}px`;
-            }
+            document.getElementById('contentFrame').src = url;
         }
 
         const rectangle = document.getElementById('rectangle');
@@ -133,11 +97,19 @@
             let clientX = e.touches ? e.touches[0].clientX : e.clientX;
             let newWidth = startWidth + (clientX - startX);
 
-            // Update the rectangle's width
-            rectangle.style.width = `${newWidth}px`;
+            // Calculate the new height based on the locked aspect ratio
+            let newHeight;
+            if (isPortrait) {
+                // Portrait mode: 9:16 aspect ratio
+                newHeight = newWidth * (16 / 9);
+            } else {
+                // Landscape mode: 16:9 aspect ratio
+                newHeight = newWidth * (9 / 16);
+            }
 
-            // Adjust the rectangle's height based on the aspect ratio
-            updateRectangleAspectRatio(rectangle);
+            // Update the rectangle's dimensions
+            rectangle.style.width = `${newWidth}px`;
+            rectangle.style.height = `${newHeight}px`;
         }
 
         function stopResize() {
@@ -178,6 +150,34 @@
         addEventListeners(handle, 'touchstart', 'touchmove', 'touchend');
         addDragListeners(dragArea, 'mousedown', 'mousemove', 'mouseup');
         addDragListeners(dragArea, 'touchstart', 'touchmove', 'touchend');
+
+        // Listen for messages from the embedded page
+        window.addEventListener('message', (event) => {
+            const message = event.data;
+
+            // Check if the message is a video container update
+            if (message.type === 'videoContainerUpdate') {
+                const { width, height, portrait } = message;
+
+                // Update the orientation flag
+                isPortrait = portrait;
+
+                // Calculate the new width based on the fixed height
+                const currentHeight = rectangle.offsetHeight; // Keep the height constant
+                let newWidth;
+
+                if (isPortrait) {
+                    // Portrait mode: 9:16 aspect ratio
+                    newWidth = currentHeight * (9 / 16);
+                } else {
+                    // Landscape mode: 16:9 aspect ratio
+                    newWidth = currentHeight * (16 / 9);
+                }
+
+                // Adjust the rectangle's width only
+                rectangle.style.width = `${newWidth}px`;
+            }
+        });
     </script>
 </body>
 </html>

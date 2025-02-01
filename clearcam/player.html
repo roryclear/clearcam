@@ -840,6 +840,15 @@
             // Ensure the container doesn't exceed the viewport dimensions
             videoContainer.style.maxWidth = '100vw';
             videoContainer.style.maxHeight = '100vh';
+
+            // Send the container's dimensions and orientation to the parent page
+            const message = {
+                type: 'videoContainerUpdate',
+                width: videoContainer.offsetWidth,
+                height: videoContainer.offsetHeight,
+                portrait: portrait,
+            };
+            window.parent.postMessage(message, '*'); // Send to the parent page
         }
 
         // Example usage with a video element
