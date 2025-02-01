@@ -1,121 +1,92 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load URL in Page</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 20px;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh; /* Full viewport height */
+        }
+        #controls {
+            padding: 10px;
+            background: #f0f0f0;
+            display: flex;
+            gap: 10px;
         }
         #urlInput {
-            width: 300px;
-            height: 30px;
+            flex: 1;
+            padding: 10px;
             font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
         #loadButton {
-            height: 36px;
+            padding: 10px 20px;
             font-size: 16px;
-        }
-        .iframe-container {
-            position: relative;
-            margin-top: 20px;
-            width: 80%;
-            max-width: 640px;
-            margin-left: auto;
-            margin-right: auto;
-            border: 1px solid #ddd;
-            overflow: hidden;
-        }
-        .iframe-container iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        .deleteButton {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            font-size: 16px;
-            background-color: red;
-            color: white;
-            border: none;
-            padding: 5px 10px;
             cursor: pointer;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 4px;
+        }
+        #loadButton:hover {
+            background: #0056b3;
+        }
+        iframe {
+            flex: 1;
+            width: 100%;
+            border: none;
         }
     </style>
 </head>
 <body>
-    <input type="text" id="urlInput" placeholder="Enter URL here">
-    <button id="loadButton" onclick="loadPage()">Enter</button>
 
-    <div id="iframeContainer"></div>
+    <div id="controls">
+        <input type="text" id="urlInput" placeholder="Enter a URL (e.g., https://example.com)">
+        <button id="loadButton">Enter</button>
+    </div>
+
+    <iframe id="contentFrame" src=""></iframe>
 
     <script>
-        function loadPage() {
+        document.getElementById('loadButton').addEventListener('click', function() {
             var url = document.getElementById('urlInput').value;
             if (url) {
-                var iframeContainer = document.createElement('div');
-                iframeContainer.className = 'iframe-container';
-
-                var iframe = document.createElement('iframe');
-                iframe.src = url;
-                iframe.onload = function() {
-                    adjustIframeSize(iframe);
-                };
-
-                var deleteButton = document.createElement('button');
-                deleteButton.className = 'deleteButton';
-                deleteButton.innerText = 'Delete';
-                deleteButton.onclick = function() {
-                    iframeContainer.remove();
-                };
-
-                iframeContainer.appendChild(iframe);
-                iframeContainer.appendChild(deleteButton);
-                document.getElementById('iframeContainer').appendChild(iframeContainer);
-
-                // Observe the content of the iframe for changes
-                var resizeObserver = new ResizeObserver(function() {
-                    adjustIframeSize(iframe);
-                });
-                resizeObserver.observe(iframe.contentWindow.document.body);
+                // Ensure the URL starts with http:// or https://
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
+                document.getElementById('contentFrame').src = url;
             }
+        });
+
+        // Optional: Allow pressing "Enter" key in the textbox to load the URL
+        document.getElementById('urlInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                document.getElementById('loadButton').click();
+            }
+        });
+
+        // Dynamically adjust iframe height to account for controls
+        function adjustIframeHeight() {
+            const controls = document.getElementById('controls');
+            const iframe = document.getElementById('contentFrame');
+            const controlsHeight = controls.offsetHeight;
+
+            // Set iframe height to fill the remaining viewport height
+            iframe.style.height = `calc(100vh - ${controlsHeight}px)`;
         }
 
-        function adjustIframeSize(iframe) {
-            var doc = iframe.contentDocument || iframe.contentWindow.document;
-            var videoElement = doc.querySelector("video"); // Assuming there's a video element
-
-            if (videoElement) {
-                videoElement.onloadedmetadata = function() {
-                    const videoWidth = videoElement.videoWidth;
-                    const videoHeight = videoElement.videoHeight;
-                    const isPortrait = videoHeight > videoWidth;
-
-                    const iframeContainer = iframe.parentNode;
-
-                    if (isPortrait) {
-                        const aspectRatio = 9 / 16;
-                        const containerWidth = Math.min(480, window.innerWidth * 0.8);
-                        const containerHeight = containerWidth / aspectRatio;
-                        
-                        iframeContainer.style.width = containerWidth + 'px';
-                        iframeContainer.style.height = containerHeight + 'px';
-                    } else {
-                        const aspectRatio = 16 / 9;
-                        const containerWidth = Math.min(640, window.innerWidth * 0.8);
-                        const containerHeight = containerWidth / aspectRatio;
-                        
-                        iframeContainer.style.width = containerWidth + 'px';
-                        iframeContainer.style.height = containerHeight + 'px';
-                    }
-
-                    iframe.style.width = '100%';
-                    iframe.style.height = '100%';
-                };
-            }
-        }
+        // Adjust iframe height on load and window resize
+        window.addEventListener('load', adjustIframeHeight);
+        window.addEventListener('resize', adjustIframeHeight);
     </script>
+
 </body>
 </html>
-
