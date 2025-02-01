@@ -3,90 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Load URL in Page</title>
+    <title>Resizable & Draggable Dynamic Aspect Ratio Rectangle</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            height: 100vh; /* Full viewport height */
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            overflow: hidden;
         }
-        #controls {
-            padding: 10px;
-            background: #f0f0f0;
-            display: flex;
-            gap: 10px;
+        .controls {
+            margin-bottom: 10px;
         }
-        #urlInput {
-            flex: 1;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+        .container {
+            position: absolute;
+            width: 300px;
+            height: calc(300px * 9 / 16);
+            border: 2px solid black;
+            touch-action: none;
         }
-        #loadButton {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            border: none;
-            background: #007bff;
-            color: white;
-            border-radius: 4px;
+        .handle {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: red;
+            bottom: -10px;
+            right: -10px;
+            cursor: nwse-resize;
         }
-        #loadButton:hover {
-            background: #0056b3;
+        .drag-area {
+            position: absolute;
+            width: 10%;
+            height: 10%;
+            top: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0);
+            cursor: move;
+            z-index: 3;
         }
         iframe {
-            flex: 1;
             width: 100%;
+            height: 100%;
             border: none;
+            position: relative;
+            z-index: 1;
         }
     </style>
 </head>
 <body>
-
-    <div id="controls">
-        <input type="text" id="urlInput" placeholder="Enter a URL (e.g., https://example.com)">
-        <button id="loadButton">Enter</button>
+    <div class="controls">
+        <input type="text" id="urlInput" placeholder="Enter URL" />
+        <button onclick="loadPage()">Enter</button>
+    </div>
+    <div id="rectangle" class="container">
+        <div class="drag-area" id="dragArea"></div>
+        <iframe id="contentFrame"></iframe>
+        <div class="handle" id="resizeHandle"></div>
     </div>
 
-    <iframe id="contentFrame" src=""></iframe>
-
     <script>
-        document.getElementById('loadButton').addEventListener('click', function() {
-            var url = document.getElementById('urlInput').value;
-            if (url) {
-                // Ensure the URL starts with http:// or https://
-                if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                    url = 'https://' + url;
-                }
-                document.getElementById('contentFrame').src = url;
-            }
-        });
+        let isPortrait = false; // Track the video's orientation
 
-        // Optional: Allow pressing "Enter" key in the textbox to load the URL
-        document.getElementById('urlInput').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
-                document.getElementById('loadButton').click();
-            }
-        });
-
-        // Dynamically adjust iframe height to account for controls
-        function adjustIframeHeight() {
-            const controls = document.getElementById('controls');
+        function loadPage() {
+            const url = document.getElementById('urlInput').value;
             const iframe = document.getElementById('contentFrame');
-            const controlsHeight = controls.offsetHeight;
+            iframe.src = url;
 
-            // Set iframe height to fill the remaining viewport height
-            iframe.style.height = `calc(100vh - ${controlsHeight}px)`;
+            // Listen for the iframe's load event to detect aspect ratio changes
+            iframe.onload = () => {
+                detectAspectRatio(iframe);
+            };
         }
 
-        // Adjust iframe height on load and window resize
-        window.addEventListener('load', adjustIframeHeight);
-        window.addEventListener('resize', adjustIframeHeight);
-    </script>
+        // Detect the aspect ratio of the iframe's content
+        function detectAspectRatio(iframe) {
+            const rectangle = document.getElementById('rectangle');
+            const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
 
+            // Check if the iframe contains a video element
+            const videoElement = iframeDocument.querySelector('video');
+            if (videoElement) {
+                const videoWidth = videoElement.videoWidth;
+                const videoHeight = videoElement.videoHeight;
+
+                // Determine if the video is in portrait mode
+                isPortrait = videoHeight > videoWidth;
+
+                // Adjust the rectangle's aspect ratio
+                updateRectangleAspectRatio(rectangle);
+            }
+        }
+
+        // Update the rectangle's aspect ratio based on the video's orientation
+        function updateRectangleAspectRatio(rectangle) {
+            if (isPortrait) {
+                // Portrait mode: 9:16 aspect ratio
+                rectangle.style.height = `${rectangle.offsetWidth * (16 / 9)}px`;
+            } else {
+                // Landscape mode: 16:9 aspect ratio
+                rectangle.style.height = `${rectangle.offsetWidth * (9 / 16)}px`;
+            }
+        }
+
+        const rectangle = document.getElementById('rectangle');
+        const handle = document.getElementById('resizeHandle');
+        const dragArea = document.getElementById('dragArea');
+        let isResizing = false;
+        let isDragging = false;
+        let startX, startY, startWidth, startHeight, offsetX, offsetY;
+
+        function addEventListeners(handle, downEvent, moveEvent, upEvent) {
+            handle.addEventListener(downEvent, (e) => {
+                e.preventDefault();
+                isResizing = true;
+                startX = e.touches ? e.touches[0].clientX : e.clientX;
+                startY = e.touches ? e.touches[0].clientY : e.clientY;
+                startWidth = rectangle.offsetWidth;
+                startHeight = rectangle.offsetHeight;
+                document.addEventListener(moveEvent, resize);
+                document.addEventListener(upEvent, stopResize);
+            });
+        }
+
+        function resize(e) {
+            if (!isResizing) return;
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let newWidth = startWidth + (clientX - startX);
+
+            // Update the rectangle's width
+            rectangle.style.width = `${newWidth}px`;
+
+            // Adjust the rectangle's height based on the aspect ratio
+            updateRectangleAspectRatio(rectangle);
+        }
+
+        function stopResize() {
+            isResizing = false;
+            document.removeEventListener('mousemove', resize);
+            document.removeEventListener('mouseup', stopResize);
+            document.removeEventListener('touchmove', resize);
+            document.removeEventListener('touchend', stopResize);
+        }
+
+        function addDragListeners(handle, downEvent, moveEvent, upEvent) {
+            handle.addEventListener(downEvent, (e) => {
+                isDragging = true;
+                offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
+                offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
+                document.addEventListener(moveEvent, drag);
+                document.addEventListener(upEvent, stopDrag);
+            });
+        }
+
+        function drag(e) {
+            if (!isDragging) return;
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            rectangle.style.left = `${clientX - offsetX}px`;
+            rectangle.style.top = `${clientY - offsetY}px`;
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+            document.removeEventListener('touchmove', drag);
+            document.removeEventListener('touchend', stopDrag);
+        }
+
+        addEventListeners(handle, 'mousedown', 'mousemove', 'mouseup');
+        addEventListeners(handle, 'touchstart', 'touchmove', 'touchend');
+        addDragListeners(dragArea, 'mousedown', 'mousemove', 'mouseup');
+        addDragListeners(dragArea, 'touchstart', 'touchmove', 'touchend');
+    </script>
 </body>
 </html>

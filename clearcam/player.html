@@ -804,42 +804,54 @@
                         x++;
                     }
                 }
-                let portrait = false;
-                function adjustContainerForOrientation(videoElement) {
-                    const videoContainer = document.getElementById('videoContainer');
+        let portrait = false;
 
-                    // Get the video's dimensions
-                    const videoWidth = videoElement.videoWidth;
-                    const videoHeight = videoElement.videoHeight;
+        function adjustContainerForOrientation(videoElement) {
+            const videoContainer = document.getElementById('videoContainer');
 
-                    // Determine if the video is in portrait mode
-                    portrait = videoHeight > videoWidth;
+            // Get the video's dimensions
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
 
-                    // Get the window's dimensions
-                    const windowWidth = window.innerWidth;
-                    const windowHeight = window.innerHeight;
-                    const windowAspectRatio = windowWidth / windowHeight;
+            // Determine if the video is in portrait mode
+            portrait = videoHeight > videoWidth;
 
-                    // Adjust the container's dimensions based on the video's orientation
-                    if (portrait) {
-                        // Portrait mode
-                        const containerHeight = Math.min(windowHeight, windowWidth * (16 / 9));
-                        const containerWidth = containerHeight * (9 / 16);
+            // Get the window's dimensions
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
 
-                        videoContainer.style.width = containerWidth + 'px';
-                        videoContainer.style.height = containerHeight + 'px';
-                    } else {
-                        // Landscape mode
-                        const containerWidth = Math.min(windowWidth, windowHeight * (16 / 9));
-                        const containerHeight = containerWidth * (9 / 16);
+            // Adjust the container's dimensions based on the video's orientation
+            if (portrait) {
+                // Portrait mode (9:16 aspect ratio)
+                const containerHeight = Math.min(windowHeight, windowWidth * (16 / 9));
+                const containerWidth = containerHeight * (9 / 16);
 
-                        videoContainer.style.width = containerWidth + 'px';
-                        videoContainer.style.height = containerHeight + 'px';
-                    }
+                videoContainer.style.width = containerWidth + 'px';
+                videoContainer.style.height = containerHeight + 'px';
+            } else {
+                // Landscape mode (16:9 aspect ratio)
+                const containerWidth = Math.min(windowWidth, windowHeight * (16 / 9));
+                const containerHeight = containerWidth * (9 / 16);
 
-                    videoContainer.style.maxWidth = '100vw';
-                    videoContainer.style.maxHeight = '100vh';
-                }
+                videoContainer.style.width = containerWidth + 'px';
+                videoContainer.style.height = containerHeight + 'px';
+            }
+
+            // Ensure the container doesn't exceed the viewport dimensions
+            videoContainer.style.maxWidth = '100vw';
+            videoContainer.style.maxHeight = '100vh';
+        }
+
+        // Example usage with a video element
+        const videoElement = document.querySelector('video'); // Replace with your video element
+        videoElement.addEventListener('loadedmetadata', () => {
+            adjustContainerForOrientation(videoElement);
+        });
+
+        // Optional: Handle window resizing to keep the container responsive
+        window.addEventListener('resize', () => {
+            adjustContainerForOrientation(videoElement);
+        });
 
                 function playSegment() {
                     if (segments.length > 0) {
