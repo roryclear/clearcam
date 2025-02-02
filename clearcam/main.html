@@ -34,16 +34,35 @@
             right: -10px;
             cursor: nwse-resize;
         }
-        .drag-area {
+        .drag-top, .drag-bottom, .drag-left, .drag-right {
             position: absolute;
-            width: 10%;
-            height: 10%;
-            top: 0;
-            left: 0;
             background: rgba(0, 0, 0, 0);
             cursor: move;
             z-index: 3;
         }
+
+        .drag-top {
+            top: 0;
+            left: 0;
+            height: 5%;
+            width: 100%;
+        }
+
+        .drag-left {
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 5%;
+        }
+
+        .drag-right {
+            top: 0;
+            right: 0;
+            height: 90%; /* Excluding the bottom-right corner */
+            width: 5%;
+        }
+        
+        
         iframe {
             width: 100%;
             height: 100%;
@@ -59,7 +78,9 @@
         <button onclick="loadPage()">Enter</button>
     </div>
     <div id="rectangle" class="container">
-        <div class="drag-area" id="dragArea"></div>
+        <div class="drag-right" id="dragRight"></div>
+        <div class="drag-left" id="dragLeft"></div>
+        <div class="drag-top" id="dragTop"></div>
         <iframe id="contentFrame"></iframe>
         <div class="handle" id="resizeHandle"></div>
     </div>
@@ -74,7 +95,9 @@
 
         const rectangle = document.getElementById('rectangle');
         const handle = document.getElementById('resizeHandle');
-        const dragArea = document.getElementById('dragArea');
+        const dragTop = document.getElementById('dragTop');
+        const dragRight = document.getElementById('dragRight');
+        const dragLeft = document.getElementById('dragLeft');
         const iframe = document.getElementById('contentFrame');
         let isResizing = false;
         let isDragging = false;
@@ -158,8 +181,13 @@
 
         addEventListeners(handle, 'mousedown', 'mousemove', 'mouseup');
         addEventListeners(handle, 'touchstart', 'touchmove', 'touchend');
-        addDragListeners(dragArea, 'mousedown', 'mousemove', 'mouseup');
-        addDragListeners(dragArea, 'touchstart', 'touchmove', 'touchend');
+        addDragListeners(dragTop, 'mousedown', 'mousemove', 'mouseup');
+        addDragListeners(dragLeft, 'mousedown', 'mousemove', 'mouseup');
+        addDragListeners(dragRight, 'mousedown', 'mousemove', 'mouseup');
+        
+        addDragListeners(dragTop, 'touchstart', 'touchmove', 'touchend');
+        addDragListeners(dragLeft, 'touchstart', 'touchmove', 'touchend');
+        addDragListeners(dragRight, 'touchstart', 'touchmove', 'touchend');
 
         // Listen for messages from the embedded page
         window.addEventListener('message', (event) => {
@@ -191,4 +219,3 @@
     </script>
 </body>
 </html>
-
