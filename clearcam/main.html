@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resizable & Draggable Rectangle</title>
+    <title>Resizable & Draggable Rectangles</title>
     <style>
         body {
             margin: 0;
@@ -62,7 +62,6 @@
             width: 5%;
         }
         
-        
         iframe {
             width: 100%;
             height: 100%;
@@ -77,145 +76,164 @@
         <input type="text" id="urlInput" placeholder="Enter URL" />
         <button onclick="loadPage()">Enter</button>
     </div>
-    <div id="rectangle" class="container">
-        <div class="drag-right" id="dragRight"></div>
-        <div class="drag-left" id="dragLeft"></div>
-        <div class="drag-top" id="dragTop"></div>
-        <iframe id="contentFrame"></iframe>
-        <div class="handle" id="resizeHandle"></div>
-    </div>
 
     <script>
         let isPortrait = false; // Track the current orientation
 
         function loadPage() {
             const url = document.getElementById('urlInput').value;
-            document.getElementById('contentFrame').src = url;
+            createRectangle(url);
         }
 
-        const rectangle = document.getElementById('rectangle');
-        const handle = document.getElementById('resizeHandle');
-        const dragTop = document.getElementById('dragTop');
-        const dragRight = document.getElementById('dragRight');
-        const dragLeft = document.getElementById('dragLeft');
-        const iframe = document.getElementById('contentFrame');
-        let isResizing = false;
-        let isDragging = false;
-        let startX, startY, startWidth, startHeight, offsetX, offsetY;
+        function createRectangle(url) {
+                    const rectangle = document.createElement('div');
+                    rectangle.className = 'container';
+                    rectangle.style.left = `${Math.random() * (window.innerWidth - 300)}px`;
+                    rectangle.style.top = `${Math.random() * (window.innerHeight - 200)}px`;
 
+                    const iframe = document.createElement('iframe');
+                    iframe.src = url;
+
+                    const handle = document.createElement('div');
+                    handle.className = 'handle';
+
+                    const dragTop = document.createElement('div');
+                    dragTop.className = 'drag-top';
+
+                    const dragLeft = document.createElement('div');
+                    dragLeft.className = 'drag-left';
+
+                    const dragRight = document.createElement('div');
+                    dragRight.className = 'drag-right';
+
+                    rectangle.append(iframe, handle, dragTop, dragLeft, dragRight);
+                    document.body.appendChild(rectangle);
+
+                    addResizeListeners(handle, rectangle);
+                    addDragListeners(dragTop, rectangle);
+                    addDragListeners(dragLeft, rectangle);
+                    addDragListeners(dragRight, rectangle);
+                }
+
+        function addResizeListeners(handle, rectangle) {
+            handle.addEventListener('mousedown', (e) => startResize(e, rectangle));
+            handle.addEventListener('touchstart', (e) => startResize(e, rectangle));
+        }
+        
+        function addDragListeners(handle, rectangle) {
+            handle.addEventListener('mousedown', (e) => startDrag(e, rectangle));
+            handle.addEventListener('touchstart', (e) => startDrag(e, rectangle));
+        }
+        
+        function startDrag(e, rectangle) {
+                    e.preventDefault();
+                    let offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
+                    let offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
+
+                    function drag(e) {
+                        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                        rectangle.style.left = `${clientX - offsetX}px`;
+                        rectangle.style.top = `${clientY - offsetY}px`;
+                    }
+
+                    function stopDrag() {
+                        document.removeEventListener('mousemove', drag);
+                        document.removeEventListener('mouseup', stopDrag);
+                        document.removeEventListener('touchmove', drag);
+                        document.removeEventListener('touchend', stopDrag);
+                        rectangle.querySelector('iframe').style.pointerEvents = "auto";
+                    }
+
+                    rectangle.querySelector('iframe').style.pointerEvents = "none";
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', stopDrag);
+                    document.addEventListener('touchmove', drag);
+                    document.addEventListener('touchend', stopDrag);
+                }
+        
+        function startResize(e, rectangle) {
+            e.preventDefault();
+            let startX = e.touches ? e.touches[0].clientX : e.clientX;
+            let startWidth = rectangle.offsetWidth;
+            let startHeight = rectangle.offsetHeight;
+            
+            // Check if this rectangle is in portrait mode
+            let isPortrait = rectangle.dataset.portrait === "true";
+
+            function resize(e) {
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let newWidth = startWidth + (clientX - startX);
+
+                // Maintain the correct aspect ratio
+                let newHeight = isPortrait ? newWidth * (16 / 9) : newWidth * (9 / 16);
+
+                rectangle.style.width = `${newWidth}px`;
+                rectangle.style.height = `${newHeight}px`;
+            }
+
+            function stopResize() {
+                document.removeEventListener('mousemove', resize);
+                document.removeEventListener('mouseup', stopResize);
+                document.removeEventListener('touchmove', resize);
+                document.removeEventListener('touchend', stopResize);
+                rectangle.querySelector('iframe').style.pointerEvents = "auto";
+            }
+
+            rectangle.querySelector('iframe').style.pointerEvents = "none";
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', stopResize);
+            document.addEventListener('touchmove', resize);
+            document.addEventListener('touchend', stopResize);
+        }
+        
+        
         function addEventListeners(handle, downEvent, moveEvent, upEvent) {
             handle.addEventListener(downEvent, (e) => {
                 e.preventDefault();
                 isResizing = true;
                 startX = e.touches ? e.touches[0].clientX : e.clientX;
                 startY = e.touches ? e.touches[0].clientY : e.clientY;
-                startWidth = rectangle.offsetWidth;
-                startHeight = rectangle.offsetHeight;
-                iframe.style.pointerEvents = "none"; // Disable pointer-events during resizing
+                startWidth = handle.parentElement.offsetWidth;
+                startHeight = handle.parentElement.offsetHeight;
+                handle.parentElement.querySelector('iframe').style.pointerEvents = "none"; // Disable pointer-events during resizing
                 document.addEventListener(moveEvent, resize);
                 document.addEventListener(upEvent, stopResize);
                 document.body.style.cursor = "nwse-resize";
             });
         }
 
-        function resize(e) {
-            if (!isResizing) return;
-            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            let newWidth = startWidth + (clientX - startX);
-
-            // Calculate the new height based on the locked aspect ratio
-            let newHeight;
-            if (isPortrait) {
-                // Portrait mode: 9:16 aspect ratio
-                newHeight = newWidth * (16 / 9);
-            } else {
-                // Landscape mode: 16:9 aspect ratio
-                newHeight = newWidth * (9 / 16);
-            }
-
-            // Update the rectangle's dimensions
-            rectangle.style.width = `${newWidth}px`;
-            rectangle.style.height = `${newHeight}px`;
-        }
-
-        function stopResize() {
-            isResizing = false;
-            iframe.style.pointerEvents = "auto"; // Re-enable pointer-events after resizing
-            document.removeEventListener('mousemove', resize);
-            document.removeEventListener('mouseup', stopResize);
-            document.removeEventListener('touchmove', resize);
-            document.removeEventListener('touchend', stopResize);
-            document.body.style.cursor = "default";
-        }
-
-        function addDragListeners(handle, downEvent, moveEvent, upEvent) {
-            handle.addEventListener(downEvent, (e) => {
-                e.preventDefault();
-                isDragging = true;
-                offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
-                offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
-                iframe.style.pointerEvents = "none"; // Disable pointer-events during dragging
-                document.addEventListener(moveEvent, drag);
-                document.addEventListener(upEvent, stopDrag);
-                document.body.style.cursor = "move";
-            });
-        }
-
-        function drag(e) {
-            if (!isDragging) return;
-            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            rectangle.style.left = `${clientX - offsetX}px`;
-            rectangle.style.top = `${clientY - offsetY}px`;
-        }
-
-        function stopDrag() {
-            isDragging = false;
-            iframe.style.pointerEvents = "auto"; // Re-enable pointer-events after dragging
-            document.removeEventListener('mousemove', drag);
-            document.removeEventListener('mouseup', stopDrag);
-            document.removeEventListener('touchmove', drag);
-            document.removeEventListener('touchend', stopDrag);
-            document.body.style.cursor = "default";
-        }
-
-        addEventListeners(handle, 'mousedown', 'mousemove', 'mouseup');
-        addEventListeners(handle, 'touchstart', 'touchmove', 'touchend');
-        addDragListeners(dragTop, 'mousedown', 'mousemove', 'mouseup');
-        addDragListeners(dragLeft, 'mousedown', 'mousemove', 'mouseup');
-        addDragListeners(dragRight, 'mousedown', 'mousemove', 'mouseup');
-        
-        addDragListeners(dragTop, 'touchstart', 'touchmove', 'touchend');
-        addDragListeners(dragLeft, 'touchstart', 'touchmove', 'touchend');
-        addDragListeners(dragRight, 'touchstart', 'touchmove', 'touchend');
-
         // Listen for messages from the embedded page
         window.addEventListener('message', (event) => {
             const message = event.data;
 
-            // Check if the message is a video container update
             if (message.type === 'videoContainerUpdate') {
-                const { width, height, portrait } = message;
+                const { portrait } = message;
 
-                // Update the orientation flag
-                isPortrait = portrait;
+                const iframes = document.querySelectorAll('.container iframe');
+                let targetIframe = null;
 
-                // Calculate the new width based on the fixed height
-                const currentHeight = rectangle.offsetHeight; // Keep the height constant
-                let newWidth;
-
-                if (isPortrait) {
-                    // Portrait mode: 9:16 aspect ratio
-                    newWidth = currentHeight * (9 / 16);
-                } else {
-                    // Landscape mode: 16:9 aspect ratio
-                    newWidth = currentHeight * (16 / 9);
+                for (let iframe of iframes) {
+                    if (iframe.contentWindow === event.source) {
+                        targetIframe = iframe;
+                        break;
+                    }
                 }
 
-                // Adjust the rectangle's width only
+                if (!targetIframe) return;
+                const rectangle = targetIframe.closest('.container');
+                if (!rectangle) return;
+
+                // Store the new orientation in a dataset attribute
+                rectangle.dataset.portrait = portrait ? "true" : "false";
+
+                const currentHeight = rectangle.offsetHeight;
+                let newWidth = portrait ? currentHeight * (9 / 16) : currentHeight * (16 / 9);
+
                 rectangle.style.width = `${newWidth}px`;
             }
         });
+
     </script>
 </body>
 </html>
