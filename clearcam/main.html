@@ -75,6 +75,7 @@
         const rectangle = document.getElementById('rectangle');
         const handle = document.getElementById('resizeHandle');
         const dragArea = document.getElementById('dragArea');
+        const iframe = document.getElementById('contentFrame');
         let isResizing = false;
         let isDragging = false;
         let startX, startY, startWidth, startHeight, offsetX, offsetY;
@@ -87,8 +88,10 @@
                 startY = e.touches ? e.touches[0].clientY : e.clientY;
                 startWidth = rectangle.offsetWidth;
                 startHeight = rectangle.offsetHeight;
+                iframe.style.pointerEvents = "none"; // Disable pointer-events during resizing
                 document.addEventListener(moveEvent, resize);
                 document.addEventListener(upEvent, stopResize);
+                document.body.style.cursor = "nwse-resize";
             });
         }
 
@@ -114,19 +117,24 @@
 
         function stopResize() {
             isResizing = false;
+            iframe.style.pointerEvents = "auto"; // Re-enable pointer-events after resizing
             document.removeEventListener('mousemove', resize);
             document.removeEventListener('mouseup', stopResize);
             document.removeEventListener('touchmove', resize);
             document.removeEventListener('touchend', stopResize);
+            document.body.style.cursor = "default";
         }
 
         function addDragListeners(handle, downEvent, moveEvent, upEvent) {
             handle.addEventListener(downEvent, (e) => {
+                e.preventDefault();
                 isDragging = true;
                 offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
                 offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
+                iframe.style.pointerEvents = "none"; // Disable pointer-events during dragging
                 document.addEventListener(moveEvent, drag);
                 document.addEventListener(upEvent, stopDrag);
+                document.body.style.cursor = "move";
             });
         }
 
@@ -140,10 +148,12 @@
 
         function stopDrag() {
             isDragging = false;
+            iframe.style.pointerEvents = "auto"; // Re-enable pointer-events after dragging
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', stopDrag);
             document.removeEventListener('touchmove', drag);
             document.removeEventListener('touchend', stopDrag);
+            document.body.style.cursor = "default";
         }
 
         addEventListeners(handle, 'mousedown', 'mousemove', 'mouseup');
@@ -181,3 +191,4 @@
     </script>
 </body>
 </html>
+
