@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resizable & Draggable Rectangles</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        .container {
+            position: absolute;
+            width: 300px;
+            height: calc(300px * 9 / 16);
+            border: 2px solid black;
+            touch-action: none;
+        }
+        .handle {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: red;
+            bottom: -10px;
+            right: -10px;
+            cursor: nwse-resize;
+        }
+        .drag-bottom, .drag-left, .drag-right {
+            position: absolute;
+            background: rgba(0, 0, 0, 0);
+            cursor: move;
+            z-index: 3;
+        }
+        .drag-left {
+            top: 0;
+            left: 0;
+            height: 80%;
+            width: 5%;
+        }
+
+        .drag-right {
+            top: 0;
+            right: 0;
+            height: 80%; /* Excluding the bottom-right corner */
+            width: 5%;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" id="urlInput" placeholder="Enter URL" />
+        <button onclick="loadPage()">Enter</button>
+    </div>
+
+    <script>
+        let isPortrait = false; // Track the current orientation
+
+        function loadPage() {
+            const url = document.getElementById('urlInput').value;
+            createRectangle(url);
+        }
+
+        function createRectangle(url) {
+                    const rectangle = document.createElement('div');
+                    rectangle.className = 'container';
+                    rectangle.style.left = `${Math.random() * (window.innerWidth - 300)}px`;
+                    rectangle.style.top = `${Math.random() * (window.innerHeight - 200)}px`;
+
+                    const iframe = document.createElement('iframe');
+                    iframe.src = url;
+
+                    const handle = document.createElement('div');
+                    handle.className = 'handle';
+
+                    const dragLeft = document.createElement('div');
+                    dragLeft.className = 'drag-left';
+
+                    const dragRight = document.createElement('div');
+                    dragRight.className = 'drag-right';
+
+                    rectangle.append(iframe, handle, dragLeft, dragRight);
+                    document.body.appendChild(rectangle);
+
+                    addResizeListeners(handle, rectangle);
+                    addDragListeners(dragLeft, rectangle);
+                    addDragListeners(dragRight, rectangle);
+                }
+
+        function addResizeListeners(handle, rectangle) {
+            handle.addEventListener('mousedown', (e) => startResize(e, rectangle));
+            handle.addEventListener('touchstart', (e) => startResize(e, rectangle));
+        }
+        
+        function addDragListeners(handle, rectangle) {
+            handle.addEventListener('mousedown', (e) => startDrag(e, rectangle));
+            handle.addEventListener('touchstart', (e) => startDrag(e, rectangle));
+        }
+        
+        function startDrag(e, rectangle) {
+                    e.preventDefault();
+                    let offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
+                    let offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
+
+                    function drag(e) {
+                        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                        rectangle.style.left = `${clientX - offsetX}px`;
+                        rectangle.style.top = `${clientY - offsetY}px`;
+                    }
+
+                    function stopDrag() {
+                        document.removeEventListener('mousemove', drag);
+                        document.removeEventListener('mouseup', stopDrag);
+                        document.removeEventListener('touchmove', drag);
+                        document.removeEventListener('touchend', stopDrag);
+                        rectangle.querySelector('iframe').style.pointerEvents = "auto";
+                    }
+
+                    rectangle.querySelector('iframe').style.pointerEvents = "none";
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', stopDrag);
+                    document.addEventListener('touchmove', drag);
+                    document.addEventListener('touchend', stopDrag);
+                }
+        
+        function startResize(e, rectangle) {
+            e.preventDefault();
+            let startX = e.touches ? e.touches[0].clientX : e.clientX;
+            let startWidth = rectangle.offsetWidth;
+            let startHeight = rectangle.offsetHeight;
+            
+            // Check if this rectangle is in portrait mode
+            let isPortrait = rectangle.dataset.portrait === "true";
+
+            function resize(e) {
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let newWidth = startWidth + (clientX - startX);
+
+                // Maintain the correct aspect ratio
+                let newHeight = isPortrait ? newWidth * (16 / 9) : newWidth * (9 / 16);
+
+                rectangle.style.width = `${newWidth}px`;
+                rectangle.style.height = `${newHeight}px`;
+            }
+
+            function stopResize() {
+                document.removeEventListener('mousemove', resize);
+                document.removeEventListener('mouseup', stopResize);
+                document.removeEventListener('touchmove', resize);
+                document.removeEventListener('touchend', stopResize);
+                rectangle.querySelector('iframe').style.pointerEvents = "auto";
+            }
+
+            rectangle.querySelector('iframe').style.pointerEvents = "none";
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', stopResize);
+            document.addEventListener('touchmove', resize);
+            document.addEventListener('touchend', stopResize);
+        }
+        
+        
+        function addEventListeners(handle, downEvent, moveEvent, upEvent) {
+            handle.addEventListener(downEvent, (e) => {
+                e.preventDefault();
+                isResizing = true;
+                startX = e.touches ? e.touches[0].clientX : e.clientX;
+                startY = e.touches ? e.touches[0].clientY : e.clientY;
+                startWidth = handle.parentElement.offsetWidth;
+                startHeight = handle.parentElement.offsetHeight;
+                handle.parentElement.querySelector('iframe').style.pointerEvents = "none"; // Disable pointer-events during resizing
+                document.addEventListener(moveEvent, resize);
+                document.addEventListener(upEvent, stopResize);
+                document.body.style.cursor = "nwse-resize";
+            });
+        }
+
+        // Listen for messages from the embedded page
+        window.addEventListener('message', (event) => {
+            const message = event.data;
+
+            if (message.type === 'videoContainerUpdate') {
+                const { portrait } = message;
+
+                const iframes = document.querySelectorAll('.container iframe');
+                let targetIframe = null;
+
+                for (let iframe of iframes) {
+                    if (iframe.contentWindow === event.source) {
+                        targetIframe = iframe;
+                        break;
+                    }
+                }
+
+                if (!targetIframe) return;
+                const rectangle = targetIframe.closest('.container');
+                if (!rectangle) return;
+
+                // Store the new orientation in a dataset attribute
+                rectangle.dataset.portrait = portrait ? "true" : "false";
+
+                const currentHeight = rectangle.offsetHeight;
+                let newWidth = portrait ? currentHeight * (9 / 16) : currentHeight * (16 / 9);
+
+                rectangle.style.width = `${newWidth}px`;
+            }
+        });
+
+    </script>
+</body>
+</html>

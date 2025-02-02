@@ -4,31 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevents body scrolling */
+            height: 100vh;
+            width: 100vw;
+        }
         #videoContainer {
-            position: relative;
-            width: 100%;
-            max-width: 640px; /* Default max-width for landscape */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             background: black;
-            aspect-ratio: 16 / 9; /* Default aspect ratio for landscape */
-            overflow: hidden; /* Prevent overflow */
-            transition: max-width 0.3s ease-in-out, aspect-ratio 0.3s ease-in-out; /* Smooth transitions */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .video-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensures the video fits within the container with letterboxing or pillarboxing */
         }
 
         .videoPlayer {
             width: 100%;
             height: 100%;
             object-fit: contain; /* Ensure video fits within the container */
-        }
-        .video-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
-        video {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
         }
         #controls {
             position: absolute;
@@ -391,7 +404,6 @@
                             if (!response.ok) {
                                 throw new Error('Network response was not ok');
                             }
-                            console.log('Class change request successful:', selectedValue);
                         })
                         .catch(error => {
                             console.error('There was a problem with the fetch operation:', error);
@@ -538,14 +550,18 @@
                         let n_boxes = document.querySelectorAll(".bounding-box").length;
                         let aspect_ratio = frames[shape_idx].aspect_ratio;
                         let res = frames[shape_idx].res;
+                        //drawBoundingBox(0.0,0.0,0.5,0.5,"red","rory");
                         for(let i = 0; i < frames[shape_idx].squares.length; i++){
                             if(portrait){ //todo, can just send the correct aspect ratio instead?
+                                console.log("is portait!");
+                                console.log(frames[shape_idx].squares[i]);
                                 let originX = (frames[shape_idx].squares[i].originX / (res / aspect_ratio));
                                 let originY = (frames[shape_idx].squares[i].originY / res);
                                 let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / (res / aspect_ratio));
                                 let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / res);
                                 drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
                             } else {
+                                console.log("is LANDSCAPE!");
                                 let originX = (frames[shape_idx].squares[i].originX / res);
                                 let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
                                 let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
@@ -573,6 +589,7 @@
                     gaps.forEach(([start, duration]) => {
                         const gapElement = document.createElement("div");
                         gapElement.classList.add("gap-indicator");
+
 
                         const gapStartPercent = (start / totalDuration) * 100;
                         const gapWidthPercent = (duration / totalDuration) * 100;
@@ -774,50 +791,76 @@
                 }
                 
                 function preloadNextSegments() {
-                    console.log("preload start");
                     let x = 1;
                     while(x < videoPlayers.length){
                         let current_x = x;
                         if (currentSegment + x < segments.length) {
-                            console.log(x);
                             if(!videoPlayers[(video_index + current_x) % videoPlayers.length].src.endsWith(segments[currentSegment + current_x].url)){
-                                console.log(videoPlayers[(video_index + current_x) % videoPlayers.length].src);
-                                console.log(segments[currentSegment + current_x].url);
                                 videoPlayers[(video_index + current_x) % videoPlayers.length].src = segments[currentSegment + current_x].url;
                                 videoPlayers[(video_index + current_x) % videoPlayers.length].load();
                                 videoPlayers[(video_index + current_x) % videoPlayers.length].preload = 'auto';
-                            } else{
-                                console.log("dont need to load");
                             }
                         }
                         x++;
                     }
-                    console.log("preload DONE");
                 }
-                let portrait = false;
-                function adjustContainerForOrientation(videoElement) {
-                    const videoContainer = document.getElementById('videoContainer');
+        let portrait = false;
 
-                    // Get the video's dimensions
-                    const videoWidth = videoElement.videoWidth;
-                    const videoHeight = videoElement.videoHeight;
+        function adjustContainerForOrientation(videoElement) {
+            const videoContainer = document.getElementById('videoContainer');
 
-                    // Determine if the video is in portrait mode
-                    const isPortrait = videoHeight > videoWidth;
+            // Get the video's dimensions
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
 
-                    // Adjust the container's dimensions based on the video's orientation
-                    if (isPortrait) {
-                        portrait = true;
-                        // Portrait mode: set container to 480x640
-                        videoContainer.style.maxWidth = '480px';
-                        videoContainer.style.aspectRatio = '9 / 16'; // 480:640 simplifies to 3:4
-                    } else {
-                        portrait = false;
-                        // Landscape mode: set container to 640x480
-                        videoContainer.style.maxWidth = '640px';
-                        videoContainer.style.aspectRatio = '16 / 9'; // 640:480 simplifies to 4:3
-                    }
-                }
+            // Determine if the video is in portrait mode
+            portrait = videoHeight > videoWidth;
+
+            // Get the window's dimensions
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            // Adjust the container's dimensions based on the video's orientation
+            if (portrait) {
+                // Portrait mode (9:16 aspect ratio)
+                const containerHeight = Math.min(windowHeight, windowWidth * (16 / 9));
+                const containerWidth = containerHeight * (9 / 16);
+
+                videoContainer.style.width = containerWidth + 'px';
+                videoContainer.style.height = containerHeight + 'px';
+            } else {
+                // Landscape mode (16:9 aspect ratio)
+                const containerWidth = Math.min(windowWidth, windowHeight * (16 / 9));
+                const containerHeight = containerWidth * (9 / 16);
+
+                videoContainer.style.width = containerWidth + 'px';
+                videoContainer.style.height = containerHeight + 'px';
+            }
+
+            // Ensure the container doesn't exceed the viewport dimensions
+            videoContainer.style.maxWidth = '100vw';
+            videoContainer.style.maxHeight = '100vh';
+
+            // Send the container's dimensions and orientation to the parent page
+            const message = {
+                type: 'videoContainerUpdate',
+                width: videoContainer.offsetWidth,
+                height: videoContainer.offsetHeight,
+                portrait: portrait,
+            };
+            window.parent.postMessage(message, '*'); // Send to the parent page
+        }
+
+        // Example usage with a video element
+        const videoElement = document.querySelector('video'); // Replace with your video element
+        videoElement.addEventListener('loadedmetadata', () => {
+            adjustContainerForOrientation(videoElement);
+        });
+
+        // Optional: Handle window resizing to keep the container responsive
+        window.addEventListener('resize', () => {
+            adjustContainerForOrientation(videoElement);
+        });
 
                 function playSegment() {
                     if (segments.length > 0) {
@@ -967,7 +1010,7 @@
 
                     let videoWidth, videoHeight, offsetX, offsetY;
                     
-                    if (containerAspectRatio > videoAspectRatio) {
+                    if (portrait) {
                         // Video is pillarboxed
                         videoHeight = container.clientHeight;
                         videoWidth = videoHeight * videoAspectRatio;

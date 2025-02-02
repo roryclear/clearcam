@@ -104,7 +104,7 @@
                 }
             }
         }
-
+        
         if (indexesParam) {
             NSMutableArray<NSNumber *> *newIndexes = [NSMutableArray array];
             NSArray *indexesArray = [indexesParam componentsSeparatedByString:@","];
@@ -135,6 +135,26 @@
         send(clientSocket, jsonData.bytes, jsonData.length, 0);
         return;
     }
+    if ([filePath hasPrefix:@"main"]) {
+        NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"html"];
+        if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
+            FILE *file = fopen([playerFilePath UTF8String], "rb");
+            if (file) {
+                fseek(file, 0, SEEK_END);
+                NSUInteger fileSize = ftell(file);
+                fseek(file, 0, SEEK_SET);
+                dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+                dprintf(clientSocket, "Content-Type: text/html\r\n");
+                dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+                dprintf(clientSocket, "\r\n");
+                [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
+                fclose(file);
+                return;
+            }
+        }
+        dprintf(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
+        return;
+    }
     if ([filePath hasPrefix:@"get-segments"]) {
         NSString *startParam = nil;
         NSString *dateParam = nil;
@@ -153,7 +173,7 @@
                 }
             }
         }
-
+        
         if(!dateParam){
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
@@ -170,7 +190,7 @@
             if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
                 NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
                 NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
-
+                
                 if (fileSegments) {
                     self.segmentsDict[dateParam] = [fileSegments mutableCopy];
                     NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
@@ -183,7 +203,7 @@
                 }
             }
         }
-
+        
         NSArray *segmentsForDate = self.segmentsDict[dateParam];
         if (start >= segmentsForDate.count) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
@@ -199,20 +219,20 @@
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
         return;
     }
-
+    
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     NSRange queryRange = [fullPath rangeOfString:@"?"];
     if (queryRange.location != NSNotFound) {
         fullPath = [fullPath substringToIndex:queryRange.location];
     }
-
+    
     BOOL isDirectory = NO;
     if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
         dprintf(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
         return;
     }
-
-
+    
+    
     if (isDirectory) { //todo, change url maybe
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"player" ofType:@"html"];
         if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
@@ -233,7 +253,7 @@
         dprintf(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
         return;
     }
-
+    
     FILE *file = fopen([fullPath UTF8String], "rb");
     if (!file) {
         dprintf(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\n");
@@ -242,8 +262,15 @@
     fseek(file, 0, SEEK_END);
     NSUInteger fileSize = ftell(file);
     fseek(file, 0, SEEK_SET);
-
+    
     NSString *fileExtension = [[fullPath pathExtension] lowercaseString];
+    
+    // Check if the file exists in the app bundle
+    NSString *bundlePath = [[NSBundle mainBundle] pathForResource:[fullPath stringByDeletingPathExtension] ofType:fileExtension];
+    if (bundlePath) {
+        fullPath = bundlePath;
+    }
+    
     if ([fileExtension isEqualToString:@"mp4"]) {
         range = [request rangeOfString:@"Range: bytes="];
         if (range.location != NSNotFound) {
@@ -253,7 +280,7 @@
             NSArray<NSString *> *rangeParts = [byteRange componentsSeparatedByString:@"-"];
             NSUInteger start = [rangeParts[0] integerValue];
             NSUInteger end = (rangeParts.count > 1 && rangeParts[1].length > 0) ? [rangeParts[1] integerValue] : fileSize - 1;
-
+            
             if (start >= fileSize || end >= fileSize || start > end) {
                 dprintf(clientSocket, "HTTP/1.1 416 Requested Range Not Satisfiable\r\n");
                 dprintf(clientSocket, "Content-Range: bytes */%lu\r\n", fileSize);
@@ -270,7 +297,13 @@
                 [self sendFileData:file toSocket:clientSocket withContentLength:contentLength];
             }
         }
-    } else { //.txt
+    } else if ([fileExtension isEqualToString:@"html"]) {
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: text/html\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
+    } else if ([fileExtension isEqualToString:@"txt"]) {
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: text/plain\r\n");
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
