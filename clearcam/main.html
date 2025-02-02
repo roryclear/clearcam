@@ -34,20 +34,12 @@
             right: -10px;
             cursor: nwse-resize;
         }
-        .drag-top, .drag-bottom, .drag-left, .drag-right {
+        .drag-bottom, .drag-left, .drag-right {
             position: absolute;
             background: rgba(0, 0, 0, 0);
             cursor: move;
             z-index: 3;
         }
-
-        .drag-top {
-            top: 0;
-            left: 0;
-            height: 5%;
-            width: 100%;
-        }
-
         .drag-left {
             top: 0;
             left: 0;
@@ -97,20 +89,16 @@
                     const handle = document.createElement('div');
                     handle.className = 'handle';
 
-                    const dragTop = document.createElement('div');
-                    dragTop.className = 'drag-top';
-
                     const dragLeft = document.createElement('div');
                     dragLeft.className = 'drag-left';
 
                     const dragRight = document.createElement('div');
                     dragRight.className = 'drag-right';
 
-                    rectangle.append(iframe, handle, dragTop, dragLeft, dragRight);
+                    rectangle.append(iframe, handle, dragLeft, dragRight);
                     document.body.appendChild(rectangle);
 
                     addResizeListeners(handle, rectangle);
-                    addDragListeners(dragTop, rectangle);
                     addDragListeners(dragLeft, rectangle);
                     addDragListeners(dragRight, rectangle);
                 }
