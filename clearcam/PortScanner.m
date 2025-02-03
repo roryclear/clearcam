@@ -95,11 +95,11 @@
 }
 
 
-- (void)scanNetworkForPort:(int)port completion:(void (^)(void))completion {
+- (void)scanNetworkForPort:(int)port completion:(void (^)(NSArray<NSString *> *openPorts))completion {
     NSDictionary *ipInfo = [self getLocalIPInfo];
     if (!ipInfo) {
         NSLog(@"Failed to get local IP info.");
-        if (completion) completion();
+        if (completion) completion(@[]);
         return;
     }
 
@@ -109,23 +109,23 @@
     dispatch_group_t scanGroup = dispatch_group_create();
     dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
     
-    __block BOOL found = NO;
+    NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
     
     for (NSString *ip in ipList) {
         dispatch_group_async(scanGroup, scanQueue, ^{
             if ([self isPortOpen:ip port:port]) {
                 @synchronized(self) {
                     NSLog(@"[+] Open port %d found at %@", port, ip);
-                    found = YES;
+                    [foundIPs addObject:ip];
                 }
             }
         });
     }
     
     dispatch_group_notify(scanGroup, dispatch_get_main_queue(), ^{
-        NSLog(@"Scan complete. Found: %@", found ? @"YES" : @"NO");
+        NSLog(@"Scan complete. Found %lu open ports.", (unsigned long)foundIPs.count);
         if (completion) {
-            completion();
+            completion([foundIPs copy]);
         }
     });
 }

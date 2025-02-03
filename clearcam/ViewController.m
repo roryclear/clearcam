@@ -38,11 +38,9 @@ NSMutableDictionary *classColorMap;
     [super viewDidLoad];
 
     PortScanner *scanner = [[PortScanner alloc] init];
-    NSString *deviceIP = [scanner getDeviceIPAddress];
-    NSLog(@"Device's IP Address: %@", deviceIP);
     NSLog(@"Scan started...");
-    [scanner scanNetworkForPort:8080 completion:^{
-        NSLog(@"Scan DONE!!!");
+    [scanner scanNetworkForPort:8080 completion:^(NSArray<NSString *> *openPorts) {
+        NSLog(@"Scan DONE!!! Found IPs: %@", openPorts);
     }];
 
     self.current_segment_squares = [[NSMutableArray alloc] init];
