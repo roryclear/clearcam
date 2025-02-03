@@ -8,6 +8,7 @@
 #import <errno.h>
 #import <AVFoundation/AVFoundation.h>
 #import "SettingsManager.h"
+#import "PortScanner.h"
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
@@ -19,6 +20,7 @@
 - (void)start {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.segment_length = 60;
+        self.scanner = [[PortScanner alloc] init];
         self.last_req_time = [NSDate now];
         self.segmentsDict = [[NSMutableDictionary alloc] init];
         self.basePath = [self getDocumentsDirectory];
@@ -135,6 +137,26 @@
         send(clientSocket, jsonData.bytes, jsonData.length, 0);
         return;
     }
+    if ([filePath hasPrefix:@"get-devices"]) {
+        [self.scanner scanNetworkForPort:8080 completion:^(NSArray<NSString *> *openPorts) {
+            NSLog(@"Scan DONE!!! Found IPs: %@", openPorts);
+            NSError *error;
+            NSData *jsonData = [NSJSONSerialization dataWithJSONObject:openPorts options:0 error:&error];
+            
+            if (!jsonData) {
+                NSLog(@"Error serializing JSON: %@", error);
+                NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+                send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+                return;
+            }
+            
+            NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, jsonData.bytes, jsonData.length, 0);
+            return;
+        }];
+    }
+    
     if ([filePath hasPrefix:@"main"]) {
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"html"];
         if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {

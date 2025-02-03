@@ -114,25 +114,25 @@
     NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
     
     dispatch_group_t scanGroup = dispatch_group_create();
-    dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
     
     for (NSString *ip in ipList) {
-        dispatch_group_async(scanGroup, scanQueue, ^{
+        dispatch_group_enter(scanGroup);
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
             if ([self isPortOpen:ip port:port]) {
                 @synchronized(self) {
                     NSLog(@"[+] Open port %d found at %@", port, ip);
                     [foundIPs addObject:ip];
                 }
             }
+            dispatch_group_leave(scanGroup);
         });
     }
     
-    dispatch_group_notify(scanGroup, dispatch_get_main_queue(), ^{
-        NSLog(@"Scan complete. Found %lu open ports.", (unsigned long)foundIPs.count);
-        if (completion) {
-            completion([foundIPs copy]);
-        }
-    });
+    dispatch_group_wait(scanGroup, DISPATCH_TIME_FOREVER);
+    NSLog(@"Scan complete. Found %lu open ports.", (unsigned long)foundIPs.count);
+    if (completion) {
+        completion([foundIPs copy]);
+    }
 }
 
 - (NSString *)getDeviceIPAddress {
