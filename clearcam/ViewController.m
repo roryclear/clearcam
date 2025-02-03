@@ -3,6 +3,7 @@
 #import <Metal/Metal.h>
 #import "Yolo.h"
 #import "FileServer.h"
+#import "PortScanner.h"
 
 @interface ViewController ()
 
@@ -35,6 +36,16 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+
+    PortScanner *scanner = [[PortScanner alloc] init];
+    NSString *deviceIP = [scanner getDeviceIPAddress];
+    NSLog(@"Device's IP Address: %@", deviceIP);
+    NSLog(@"Scan started...");
+    [scanner scanNetworkForPort:8080 completion:^{
+        NSLog(@"Scan DONE!!!");
+    }];
+    NSLog(@"This will NOT print until the scan is finished.");
+
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
