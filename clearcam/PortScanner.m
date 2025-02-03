@@ -103,7 +103,7 @@
         return;
     }
 
-    NSString *deviceIP = [self getDeviceIPAddress];
+    //NSString *deviceIP = [self getDeviceIPAddress];
     NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
     
     //if (deviceIP) { //todo, needed?
