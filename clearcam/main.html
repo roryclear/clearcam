@@ -50,7 +50,7 @@
         .drag-right {
             top: 0;
             right: 0;
-            height: 80%; /* Excluding the bottom-right corner */
+            height: 70%; /* Excluding the bottom-right corner */
             width: 5%;
         }
         
@@ -71,12 +71,62 @@
 
     <script>
         let isPortrait = false; // Track the current orientation
+        
+        const existingUrls = new Set();
+        const rectangles = new Map();
 
-        function loadPage() {
-            const url = document.getElementById('urlInput').value;
-            createRectangle(url);
+        async function fetchDevices() {
+            try {
+                const response = await fetch('/get-devices');
+                const devices = await response.json();
+                const newUrls = new Set(devices.map(ip => `http://${ip}:8080`));
+                
+                console.log('Fetched devices:', devices);
+                console.log('New URLs:', [...newUrls]);
+
+                // Add new URLs
+                newUrls.forEach(url => {
+                    if (!existingUrls.has(url)) {
+                        console.log('Adding new rectangle for:', url);
+                        existingUrls.add(url);
+                        const rect = createRectangle(url);
+                        rectangles.set(url, rect);
+                    }
+                });
+
+                // Remove rectangles for URLs no longer present
+                [...existingUrls].forEach(url => {
+                    if (!newUrls.has(url)) {
+                        console.log('Removing rectangle for:', url);
+                        removeRectangle(url);
+                        existingUrls.delete(url);
+                        rectangles.delete(url);
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching devices:', error);
+            }
         }
 
+        function removeRectangle(url) {
+            const rect = rectangles.get(url);
+            if (rect) {
+                console.log('Removing element from DOM:', rect);
+                rect.remove();
+            } else {
+                console.warn('Rectangle not found for URL:', url);
+            }
+        }
+
+        function startPolling(interval = 5000) {
+            setInterval(fetchDevices, interval);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchDevices(); // Initial load
+            startPolling(); // Periodic checks
+        });
+        
         function createRectangle(url) {
                     const rectangle = document.createElement('div');
                     rectangle.className = 'container';
@@ -101,7 +151,8 @@
                     addResizeListeners(handle, rectangle);
                     addDragListeners(dragLeft, rectangle);
                     addDragListeners(dragRight, rectangle);
-                }
+                    return rectangle;
+        }
 
         function addResizeListeners(handle, rectangle) {
             handle.addEventListener('mousedown', (e) => startResize(e, rectangle));
