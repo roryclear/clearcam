@@ -137,11 +137,14 @@
         send(clientSocket, jsonData.bytes, jsonData.length, 0);
         return;
     }
+    
     if ([filePath hasPrefix:@"get-devices"]) {
-        [self.scanner scanNetworkForPort:8080 completion:^(NSArray<NSString *> *openPorts) {
-            NSLog(@"Scan DONE!!! Found IPs: %@", openPorts);
+        NSLog(@"get-devices??");
+        
+        // Respond immediately with cached list
+        @synchronized (self.scanner.cachedOpenPorts) {
             NSError *error;
-            NSData *jsonData = [NSJSONSerialization dataWithJSONObject:openPorts options:0 error:&error];
+            NSData *jsonData = [NSJSONSerialization dataWithJSONObject:self.scanner.cachedOpenPorts options:0 error:&error];
             
             if (!jsonData) {
                 NSLog(@"Error serializing JSON: %@", error);
@@ -153,9 +156,13 @@
             NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, jsonData.bytes, jsonData.length, 0);
-            return;
-        }];
+        }
+        
+        // Update cached list asynchronously
+        [self.scanner updateCachedOpenPortsForPort:8080];
+        return;
     }
+
     
     if ([filePath hasPrefix:@"main"]) {
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"html"];

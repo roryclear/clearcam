@@ -6,6 +6,28 @@
 
 @implementation PortScanner
 
+// Initialize cached list and scan queue
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _cachedOpenPorts = [NSMutableArray array];
+        _scanQueue = dispatch_queue_create("com.example.PortScannerQueue", DISPATCH_QUEUE_SERIAL);
+    }
+    return self;
+}
+
+- (void)updateCachedOpenPortsForPort:(int)port {
+    dispatch_async(self.scanQueue, ^{
+        [self throttledScanNetworkForPort:port withBatchSize:10 completion:^(NSArray<NSString *> *openPorts) {
+            @synchronized (self.cachedOpenPorts) {
+                [self.cachedOpenPorts removeAllObjects];
+                [self.cachedOpenPorts addObjectsFromArray:openPorts];
+            }
+            NSLog(@"Cache updated with open ports: %@", self.cachedOpenPorts);
+        }];
+    });
+}
+
 // Get the local IP address and subnet mask
 - (NSDictionary *)getLocalIPInfo {
     struct ifaddrs *interfaces = NULL;
@@ -103,12 +125,12 @@
         return;
     }
 
-    //NSString *deviceIP = [self getDeviceIPAddress];
+    NSString *deviceIP = [self getDeviceIPAddress];
     NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
     
-    //if (deviceIP) { //todo, needed?
-    //    [foundIPs addObject:deviceIP];
-    //}
+    if (deviceIP) {
+        [foundIPs addObject:deviceIP];
+    }
 
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
     NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
@@ -133,6 +155,56 @@
     if (completion) {
         completion([foundIPs copy]);
     }
+}
+
+- (void)throttledScanNetworkForPort:(int)port withBatchSize:(int)batchSize completion:(void (^)(NSArray<NSString *> *openPorts))completion {
+    NSDictionary *ipInfo = [self getLocalIPInfo];
+    if (!ipInfo) {
+        NSLog(@"Failed to get local IP info.");
+        if (completion) completion(@[]);
+        return;
+    }
+
+    NSString *deviceIP = [self getDeviceIPAddress];
+    NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
+    
+    if (deviceIP) {
+        [foundIPs addObject:deviceIP];
+    }
+
+    NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
+    NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
+    
+    dispatch_group_t scanGroup = dispatch_group_create();
+    dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
+    
+    for (NSInteger i = 0; i < ipList.count; i += batchSize) {
+        NSRange range = NSMakeRange(i, MIN(batchSize, ipList.count - i));
+        NSArray *batch = [ipList subarrayWithRange:range];
+        
+        for (NSString *ip in batch) {
+            dispatch_group_enter(scanGroup);
+            dispatch_async(scanQueue, ^{
+                if ([self isPortOpen:ip port:port]) {
+                    @synchronized(self) {
+                        NSLog(@"[+] Open port %d found at %@", port, ip);
+                        [foundIPs addObject:ip];
+                    }
+                }
+                dispatch_group_leave(scanGroup);
+            });
+        }
+        
+        // Throttle by waiting for the batch to complete before starting the next batch
+        dispatch_group_wait(scanGroup, DISPATCH_TIME_FOREVER);
+    }
+    
+    dispatch_group_notify(scanGroup, dispatch_get_main_queue(), ^{
+        NSLog(@"Scan complete. Found %lu open ports.", (unsigned long)foundIPs.count);
+        if (completion) {
+            completion([foundIPs copy]);
+        }
+    });
 }
 
 - (NSString *)getDeviceIPAddress {
