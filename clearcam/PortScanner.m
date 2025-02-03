@@ -103,13 +103,18 @@
         return;
     }
 
+    NSString *deviceIP = [self getDeviceIPAddress];
+    NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
+    
+    if (deviceIP) {
+        [foundIPs addObject:deviceIP];
+    }
+
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
     NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
     
     dispatch_group_t scanGroup = dispatch_group_create();
     dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
-    
-    NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
     
     for (NSString *ip in ipList) {
         dispatch_group_async(scanGroup, scanQueue, ^{
