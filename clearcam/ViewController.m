@@ -44,7 +44,6 @@ NSMutableDictionary *classColorMap;
     [scanner scanNetworkForPort:8080 completion:^{
         NSLog(@"Scan DONE!!!");
     }];
-    NSLog(@"This will NOT print until the scan is finished.");
 
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];

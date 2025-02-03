@@ -105,23 +105,29 @@
 
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
     NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
-
-    BOOL found = NO;
+    
+    dispatch_group_t scanGroup = dispatch_group_create();
+    dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
+    
+    __block BOOL found = NO;
+    
     for (NSString *ip in ipList) {
-        NSLog(@"Checking IP: %@", ip);
-
-        if ([self isPortOpen:ip port:port]) {
-            NSLog(@"[+] Open port %d found at %@", port, ip);
-            found = YES;
+        dispatch_group_async(scanGroup, scanQueue, ^{
+            if ([self isPortOpen:ip port:port]) {
+                @synchronized(self) {
+                    NSLog(@"[+] Open port %d found at %@", port, ip);
+                    found = YES;
+                }
+            }
+        });
+    }
+    
+    dispatch_group_notify(scanGroup, dispatch_get_main_queue(), ^{
+        NSLog(@"Scan complete. Found: %@", found ? @"YES" : @"NO");
+        if (completion) {
+            completion();
         }
-    }
-
-    NSLog(@"Scan complete. Found: %@", found ? @"YES" : @"NO");
-
-    if (completion) {
-        NSLog(@"Calling completion block...");
-        completion();
-    }
+    });
 }
 
 - (NSString *)getDeviceIPAddress {
