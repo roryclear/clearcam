@@ -50,7 +50,7 @@
         .drag-right {
             top: 0;
             right: 0;
-            height: 80%; /* Excluding the bottom-right corner */
+            height: 70%; /* Excluding the bottom-right corner */
             width: 5%;
         }
         
@@ -76,7 +76,34 @@
             const url = document.getElementById('urlInput').value;
             createRectangle(url);
         }
+        
+        const existingUrls = new Set();
 
+        async function fetchDevices() {
+            try {
+                const response = await fetch('/get-devices');
+                const devices = await response.json();
+                devices.forEach(ip => {
+                    const url = `http://${ip}:8080`;
+                    if (!existingUrls.has(url)) {
+                        existingUrls.add(url);
+                        createRectangle(url);
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching devices:', error);
+            }
+        }
+
+        function startPolling(interval = 5000) {
+            setInterval(fetchDevices, interval);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchDevices(); // Initial load
+            startPolling(); // Periodic checks
+        });
+        
         function createRectangle(url) {
                     const rectangle = document.createElement('div');
                     rectangle.className = 'container';
@@ -101,7 +128,7 @@
                     addResizeListeners(handle, rectangle);
                     addDragListeners(dragLeft, rectangle);
                     addDragListeners(dragRight, rectangle);
-                }
+        }
 
         function addResizeListeners(handle, rectangle) {
             handle.addEventListener('mousedown', (e) => startResize(e, rectangle));
