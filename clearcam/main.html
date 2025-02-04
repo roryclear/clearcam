@@ -124,19 +124,11 @@
               if (window.innerWidth <= 600) {
                 rectangle.style.left = '0';
                 rectangle.style.width = '100%';
-
-                // Calculate the height based on the aspect ratio
                 const screenWidth = window.innerWidth;
-                const rectangleHeight = screenWidth * (9 / 16); // 16:9 aspect ratio
-
-                // Set the height of the rectangle
+                const rectangleHeight = screenWidth * (9 / 16);
                 rectangle.style.height = `${rectangleHeight}px`;
-
-                // Position the rectangle
                 rectangle.style.top = `${currentTopPosition}px`;
-
-                // Update the currentTopPosition for the next rectangle
-                currentTopPosition += rectangleHeight + 2; // Add gap between rectangles
+                currentTopPosition += rectangleHeight + 2;
               } else {
                 rectangle.style.left = `${Math.random() * (window.innerWidth - 300)}px`;
                 rectangle.style.top = `${Math.random() * (window.innerHeight - 200)}px`;
@@ -144,22 +136,22 @@
 
               const iframe = document.createElement('iframe');
               iframe.src = url;
-
               const handle = document.createElement('div');
               handle.className = 'handle';
-
               const dragLeft = document.createElement('div');
               dragLeft.className = 'drag-left';
-
               const dragRight = document.createElement('div');
               dragRight.className = 'drag-right';
-
-              rectangle.append(iframe, handle, dragLeft, dragRight);
+              
+              rectangle.append(iframe, handle);
+              if(window.innerWidth > 600){
+                  rectangle.append(dragLeft, dragRight);
+                  addDragListeners(dragLeft, rectangle);
+                  addDragListeners(dragRight, rectangle);
+              }
+              
               document.body.appendChild(rectangle);
-
               addResizeListeners(handle, rectangle);
-              addDragListeners(dragLeft, rectangle);
-              addDragListeners(dragRight, rectangle);
               return rectangle;
             }
 
