@@ -13,6 +13,7 @@
         _cachedOpenPorts = [NSMutableArray array];
         _scanQueue = dispatch_queue_create("com.example.PortScannerQueue", DISPATCH_QUEUE_SERIAL);
     }
+    [self updateCachedOpenPortsForPort:8080];
     return self;
 }
 
