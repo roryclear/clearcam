@@ -100,8 +100,24 @@
         function removeRectangle(url) {
             const rect = rectangles.get(url);
             if (rect) {
-                console.log('Removing element from DOM:', rect);
+                // Get the height of the rectangle being removed
+                const rectHeight = rect.offsetHeight;
+
+                // Remove the rectangle from the DOM
                 rect.remove();
+
+                // Update the `currentTopPosition` and adjust the `top` style of rectangles below
+                if (window.innerWidth <= 600) {
+                    const allRectangles = Array.from(document.querySelectorAll('.container'));
+                    let currentTop = 0;
+                    allRectangles.forEach(rectangle => {
+                        rectangle.style.top = `${currentTop}px`;
+                        currentTop += rectangle.offsetHeight + 2; // 2px margin between rectangles
+                    });
+                    currentTopPosition = currentTop;
+                }
+
+                console.log('Removed element from DOM:', rect);
             } else {
                 console.warn('Rectangle not found for URL:', url);
             }
