@@ -115,33 +115,53 @@
             fetchDevices(); // Initial load
             startPolling(); // Periodic checks
         });
-        
+        let currentTopPosition = 0;
         function createRectangle(url) {
-                    const rectangle = document.createElement('div');
-                    rectangle.className = 'container';
-                    rectangle.style.left = `${Math.random() * (window.innerWidth - 300)}px`;
-                    rectangle.style.top = `${Math.random() * (window.innerHeight - 200)}px`;
+              const rectangle = document.createElement('div');
+              rectangle.className = 'container';
 
-                    const iframe = document.createElement('iframe');
-                    iframe.src = url;
+              // On mobile, arrange in column with 100% width
+              if (window.innerWidth <= 600) {
+                rectangle.style.left = '0';
+                rectangle.style.width = '100%';
 
-                    const handle = document.createElement('div');
-                    handle.className = 'handle';
+                // Calculate the height based on the aspect ratio
+                const screenWidth = window.innerWidth;
+                const rectangleHeight = screenWidth * (9 / 16); // 16:9 aspect ratio
 
-                    const dragLeft = document.createElement('div');
-                    dragLeft.className = 'drag-left';
+                // Set the height of the rectangle
+                rectangle.style.height = `${rectangleHeight}px`;
 
-                    const dragRight = document.createElement('div');
-                    dragRight.className = 'drag-right';
+                // Position the rectangle
+                rectangle.style.top = `${currentTopPosition}px`;
 
-                    rectangle.append(iframe, handle, dragLeft, dragRight);
-                    document.body.appendChild(rectangle);
+                // Update the currentTopPosition for the next rectangle
+                currentTopPosition += rectangleHeight + 2; // Add gap between rectangles
+              } else {
+                rectangle.style.left = `${Math.random() * (window.innerWidth - 300)}px`;
+                rectangle.style.top = `${Math.random() * (window.innerHeight - 200)}px`;
+              }
 
-                    addResizeListeners(handle, rectangle);
-                    addDragListeners(dragLeft, rectangle);
-                    addDragListeners(dragRight, rectangle);
-                    return rectangle;
-        }
+              const iframe = document.createElement('iframe');
+              iframe.src = url;
+
+              const handle = document.createElement('div');
+              handle.className = 'handle';
+
+              const dragLeft = document.createElement('div');
+              dragLeft.className = 'drag-left';
+
+              const dragRight = document.createElement('div');
+              dragRight.className = 'drag-right';
+
+              rectangle.append(iframe, handle, dragLeft, dragRight);
+              document.body.appendChild(rectangle);
+
+              addResizeListeners(handle, rectangle);
+              addDragListeners(dragLeft, rectangle);
+              addDragListeners(dragRight, rectangle);
+              return rectangle;
+            }
 
         function addResizeListeners(handle, rectangle) {
             handle.addEventListener('mousedown', (e) => startResize(e, rectangle));
