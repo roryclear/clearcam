@@ -169,9 +169,9 @@
     NSString *deviceIP = [self getDeviceIPAddress];
     NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
     
-    if (deviceIP) {
-        [foundIPs addObject:deviceIP];
-    }
+    //if (deviceIP) {
+    //    [foundIPs addObject:deviceIP];
+    //}
 
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
     NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
