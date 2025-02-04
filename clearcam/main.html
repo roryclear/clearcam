@@ -82,14 +82,10 @@
                 const response = await fetch('/get-devices');
                 const devices = await response.json();
                 const newUrls = new Set(devices.map(ip => `http://${ip}:8080`));
-                
-                console.log('Fetched devices:', devices);
-                console.log('New URLs:', [...newUrls]);
 
                 // Add new URLs
                 newUrls.forEach(url => {
                     if (!existingUrls.has(url)) {
-                        console.log('Adding new rectangle for:', url);
                         existingUrls.add(url);
                         const rect = createRectangle(url);
                         rectangles.set(url, rect);
@@ -99,7 +95,6 @@
                 // Remove rectangles for URLs no longer present
                 [...existingUrls].forEach(url => {
                     if (!newUrls.has(url)) {
-                        console.log('Removing rectangle for:', url);
                         removeRectangle(url);
                         existingUrls.delete(url);
                         rectangles.delete(url);
