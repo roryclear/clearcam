@@ -269,6 +269,7 @@
                 const iframes = document.querySelectorAll('.container iframe');
                 let targetIframe = null;
 
+                // Find the iframe that sent the message
                 for (let iframe of iframes) {
                     if (iframe.contentWindow === event.source) {
                         targetIframe = iframe;
@@ -283,12 +284,47 @@
                 // Store the new orientation in a dataset attribute
                 rectangle.dataset.portrait = portrait ? "true" : "false";
 
-                const currentHeight = rectangle.clientHeight;
-                let newWidth = portrait
-                    ? Math.floor(currentHeight * (9 / 16))
-                    : Math.floor(currentHeight * (16 / 9));
-                    
-                rectangle.style.width = `${newWidth}px`;
+                if (window.innerWidth <= 600) {
+                    // On mobile, keep the width fixed and adjust the height
+                    const currentWidth = rectangle.clientWidth;
+                    const newHeight = portrait
+                        ? Math.floor(currentWidth * (16 / 9)) // Portrait: height is taller
+                        : Math.floor(currentWidth * (9 / 16)); // Landscape: height is shorter
+
+                    // Update the rectangle's height
+                    rectangle.style.height = `${newHeight}px`;
+
+                    // Adjust the `style.top` of all rectangles below this one
+                    const allRectangles = Array.from(document.querySelectorAll('.container'));
+                    const index = allRectangles.indexOf(rectangle);
+
+                    // Start from the top of the first rectangle
+                    let currentTop = 0;
+
+                    for (let i = 0; i < allRectangles.length; i++) {
+                        const rect = allRectangles[i];
+                        rect.style.top = `${currentTop}px`;
+
+                        // Update currentTop for the next rectangle
+                        currentTop += rect.clientHeight + 2; // 2px margin between rectangles
+                    }
+
+                    // Ensure the body is scrollable if rectangles are pushed below the viewport
+                    const lastRectangle = allRectangles[allRectangles.length - 1];
+                    const lastRectangleBottom = parseInt(lastRectangle.style.top, 10) + lastRectangle.clientHeight;
+
+                    // Make the body scrollable
+                    document.body.style.overflowY = 'scroll'; // Ensure the body can scroll
+                    document.body.style.minHeight = `${lastRectangleBottom}px`; // Expand the body height
+                } else {
+                    // On desktop, adjust the width based on the height (original behavior)
+                    const currentHeight = rectangle.clientHeight;
+                    const newWidth = portrait
+                        ? Math.floor(currentHeight * (9 / 16))
+                        : Math.floor(currentHeight * (16 / 9));
+
+                    rectangle.style.width = `${newWidth}px`;
+                }
             }
         });
 
