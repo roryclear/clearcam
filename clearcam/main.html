@@ -263,9 +263,11 @@
                 // Store the new orientation in a dataset attribute
                 rectangle.dataset.portrait = portrait ? "true" : "false";
 
-                const currentHeight = rectangle.offsetHeight;
-                let newWidth = portrait ? currentHeight * (9 / 16) : currentHeight * (16 / 9);
-
+                const currentHeight = rectangle.clientHeight;
+                let newWidth = portrait
+                    ? Math.floor(currentHeight * (9 / 16))
+                    : Math.floor(currentHeight * (16 / 9));
+                    
                 rectangle.style.width = `${newWidth}px`;
             }
         });
