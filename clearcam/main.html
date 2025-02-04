@@ -71,8 +71,10 @@
 
         async function fetchDevices() {
             try {
+                console.log('Fetching devices...');
                 const response = await fetch('/get-devices');
                 const devices = await response.json();
+                console.log('Devices fetched:', devices);
                 const newUrls = new Set(devices.map(ip => `http://${ip}:8080`));
 
                 // Add new URLs
@@ -81,6 +83,7 @@
                         existingUrls.add(url);
                         const rect = createRectangle(url);
                         rectangles.set(url, rect);
+                        updateURL(); // Update the URL after adding a new rectangle
                     }
                 });
 
@@ -90,6 +93,7 @@
                         removeRectangle(url);
                         existingUrls.delete(url);
                         rectangles.delete(url);
+                        updateURL(); // Update the URL after removing a rectangle
                     }
                 });
             } catch (error) {
@@ -123,13 +127,30 @@
             }
         }
 
-        function startPolling(interval = 5000) {
-            setInterval(fetchDevices, interval);
+        function startPolling() {
+            const pollingInterval = 5000; // Poll every 5 seconds (adjust as needed)
+            setInterval(fetchDevices, pollingInterval);
+        }
+        
+        function loadFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            params.forEach((value, url) => {
+                const rectInfo = JSON.parse(value);
+                const rect = createRectangle(url);
+                rect.style.left = rectInfo.left;
+                rect.style.top = rectInfo.top;
+                rect.style.width = rectInfo.width;
+                rect.style.height = rectInfo.height;
+                rect.dataset.portrait = rectInfo.portrait ? "true" : "false";
+                rectangles.set(url, rect);
+                existingUrls.add(url);
+            });
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            loadFromURL(); // Load configuration from URL
             fetchDevices(); // Initial load
-            startPolling(); // Periodic checks
+            startPolling(); // Start periodic polling
         });
         let currentTopPosition = 0;
         function createRectangle(url) {
@@ -182,48 +203,44 @@
         }
         
         function startDrag(e, rectangle) {
-                    e.preventDefault();
-                    let offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
-                    let offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
+            e.preventDefault();
+            let offsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rectangle.offsetLeft;
+            let offsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rectangle.offsetTop;
 
-                    function drag(e) {
-                        let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                        let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                        rectangle.style.left = `${clientX - offsetX}px`;
-                        rectangle.style.top = `${clientY - offsetY}px`;
-                    }
+            function drag(e) {
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                rectangle.style.left = `${clientX - offsetX}px`;
+                rectangle.style.top = `${clientY - offsetY}px`;
+            }
 
-                    function stopDrag() {
-                        document.removeEventListener('mousemove', drag);
-                        document.removeEventListener('mouseup', stopDrag);
-                        document.removeEventListener('touchmove', drag);
-                        document.removeEventListener('touchend', stopDrag);
-                        rectangle.querySelector('iframe').style.pointerEvents = "auto";
-                    }
+            function stopDrag() {
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('mouseup', stopDrag);
+                document.removeEventListener('touchmove', drag);
+                document.removeEventListener('touchend', stopDrag);
+                rectangle.querySelector('iframe').style.pointerEvents = "auto";
+                updateURL(); // Update the URL after dragging
+            }
 
-                    rectangle.querySelector('iframe').style.pointerEvents = "none";
-                    document.addEventListener('mousemove', drag);
-                    document.addEventListener('mouseup', stopDrag);
-                    document.addEventListener('touchmove', drag);
-                    document.addEventListener('touchend', stopDrag);
-                }
-        
+            rectangle.querySelector('iframe').style.pointerEvents = "none";
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchmove', drag);
+            document.addEventListener('touchend', stopDrag);
+        }
+
         function startResize(e, rectangle) {
             e.preventDefault();
             let startX = e.touches ? e.touches[0].clientX : e.clientX;
             let startWidth = rectangle.offsetWidth;
             let startHeight = rectangle.offsetHeight;
-            
-            // Check if this rectangle is in portrait mode
             let isPortrait = rectangle.dataset.portrait === "true";
 
             function resize(e) {
                 let clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 let newWidth = startWidth + (clientX - startX);
-
-                // Maintain the correct aspect ratio
                 let newHeight = isPortrait ? newWidth * (16 / 9) : newWidth * (9 / 16);
-
                 rectangle.style.width = `${newWidth}px`;
                 rectangle.style.height = `${newHeight}px`;
             }
@@ -234,6 +251,7 @@
                 document.removeEventListener('touchmove', resize);
                 document.removeEventListener('touchend', stopResize);
                 rectangle.querySelector('iframe').style.pointerEvents = "auto";
+                updateURL(); // Update the URL after resizing
             }
 
             rectangle.querySelector('iframe').style.pointerEvents = "none";
@@ -327,6 +345,21 @@
                 }
             }
         });
+        
+        function updateURL() {
+            const params = new URLSearchParams();
+            rectangles.forEach((rect, url) => {
+                const rectInfo = {
+                    left: rect.style.left,
+                    top: rect.style.top,
+                    width: rect.style.width,
+                    height: rect.style.height,
+                    portrait: rect.dataset.portrait === "true"
+                };
+                params.append(url, JSON.stringify(rectInfo));
+            });
+            window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
+        }
 
     </script>
 </body>
