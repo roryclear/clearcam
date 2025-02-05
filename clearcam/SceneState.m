@@ -21,22 +21,26 @@
     }
     [self.lastN addObject:frame];
     
-    if(self.lastN.count > 10){
-        NSLog(@"> 10 %lu",(unsigned long)self.lastN.count);
-        for(int i = 0; i < self.events.count; i++){
-            NSNumber *totalValue = self.lastN_total[self.events[i][0]] ?: @0;
-            NSNumber *frameValue = frame[self.events[i][0]] ?: @0;
-            self.lastN_total[self.events[i][0]] = @(totalValue.intValue + frameValue.intValue);
-            
+    for(int i = 0; i < self.events.count; i++){
+        NSNumber *totalValue = self.lastN_total[self.events[i][0]] ?: @0;
+        NSNumber *frameValue = frame[self.events[i][0]] ?: @0;
+        self.lastN_total[self.events[i][0]] = @(totalValue.intValue + frameValue.intValue);
+        
+        if(self.lastN.count > 10){
             totalValue = self.lastN_total[self.events[i][0]] ?: @0;
             frameValue = self.lastN[0][self.events[i][0]] ?: @0;
             self.lastN_total[self.events[i][0]] = @(totalValue.intValue - frameValue.intValue);
-            
-            [self.lastN removeObjectAtIndex:0];
-            
-            NSLog(@"rory event %d = %@",i,self.events[i][0]);
-            NSLog(@"rory event total = %@",self.lastN_total[self.events[i][0]]);
         }
+        
+        NSLog(@"rory event %d = %@",i,self.events[i][0]);
+        NSLog(@"rory event total = %@",self.lastN_total[self.events[i][0]]);
+        
+        float result = (self.lastN_total[self.events[i][0]] ? [self.lastN_total[self.events[i][0]] floatValue] : 0.0) / 10.0;
+        NSLog(@"rory current state = %d", (int)roundf(result));
+    }
+    if(self.lastN.count > 10){
+        NSLog(@"> 10 %lu",(unsigned long)self.lastN.count);
+        [self.lastN removeObjectAtIndex:0];
     }
     
     return;
