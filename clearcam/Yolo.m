@@ -368,6 +368,7 @@ UInt8 *rgbData;
         if (i < output.count - 1) [classNamesString appendString:@", "];
     }
     //NSLog(@"Class Names: %@", classNamesString);
+    [self.scene processOutput:output];
     if(output.count > 0){
         NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
         [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
