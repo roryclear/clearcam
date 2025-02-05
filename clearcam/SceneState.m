@@ -23,21 +23,21 @@
     [self.lastN addObject:frame];
     
     for(int i = 0; i < self.events.count; i++){
-        NSNumber *totalValue = self.lastN_total[self.events[i][0]] ?: @0;
-        NSNumber *frameValue = frame[self.events[i][0]] ?: @0;
-        self.lastN_total[self.events[i][0]] = @(totalValue.intValue + frameValue.intValue);
+        NSNumber *totalValue = self.lastN_total[self.events[i]] ?: @0;
+        NSNumber *frameValue = frame[self.events[i]] ?: @0;
+        self.lastN_total[self.events[i]] = @(totalValue.intValue + frameValue.intValue);
         
         if(self.lastN.count > 10){
-            totalValue = self.lastN_total[self.events[i][0]] ?: @0;
-            frameValue = self.lastN[0][self.events[i][0]] ?: @0;
-            self.lastN_total[self.events[i][0]] = @(totalValue.intValue - frameValue.intValue);
+            totalValue = self.lastN_total[self.events[i]] ?: @0;
+            frameValue = self.lastN[0][self.events[i]] ?: @0;
+            self.lastN_total[self.events[i]] = @(totalValue.intValue - frameValue.intValue);
         }
-        int current_state = (int)roundf((self.lastN_total[self.events[i][0]] ? [self.lastN_total[self.events[i][0]] floatValue] : 0.0) / 10.0);
-        if(!self.lastN_state[self.events[i][0]]){
-            self.lastN_state[self.events[i][0]] = 0;
+        int current_state = (int)roundf((self.lastN_total[self.events[i]] ? [self.lastN_total[self.events[i]] floatValue] : 0.0) / 10.0);
+        if(!self.lastN_state[self.events[i]]){
+            self.lastN_state[self.events[i]] = 0;
         }
         
-        if(current_state != [self.lastN_state[self.events[i][0]] intValue]){
+        if(current_state != [self.lastN_state[self.events[i]] intValue]){
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
             NSString *documentsDirectory = [paths firstObject];
             NSString *filePath = [documentsDirectory stringByAppendingPathComponent:@"events.txt"];
@@ -51,12 +51,12 @@
             [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
             NSString *timestamp = [dateFormatter stringFromDate:[NSDate date]];
 
-            NSString *contentToWrite = [NSString stringWithFormat:@"%@ class: %@ x%@\n", timestamp, self.events[i][0], @(current_state)];
+            NSString *contentToWrite = [NSString stringWithFormat:@"%@ class: %@ x%@\n", timestamp, self.events[i], @(current_state)];
             NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
             [fileHandle seekToEndOfFile];
             [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
             [fileHandle closeFile];
-            self.lastN_state[self.events[i][0]] = @(current_state);
+            self.lastN_state[self.events[i]] = @(current_state);
         }
         
     }

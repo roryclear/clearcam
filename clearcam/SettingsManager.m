@@ -62,10 +62,10 @@
     }
 }
 
-- (NSArray<NSArray<NSNumber *> *> *)generateDefaultEvents {
-    NSMutableArray<NSArray<NSNumber *> *> *defaultEvenets = [NSMutableArray array];
-    [defaultEvenets addObject:@[@0,@1]]; // 1 person for now // todo, default will be none, +/- person will be a bool
-    [defaultEvenets addObject:@[@2,@1]]; // 1 car why not?
+- (NSArray<NSNumber *> *)generateDefaultEvents {
+    NSMutableArray<NSNumber *> *defaultEvenets = [NSMutableArray array];
+    [defaultEvenets addObject:@0]; // 1 person for now // todo, default will be none, +/- person will be a bool
+    [defaultEvenets addObject:@2]; // 1 car why not?
     return [defaultEvenets copy];
 }
 
