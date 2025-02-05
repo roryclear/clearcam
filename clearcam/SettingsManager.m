@@ -63,10 +63,16 @@
 }
 
 - (NSArray<NSNumber *> *)generateDefaultEvents {
-    NSMutableArray<NSNumber *> *defaultEvenets = [NSMutableArray array];
-    [defaultEvenets addObject:@0]; // 1 person for now // todo, default will be none, +/- person will be a bool
-    [defaultEvenets addObject:@2]; // 1 car why not?
-    return [defaultEvenets copy];
+    NSMutableArray<NSNumber *> *defaultEvents = [NSMutableArray array];
+    [defaultEvents addObject:@0]; // 1 person for now // todo, default will be none, +/- person will be a bool
+    [defaultEvents addObject:@2]; // 1 car why not?
+    return [defaultEvents copy];
+}
+
+- (NSDictionary*)generateDefaultAlerts { //todo, alerts events, min-max all in one object?
+    NSMutableDictionary *defaultAlerts = [[NSMutableDictionary alloc] init];
+    defaultAlerts[@2] = 0; //just min 0 for now
+    return [defaultAlerts copy];
 }
 
 @end

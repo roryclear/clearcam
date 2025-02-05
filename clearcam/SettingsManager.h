@@ -4,6 +4,7 @@
 
 @property (nonatomic, strong) NSArray<NSNumber *> *yolo_indexes;
 @property (nonatomic, strong) NSArray<NSNumber *> *events;
+@property (nonatomic, strong) NSDictionary *alerts;
 
 
 + (instancetype)sharedManager;

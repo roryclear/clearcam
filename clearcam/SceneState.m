@@ -9,6 +9,7 @@
         self.lastN = [NSMutableArray array];
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.events = [SettingsManager sharedManager].events;
+        self.alerts = [SettingsManager sharedManager].alerts;
     }
     return self;
 }
@@ -52,6 +53,17 @@
             [fileHandle seekToEndOfFile];
             [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
             [fileHandle closeFile];
+            
+            if(current_state == [self.alerts[self.events[i]] intValue]){
+                filePath = [documentsDirectory stringByAppendingPathComponent:@"alerts.txt"];
+                if (![fileManager fileExistsAtPath:filePath]) {
+                    [fileManager createFileAtPath:filePath contents:nil attributes:nil];
+                }
+                fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
+                [fileHandle seekToEndOfFile];
+                [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
+                [fileHandle closeFile];
+            }
         }
         
     }
