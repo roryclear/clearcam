@@ -3,6 +3,8 @@
 @interface SettingsManager : NSObject
 
 @property (nonatomic, strong) NSArray<NSNumber *> *yolo_indexes;
+@property (nonatomic, strong) NSArray<NSArray<NSNumber *> *> *events;
+
 
 + (instancetype)sharedManager;
 - (void)saveYoloIndexes;

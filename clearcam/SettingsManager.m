@@ -15,6 +15,7 @@
     self = [super init];
     if (self) {
         [self loadYoloIndexes];
+        [self loadEvents];
     }
     return self;
 }
@@ -50,6 +51,21 @@
     NSArray<NSNumber *> *defaultIndexes = @[@0, @1, @2, @3, @5, @7]; //vehicles+people preset for now (person, bicycle, car, motorcycle, bus, truck)
      */
     return [defaultIndexes copy];
+}
+
+- (void)loadEvents {
+    NSArray *savedEvents = [[NSUserDefaults standardUserDefaults] arrayForKey:@"events"];
+    if (savedEvents) {
+        self.events = savedEvents;
+    } else {
+        self.events = [self generateDefaultEvents];
+    }
+}
+
+- (NSArray<NSArray<NSNumber *> *> *)generateDefaultEvents {
+    NSMutableArray<NSArray<NSNumber *> *> *defaultEvenets = [NSMutableArray array];
+    [defaultEvenets addObject:@[@0,@1]]; // +1 change in person for now // todo, default will be none
+    return [defaultEvenets copy];
 }
 
 @end
