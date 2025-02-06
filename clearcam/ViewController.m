@@ -65,6 +65,7 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
+        continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-27"]) continue;
 
@@ -412,25 +413,49 @@ NSMutableDictionary *classColorMap;
     NSFileManager *fileManager = [NSFileManager defaultManager];
     if (![fileManager fileExistsAtPath:filePath]) {
         NSError *error;
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry] options:NSJSONWritingPrettyPrinted error:&error];
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry]
+                                                           options:NSJSONWritingPrettyPrinted
+                                                             error:&error];
         if (!error) {
-            [jsonData writeToFile:filePath atomically:YES];
+            BOOL success = [jsonData writeToFile:filePath atomically:YES];
+            if (!success) {
+                NSLog(@"Failed to write JSON to file.");
+            }
         } else {
             NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
         }
     } else {
-        NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
-        if (fileHandle) {
-            [fileHandle seekToEndOfFile];
-            [fileHandle truncateFileAtOffset:[fileHandle offsetInFile] - 1];
-            NSString *entryString = [NSString stringWithFormat:@", %@]", [self jsonStringFromDictionary:segmentEntry]];
-            [fileHandle writeData:[entryString dataUsingEncoding:NSUTF8StringEncoding]];
-            [fileHandle closeFile];
-        } else {
+        NSFileHandle *fileHandle = [NSFileHandle fileHandleForUpdatingAtPath:filePath];
+        if (!fileHandle) {
             NSLog(@"Error opening file for writing.");
+            return;
+        }
+        @try {
+            NSData *existingData = [fileManager contentsAtPath:filePath];
+            if (!existingData) {
+                NSLog(@"Error reading existing file contents.");
+                return;
+            }
+            NSMutableArray *jsonArray = [NSJSONSerialization JSONObjectWithData:existingData options:NSJSONReadingMutableContainers error:nil];
+            if (![jsonArray isKindOfClass:[NSMutableArray class]]) {
+                NSLog(@"Error parsing JSON: Not an array.");
+                return;
+            }
+            [jsonArray addObject:segmentEntry];
+            NSData *updatedJsonData = [NSJSONSerialization dataWithJSONObject:jsonArray options:NSJSONWritingPrettyPrinted error:nil];
+            if (updatedJsonData) {
+                [fileHandle truncateFileAtOffset:0];
+                [fileHandle writeData:updatedJsonData];
+            } else {
+                NSLog(@"Error serializing updated JSON.");
+            }
+        }
+        @finally {
+            [fileHandle closeFile];
         }
     }
 }
+
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
     NSError *error;

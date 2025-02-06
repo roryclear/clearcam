@@ -65,7 +65,7 @@
 - (NSArray<NSNumber *> *)generateDefaultEvents {
     NSMutableArray<NSNumber *> *defaultEvents = [NSMutableArray array];
     [defaultEvents addObject:@0]; // 1 person for now // todo, default will be none, +/- person will be a bool
-    [defaultEvents addObject:@2]; // 1 car why not?
+    [defaultEvents addObject:@2];
     return [defaultEvents copy];
 }
 
