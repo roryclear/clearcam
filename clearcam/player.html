@@ -883,6 +883,8 @@
 
                 function switchToNextSegment() {
                     if (currentSegment + 1 < segments.length) {
+                        let lostFrames = segments[currentSegment].lostFrames
+                        console.log(lostFrames);
                         currentSegment++;
                         is_prepared[video_index] = false;
                         video_index = (video_index + 1) % videoPlayers.length;
@@ -896,9 +898,17 @@
                         currentVideo.style.display = "block";
 
                         // Play the video
-                        currentVideo.play().catch(() => {
-                            retrySegment(currentVideo);
-                        });
+                        if(lostFrames < 1){
+                            setTimeout(() => {
+                                currentVideo.play().catch(() => {
+                                    retrySegment(currentVideo);
+                                });
+                            }, lostFrames*1000); // to ms
+                        } else {
+                            currentVideo.play().catch(() => {
+                                retrySegment(currentVideo);
+                            });
+                        }
 
                         // Adjust container dimensions based on video orientation
                         currentVideo.addEventListener('loadedmetadata', () => {

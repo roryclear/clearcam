@@ -26,6 +26,7 @@
 @property (nonatomic, assign) NSDate *current_file_timestamp;
 @property (nonatomic, strong) NSMutableDictionary *digits;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
+@property (nonatomic, strong) NSLock *segmentLock;
 
 @end
 
@@ -49,6 +50,7 @@ NSMutableDictionary *classColorMap;
     self.digits[@"9"] = @[@[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ],@[ @0, @4, @3, @1 ]];
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
+    self.segmentLock = [[NSLock alloc] init]; //dont allow current_segment_squares to be accessed twice at once!
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
     
     //TODO REMOVE THIS
@@ -65,7 +67,7 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
-        continue;
+        //continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-27"]) continue;
 
@@ -400,8 +402,10 @@ NSMutableDictionary *classColorMap;
             
             [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
             [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-        
+            
+            [self.segmentLock lock];
             [self.current_segment_squares removeAllObjects];
+            [self.segmentLock unlock];
             [self startNewRecording];
         }];
     } else {
@@ -573,7 +577,9 @@ NSMutableDictionary *classColorMap;
                     // Ensure thread safety and check for nil
                     @synchronized(weak_self) {
                         if (frame) {
+                            [self.segmentLock lock];
                             [weak_self.current_segment_squares addObject:frame];
+                            [self.segmentLock unlock];
                         } else {
                             NSLog(@"Warning: Attempted to insert nil frame into array.");
                         }
@@ -715,4 +721,5 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
