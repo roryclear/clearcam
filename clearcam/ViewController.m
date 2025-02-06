@@ -157,7 +157,7 @@ NSMutableDictionary *classColorMap;
 - (void)startNewRecording {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
-    NSString *hourFolderName = [formatter stringFromDate:[NSDate date]];
+    NSString *dayFolderName = [formatter stringFromDate:[NSDate date]];
     
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
     self.current_file_timestamp = [NSDate date];
@@ -169,21 +169,21 @@ NSMutableDictionary *classColorMap;
                                 segNumberString,
                                 [[timestamp componentsSeparatedByString:@"_"] lastObject]];
     
-    // Create a folder for the hour within the documents directory
+    // Create a folder for the day within the documents directory
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *hourFolderURL = [documentsDirectory URLByAppendingPathComponent:hourFolderName];
+    NSURL *dayFolderURL = [documentsDirectory URLByAppendingPathComponent:dayFolderName];
     
     // Ensure the directory exists
     NSError *error = nil;
-    if (![[NSFileManager defaultManager] fileExistsAtPath:hourFolderURL.path]) {
-        [[NSFileManager defaultManager] createDirectoryAtURL:hourFolderURL withIntermediateDirectories:YES attributes:nil error:&error];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:dayFolderURL.path]) {
+        [[NSFileManager defaultManager] createDirectoryAtURL:dayFolderURL withIntermediateDirectories:YES attributes:nil error:&error];
         if (error) {
-            NSLog(@"Error creating hour folder: %@", error.localizedDescription);
+            NSLog(@"Error creating day folder: %@", error.localizedDescription);
             return;
         }
     }
     
-    NSURL *outputURL = [hourFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
+    NSURL *outputURL = [dayFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
     self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
     if (error) {
         NSLog(@"Error creating asset writer: %@", error.localizedDescription);
@@ -347,7 +347,6 @@ NSMutableDictionary *classColorMap;
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
 
-            // Use self.current_file_timestamp to get the date and hour without minutes and seconds
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
             [dateFormatter setDateFormat:@"yyyy-MM-dd"];
             NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
