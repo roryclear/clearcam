@@ -15,6 +15,7 @@
     self = [super init];
     if (self) {
         [self loadYoloIndexes];
+        [self loadEvents];
     }
     return self;
 }
@@ -50,6 +51,28 @@
     NSArray<NSNumber *> *defaultIndexes = @[@0, @1, @2, @3, @5, @7]; //vehicles+people preset for now (person, bicycle, car, motorcycle, bus, truck)
      */
     return [defaultIndexes copy];
+}
+
+- (void)loadEvents {
+    NSArray *savedEvents = [[NSUserDefaults standardUserDefaults] arrayForKey:@"events"];
+    if (savedEvents) {
+        self.events = savedEvents;
+    } else {
+        self.events = [self generateDefaultEvents];
+    }
+}
+
+- (NSArray<NSNumber *> *)generateDefaultEvents {
+    NSMutableArray<NSNumber *> *defaultEvents = [NSMutableArray array];
+    [defaultEvents addObject:@0]; // 1 person for now // todo, default will be none, +/- person will be a bool
+    [defaultEvents addObject:@2];
+    return [defaultEvents copy];
+}
+
+- (NSDictionary*)generateDefaultAlerts { //todo, alerts events, min-max all in one object?
+    NSMutableDictionary *defaultAlerts = [[NSMutableDictionary alloc] init];
+    defaultAlerts[@2] = 0; //just min 0 for now
+    return [defaultAlerts copy];
 }
 
 @end

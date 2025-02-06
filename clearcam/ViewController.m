@@ -26,6 +26,7 @@
 @property (nonatomic, assign) NSDate *current_file_timestamp;
 @property (nonatomic, strong) NSMutableDictionary *digits;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
+@property (nonatomic, strong) NSLock *segmentLock;
 
 @end
 
@@ -49,6 +50,7 @@ NSMutableDictionary *classColorMap;
     self.digits[@"9"] = @[@[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ],@[ @0, @4, @3, @1 ]];
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
+    self.segmentLock = [[NSLock alloc] init]; //dont allow current_segment_squares to be accessed twice at once!
     [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
     
     //TODO REMOVE THIS
@@ -65,6 +67,7 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
+        //continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-27"]) continue;
 
@@ -399,8 +402,10 @@ NSMutableDictionary *classColorMap;
             
             [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
             [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-        
+            
+            [self.segmentLock lock];
             [self.current_segment_squares removeAllObjects];
+            [self.segmentLock unlock];
             [self startNewRecording];
         }];
     } else {
@@ -412,25 +417,49 @@ NSMutableDictionary *classColorMap;
     NSFileManager *fileManager = [NSFileManager defaultManager];
     if (![fileManager fileExistsAtPath:filePath]) {
         NSError *error;
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry] options:NSJSONWritingPrettyPrinted error:&error];
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry]
+                                                           options:NSJSONWritingPrettyPrinted
+                                                             error:&error];
         if (!error) {
-            [jsonData writeToFile:filePath atomically:YES];
+            BOOL success = [jsonData writeToFile:filePath atomically:YES];
+            if (!success) {
+                NSLog(@"Failed to write JSON to file.");
+            }
         } else {
             NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
         }
     } else {
-        NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
-        if (fileHandle) {
-            [fileHandle seekToEndOfFile];
-            [fileHandle truncateFileAtOffset:[fileHandle offsetInFile] - 1];
-            NSString *entryString = [NSString stringWithFormat:@", %@]", [self jsonStringFromDictionary:segmentEntry]];
-            [fileHandle writeData:[entryString dataUsingEncoding:NSUTF8StringEncoding]];
-            [fileHandle closeFile];
-        } else {
+        NSFileHandle *fileHandle = [NSFileHandle fileHandleForUpdatingAtPath:filePath];
+        if (!fileHandle) {
             NSLog(@"Error opening file for writing.");
+            return;
+        }
+        @try {
+            NSData *existingData = [fileManager contentsAtPath:filePath];
+            if (!existingData) {
+                NSLog(@"Error reading existing file contents.");
+                return;
+            }
+            NSMutableArray *jsonArray = [NSJSONSerialization JSONObjectWithData:existingData options:NSJSONReadingMutableContainers error:nil];
+            if (![jsonArray isKindOfClass:[NSMutableArray class]]) {
+                NSLog(@"Error parsing JSON: Not an array.");
+                return;
+            }
+            [jsonArray addObject:segmentEntry];
+            NSData *updatedJsonData = [NSJSONSerialization dataWithJSONObject:jsonArray options:NSJSONWritingPrettyPrinted error:nil];
+            if (updatedJsonData) {
+                [fileHandle truncateFileAtOffset:0];
+                [fileHandle writeData:updatedJsonData];
+            } else {
+                NSLog(@"Error serializing updated JSON.");
+            }
+        }
+        @finally {
+            [fileHandle closeFile];
         }
     }
 }
+
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
     NSError *error;
@@ -548,7 +577,9 @@ NSMutableDictionary *classColorMap;
                     // Ensure thread safety and check for nil
                     @synchronized(weak_self) {
                         if (frame) {
+                            [self.segmentLock lock];
                             [weak_self.current_segment_squares addObject:frame];
+                            [self.segmentLock unlock];
                         } else {
                             NSLog(@"Warning: Attempted to insert nil frame into array.");
                         }
@@ -690,4 +721,5 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 

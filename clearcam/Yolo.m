@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 #import <sys/utsname.h>
 #import "SettingsManager.h"
+#import "SceneState.h"
 
 @implementation Yolo
 
@@ -22,6 +23,7 @@ UInt8 *rgbData;
 
 - (instancetype)init {
     self = [super init];
+    self.scene = [[SceneState alloc] init];
     self.device = MTLCreateSystemDefaultDevice();
     self.pipeline_states = [[NSMutableDictionary alloc] init];
     self.buffers = [[NSMutableDictionary alloc] init];
@@ -366,6 +368,7 @@ UInt8 *rgbData;
         if (i < output.count - 1) [classNamesString appendString:@", "];
     }
     //NSLog(@"Class Names: %@", classNamesString);
+    [self.scene processOutput:output];
     if(output.count > 0){
         NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
         [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
