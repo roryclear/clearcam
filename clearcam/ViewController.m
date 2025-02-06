@@ -342,70 +342,67 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         [self.assetWriter finishWritingWithCompletionHandler:^{
 
-            NSString *fileName = [self.assetWriter.outputURL lastPathComponent];
+        AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
+        CMTime time = asset.duration;
 
-            AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
-            CMTime time = asset.duration;
+        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+        [dateFormatter setDateFormat:@"yyyy-MM-dd"];
+        NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
 
-            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-            [dateFormatter setDateFormat:@"yyyy-MM-dd"];
-            NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
+        // Get the documents directory
+        NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+        NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateFolderName];
 
-            // Get the documents directory
+        // Create the folder if it doesn't exist
+        NSError *error = nil;
+        if (![[NSFileManager defaultManager] fileExistsAtPath:segmentsDirectory]) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error];
+            if (error) {
+                NSLog(@"Error creating directory: %@", error);
+            }
+        }
+
+        NSCalendar *calendar = [NSCalendar currentCalendar];
+        NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
+        NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
+
+        if (!self.fileServer.segmentsDict[dateKey]) {
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateFolderName];
-
-            // Create the folder if it doesn't exist
-            NSError *error = nil;
-            if (![[NSFileManager defaultManager] fileExistsAtPath:segmentsDirectory]) {
-                [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error];
-                if (error) {
-                    NSLog(@"Error creating directory: %@", error);
-                }
-            }
-
-            // Path to segments.txt in the date folder
+            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateKey];
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-
-            NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
-            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
-
-            if (!self.fileServer.segmentsDict[dateKey]) {
-                NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-                NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateKey];
-                NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-                if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
-                    NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
-                    NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
-                    if (fileSegments) {
-                        self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
-                    }
+            if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
+                NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
+                NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
+                if (fileSegments) {
+                    self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
                 }
-                if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
             }
+            if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
+        }
 
 
-            NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
-                @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent],
-                @"duration": @(CMTimeGetSeconds(time)),
-                @"frames":[self.current_segment_squares copy]
-            }];
-                        
-            //timestamp of every segment now
-            calendar = [NSCalendar currentCalendar];
-            components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
-            NSDate *midnight = [calendar dateFromComponents:components];
-            NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
-            segmentEntry[@"timeStamp"] = @(timeStamp);
+        NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
+            @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent],
+            @"duration": @(CMTimeGetSeconds(time)),
+            @"frames":[self.current_segment_squares copy]
+        }];
+                    
+        //timestamp of every segment now
+        calendar = [NSCalendar currentCalendar];
+        components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+        NSDate *midnight = [calendar dateFromComponents:components];
+        NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
+        segmentEntry[@"timeStamp"] = @(timeStamp);
             
-            [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath]; // Not used yet
-            [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-            
-            [self.segmentLock lock];
-            [self.current_segment_squares removeAllObjects];
-            [self.segmentLock unlock];
-            [self startNewRecording];
+
+        [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
+        
+        [self startNewRecording];
+        NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
+        [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath];
+        [self.segmentLock lock];
+        [self.current_segment_squares removeAllObjects];
+        [self.segmentLock unlock];
         }];
     } else {
         NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
