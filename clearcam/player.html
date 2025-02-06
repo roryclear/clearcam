@@ -897,7 +897,8 @@
                         currentVideo.style.display = "block";
 
                         // Play the video
-                        if(lostFrames < 1){
+                        if(lostFrames < 60){
+                            console.log(`${lostFrames} - ${segments.length}`);
                             setTimeout(() => {
                                 currentVideo.play().catch(() => {
                                     retrySegment(currentVideo);
