@@ -884,7 +884,6 @@
                 function switchToNextSegment() {
                     if (currentSegment + 1 < segments.length) {
                         let lostFrames = segments[currentSegment].lostFrames
-                        console.log(lostFrames);
                         currentSegment++;
                         is_prepared[video_index] = false;
                         video_index = (video_index + 1) % videoPlayers.length;
@@ -903,7 +902,8 @@
                                 currentVideo.play().catch(() => {
                                     retrySegment(currentVideo);
                                 });
-                            }, lostFrames*1000); // to ms
+                            }, lostFrames*1000 + 28); // to ms //todo +28ms is a hack to stop the playback playing slightly too fast,
+                            //+28 was picked from trial and error, but may be proportional to frame rate
                         } else {
                             currentVideo.play().catch(() => {
                                 retrySegment(currentVideo);
