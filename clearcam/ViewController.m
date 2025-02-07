@@ -67,7 +67,7 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
-        //continue;
+        continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-27"]) continue;
 
@@ -411,8 +411,11 @@ NSMutableDictionary *classColorMap;
 
 - (void)saveSegmentEntry:(NSDictionary *)segmentEntry toFile:(NSString *)filePath {
     NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSError *error = nil;
+
+    // Check if file exists
     if (![fileManager fileExistsAtPath:filePath]) {
-        NSError *error;
+        // Create a new file with the initial JSON array
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry]
                                                            options:NSJSONWritingPrettyPrinted
                                                              error:&error];
@@ -425,37 +428,44 @@ NSMutableDictionary *classColorMap;
             NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
         }
     } else {
+        // Open the file for updating
         NSFileHandle *fileHandle = [NSFileHandle fileHandleForUpdatingAtPath:filePath];
         if (!fileHandle) {
             NSLog(@"Error opening file for writing.");
             return;
         }
+        
         @try {
-            NSData *existingData = [fileManager contentsAtPath:filePath];
-            if (!existingData) {
-                NSLog(@"Error reading existing file contents.");
+            // Seek to the end of the file
+            [fileHandle seekToEndOfFile];
+            
+            // Create a comma to separate the new JSON object
+            NSString *commaString = @",";
+            NSData *commaData = [commaString dataUsingEncoding:NSUTF8StringEncoding];
+            
+            // Write the comma to the file
+            [fileHandle writeData:commaData];
+            
+            // Serialize the new JSON object
+            NSData *newJsonData = [NSJSONSerialization dataWithJSONObject:segmentEntry options:0 error:&error];
+            if (!newJsonData || error) {
+                NSLog(@"Error serializing new JSON: %@", error.localizedDescription);
                 return;
             }
-            NSMutableArray *jsonArray = [NSJSONSerialization JSONObjectWithData:existingData options:NSJSONReadingMutableContainers error:nil];
-            if (![jsonArray isKindOfClass:[NSMutableArray class]]) {
-                NSLog(@"Error parsing JSON: Not an array.");
-                return;
-            }
-            [jsonArray addObject:segmentEntry];
-            NSData *updatedJsonData = [NSJSONSerialization dataWithJSONObject:jsonArray options:NSJSONWritingPrettyPrinted error:nil];
-            if (updatedJsonData) {
-                [fileHandle truncateFileAtOffset:0];
-                [fileHandle writeData:updatedJsonData];
-            } else {
-                NSLog(@"Error serializing updated JSON.");
-            }
+            
+            // Write the new JSON object to the file
+            [fileHandle writeData:newJsonData];
+            
+            // Insert closing bracket at the end of file
+            NSString *closingBracketString = @"]";
+            NSData *closingBracketData = [closingBracketString dataUsingEncoding:NSUTF8StringEncoding];
+            [fileHandle writeData:closingBracketData];
         }
         @finally {
             [fileHandle closeFile];
         }
     }
 }
-
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
     NSError *error;
@@ -717,5 +727,6 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
 
