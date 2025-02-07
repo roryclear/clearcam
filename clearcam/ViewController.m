@@ -374,6 +374,7 @@ NSMutableDictionary *classColorMap;
                 NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
                 NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
                 if (fileSegments) {
+                    NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
                     self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
                 }
             }
@@ -436,8 +437,25 @@ NSMutableDictionary *classColorMap;
         }
         
         @try {
-            // Seek to the end of the file
+            // Seek to the end of the file minus 1 byte (to remove the last ']')
             [fileHandle seekToEndOfFile];
+            unsigned long long fileLength = [fileHandle offsetInFile];
+            if (fileLength < 1) {
+                NSLog(@"File is too short to be valid JSON.");
+                return;
+            }
+            [fileHandle seekToFileOffset:fileLength - 1];
+            
+            // Read the last character to ensure it's a ']'
+            NSData *lastCharData = [fileHandle readDataOfLength:1];
+            NSString *lastChar = [[NSString alloc] initWithData:lastCharData encoding:NSUTF8StringEncoding];
+            if (![lastChar isEqualToString:@"]"]) {
+                NSLog(@"File does not end with a valid JSON array closing bracket.");
+                return;
+            }
+            
+            // Truncate the file to remove the last ']'
+            [fileHandle truncateFileAtOffset:fileLength - 1];
             
             // Create a comma to separate the new JSON object
             NSString *commaString = @",";
