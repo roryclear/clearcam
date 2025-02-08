@@ -70,6 +70,7 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
+        continue;
         if ([file hasPrefix:@"video_"]) continue;
         if ([file hasPrefix:@"opp"]) continue;
         if ([file hasPrefix:@"batch_req"]) continue;
@@ -159,7 +160,7 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)startNewRecording {
-    [self ensureFreeDiskSpaceInBackground];
+    [self ensureFreeDiskSpace];
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
     NSString *dayFolderName = [formatter stringFromDate:[NSDate date]];
@@ -514,70 +515,65 @@ NSMutableDictionary *classColorMap;
     return freeSpace;
 }
 
-- (void)ensureFreeDiskSpaceInBackground {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        [self ensureFreeDiskSpace];
-    });
-}
-
-
 - (void)ensureFreeDiskSpace { //todo, this should also remove from segments.txt etc
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    
-    double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
-    NSLog(@"Current free space: %.2f GB", freeSpace);
-    while (freeSpace < (MIN_FREE_SPACE_MB / 1024.0)) {
-        NSError *error;
-        NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
-        if (error) {
-            NSLog(@"Error retrieving contents of Documents directory: %@", error.localizedDescription);
-            return;
-        }
-
-        // Get only folders, sorted alphabetically
-        NSMutableArray *folders = [NSMutableArray array];
-        for (NSString *item in contents) {
-            NSString *fullPath = [documentsPath stringByAppendingPathComponent:item];
-            BOOL isDirectory;
-            if ([fileManager fileExistsAtPath:fullPath isDirectory:&isDirectory] && isDirectory) {
-                [folders addObject:fullPath];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+        
+        double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
+        NSLog(@"Current free space: %.2f GB", freeSpace);
+        while (freeSpace < (MIN_FREE_SPACE_MB / 1024.0)) {
+            NSError *error;
+            NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
+            if (error) {
+                NSLog(@"Error retrieving contents of Documents directory: %@", error.localizedDescription);
+                return;
             }
-        }
 
-        [folders sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)]; // Sort folders alphabetically
-
-        // Delete files inside folders in order
-        BOOL deletedSomething = NO;
-        for (NSString *folderPath in folders) {
-            NSArray *files = [fileManager contentsOfDirectoryAtPath:folderPath error:nil];
-            if (files.count == 0) continue;
-
-            // Sort files alphabetically
-            files = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-
-            for (NSString *file in files) {
-                NSString *filePath = [folderPath stringByAppendingPathComponent:file];
+            // Get only folders, sorted alphabetically
+            NSMutableArray *folders = [NSMutableArray array];
+            for (NSString *item in contents) {
+                NSString *fullPath = [documentsPath stringByAppendingPathComponent:item];
                 BOOL isDirectory;
-                if ([fileManager fileExistsAtPath:filePath isDirectory:&isDirectory] && !isDirectory) {
-                    NSLog(@"Deleting file: %@", filePath);
-                    [fileManager removeItemAtPath:filePath error:nil];
-                    deletedSomething = YES;
+                if ([fileManager fileExistsAtPath:fullPath isDirectory:&isDirectory] && isDirectory) {
+                    [folders addObject:fullPath];
+                }
+            }
 
-                    // Check if free space is now over 1GB
-                    if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0) > TARGET_FREE_SPACE_GB) {
-                        return;
+            [folders sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)]; // Sort folders alphabetically
+
+            // Delete files inside folders in order
+            BOOL deletedSomething = NO;
+            for (NSString *folderPath in folders) {
+                NSArray *files = [fileManager contentsOfDirectoryAtPath:folderPath error:nil];
+                if (files.count == 0) continue;
+
+                // Sort files alphabetically
+                files = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+
+                for (NSString *file in files) {
+                    NSString *filePath = [folderPath stringByAppendingPathComponent:file];
+                    BOOL isDirectory;
+                    if ([fileManager fileExistsAtPath:filePath isDirectory:&isDirectory] && !isDirectory) {
+                        NSLog(@"Deleting file: %@", filePath);
+                        [fileManager removeItemAtPath:filePath error:nil];
+                        deletedSomething = YES;
+
+                        // Check if free space is now over 1GB
+                        if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0) > TARGET_FREE_SPACE_GB) {
+                            return;
+                        }
                     }
                 }
             }
-        }
 
-        // If no files were deleted, break to prevent infinite loop
-        if (!deletedSomething) {
-            NSLog(@"No more deletable files found.");
-            break;
+            // If no files were deleted, break to prevent infinite loop
+            if (!deletedSomething) {
+                NSLog(@"No more deletable files found.");
+                break;
+            }
         }
-    }
+    });
 }
 
 
