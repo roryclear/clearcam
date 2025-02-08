@@ -159,7 +159,7 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)startNewRecording {
-    [self ensureFreeDiskSpace];
+    [self ensureFreeDiskSpaceInBackground];
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
     NSString *dayFolderName = [formatter stringFromDate:[NSDate date]];
@@ -512,6 +512,12 @@ NSMutableDictionary *classColorMap;
 
     uint64_t freeSpace = [[attributes objectForKey:NSFileSystemFreeSize] unsignedLongLongValue];
     return freeSpace;
+}
+
+- (void)ensureFreeDiskSpaceInBackground {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+        [self ensureFreeDiskSpace];
+    });
 }
 
 
