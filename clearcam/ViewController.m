@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 17800  // 100MB threshold to start deleting
+#define MIN_FREE_SPACE_MB 20500  //threshold to start deleting
 
 @end
 
@@ -69,7 +69,6 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
-        continue;
         if ([file hasPrefix:@"video_"]) continue;
         if ([file hasPrefix:@"opp"]) continue;
         if ([file hasPrefix:@"batch_req"]) continue;
@@ -579,6 +578,13 @@ NSMutableDictionary *classColorMap;
                     NSLog(@"No 'url' field found in the first entry of segments.txt in folder %@.", folderPath);
                     continue;
                 }
+                
+                NSString *date = [[folderPath componentsSeparatedByString:@"/"] lastObject];
+                NSMutableArray *segmentsForDate = [self.fileServer.segmentsDict[date] mutableCopy]; //todo, shouldn't need to do this?
+                if (segmentsForDate && [segmentsForDate count] > 0) {
+                    [segmentsForDate removeObjectAtIndex:0];
+                    self.fileServer.segmentsDict[date] = segmentsForDate;
+                }
 
                 // Construct the full path to the file (relative to the parent directory, i.e., `documentsPath`)
                 NSString *filePath = [documentsPath stringByAppendingPathComponent:fileToDelete];
@@ -876,7 +882,3 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-
-
-
-
