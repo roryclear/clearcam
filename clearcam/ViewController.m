@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 20500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 200  //threshold to start deleting
 
 @end
 
@@ -69,7 +69,6 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
-        if ([file hasPrefix:@"video_"]) continue;
         if ([file hasPrefix:@"opp"]) continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-27"]) continue;
