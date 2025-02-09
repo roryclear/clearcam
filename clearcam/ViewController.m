@@ -28,8 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 150  // 100MB threshold to start deleting
-#define TARGET_FREE_SPACE_GB 1 // 1GB free space target
+#define MIN_FREE_SPACE_MB 17800  // 100MB threshold to start deleting
 
 @end
 
@@ -515,13 +514,14 @@ NSMutableDictionary *classColorMap;
     return freeSpace;
 }
 
-- (void)ensureFreeDiskSpace { //todo, this should also remove from segments.txt etc
+- (void)ensureFreeDiskSpace {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
         NSFileManager *fileManager = [NSFileManager defaultManager];
-        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        
+        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]; // Uses your app's Documents directory
+
         double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
         NSLog(@"Current free space: %.2f GB", freeSpace);
+
         while (freeSpace < (MIN_FREE_SPACE_MB / 1024.0)) {
             NSError *error;
             NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
@@ -542,28 +542,80 @@ NSMutableDictionary *classColorMap;
 
             [folders sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)]; // Sort folders alphabetically
 
-            // Delete files inside folders in order
+            // Iterate through folders in alphabetical order
             BOOL deletedSomething = NO;
             for (NSString *folderPath in folders) {
-                NSArray *files = [fileManager contentsOfDirectoryAtPath:folderPath error:nil];
-                if (files.count == 0) continue;
+                NSString *segmentsFilePath = [folderPath stringByAppendingPathComponent:@"segments.txt"];
+                
+                // Check if segments.txt exists in the folder
+                if (![fileManager fileExistsAtPath:segmentsFilePath]) {
+                    NSLog(@"No segments.txt found in folder: %@", folderPath);
+                    continue;
+                }
 
-                // Sort files alphabetically
-                files = [files sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+                // Read the segments.txt file
+                NSData *segmentsData = [NSData dataWithContentsOfFile:segmentsFilePath options:0 error:&error];
+                if (error) {
+                    NSLog(@"Error reading segments.txt in folder %@: %@", folderPath, error.localizedDescription);
+                    continue;
+                }
 
-                for (NSString *file in files) {
-                    NSString *filePath = [folderPath stringByAppendingPathComponent:file];
-                    BOOL isDirectory;
-                    if ([fileManager fileExistsAtPath:filePath isDirectory:&isDirectory] && !isDirectory) {
-                        NSLog(@"Deleting file: %@", filePath);
-                        [fileManager removeItemAtPath:filePath error:nil];
-                        deletedSomething = YES;
+                // Parse the JSON data
+                NSMutableArray *segmentsArray = [NSJSONSerialization JSONObjectWithData:segmentsData options:NSJSONReadingMutableContainers error:&error];
+                if (error) {
+                    NSLog(@"Error parsing segments.txt JSON in folder %@: %@", folderPath, error.localizedDescription);
+                    continue;
+                }
 
-                        // Check if free space is now over 1GB
-                        if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0) > TARGET_FREE_SPACE_GB) {
-                            return;
-                        }
+                if (segmentsArray.count == 0) {
+                    NSLog(@"No more entries in segments.txt in folder %@.", folderPath);
+                    continue;
+                }
+
+                // Get the first entry's URL (relative to the parent directory)
+                NSDictionary *firstEntry = segmentsArray[0];
+                NSString *fileToDelete = firstEntry[@"url"];
+                if (!fileToDelete) {
+                    NSLog(@"No 'url' field found in the first entry of segments.txt in folder %@.", folderPath);
+                    continue;
+                }
+
+                // Construct the full path to the file (relative to the parent directory, i.e., `documentsPath`)
+                NSString *filePath = [documentsPath stringByAppendingPathComponent:fileToDelete];
+
+                // Delete the file
+                if ([fileManager fileExistsAtPath:filePath]) {
+                    NSLog(@"Deleting file: %@", filePath);
+                    [fileManager removeItemAtPath:filePath error:&error];
+                    if (error) {
+                        NSLog(@"Error deleting file: %@", error.localizedDescription);
+                        continue;
                     }
+
+                    // Remove the first entry from the segments array
+                    [segmentsArray removeObjectAtIndex:0];
+
+                    // Write the updated segments array back to segments.txt
+                    NSData *updatedSegmentsData = [NSJSONSerialization dataWithJSONObject:segmentsArray options:NSJSONWritingPrettyPrinted error:&error];
+                    if (error) {
+                        NSLog(@"Error serializing updated segments.txt in folder %@: %@", folderPath, error.localizedDescription);
+                        continue;
+                    }
+                    [updatedSegmentsData writeToFile:segmentsFilePath atomically:YES];
+
+                    // Mark that something was deleted
+                    deletedSomething = YES;
+
+                    // Check if free space is now sufficient
+                    freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
+                    NSLog(@"New free space: %.2f GB", freeSpace);
+                    
+                    if (freeSpace >= (MIN_FREE_SPACE_MB / 1024.0)) {
+                        break;
+                    }
+                } else {
+                    NSLog(@"File to delete does not exist: %@", filePath);
+                    continue;
                 }
             }
 
@@ -575,8 +627,6 @@ NSMutableDictionary *classColorMap;
         }
     });
 }
-
-
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
@@ -826,6 +876,7 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
 
 
