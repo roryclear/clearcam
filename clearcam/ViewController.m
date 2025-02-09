@@ -28,6 +28,8 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
+#define MIN_FREE_SPACE_MB 200  //threshold to start deleting
+
 @end
 
 @implementation ViewController
@@ -67,7 +69,7 @@ NSMutableDictionary *classColorMap;
     }
 
     for (NSString *file in contents) {
-        continue;
+        if ([file hasPrefix:@"opp"]) continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         if ([file hasPrefix:@"2025-01-27"]) continue;
 
@@ -155,6 +157,7 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)startNewRecording {
+    [self ensureFreeDiskSpace];
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
     NSString *dayFolderName = [formatter stringFromDate:[NSDate date]];
@@ -496,6 +499,139 @@ NSMutableDictionary *classColorMap;
     }
 }
 
+- (uint64_t)getFreeDiskSpace {
+    NSError *error = nil;
+    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:&error];
+
+    if (error) {
+        NSLog(@"Error retrieving file system info: %@", error.localizedDescription);
+        return 0;
+    }
+
+    uint64_t freeSpace = [[attributes objectForKey:NSFileSystemFreeSize] unsignedLongLongValue];
+    return freeSpace;
+}
+
+- (void)ensureFreeDiskSpace {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]; // Uses your app's Documents directory
+
+        double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
+        NSLog(@"Current free space: %.2f GB", freeSpace);
+
+        while (freeSpace < (MIN_FREE_SPACE_MB / 1024.0)) {
+            NSError *error;
+            NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
+            if (error) {
+                NSLog(@"Error retrieving contents of Documents directory: %@", error.localizedDescription);
+                return;
+            }
+
+            // Get only folders, sorted alphabetically
+            NSMutableArray *folders = [NSMutableArray array];
+            for (NSString *item in contents) {
+                NSString *fullPath = [documentsPath stringByAppendingPathComponent:item];
+                BOOL isDirectory;
+                if ([fileManager fileExistsAtPath:fullPath isDirectory:&isDirectory] && isDirectory) {
+                    [folders addObject:fullPath];
+                }
+            }
+
+            [folders sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)]; // Sort folders alphabetically
+
+            // Iterate through folders in alphabetical order
+            BOOL deletedSomething = NO;
+            for (NSString *folderPath in folders) {
+                NSString *segmentsFilePath = [folderPath stringByAppendingPathComponent:@"segments.txt"];
+                
+                // Check if segments.txt exists in the folder
+                if (![fileManager fileExistsAtPath:segmentsFilePath]) {
+                    NSLog(@"No segments.txt found in folder: %@", folderPath);
+                    continue;
+                }
+
+                // Read the segments.txt file
+                NSData *segmentsData = [NSData dataWithContentsOfFile:segmentsFilePath options:0 error:&error];
+                if (error) {
+                    NSLog(@"Error reading segments.txt in folder %@: %@", folderPath, error.localizedDescription);
+                    continue;
+                }
+
+                // Parse the JSON data
+                NSMutableArray *segmentsArray = [NSJSONSerialization JSONObjectWithData:segmentsData options:NSJSONReadingMutableContainers error:&error];
+                if (error) {
+                    NSLog(@"Error parsing segments.txt JSON in folder %@: %@", folderPath, error.localizedDescription);
+                    continue;
+                }
+
+                if (segmentsArray.count == 0) {
+                    NSLog(@"No more entries in segments.txt in folder %@.", folderPath);
+                    continue;
+                }
+
+                // Get the first entry's URL (relative to the parent directory)
+                NSDictionary *firstEntry = segmentsArray[0];
+                NSString *fileToDelete = firstEntry[@"url"];
+                if (!fileToDelete) {
+                    NSLog(@"No 'url' field found in the first entry of segments.txt in folder %@.", folderPath);
+                    continue;
+                }
+                
+                NSString *date = [[folderPath componentsSeparatedByString:@"/"] lastObject];
+                NSMutableArray *segmentsForDate = [self.fileServer.segmentsDict[date] mutableCopy]; //todo, shouldn't need to do this?
+                if (segmentsForDate && [segmentsForDate count] > 0) {
+                    [segmentsForDate removeObjectAtIndex:0];
+                    self.fileServer.segmentsDict[date] = segmentsForDate;
+                }
+
+                // Construct the full path to the file (relative to the parent directory, i.e., `documentsPath`)
+                NSString *filePath = [documentsPath stringByAppendingPathComponent:fileToDelete];
+
+                // Delete the file
+                if ([fileManager fileExistsAtPath:filePath]) {
+                    NSLog(@"Deleting file: %@", filePath);
+                    [fileManager removeItemAtPath:filePath error:&error];
+                    if (error) {
+                        NSLog(@"Error deleting file: %@", error.localizedDescription);
+                        continue;
+                    }
+
+                    // Remove the first entry from the segments array
+                    [segmentsArray removeObjectAtIndex:0];
+
+                    // Write the updated segments array back to segments.txt
+                    NSData *updatedSegmentsData = [NSJSONSerialization dataWithJSONObject:segmentsArray options:NSJSONWritingPrettyPrinted error:&error];
+                    if (error) {
+                        NSLog(@"Error serializing updated segments.txt in folder %@: %@", folderPath, error.localizedDescription);
+                        continue;
+                    }
+                    [updatedSegmentsData writeToFile:segmentsFilePath atomically:YES];
+
+                    // Mark that something was deleted
+                    deletedSomething = YES;
+
+                    // Check if free space is now sufficient
+                    freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
+                    NSLog(@"New free space: %.2f GB", freeSpace);
+                    
+                    if (freeSpace >= (MIN_FREE_SPACE_MB / 1024.0)) {
+                        break;
+                    }
+                } else {
+                    NSLog(@"File to delete does not exist: %@", filePath);
+                    continue;
+                }
+            }
+
+            // If no files were deleted, break to prevent infinite loop
+            if (!deletedSomething) {
+                NSLog(@"No more deletable files found.");
+                break;
+            }
+        }
+    });
+}
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
@@ -745,6 +881,3 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-
-
-
