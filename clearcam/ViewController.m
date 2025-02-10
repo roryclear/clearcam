@@ -578,12 +578,14 @@ NSMutableDictionary *classColorMap;
                     continue;
                 }
                 
+                /* todo, this breaks live playback until indexes can be updated in front end
                 NSString *date = [[folderPath componentsSeparatedByString:@"/"] lastObject];
-                NSMutableArray *segmentsForDate = [self.fileServer.segmentsDict[date] mutableCopy]; //todo, shouldn't need to do this?
+                NSMutableArray *segmentsForDate = [self.fileServer.segmentsDict[date] mutableCopy];
                 if (segmentsForDate && [segmentsForDate count] > 0) {
                     [segmentsForDate removeObjectAtIndex:0];
                     self.fileServer.segmentsDict[date] = segmentsForDate;
                 }
+                */
 
                 // Construct the full path to the file (relative to the parent directory, i.e., `documentsPath`)
                 NSString *filePath = [documentsPath stringByAppendingPathComponent:fileToDelete];
