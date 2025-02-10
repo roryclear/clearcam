@@ -212,7 +212,7 @@
         }
         
         NSInteger start = startParam ? [startParam integerValue] : 0;
-        if (!self.segmentsDict[dateParam]) {
+        if (!self.segmentsDict[dateParam] || start == 0) {
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
             NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateParam];
             NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
