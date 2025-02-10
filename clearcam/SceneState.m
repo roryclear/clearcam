@@ -10,10 +10,10 @@
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.events = [SettingsManager sharedManager].events;
         self.alerts = [SettingsManager sharedManager].alerts;
+        self.event_times = [[NSMutableArray alloc] init]; //todo init from txt on launch
     }
     return self;
 }
-
 
 - (void)processOutput:(NSArray *)array {
     NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
@@ -45,8 +45,10 @@
                 [fileManager createFileAtPath:filePath contents:nil attributes:nil];
             }
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+            NSDate *date = [NSDate date];
             [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-            NSString *timestamp = [dateFormatter stringFromDate:[NSDate date]];
+            NSString *timestamp = [dateFormatter stringFromDate:date];
+            [self.event_times addObject:date];
 
             NSString *contentToWrite = [NSString stringWithFormat:@"%@ class: %@ x%@\n", timestamp, self.events[i], @(current_state)];
             NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
