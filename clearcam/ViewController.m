@@ -27,8 +27,9 @@
 @property (nonatomic, strong) NSMutableDictionary *digits;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
+@property (nonatomic, strong) NSLock *segmentTxtLock;
 
-#define MIN_FREE_SPACE_MB 200  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 41800  //threshold to start deleting
 
 @end
 
@@ -515,7 +516,7 @@ NSMutableDictionary *classColorMap;
 - (void)ensureFreeDiskSpace {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
         NSFileManager *fileManager = [NSFileManager defaultManager];
-        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject]; // Uses your app's Documents directory
+        NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
 
         double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
         NSLog(@"Current free space: %.2f GB", freeSpace);
@@ -528,7 +529,6 @@ NSMutableDictionary *classColorMap;
                 return;
             }
 
-            // Get only folders, sorted alphabetically
             NSMutableArray *folders = [NSMutableArray array];
             for (NSString *item in contents) {
                 NSString *fullPath = [documentsPath stringByAppendingPathComponent:item];
@@ -538,27 +538,23 @@ NSMutableDictionary *classColorMap;
                 }
             }
 
-            [folders sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)]; // Sort folders alphabetically
+            [folders sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
 
-            // Iterate through folders in alphabetical order
-            BOOL deletedSomething = NO;
             for (NSString *folderPath in folders) {
                 NSString *segmentsFilePath = [folderPath stringByAppendingPathComponent:@"segments.txt"];
                 
-                // Check if segments.txt exists in the folder
                 if (![fileManager fileExistsAtPath:segmentsFilePath]) {
                     NSLog(@"No segments.txt found in folder: %@", folderPath);
                     continue;
                 }
-
-                // Read the segments.txt file
+                
+                
                 NSData *segmentsData = [NSData dataWithContentsOfFile:segmentsFilePath options:0 error:&error];
                 if (error) {
                     NSLog(@"Error reading segments.txt in folder %@: %@", folderPath, error.localizedDescription);
                     continue;
                 }
 
-                // Parse the JSON data
                 NSMutableArray *segmentsArray = [NSJSONSerialization JSONObjectWithData:segmentsData options:NSJSONReadingMutableContainers error:&error];
                 if (error) {
                     NSLog(@"Error parsing segments.txt JSON in folder %@: %@", folderPath, error.localizedDescription);
@@ -570,70 +566,84 @@ NSMutableDictionary *classColorMap;
                     continue;
                 }
 
-                // Get the first entry's URL (relative to the parent directory)
-                NSDictionary *firstEntry = segmentsArray[0];
-                NSString *fileToDelete = firstEntry[@"url"];
-                if (!fileToDelete) {
-                    NSLog(@"No 'url' field found in the first entry of segments.txt in folder %@.", folderPath);
-                    continue;
-                }
-                
-                /* todo, this breaks live playback until indexes can be updated in front end
-                NSString *date = [[folderPath componentsSeparatedByString:@"/"] lastObject];
-                NSMutableArray *segmentsForDate = [self.fileServer.segmentsDict[date] mutableCopy];
-                if (segmentsForDate && [segmentsForDate count] > 0) {
-                    [segmentsForDate removeObjectAtIndex:0];
-                    self.fileServer.segmentsDict[date] = segmentsForDate;
-                }
-                */
-
-                // Construct the full path to the file (relative to the parent directory, i.e., `documentsPath`)
-                NSString *filePath = [documentsPath stringByAppendingPathComponent:fileToDelete];
-
-                // Delete the file
-                if ([fileManager fileExistsAtPath:filePath]) {
-                    NSLog(@"Deleting file: %@", filePath);
-                    [fileManager removeItemAtPath:filePath error:&error];
-                    if (error) {
-                        NSLog(@"Error deleting file: %@", error.localizedDescription);
+                // Try deleting in order, skipping protected ones
+                for (NSInteger i = 0; i < segmentsArray.count; i++) {
+                    NSDictionary *entry = segmentsArray[i];
+                    NSString *fileToDelete = entry[@"url"];
+                    if (!fileToDelete) {
+                        NSLog(@"No 'url' field found in entry %ld of segments.txt in folder %@.", (long)i, folderPath);
                         continue;
                     }
 
-                    // Remove the first entry from the segments array
-                    [segmentsArray removeObjectAtIndex:0];
+                    NSString *filePath = [documentsPath stringByAppendingPathComponent:fileToDelete];
 
-                    // Write the updated segments array back to segments.txt
-                    NSData *updatedSegmentsData = [NSJSONSerialization dataWithJSONObject:segmentsArray options:NSJSONWritingPrettyPrinted error:&error];
+                    // Get file creation date
+                    NSDictionary *fileAttributes = [fileManager attributesOfItemAtPath:filePath error:&error];
                     if (error) {
-                        NSLog(@"Error serializing updated segments.txt in folder %@: %@", folderPath, error.localizedDescription);
+                        NSLog(@"Error getting attributes for file %@: %@", filePath, error.localizedDescription);
                         continue;
                     }
-                    [updatedSegmentsData writeToFile:segmentsFilePath atomically:YES];
 
-                    // Mark that something was deleted
-                    deletedSomething = YES;
-
-                    // Check if free space is now sufficient
-                    freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
-                    NSLog(@"New free space: %.2f GB", freeSpace);
-                    
-                    if (freeSpace >= (MIN_FREE_SPACE_MB / 1024.0)) {
-                        break;
+                    NSDate *fileCreationDate = fileAttributes[NSFileCreationDate];
+                    if (!fileCreationDate) {
+                        NSLog(@"Could not retrieve creation date for file: %@", filePath);
+                        continue;
                     }
-                } else {
-                    NSLog(@"File to delete does not exist: %@", filePath);
-                    continue;
+
+                    // Check if the file is within 60 seconds of an event
+                    BOOL shouldSkip = NO;
+                    for (NSDate *eventTime in self.yolo.scene.event_times) {
+                        if (fabs([fileCreationDate timeIntervalSinceDate:eventTime]) < 60) {
+                            shouldSkip = YES;
+                            break;
+                        }
+                    }
+
+                    if (shouldSkip) {
+                        NSLog(@"Skipping file (within 60s of an event): %@", filePath);
+                        continue;
+                    }
+
+                    // Delete file
+                    if ([fileManager fileExistsAtPath:filePath]) {
+                        NSDateFormatter *formatter = [NSDateFormatter new]; [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"]; NSLog(@"[%@] Deleting file: %@", [formatter stringFromDate:[NSDate date]], filePath);
+                        [fileManager removeItemAtPath:filePath error:&error];
+                        if (error) {
+                            NSLog(@"Error deleting file: %@", error.localizedDescription);
+                            continue;
+                        }
+
+                        // Remove entry from segments.txt
+                        [segmentsArray removeObjectAtIndex:i];
+
+                        // Write updated segments.txt
+                        NSData *updatedSegmentsData = [NSJSONSerialization dataWithJSONObject:segmentsArray options:NSJSONWritingPrettyPrinted error:&error];
+                        if (error) {
+                            NSLog(@"Error serializing updated segments.txt in folder %@: %@", folderPath, error.localizedDescription);
+                            continue;
+                        }
+                        [updatedSegmentsData writeToFile:segmentsFilePath atomically:YES];
+
+                        // Check free space again
+                        freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
+                        NSLog(@"New free space: %.2f GB", freeSpace);
+                        
+                        // Stop if free space is sufficient
+                        if (freeSpace >= (MIN_FREE_SPACE_MB / 1024.0)) {
+                            return;
+                        }
+                    } else {
+                        NSLog(@"File to delete does not exist: %@", filePath);
+                    }
                 }
             }
 
-            // If no files were deleted, break to prevent infinite loop
-            if (!deletedSomething) {
-                NSLog(@"No more deletable files found.");
-                break;
-            }
+            NSLog(@"No more deletable files found.");
+            break;
         }
     });
 }
+
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
@@ -883,3 +893,4 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+

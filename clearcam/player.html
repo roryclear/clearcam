@@ -698,7 +698,7 @@
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
-                                    if(lostFrames > 60){ //todo why 60
+                                    if(lostFrames > 1){ //todo 1 sec?
                                         gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
                                     }
                                 }
