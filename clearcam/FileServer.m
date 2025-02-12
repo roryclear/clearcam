@@ -9,6 +9,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import "SettingsManager.h"
 #import "PortScanner.h"
+#import "AppDelegate.h"
+#import <CoreData/CoreData.h>
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
@@ -18,6 +20,17 @@
 @implementation FileServer
 
 - (void)start {
+    // coredata stuff
+    AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+    self.context = appDelegate.persistentContainer.viewContext;
+
+    // Save a new string
+    NSLog(@"core data segments?:");
+    [self fetchAllSegmentsInContext:self.context];
+    [self deleteAllSegmentsInContext:self.context]; //to delete all
+    // Fetch all saved strings
+    // coredata stuff
+    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.segment_length = 60;
         self.scanner = [[PortScanner alloc] init];
@@ -354,6 +367,88 @@
             break;
         }
         bytesToSend -= bytesSent;
+    }
+}
+
+- (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
+    // Create a fetch request for SegmentEntity
+    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+    
+    // Execute the fetch request
+    NSError *error = nil;
+    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
+    
+    if (error) {
+        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
+    } else {
+        NSLog(@"Fetched segments:");
+        for (NSManagedObject *segment in results) {
+            NSString *url = [segment valueForKey:@"url"];
+            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
+            double duration = [[segment valueForKey:@"duration"] doubleValue];
+            
+            NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
+            
+            // Fetch the ordered frames
+            NSOrderedSet *frames = [segment valueForKey:@"frames"];
+            if (frames.count == 0) {
+                NSLog(@"  No frames associated with this segment.");
+            } else {
+                NSLog(@"  Frames:");
+                for (NSManagedObject *frame in frames) {
+                    double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+                    double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+                    int res = [[frame valueForKey:@"res"] intValue];
+
+                    NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
+
+                    // Fetch the ordered squares within this frame
+                    NSOrderedSet *squares = [frame valueForKey:@"squares"];
+                    if (squares.count == 0) {
+                        NSLog(@"      No squares associated with this frame.");
+                    } else {
+                        NSLog(@"      Squares:");
+                        for (NSManagedObject *square in squares) {
+                            double originX = [[square valueForKey:@"originX"] doubleValue];
+                            double originY = [[square valueForKey:@"originY"] doubleValue];
+                            double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                            double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                            int classIndex = [[square valueForKey:@"classIndex"] intValue];
+
+                            NSLog(@"        - Square: Origin(%.2f, %.2f), BottomRight(%.2f, %.2f), Class Index: %d",
+                                  originX, originY, bottomRightX, bottomRightY, classIndex);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+- (void)deleteAllSegmentsInContext:(NSManagedObjectContext *)context {
+    // Create a fetch request for all SegmentEntity objects
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
+    
+    // Fetch all SegmentEntity objects
+    NSError *fetchError = nil;
+    NSArray *segments = [context executeFetchRequest:fetchRequest error:&fetchError];
+    
+    if (fetchError) {
+        NSLog(@"Failed to fetch SegmentEntity objects: %@", fetchError.localizedDescription);
+        return;
+    }
+    
+    // Loop through all fetched objects and delete them
+    for (NSManagedObject *segment in segments) {
+        [context deleteObject:segment];
+    }
+    
+    // Save the context after deletion
+    NSError *saveError = nil;
+    if (![context save:&saveError]) {
+        NSLog(@"Failed to delete objects: %@", saveError.localizedDescription);
+    } else {
+        NSLog(@"All segments deleted successfully");
     }
 }
     

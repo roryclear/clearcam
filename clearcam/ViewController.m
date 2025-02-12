@@ -1,8 +1,6 @@
 #import "ViewController.h"
 #import <AVFoundation/AVFoundation.h>
 #import <Metal/Metal.h>
-#import "AppDelegate.h"
-#import <CoreData/CoreData.h>
 #import "Yolo.h"
 #import "FileServer.h"
 
@@ -29,7 +27,6 @@
 @property (nonatomic, strong) NSMutableDictionary *digits;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
-@property (nonatomic, strong) NSManagedObjectContext *context;
 
 #define MIN_FREE_SPACE_MB 200  //threshold to start deleting
 
@@ -41,18 +38,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
-    // coredata stuff
-    AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
-    self.context = appDelegate.persistentContainer.viewContext;
-
-    // Save a new string
-    NSLog(@"core data segments?:");
-    [self fetchAllSegmentsInContext:self.context];
-    [self deleteAllSegmentsInContext:self.context]; //to delete all
-    // Fetch all saved strings
-    // coredata stuff
-        
+            
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -144,88 +130,6 @@ NSMutableDictionary *classColorMap;
     
     if (self.previewLayer.connection.isVideoOrientationSupported) {
         self.previewLayer.connection.videoOrientation = videoOrientation;
-    }
-}
-
-- (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
-    // Create a fetch request for SegmentEntity
-    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
-    
-    // Execute the fetch request
-    NSError *error = nil;
-    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
-    
-    if (error) {
-        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
-    } else {
-        NSLog(@"Fetched segments:");
-        for (NSManagedObject *segment in results) {
-            NSString *url = [segment valueForKey:@"url"];
-            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
-            double duration = [[segment valueForKey:@"duration"] doubleValue];
-            
-            NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
-            
-            // Fetch the ordered frames
-            NSOrderedSet *frames = [segment valueForKey:@"frames"];
-            if (frames.count == 0) {
-                NSLog(@"  No frames associated with this segment.");
-            } else {
-                NSLog(@"  Frames:");
-                for (NSManagedObject *frame in frames) {
-                    double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-                    double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-                    int res = [[frame valueForKey:@"res"] intValue];
-
-                    NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
-
-                    // Fetch the ordered squares within this frame
-                    NSOrderedSet *squares = [frame valueForKey:@"squares"];
-                    if (squares.count == 0) {
-                        NSLog(@"      No squares associated with this frame.");
-                    } else {
-                        NSLog(@"      Squares:");
-                        for (NSManagedObject *square in squares) {
-                            double originX = [[square valueForKey:@"originX"] doubleValue];
-                            double originY = [[square valueForKey:@"originY"] doubleValue];
-                            double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                            double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                            int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                            NSLog(@"        - Square: Origin(%.2f, %.2f), BottomRight(%.2f, %.2f), Class Index: %d",
-                                  originX, originY, bottomRightX, bottomRightY, classIndex);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-- (void)deleteAllSegmentsInContext:(NSManagedObjectContext *)context {
-    // Create a fetch request for all SegmentEntity objects
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
-    
-    // Fetch all SegmentEntity objects
-    NSError *fetchError = nil;
-    NSArray *segments = [context executeFetchRequest:fetchRequest error:&fetchError];
-    
-    if (fetchError) {
-        NSLog(@"Failed to fetch SegmentEntity objects: %@", fetchError.localizedDescription);
-        return;
-    }
-    
-    // Loop through all fetched objects and delete them
-    for (NSManagedObject *segment in segments) {
-        [context deleteObject:segment];
-    }
-    
-    // Save the context after deletion
-    NSError *saveError = nil;
-    if (![context save:&saveError]) {
-        NSLog(@"Failed to delete objects: %@", saveError.localizedDescription);
-    } else {
-        NSLog(@"All segments deleted successfully");
     }
 }
 
@@ -498,7 +402,7 @@ NSMutableDictionary *classColorMap;
             
         //core data below
         // Create new SegmentEntity object
-        NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.context];
+        NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.fileServer.context];
 
         // Set the segment properties
         [newSegment setValue:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] forKey:@"url"];
@@ -510,7 +414,7 @@ NSMutableDictionary *classColorMap;
 
         for (NSDictionary *frameData in self.current_segment_squares) {
             // Create new FrameEntity object
-            NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.context];
+            NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.fileServer.context];
             [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
             [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
             [newFrame setValue:frameData[@"res"] forKey:@"res"];
@@ -520,7 +424,7 @@ NSMutableDictionary *classColorMap;
 
             for (NSDictionary *squareData in frameData[@"squares"]) {
                 // Create new SquareEntity object
-                NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.context];
+                NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.fileServer.context];
                 [newSquare setValue:squareData[@"originX"] forKey:@"originX"];
                 [newSquare setValue:squareData[@"originY"] forKey:@"originY"];
                 [newSquare setValue:squareData[@"bottomRightX"] forKey:@"bottomRightX"];
@@ -543,7 +447,7 @@ NSMutableDictionary *classColorMap;
 
         // Save the context
         error = nil;
-        if (![self.context save:&error]) {
+        if (![self.fileServer.context save:&error]) {
             NSLog(@"Failed to save segment: %@", error.localizedDescription);
         } else {
             NSLog(@"Segment saved successfully with ordered frames and squares.");
