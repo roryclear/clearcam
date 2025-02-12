@@ -1,6 +1,8 @@
 #import "ViewController.h"
 #import <AVFoundation/AVFoundation.h>
 #import <Metal/Metal.h>
+#import "AppDelegate.h"
+#import <CoreData/CoreData.h>
 #import "Yolo.h"
 #import "FileServer.h"
 
@@ -38,6 +40,18 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
+    // coredata stuff
+    AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+    NSManagedObjectContext *context = appDelegate.persistentContainer.viewContext;
+
+    // Save a new string
+    //[self deleteAllSegmentsInContext:context]; to delete all
+    [self saveString:@"Rory here???" inContext:context];
+    // Fetch all saved strings
+    [self fetchAllStringsInContext:context];
+    // coredata stuff
+    
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -129,6 +143,68 @@ NSMutableDictionary *classColorMap;
     
     if (self.previewLayer.connection.isVideoOrientationSupported) {
         self.previewLayer.connection.videoOrientation = videoOrientation;
+    }
+}
+
+- (void)saveString:(NSString *)string inContext:(NSManagedObjectContext *)context {
+    // Create a new StringEntity object
+    NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:context];
+    
+    // Set the value attribute
+    [newString setValue:string forKey:@"url"];
+    
+    // Save the context
+    NSError *error = nil;
+    if (![context save:&error]) {
+        NSLog(@"Failed to save string: %@", error.localizedDescription);
+    } else {
+        NSLog(@"String saved successfully");
+    }
+}
+
+- (void)fetchAllStringsInContext:(NSManagedObjectContext *)context {
+    // Create a fetch request for StringEntity
+    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+    
+    // Execute the fetch request
+    NSError *error = nil;
+    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
+    
+    if (error) {
+        NSLog(@"Failed to fetch strings: %@", error.localizedDescription);
+    } else {
+        NSLog(@"Fetched strings:");
+        for (NSManagedObject *obj in results) {
+            NSString *value = [obj valueForKey:@"url"];
+            NSLog(@"%@", value);
+        }
+    }
+}
+
+- (void)deleteAllSegmentsInContext:(NSManagedObjectContext *)context {
+    // Create a fetch request for all SegmentEntity objects
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
+    
+    // Fetch all SegmentEntity objects
+    NSError *fetchError = nil;
+    NSArray *segments = [context executeFetchRequest:fetchRequest error:&fetchError];
+    
+    if (fetchError) {
+        NSLog(@"Failed to fetch SegmentEntity objects: %@", fetchError.localizedDescription);
+        return;
+    }
+    
+    // Loop through all fetched objects and delete them
+    for (NSManagedObject *segment in segments) {
+        [context deleteObject:segment];
+    }
+    
+    // Save the context after deletion
+    NSError *saveError = nil;
+    if (![context save:&saveError]) {
+        NSLog(@"Failed to delete objects: %@", saveError.localizedDescription);
+    } else {
+        NSLog(@"All segments deleted successfully");
     }
 }
 

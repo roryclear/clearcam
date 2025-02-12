@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BEA6777C2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = BEA6777A2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		BE007DCA2D2BFF36005D40B3 /* clearcam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = clearcam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BEA6777B2D5CEFE300271B4F /* SegmentsModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = SegmentsModel.xcdatamodel; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -45,6 +50,7 @@
 		BE007DC12D2BFF36005D40B3 = {
 			isa = PBXGroup;
 			children = (
+				BEA6777A2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld */,
 				BE007DCC2D2BFF36005D40B3 /* clearcam */,
 				BE007DCB2D2BFF36005D40B3 /* Products */,
 			);
@@ -131,6 +137,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BEA6777C2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -160,6 +167,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = roryclear.clearcam;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 4.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -187,6 +195,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = roryclear.clearcam;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 4.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -329,6 +338,19 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		BEA6777A2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				BEA6777B2D5CEFE300271B4F /* SegmentsModel.xcdatamodel */,
+			);
+			currentVersion = BEA6777B2D5CEFE300271B4F /* SegmentsModel.xcdatamodel */;
+			path = SegmentsModel.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
 	};
 	rootObject = BE007DC22D2BFF36005D40B3 /* Project object */;
 }
