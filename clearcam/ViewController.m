@@ -165,9 +165,25 @@ NSMutableDictionary *classColorMap;
             double duration = [[obj valueForKey:@"duration"] doubleValue];
             
             NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
+            
+            // Fetch the ordered frames
+            NSOrderedSet *frames = [obj valueForKey:@"frames"];
+            if (frames.count == 0) {
+                NSLog(@"  No frames associated with this segment.");
+            } else {
+                NSLog(@"  Frames:");
+                for (NSManagedObject *frame in frames) {
+                    double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+                    double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+                    int res = [[frame valueForKey:@"res"] intValue];
+
+                    NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
+                }
+            }
         }
     }
 }
+
 
 - (void)deleteAllSegmentsInContext:(NSManagedObjectContext *)context {
     // Create a fetch request for all SegmentEntity objects
@@ -463,23 +479,41 @@ NSMutableDictionary *classColorMap;
         segmentEntry[@"timeStamp"] = @(timeStamp);
             
             
+        //core data below
+        // Create new SegmentEntity object
         NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.context];
-        
-        // Set the value attribute
+
+        // Set the segment properties
         [newString setValue:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] forKey:@"url"];
         [newString setValue:@(timeStamp) forKey:@"timeStamp"];
         [newString setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
-        // Save the context
-        if (![self.context save:&error]) {
-            NSLog(@"Failed to save string: %@", error.localizedDescription);
-        } else {
-            NSLog(@"String saved successfully");
-        }
-        //core data
-            
 
+        // Create an array for the frames
+        NSMutableArray<NSManagedObject *> *segmentFrames = [[NSMutableArray alloc] init];
+
+        for (NSDictionary *frameData in self.current_segment_squares) {
+            NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.context];
+            [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
+            [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
+            [newFrame setValue:frameData[@"res"] forKey:@"res"];
+            
+            [segmentFrames addObject:newFrame];
+        }
+
+        // Convert NSMutableArray to NSOrderedSet
+        NSOrderedSet *orderedFrames = [NSOrderedSet orderedSetWithArray:segmentFrames];
+        [newString setValue:orderedFrames forKey:@"frames"];
+
+        // Save the context
+        error = nil;
+        if (![self.context save:&error]) {
+            NSLog(@"Failed to save segment: %@", error.localizedDescription);
+        } else {
+            NSLog(@"Segment saved successfully with ordered frames.");
+        }
+        //core data above
+            
         [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-        
         [self startNewRecording];
         NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
         [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath];
