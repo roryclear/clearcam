@@ -49,9 +49,8 @@ NSMutableDictionary *classColorMap;
     // Save a new string
     NSLog(@"core data segments?:");
     //[self deleteAllSegmentsInContext:self.context]; //to delete all
-    [self saveURL:@"Rory here???" inContext:self.context];
     // Fetch all saved strings
-    [self fetchAllStringsInContext:self.context];
+    [self fetchAllSegmentsInContext:self.context];
     // coredata stuff
         
     self.current_segment_squares = [[NSMutableArray alloc] init];
@@ -164,8 +163,8 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)fetchAllStringsInContext:(NSManagedObjectContext *)context {
-    // Create a fetch request for StringEntity
+- (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
+    // Create a fetch request for SegmentEntity
     NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
     
     // Execute the fetch request
@@ -173,12 +172,15 @@ NSMutableDictionary *classColorMap;
     NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
     
     if (error) {
-        NSLog(@"Failed to fetch strings: %@", error.localizedDescription);
+        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
     } else {
-        NSLog(@"Fetched strings:");
+        NSLog(@"Fetched segments:");
         for (NSManagedObject *obj in results) {
-            NSString *value = [obj valueForKey:@"url"];
-            NSLog(@"%@", value);
+            NSString *url = [obj valueForKey:@"url"];
+            double timeStamp = [[obj valueForKey:@"timeStamp"] doubleValue];
+            double duration = [[obj valueForKey:@"duration"] doubleValue];
+            
+            NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
         }
     }
 }
@@ -477,8 +479,21 @@ NSMutableDictionary *classColorMap;
         segmentEntry[@"timeStamp"] = @(timeStamp);
             
             
-        //new core data way!
+        //new coredata way!
         [self saveURL:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] inContext:self.context];
+            
+        NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.context];
+        
+        // Set the value attribute
+        [newString setValue:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] forKey:@"url"];
+        [newString setValue:@(timeStamp) forKey:@"timeStamp"];
+        [newString setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
+        // Save the context
+        if (![self.context save:&error]) {
+            NSLog(@"Failed to save string: %@", error.localizedDescription);
+        } else {
+            NSLog(@"String saved successfully");
+        }
         //core data
             
 
