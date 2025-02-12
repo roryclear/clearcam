@@ -147,22 +147,6 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)saveURL:(NSString *)string inContext:(NSManagedObjectContext *)context {
-    // Create a new StringEntity object
-    NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:context];
-    
-    // Set the value attribute
-    [newString setValue:string forKey:@"url"];
-    
-    // Save the context
-    NSError *error = nil;
-    if (![context save:&error]) {
-        NSLog(@"Failed to save string: %@", error.localizedDescription);
-    } else {
-        NSLog(@"String saved successfully");
-    }
-}
-
 - (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
     // Create a fetch request for SegmentEntity
     NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
@@ -478,9 +462,6 @@ NSMutableDictionary *classColorMap;
         NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
         segmentEntry[@"timeStamp"] = @(timeStamp);
             
-            
-        //new coredata way!
-        [self saveURL:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] inContext:self.context];
             
         NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.context];
         
