@@ -29,6 +29,7 @@
 @property (nonatomic, strong) NSMutableDictionary *digits;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
+@property (nonatomic, strong) NSManagedObjectContext *context;
 
 #define MIN_FREE_SPACE_MB 200  //threshold to start deleting
 
@@ -43,15 +44,16 @@ NSMutableDictionary *classColorMap;
     
     // coredata stuff
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
-    NSManagedObjectContext *context = appDelegate.persistentContainer.viewContext;
+    self.context = appDelegate.persistentContainer.viewContext;
 
     // Save a new string
-    //[self deleteAllSegmentsInContext:context]; to delete all
-    [self saveString:@"Rory here???" inContext:context];
+    NSLog(@"core data segments?:");
+    //[self deleteAllSegmentsInContext:self.context]; //to delete all
+    [self saveURL:@"Rory here???" inContext:self.context];
     // Fetch all saved strings
-    [self fetchAllStringsInContext:context];
+    [self fetchAllStringsInContext:self.context];
     // coredata stuff
-    
+        
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -146,7 +148,7 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)saveString:(NSString *)string inContext:(NSManagedObjectContext *)context {
+- (void)saveURL:(NSString *)string inContext:(NSManagedObjectContext *)context {
     // Create a new StringEntity object
     NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:context];
     
@@ -473,6 +475,11 @@ NSMutableDictionary *classColorMap;
         NSDate *midnight = [calendar dateFromComponents:components];
         NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
         segmentEntry[@"timeStamp"] = @(timeStamp);
+            
+            
+        //new core data way!
+        [self saveURL:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] inContext:self.context];
+        //core data
             
 
         [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
