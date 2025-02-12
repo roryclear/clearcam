@@ -47,6 +47,89 @@
     return [paths firstObject];
 }
 
+- (void)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+    // Create a fetch request for SegmentEntity
+    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+    
+    // Execute the fetch request
+    NSError *error = nil;
+    NSArray *segments = [context executeFetchRequest:fetchRequest error:&error];
+    
+    if (error) {
+        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
+        return;
+    }
+
+    NSMutableArray *segmentDicts = [NSMutableArray array];
+    
+    // Loop through fetched segments and construct the JSON-like structure
+    for (NSManagedObject *segment in segments) {
+        NSString *url = [segment valueForKey:@"url"];
+        double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
+        double duration = [[segment valueForKey:@"duration"] doubleValue];
+        
+        NSMutableArray *frameDicts = [NSMutableArray array];
+        
+        // Fetch the ordered frames
+        NSOrderedSet *frames = [segment valueForKey:@"frames"];
+        
+        for (NSManagedObject *frame in frames) {
+            double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+            double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+            int res = [[frame valueForKey:@"res"] intValue];
+            
+            NSMutableArray *squareDicts = [NSMutableArray array];
+            
+            // Fetch the ordered squares within this frame
+            NSOrderedSet *squares = [frame valueForKey:@"squares"];
+            
+            for (NSManagedObject *square in squares) {
+                double originX = [[square valueForKey:@"originX"] doubleValue];
+                double originY = [[square valueForKey:@"originY"] doubleValue];
+                double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                int classIndex = [[square valueForKey:@"classIndex"] intValue];
+                
+                NSDictionary *squareDict = @{
+                    @"originX": @(originX),
+                    @"originY": @(originY),
+                    @"bottomRightX": @(bottomRightX),
+                    @"bottomRightY": @(bottomRightY),
+                    @"classIndex": @(classIndex)
+                };
+                
+                [squareDicts addObject:squareDict];
+            }
+            
+            // Create frame dictionary
+            NSDictionary *frameDict = @{
+                @"frame_timeStamp": @(frameTimeStamp),
+                @"aspect_ratio": @(aspectRatio),
+                @"res": @(res),
+                @"squares": squareDicts
+            };
+            
+            [frameDicts addObject:frameDict];
+        }
+        
+        // Create segment dictionary
+        NSDictionary *segmentDict = @{
+            @"url": url,
+            @"timeStamp": @(timeStamp),
+            @"duration": @(duration),
+            @"frames": frameDicts
+        };
+        
+        [segmentDicts addObject:segmentDict];
+    }
+    
+    // Now, `segmentDicts` contains all the segments, frames, and squares as required
+    self.segmentsDict[dateParam] = segmentDicts;  // Store it in your segmentsDict
+    
+    NSLog(@"Fetched and processed %lu segments", (unsigned long)segmentDicts.count);
+}
+
+
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
     @try {
         signal(SIGPIPE, SIG_IGN);
@@ -226,24 +309,7 @@
         
         NSInteger start = startParam ? [startParam integerValue] : 0;
         if (!self.segmentsDict[dateParam] || start == 0) {
-            NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateParam];
-            NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
-                NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
-                NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
-                
-                if (fileSegments) {
-                    self.segmentsDict[dateParam] = [fileSegments mutableCopy];
-                    NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
-                } else {
-                    NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
-                    NSString *errorMessage = @"{\"error\": \"Failed to read segments from file\"}";
-                    send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-                    send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-                    return;
-                }
-            }
+            [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context]; //todo, only works for one date! and is a mess
         }
         
         NSArray *segmentsForDate = self.segmentsDict[dateParam];
