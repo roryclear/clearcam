@@ -48,9 +48,9 @@ NSMutableDictionary *classColorMap;
 
     // Save a new string
     NSLog(@"core data segments?:");
-    //[self deleteAllSegmentsInContext:self.context]; //to delete all
-    // Fetch all saved strings
     [self fetchAllSegmentsInContext:self.context];
+    [self deleteAllSegmentsInContext:self.context]; //to delete all
+    // Fetch all saved strings
     // coredata stuff
         
     self.current_segment_squares = [[NSMutableArray alloc] init];
@@ -159,15 +159,15 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
     } else {
         NSLog(@"Fetched segments:");
-        for (NSManagedObject *obj in results) {
-            NSString *url = [obj valueForKey:@"url"];
-            double timeStamp = [[obj valueForKey:@"timeStamp"] doubleValue];
-            double duration = [[obj valueForKey:@"duration"] doubleValue];
+        for (NSManagedObject *segment in results) {
+            NSString *url = [segment valueForKey:@"url"];
+            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
+            double duration = [[segment valueForKey:@"duration"] doubleValue];
             
             NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
             
             // Fetch the ordered frames
-            NSOrderedSet *frames = [obj valueForKey:@"frames"];
+            NSOrderedSet *frames = [segment valueForKey:@"frames"];
             if (frames.count == 0) {
                 NSLog(@"  No frames associated with this segment.");
             } else {
@@ -178,12 +178,29 @@ NSMutableDictionary *classColorMap;
                     int res = [[frame valueForKey:@"res"] intValue];
 
                     NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
+
+                    // Fetch the ordered squares within this frame
+                    NSOrderedSet *squares = [frame valueForKey:@"squares"];
+                    if (squares.count == 0) {
+                        NSLog(@"      No squares associated with this frame.");
+                    } else {
+                        NSLog(@"      Squares:");
+                        for (NSManagedObject *square in squares) {
+                            double originX = [[square valueForKey:@"originX"] doubleValue];
+                            double originY = [[square valueForKey:@"originY"] doubleValue];
+                            double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                            double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                            int classIndex = [[square valueForKey:@"classIndex"] intValue];
+
+                            NSLog(@"        - Square: Origin(%.2f, %.2f), BottomRight(%.2f, %.2f), Class Index: %d",
+                                  originX, originY, bottomRightX, bottomRightY, classIndex);
+                        }
+                    }
                 }
             }
         }
     }
 }
-
 
 - (void)deleteAllSegmentsInContext:(NSManagedObjectContext *)context {
     // Create a fetch request for all SegmentEntity objects
@@ -481,35 +498,55 @@ NSMutableDictionary *classColorMap;
             
         //core data below
         // Create new SegmentEntity object
-        NSManagedObject *newString = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.context];
+        NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.context];
 
         // Set the segment properties
-        [newString setValue:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] forKey:@"url"];
-        [newString setValue:@(timeStamp) forKey:@"timeStamp"];
-        [newString setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
+        [newSegment setValue:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] forKey:@"url"];
+        [newSegment setValue:@(timeStamp) forKey:@"timeStamp"];
+        [newSegment setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
 
         // Create an array for the frames
         NSMutableArray<NSManagedObject *> *segmentFrames = [[NSMutableArray alloc] init];
 
         for (NSDictionary *frameData in self.current_segment_squares) {
+            // Create new FrameEntity object
             NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.context];
             [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
             [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
             [newFrame setValue:frameData[@"res"] forKey:@"res"];
-            
+
+            // Create an array for the squares in this frame
+            NSMutableArray<NSManagedObject *> *frameSquares = [[NSMutableArray alloc] init];
+
+            for (NSDictionary *squareData in frameData[@"squares"]) {
+                // Create new SquareEntity object
+                NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.context];
+                [newSquare setValue:squareData[@"originX"] forKey:@"originX"];
+                [newSquare setValue:squareData[@"originY"] forKey:@"originY"];
+                [newSquare setValue:squareData[@"bottomRightX"] forKey:@"bottomRightX"];
+                [newSquare setValue:squareData[@"bottomRightY"] forKey:@"bottomRightY"];
+                [newSquare setValue:squareData[@"classIndex"] forKey:@"classIndex"];
+
+                [frameSquares addObject:newSquare];
+            }
+
+            // Convert squares array to NSOrderedSet and set to the frame
+            NSOrderedSet *orderedSquares = [NSOrderedSet orderedSetWithArray:frameSquares];
+            [newFrame setValue:orderedSquares forKey:@"squares"];
+
             [segmentFrames addObject:newFrame];
         }
 
-        // Convert NSMutableArray to NSOrderedSet
+        // Convert NSMutableArray to NSOrderedSet and set to the segment
         NSOrderedSet *orderedFrames = [NSOrderedSet orderedSetWithArray:segmentFrames];
-        [newString setValue:orderedFrames forKey:@"frames"];
+        [newSegment setValue:orderedFrames forKey:@"frames"];
 
         // Save the context
         error = nil;
         if (![self.context save:&error]) {
             NSLog(@"Failed to save segment: %@", error.localizedDescription);
         } else {
-            NSLog(@"Segment saved successfully with ordered frames.");
+            NSLog(@"Segment saved successfully with ordered frames and squares.");
         }
         //core data above
             

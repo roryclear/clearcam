@@ -5,11 +5,23 @@
         <attribute name="frame_timeStamp" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="res" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="segment" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="SegmentEntity" inverseName="frames" inverseEntity="SegmentEntity"/>
+        <relationship name="squares" optional="YES" toMany="YES" deletionRule="Nullify" ordered="YES" destinationEntity="SquareEntity" inverseName="frame" inverseEntity="SquareEntity"/>
+        <fetchedProperty name="fetchedProperty" optional="YES">
+            <fetchRequest name="fetchedPropertyFetchRequest" entity="FrameEntity"/>
+        </fetchedProperty>
     </entity>
     <entity name="SegmentEntity" representedClassName="SegmentEntity" syncable="YES" codeGenerationType="class">
         <attribute name="duration" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="timeStamp" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="url" optional="YES" attributeType="String"/>
         <relationship name="frames" optional="YES" toMany="YES" deletionRule="Nullify" ordered="YES" destinationEntity="FrameEntity" inverseName="segment" inverseEntity="FrameEntity"/>
+    </entity>
+    <entity name="SquareEntity" representedClassName="SquareEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="bottomRightX" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="bottomRightY" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="classIndex" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="originX" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="originY" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="frame" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FrameEntity" inverseName="squares" inverseEntity="FrameEntity"/>
     </entity>
 </model>
