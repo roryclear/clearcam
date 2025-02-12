@@ -54,7 +54,6 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     self.segmentLock = [[NSLock alloc] init]; //dont allow current_segment_squares to be accessed twice at once!
-    [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
     
     //TODO REMOVE THIS
     NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -371,18 +370,7 @@ NSMutableDictionary *classColorMap;
         NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
 
         if (!self.fileServer.segmentsDict[dateKey]) {
-            NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateKey];
-            NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
-                NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
-                NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
-                if (fileSegments) {
-                    NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
-                    self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
-                }
-            }
-            if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
+            [self.fileServer fetchAndProcessSegmentsFromCoreDataForDateParam:dateKey context:self.fileServer.context]; //todo only works on today's segments!
         }
 
 
@@ -456,89 +444,12 @@ NSMutableDictionary *classColorMap;
             
         [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
         [self startNewRecording];
-        NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-        [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath];
         [self.segmentLock lock];
         [self.current_segment_squares removeAllObjects];
         [self.segmentLock unlock];
         }];
     } else {
         NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
-    }
-}
-
-- (void)saveSegmentEntry:(NSDictionary *)segmentEntry toFile:(NSString *)filePath {
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSError *error = nil;
-
-    // Check if file exists
-    if (![fileManager fileExistsAtPath:filePath]) {
-        // Create a new file with the initial JSON array
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry]
-                                                           options:NSJSONWritingPrettyPrinted
-                                                             error:&error];
-        if (!error) {
-            BOOL success = [jsonData writeToFile:filePath atomically:YES];
-            if (!success) {
-                NSLog(@"Failed to write JSON to file.");
-            }
-        } else {
-            NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
-        }
-    } else {
-        // Open the file for updating
-        NSFileHandle *fileHandle = [NSFileHandle fileHandleForUpdatingAtPath:filePath];
-        if (!fileHandle) {
-            NSLog(@"Error opening file for writing.");
-            return;
-        }
-        
-        @try {
-            // Seek to the end of the file minus 1 byte (to remove the last ']')
-            [fileHandle seekToEndOfFile];
-            unsigned long long fileLength = [fileHandle offsetInFile];
-            if (fileLength < 1) {
-                NSLog(@"File is too short to be valid JSON.");
-                return;
-            }
-            [fileHandle seekToFileOffset:fileLength - 1];
-            
-            // Read the last character to ensure it's a ']'
-            NSData *lastCharData = [fileHandle readDataOfLength:1];
-            NSString *lastChar = [[NSString alloc] initWithData:lastCharData encoding:NSUTF8StringEncoding];
-            if (![lastChar isEqualToString:@"]"]) {
-                NSLog(@"File does not end with a valid JSON array closing bracket.");
-                return;
-            }
-            
-            // Truncate the file to remove the last ']'
-            [fileHandle truncateFileAtOffset:fileLength - 1];
-            
-            // Create a comma to separate the new JSON object
-            NSString *commaString = @",";
-            NSData *commaData = [commaString dataUsingEncoding:NSUTF8StringEncoding];
-            
-            // Write the comma to the file
-            [fileHandle writeData:commaData];
-            
-            // Serialize the new JSON object
-            NSData *newJsonData = [NSJSONSerialization dataWithJSONObject:segmentEntry options:0 error:&error];
-            if (!newJsonData || error) {
-                NSLog(@"Error serializing new JSON: %@", error.localizedDescription);
-                return;
-            }
-            
-            // Write the new JSON object to the file
-            [fileHandle writeData:newJsonData];
-            
-            // Insert closing bracket at the end of file
-            NSString *closingBracketString = @"]";
-            NSData *closingBracketData = [closingBracketString dataUsingEncoding:NSUTF8StringEncoding];
-            [fileHandle writeData:closingBracketData];
-        }
-        @finally {
-            [fileHandle closeFile];
-        }
     }
 }
 
