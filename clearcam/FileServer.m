@@ -56,7 +56,7 @@
     // Save a new string
     NSLog(@"core data segments?:");
     //[self fetchAllSegmentsInContext:self.context];
-    [self deleteAllSegmentsInContext:self.context]; //to delete all, not thread safe yet!
+    [self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
     // Fetch all saved strings
     // coredata stuff
     
@@ -82,15 +82,26 @@
     backgroundContext.parentContext = context; // Link it to the main context
 
     [backgroundContext performBlock:^{
-        NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
-        
         NSError *error = nil;
-        NSArray *segments = [backgroundContext executeFetchRequest:fetchRequest error:&error];
         
+        // Fetch the DayEntity for the given date
+        NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
+        dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", @"2025-02-13"];
+
+        NSArray *fetchedDays = [backgroundContext executeFetchRequest:dayFetchRequest error:&error];
+
         if (error) {
-            NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
+            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
             return;
         }
+
+        if (fetchedDays.count == 0) {
+            NSLog(@"No DayEntity found for date 2025-02-13");
+            return;
+        }
+
+        NSManagedObject *dayEntity = fetchedDays.firstObject;
+        NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
         // Create a temporary array for the segment dictionaries
         NSMutableArray *tempSegmentDicts = [NSMutableArray array];
@@ -101,20 +112,20 @@
             double duration = [[segment valueForKey:@"duration"] doubleValue];
 
             NSMutableArray *frameDicts = [NSMutableArray array];
-            
+
             // Fetch the ordered frames
             NSOrderedSet *frames = [segment valueForKey:@"frames"];
-            
+
             for (NSManagedObject *frame in frames) {
                 double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
                 double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
                 int res = [[frame valueForKey:@"res"] intValue];
 
                 NSMutableArray *squareDicts = [NSMutableArray array];
-                
+
                 // Fetch the ordered squares within this frame
                 NSOrderedSet *squares = [frame valueForKey:@"squares"];
-                
+
                 for (NSManagedObject *square in squares) {
                     double originX = [[square valueForKey:@"originX"] doubleValue];
                     double originY = [[square valueForKey:@"originY"] doubleValue];
@@ -153,16 +164,14 @@
             [tempSegmentDicts addObject:segmentDict];
         }
 
-        // Once all iterations are complete, assign tempSegmentDicts to the final array
+        // Assign tempSegmentDicts to the final array
         self.segmentsDict[dateParam] = tempSegmentDicts;
 
         // Log the results
         NSLog(@"rory length of init segments = %lu", (unsigned long)tempSegmentDicts.count);
-        NSLog(@"Fetched and processed %lu segments", (unsigned long)tempSegmentDicts.count);
+        NSLog(@"Fetched and processed %lu segments for date 2025-02-13", (unsigned long)tempSegmentDicts.count);
     }];
-
 }
-
 
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
     @try {
@@ -524,28 +533,28 @@
     }
 }
 
-- (void)deleteAllSegmentsInContext:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
+- (void)deleteAllDayEntitiesInContext:(NSManagedObjectContext *)context {
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
 
     NSError *fetchError = nil;
-    NSArray *segments = [context executeFetchRequest:fetchRequest error:&fetchError];
-    
+    NSArray *dayEntities = [context executeFetchRequest:fetchRequest error:&fetchError];
+
     if (fetchError) {
-        NSLog(@"Failed to fetch Segment Entity objects: %@", fetchError.localizedDescription);
+        NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
         return;
     }
-    
+
     // Loop through all fetched objects and delete them
-    for (NSManagedObject *segment in segments) {
-        [context deleteObject:segment];
+    for (NSManagedObject *dayEntity in dayEntities) {
+        [context deleteObject:dayEntity];
     }
-    
+
     // Save the context after deletion
     NSError *saveError = nil;
     if (![context save:&saveError]) {
-        NSLog(@"Failed to delete objects: %@", saveError.localizedDescription);
+        NSLog(@"Failed to delete DayEntity objects: %@", saveError.localizedDescription);
     } else {
-        NSLog(@"All segments deleted successfully");
+        NSLog(@"All DayEntity objects deleted successfully");
     }
 }
     

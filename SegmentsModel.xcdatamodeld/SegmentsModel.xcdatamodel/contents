@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23605" systemVersion="24D60" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="DayEntity" representedClassName="DayEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="date" optional="YES" attributeType="String"/>
+        <relationship name="segments" optional="YES" toMany="YES" deletionRule="Nullify" ordered="YES" destinationEntity="SegmentEntity" inverseName="day" inverseEntity="SegmentEntity"/>
+    </entity>
     <entity name="FrameEntity" representedClassName="FrameEntity" syncable="YES" codeGenerationType="class">
         <attribute name="aspect_ratio" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="frame_timeStamp" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -14,6 +18,7 @@
         <attribute name="duration" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="timeStamp" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="url" optional="YES" attributeType="String"/>
+        <relationship name="day" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DayEntity" inverseName="segments" inverseEntity="DayEntity"/>
         <relationship name="frames" optional="YES" toMany="YES" deletionRule="Nullify" ordered="YES" destinationEntity="FrameEntity" inverseName="segment" inverseEntity="FrameEntity"/>
     </entity>
     <entity name="SquareEntity" representedClassName="SquareEntity" syncable="YES" codeGenerationType="class">
