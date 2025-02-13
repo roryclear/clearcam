@@ -86,7 +86,7 @@
         
         // Fetch the DayEntity for the given date
         NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
-        dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", @"2025-02-13"];
+        dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
 
         NSArray *fetchedDays = [backgroundContext executeFetchRequest:dayFetchRequest error:&error];
 
@@ -96,7 +96,7 @@
         }
 
         if (fetchedDays.count == 0) {
-            NSLog(@"No DayEntity found for date 2025-02-13");
+            NSLog(@"No DayEntity found for date %@",dateParam);
             return;
         }
 
@@ -169,7 +169,7 @@
 
         // Log the results
         NSLog(@"rory length of init segments = %lu", (unsigned long)tempSegmentDicts.count);
-        NSLog(@"Fetched and processed %lu segments for date 2025-02-13", (unsigned long)tempSegmentDicts.count);
+        NSLog(@"Fetched and processed %lu segments for date %@", (unsigned long)tempSegmentDicts.count,dateParam);
     }];
 }
 

@@ -369,8 +369,11 @@ NSMutableDictionary *classColorMap;
                 NSError *error = nil;
 
                 // Fetch or create DayEntity
+                NSDateFormatter *formatter = [NSDateFormatter new];
+                formatter.dateFormat = @"yyyy-MM-dd";
+                NSString *dateParam = [formatter stringFromDate:[NSDate date]];
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", @"2025-02-13"];
+                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
                 NSArray *fetchedDays = [backgroundContext executeFetchRequest:fetchRequest error:&error];
 
                 NSManagedObject *dayEntity;
@@ -378,7 +381,7 @@ NSMutableDictionary *classColorMap;
                     dayEntity = fetchedDays.firstObject;
                 } else {
                     dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:backgroundContext];
-                    [dayEntity setValue:@"2025-02-13" forKey:@"date"];
+                    [dayEntity setValue:dateParam forKey:@"date"];
                 }
 
                 // Create new SegmentEntity
@@ -433,7 +436,7 @@ NSMutableDictionary *classColorMap;
                 if (![backgroundContext save:&error]) {
                     NSLog(@"Failed to save segment: %@", error.localizedDescription);
                 } else {
-                    NSLog(@"Segment saved successfully under DayEntity with date 2025-02-13.");
+                    NSLog(@"Segment saved successfully under DayEntity with date %@",dateParam);
 
                     // Merge changes back to the main context
                     [self.fileServer.context performBlock:^{
