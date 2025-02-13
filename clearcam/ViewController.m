@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 200  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 21200  //threshold to start deleting
 
 @end
 
@@ -488,9 +488,11 @@ NSMutableDictionary *classColorMap;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
         double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0 * 1024.0);
         NSLog(@"Current free space: %.2f GB", freeSpace);
+        if(freeSpace < MIN_FREE_SPACE_MB){
+            NSLog(@"NOT ENOUGH SPACE!");
+        }
     });
 }
-
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
