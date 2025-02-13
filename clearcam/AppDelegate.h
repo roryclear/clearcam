@@ -1,14 +1,11 @@
-//
-//  AppDelegate.h
-//  clearcam
-//
-//  Created by Rory Clear on 06/01/2025.
-//
-
 #import <UIKit/UIKit.h>
+#import <CoreData/CoreData.h>
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 
+@property (strong, nonatomic) UIWindow *window;
+@property (readonly, strong) NSPersistentContainer *persistentContainer; // Core Data container
+
+- (void)saveContext;
 
 @end
-

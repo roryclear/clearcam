@@ -38,6 +38,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+            
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -53,38 +54,7 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     self.segmentLock = [[NSLock alloc] init]; //dont allow current_segment_squares to be accessed twice at once!
-    [[NSFileManager defaultManager] removeItemAtPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"segments.txt"] error:nil]; //TODO remove
-    
-    //TODO REMOVE THIS
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSString *documentsPath = [documentsURL path];
-
-    NSError *error;
-    NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
-
-    if (error) {
-        NSLog(@"Failed to get contents of Documents directory: %@", error.localizedDescription);
-        return;
-    }
-
-    for (NSString *file in contents) {
-        if ([file hasPrefix:@"opp"]) continue;
-        if ([file hasPrefix:@"batch_req"]) continue;
-        if ([file hasPrefix:@"2025-01-27"]) continue;
-
-        NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
-        BOOL success = [fileManager removeItemAtPath:filePath error:&error];
-
-        if (!success) {
-            NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
-        } else {
-            NSLog(@"Deleted: %@", file);
-        }
-    }
-
-    ///TODO
-    
+        
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
     self.seg_number = 0;
@@ -345,146 +315,148 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         [self.assetWriter finishWritingWithCompletionHandler:^{
 
-        AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
-        CMTime time = asset.duration;
+            AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
+            CMTime time = asset.duration;
 
-        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-        [dateFormatter setDateFormat:@"yyyy-MM-dd"];
-        NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
+            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+            [dateFormatter setDateFormat:@"yyyy-MM-dd"];
+            NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
 
-        // Get the documents directory
-        NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateFolderName];
-
-        // Create the folder if it doesn't exist
-        NSError *error = nil;
-        if (![[NSFileManager defaultManager] fileExistsAtPath:segmentsDirectory]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error];
-            if (error) {
-                NSLog(@"Error creating directory: %@", error);
-            }
-        }
-
-        NSCalendar *calendar = [NSCalendar currentCalendar];
-        NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
-        NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
-
-        if (!self.fileServer.segmentsDict[dateKey]) {
+            // Get the documents directory
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateKey];
-            NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
-                NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
-                NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
-                if (fileSegments) {
-                    NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
-                    self.fileServer.segmentsDict[dateKey] = [fileSegments mutableCopy];
+            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateFolderName];
+
+            // Create the folder if it doesn't exist
+            NSError *error = nil;
+            if (![[NSFileManager defaultManager] fileExistsAtPath:segmentsDirectory]) {
+                [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error];
+                if (error) {
+                    NSLog(@"Error creating directory: %@", error);
                 }
             }
-            if(!self.fileServer.segmentsDict[dateKey]) self.fileServer.segmentsDict[dateKey] = [[NSMutableArray alloc] init];
-        }
 
+            NSCalendar *calendar = [NSCalendar currentCalendar];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
+            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
 
-        NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
-            @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent],
-            @"duration": @(CMTimeGetSeconds(time)),
-            @"frames":[self.current_segment_squares copy]
-        }];
-                    
-        //timestamp of every segment now
-        calendar = [NSCalendar currentCalendar];
-        components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
-        NSDate *midnight = [calendar dateFromComponents:components];
-        NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
-        segmentEntry[@"timeStamp"] = @(timeStamp);
-            
+            if (!self.fileServer.segmentsDict[dateKey]) {
+                [self.fileServer fetchAndProcessSegmentsFromCoreDataForDateParam:dateKey context:self.fileServer.context]; //todo only works on today's segments!
+            }
 
-        [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
-        
-        [self startNewRecording];
-        NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-        [self saveSegmentEntry:segmentEntry toFile:segmentsFilePath];
-        [self.segmentLock lock];
-        [self.current_segment_squares removeAllObjects];
-        [self.segmentLock unlock];
+            // Create a copy of self.current_segment_squares to avoid mutation during enumeration
+            NSArray *currentSegmentSquaresCopy = [self.current_segment_squares copy];
+
+            NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{ //does this fix last segment in hour/day?
+                @"url": [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent],
+                @"duration": @(CMTimeGetSeconds(time)),
+                @"frames": currentSegmentSquaresCopy
+            }];
+                        
+            //timestamp of every segment now
+            calendar = [NSCalendar currentCalendar];
+            components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+            NSDate *midnight = [calendar dateFromComponents:components];
+            NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
+            segmentEntry[@"timeStamp"] = @(timeStamp);
+                
+                
+            //core data below
+            // Create a private context for background processing
+            NSManagedObjectContext *backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+            backgroundContext.parentContext = self.fileServer.context; // Link to main context
+
+            [backgroundContext performBlock:^{
+                NSError *error = nil;
+
+                // Fetch or create DayEntity
+                NSDateFormatter *formatter = [NSDateFormatter new];
+                formatter.dateFormat = @"yyyy-MM-dd";
+                NSString *dateParam = [formatter stringFromDate:[NSDate date]];
+                NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+                NSArray *fetchedDays = [backgroundContext executeFetchRequest:fetchRequest error:&error];
+
+                NSManagedObject *dayEntity;
+                if (fetchedDays.count > 0) {
+                    dayEntity = fetchedDays.firstObject;
+                } else {
+                    dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:backgroundContext];
+                    [dayEntity setValue:dateParam forKey:@"date"];
+                }
+
+                // Create new SegmentEntity
+                NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:backgroundContext];
+
+                // Set segment properties
+                [newSegment setValue:[NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent] forKey:@"url"];
+                [newSegment setValue:@(timeStamp) forKey:@"timeStamp"];
+                [newSegment setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
+
+                // Create an array for the frames
+                NSMutableArray<NSManagedObject *> *segmentFrames = [[NSMutableArray alloc] init];
+
+                for (NSDictionary *frameData in currentSegmentSquaresCopy) {
+                    // Create new FrameEntity
+                    NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:backgroundContext];
+                    [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
+                    [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
+                    [newFrame setValue:frameData[@"res"] forKey:@"res"];
+
+                    // Create an array for the squares in this frame
+                    NSMutableArray<NSManagedObject *> *frameSquares = [[NSMutableArray alloc] init];
+
+                    for (NSDictionary *squareData in frameData[@"squares"]) {
+                        // Create new SquareEntity
+                        NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:backgroundContext];
+                        [newSquare setValue:squareData[@"originX"] forKey:@"originX"];
+                        [newSquare setValue:squareData[@"originY"] forKey:@"originY"];
+                        [newSquare setValue:squareData[@"bottomRightX"] forKey:@"bottomRightX"];
+                        [newSquare setValue:squareData[@"bottomRightY"] forKey:@"bottomRightY"];
+                        [newSquare setValue:squareData[@"classIndex"] forKey:@"classIndex"];
+
+                        [frameSquares addObject:newSquare];
+                    }
+
+                    // Convert squares array to NSOrderedSet and set to the frame
+                    NSOrderedSet *orderedSquares = [NSOrderedSet orderedSetWithArray:frameSquares];
+                    [newFrame setValue:orderedSquares forKey:@"squares"];
+
+                    [segmentFrames addObject:newFrame];
+                }
+
+                // Convert NSMutableArray to NSOrderedSet and set to the segment
+                NSOrderedSet *orderedFrames = [NSOrderedSet orderedSetWithArray:segmentFrames];
+                [newSegment setValue:orderedFrames forKey:@"frames"];
+
+                // Add new segment to DayEntity
+                NSMutableOrderedSet *daySegments = [dayEntity mutableOrderedSetValueForKey:@"segments"];
+                [daySegments addObject:newSegment];
+
+                // Save changes in the background context
+                if (![backgroundContext save:&error]) {
+                    NSLog(@"Failed to save segment: %@", error.localizedDescription);
+                } else {
+                    NSLog(@"Segment saved successfully under DayEntity with date %@",dateParam);
+
+                    // Merge changes back to the main context
+                    [self.fileServer.context performBlock:^{
+                        NSError *mainContextError = nil;
+                        if (![self.fileServer.context save:&mainContextError]) {
+                            NSLog(@"Failed to save main context: %@", mainContextError.localizedDescription);
+                        }
+                    }];
+                }
+            }];
+            //core data above
+                
+            [self.fileServer.segmentsDict[dateKey] addObject:segmentEntry];
+            [self startNewRecording];
+            [self.segmentLock lock];
+            [self.current_segment_squares removeAllObjects];
+            [self.segmentLock unlock];
         }];
     } else {
         NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
-    }
-}
-
-- (void)saveSegmentEntry:(NSDictionary *)segmentEntry toFile:(NSString *)filePath {
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSError *error = nil;
-
-    // Check if file exists
-    if (![fileManager fileExistsAtPath:filePath]) {
-        // Create a new file with the initial JSON array
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@[segmentEntry]
-                                                           options:NSJSONWritingPrettyPrinted
-                                                             error:&error];
-        if (!error) {
-            BOOL success = [jsonData writeToFile:filePath atomically:YES];
-            if (!success) {
-                NSLog(@"Failed to write JSON to file.");
-            }
-        } else {
-            NSLog(@"Error writing JSON to file: %@", error.localizedDescription);
-        }
-    } else {
-        // Open the file for updating
-        NSFileHandle *fileHandle = [NSFileHandle fileHandleForUpdatingAtPath:filePath];
-        if (!fileHandle) {
-            NSLog(@"Error opening file for writing.");
-            return;
-        }
-        
-        @try {
-            // Seek to the end of the file minus 1 byte (to remove the last ']')
-            [fileHandle seekToEndOfFile];
-            unsigned long long fileLength = [fileHandle offsetInFile];
-            if (fileLength < 1) {
-                NSLog(@"File is too short to be valid JSON.");
-                return;
-            }
-            [fileHandle seekToFileOffset:fileLength - 1];
-            
-            // Read the last character to ensure it's a ']'
-            NSData *lastCharData = [fileHandle readDataOfLength:1];
-            NSString *lastChar = [[NSString alloc] initWithData:lastCharData encoding:NSUTF8StringEncoding];
-            if (![lastChar isEqualToString:@"]"]) {
-                NSLog(@"File does not end with a valid JSON array closing bracket.");
-                return;
-            }
-            
-            // Truncate the file to remove the last ']'
-            [fileHandle truncateFileAtOffset:fileLength - 1];
-            
-            // Create a comma to separate the new JSON object
-            NSString *commaString = @",";
-            NSData *commaData = [commaString dataUsingEncoding:NSUTF8StringEncoding];
-            
-            // Write the comma to the file
-            [fileHandle writeData:commaData];
-            
-            // Serialize the new JSON object
-            NSData *newJsonData = [NSJSONSerialization dataWithJSONObject:segmentEntry options:0 error:&error];
-            if (!newJsonData || error) {
-                NSLog(@"Error serializing new JSON: %@", error.localizedDescription);
-                return;
-            }
-            
-            // Write the new JSON object to the file
-            [fileHandle writeData:newJsonData];
-            
-            // Insert closing bracket at the end of file
-            NSString *closingBracketString = @"]";
-            NSData *closingBracketData = [closingBracketString dataUsingEncoding:NSUTF8StringEncoding];
-            [fileHandle writeData:closingBracketData];
-        }
-        @finally {
-            [fileHandle closeFile];
-        }
     }
 }
 

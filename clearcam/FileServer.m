@@ -9,6 +9,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import "SettingsManager.h"
 #import "PortScanner.h"
+#import "AppDelegate.h"
+#import <CoreData/CoreData.h>
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
@@ -18,6 +20,46 @@
 @implementation FileServer
 
 - (void)start {
+    // coredata stuff
+    AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+    self.context = appDelegate.persistentContainer.viewContext;
+
+    
+    //TODO REMOVE THIS
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+    NSString *documentsPath = [documentsURL path];
+
+    NSError *error;
+    NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
+
+    if (error) {
+        NSLog(@"Failed to get contents of Documents directory: %@", error.localizedDescription);
+        return;
+    }
+
+    for (NSString *file in contents) {
+        //continue;
+        if ([file hasPrefix:@"batch_req"]) continue;
+        NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
+        BOOL success = [fileManager removeItemAtPath:filePath error:&error];
+
+        if (!success) {
+            NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
+        } else {
+            NSLog(@"Deleted: %@", file);
+        }
+    }
+
+    ///TODO
+    
+    // Save a new string
+    NSLog(@"core data segments?:");
+    //[self fetchAllSegmentsInContext:self.context];
+    [self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
+    // Fetch all saved strings
+    // coredata stuff
+    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.segment_length = 60;
         self.scanner = [[PortScanner alloc] init];
@@ -32,6 +74,103 @@
 - (NSString *)getDocumentsDirectory {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     return [paths firstObject];
+}
+
+- (void)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+    // Create a private queue context for fetching
+    NSManagedObjectContext *backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+    backgroundContext.parentContext = context; // Link it to the main context
+
+    [backgroundContext performBlock:^{
+        NSError *error = nil;
+        
+        // Fetch the DayEntity for the given date
+        NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
+        dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+
+        NSArray *fetchedDays = [backgroundContext executeFetchRequest:dayFetchRequest error:&error];
+
+        if (error) {
+            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
+            return;
+        }
+
+        if (fetchedDays.count == 0) {
+            NSLog(@"No DayEntity found for date %@",dateParam);
+            return;
+        }
+
+        NSManagedObject *dayEntity = fetchedDays.firstObject;
+        NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
+
+        // Create a temporary array for the segment dictionaries
+        NSMutableArray *tempSegmentDicts = [NSMutableArray array];
+
+        for (NSManagedObject *segment in segments) {
+            NSString *url = [segment valueForKey:@"url"];
+            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
+            double duration = [[segment valueForKey:@"duration"] doubleValue];
+
+            NSMutableArray *frameDicts = [NSMutableArray array];
+
+            // Fetch the ordered frames
+            NSOrderedSet *frames = [segment valueForKey:@"frames"];
+
+            for (NSManagedObject *frame in frames) {
+                double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+                double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+                int res = [[frame valueForKey:@"res"] intValue];
+
+                NSMutableArray *squareDicts = [NSMutableArray array];
+
+                // Fetch the ordered squares within this frame
+                NSOrderedSet *squares = [frame valueForKey:@"squares"];
+
+                for (NSManagedObject *square in squares) {
+                    double originX = [[square valueForKey:@"originX"] doubleValue];
+                    double originY = [[square valueForKey:@"originY"] doubleValue];
+                    double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                    double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                    int classIndex = [[square valueForKey:@"classIndex"] intValue];
+
+                    NSDictionary *squareDict = @{
+                        @"originX": @(originX),
+                        @"originY": @(originY),
+                        @"bottomRightX": @(bottomRightX),
+                        @"bottomRightY": @(bottomRightY),
+                        @"classIndex": @(classIndex)
+                    };
+
+                    [squareDicts addObject:squareDict];
+                }
+
+                NSDictionary *frameDict = @{
+                    @"frame_timeStamp": @(frameTimeStamp),
+                    @"aspect_ratio": @(aspectRatio),
+                    @"res": @(res),
+                    @"squares": squareDicts
+                };
+
+                [frameDicts addObject:frameDict];
+            }
+
+            NSDictionary *segmentDict = @{
+                @"url": url,
+                @"timeStamp": @(timeStamp),
+                @"duration": @(duration),
+                @"frames": frameDicts
+            };
+
+            [tempSegmentDicts addObject:segmentDict];
+        }
+
+        // Assign tempSegmentDicts to the final array
+        self.segmentsDict[dateParam] = tempSegmentDicts;
+
+        // Log the results
+        NSLog(@"rory length of init segments = %lu", (unsigned long)tempSegmentDicts.count);
+        NSLog(@"Fetched and processed %lu segments for date %@", (unsigned long)tempSegmentDicts.count,dateParam);
+    }];
 }
 
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
@@ -213,24 +352,7 @@
         
         NSInteger start = startParam ? [startParam integerValue] : 0;
         if (!self.segmentsDict[dateParam] || start == 0) {
-            NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateParam];
-            NSString *segmentsFilePath = [segmentsDirectory stringByAppendingPathComponent:@"segments.txt"];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:segmentsFilePath]) {
-                NSData *data = [NSData dataWithContentsOfFile:segmentsFilePath];
-                NSArray *fileSegments = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
-                
-                if (fileSegments) {
-                    self.segmentsDict[dateParam] = [fileSegments mutableCopy];
-                    NSLog(@"found segments %lu",(unsigned long)fileSegments.count);
-                } else {
-                    NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
-                    NSString *errorMessage = @"{\"error\": \"Failed to read segments from file\"}";
-                    send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-                    send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-                    return;
-                }
-            }
+            [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context]; //todo, only works for one date! and is a mess
         }
         
         NSArray *segmentsForDate = self.segmentsDict[dateParam];
@@ -354,6 +476,85 @@
             break;
         }
         bytesToSend -= bytesSent;
+    }
+}
+
+- (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
+    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+    
+    // Execute the fetch request
+    NSError *error = nil;
+    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
+    
+    if (error) {
+        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
+    } else {
+        NSLog(@"Fetched segments:");
+        for (NSManagedObject *segment in results) {
+            NSString *url = [segment valueForKey:@"url"];
+            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
+            double duration = [[segment valueForKey:@"duration"] doubleValue];
+            
+            NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
+            
+            // Fetch the ordered frames
+            NSOrderedSet *frames = [segment valueForKey:@"frames"];
+            if (frames.count == 0) {
+                NSLog(@"  No frames associated with this segment.");
+            } else {
+                NSLog(@"  Frames:");
+                for (NSManagedObject *frame in frames) {
+                    double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+                    double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+                    int res = [[frame valueForKey:@"res"] intValue];
+
+                    NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
+
+                    // Fetch the ordered squares within this frame
+                    NSOrderedSet *squares = [frame valueForKey:@"squares"];
+                    if (squares.count == 0) {
+                        NSLog(@"      No squares associated with this frame.");
+                    } else {
+                        NSLog(@"      Squares:");
+                        for (NSManagedObject *square in squares) {
+                            double originX = [[square valueForKey:@"originX"] doubleValue];
+                            double originY = [[square valueForKey:@"originY"] doubleValue];
+                            double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                            double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                            int classIndex = [[square valueForKey:@"classIndex"] intValue];
+
+                            NSLog(@"        - Square: Origin(%.2f, %.2f), BottomRight(%.2f, %.2f), Class Index: %d",
+                                  originX, originY, bottomRightX, bottomRightY, classIndex);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+- (void)deleteAllDayEntitiesInContext:(NSManagedObjectContext *)context {
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+
+    NSError *fetchError = nil;
+    NSArray *dayEntities = [context executeFetchRequest:fetchRequest error:&fetchError];
+
+    if (fetchError) {
+        NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
+        return;
+    }
+
+    // Loop through all fetched objects and delete them
+    for (NSManagedObject *dayEntity in dayEntities) {
+        [context deleteObject:dayEntity];
+    }
+
+    // Save the context after deletion
+    NSError *saveError = nil;
+    if (![context save:&saveError]) {
+        NSLog(@"Failed to delete DayEntity objects: %@", saveError.localizedDescription);
+    } else {
+        NSLog(@"All DayEntity objects deleted successfully");
     }
 }
     
