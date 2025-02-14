@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 21100  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 20500  //threshold to start deleting
 
 @end
 
@@ -127,7 +127,6 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)startNewRecording {
-    [self ensureFreeDiskSpace];
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
     NSString *dayFolderName = [formatter stringFromDate:[NSDate date]];
@@ -198,6 +197,7 @@ NSMutableDictionary *classColorMap;
     
     [self.assetWriter startWriting];
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
+    [self ensureFreeDiskSpace];
 }
 
 - (void)drawSquareWithTopLeftX:(CGFloat)xOrigin topLeftY:(CGFloat)yOrigin bottomRightX:(CGFloat)bottomRightX bottomRightY:(CGFloat)bottomRightY classIndex:(int)classIndex aspectRatio:(float)aspectRatio {
@@ -485,32 +485,26 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)ensureFreeDiskSpace {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
-        NSLog(@"Current free space: %.2f MB", freeSpace);
-        if(freeSpace < MIN_FREE_SPACE_MB){
-            NSLog(@"NOT ENOUGH SPACE!");
-            [self getAllDayEntitiesInContext:self.fileServer.context];
+    double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
+    NSLog(@"Current free space: %.2f MB", freeSpace);
+    if(freeSpace < MIN_FREE_SPACE_MB){
+        NSLog(@"NOT ENOUGH SPACE!");
+        NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+
+        NSError *fetchError = nil;
+        NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
+
+        if (fetchError) {
+            NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
+            return;
         }
-    });
-}
 
-- (void)getAllDayEntitiesInContext:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-
-    NSError *fetchError = nil;
-    NSArray *dayEntities = [context executeFetchRequest:fetchRequest error:&fetchError];
-
-    if (fetchError) {
-        NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-        return;
-    }
-
-    // Loop through all fetched objects and delete them
-    for (NSManagedObject *dayEntity in dayEntities) {
-        NSLog(@"day entity found: %@",[dayEntity valueForKey:@"date"]);
-        for(NSManagedObject *segmentEntity in [dayEntity valueForKey:@"segments"]){
-            NSLog(@"\t segment found %@",[segmentEntity valueForKey:@"url"]);
+        // Loop through all fetched objects and delete them
+        for (NSManagedObject *dayEntity in dayEntities) {
+            NSLog(@"day entity found: %@",[dayEntity valueForKey:@"date"]);
+            for(NSManagedObject *segmentEntity in [dayEntity valueForKey:@"segments"]){
+                NSLog(@"\t segment found %@",[segmentEntity valueForKey:@"url"]);
+            }
         }
     }
 }
