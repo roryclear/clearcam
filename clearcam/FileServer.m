@@ -64,7 +64,6 @@
         self.segment_length = 60;
         self.scanner = [[PortScanner alloc] init];
         self.last_req_time = [NSDate now];
-        self.segmentsDict = [[NSMutableDictionary alloc] init];
         self.basePath = [self getDocumentsDirectory];
         self.durationCache = [[NSMutableDictionary alloc] init];
         [self startHTTPServerWithBasePath:self.basePath];
@@ -76,9 +75,10 @@
     return [paths firstObject];
 }
 
-- (void)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+- (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+    // Create a temporary array for the segment dictionaries
+    NSMutableArray *tempSegmentDicts = [NSMutableArray array];
     NSError *error = nil;
-
     // Fetch the DayEntity for the given date
     NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
     dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
@@ -87,19 +87,16 @@
 
     if (error) {
         NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
-        return;
+        return tempSegmentDicts;
     }
 
     if (fetchedDays.count == 0) {
         NSLog(@"No DayEntity found for date %@",dateParam);
-        return;
+        return tempSegmentDicts;
     }
 
     NSManagedObject *dayEntity = fetchedDays.firstObject;
     NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
-
-    // Create a temporary array for the segment dictionaries
-    NSMutableArray *tempSegmentDicts = [NSMutableArray array];
 
     for (NSManagedObject *segment in segments) {
         NSString *url = [segment valueForKey:@"url"];
@@ -159,12 +156,10 @@
         [tempSegmentDicts addObject:segmentDict];
     }
 
-    // Assign tempSegmentDicts to the final array
-    self.segmentsDict[dateParam] = tempSegmentDicts;
-
     // Log the results
     NSLog(@"rory length of init segments = %lu", (unsigned long)tempSegmentDicts.count);
     NSLog(@"Fetched and processed %lu segments for date %@", (unsigned long)tempSegmentDicts.count,dateParam);
+    return tempSegmentDicts;
 }
 
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
@@ -345,11 +340,7 @@
         }
         
         NSInteger start = startParam ? [startParam integerValue] : 0;
-        if (!self.segmentsDict[dateParam] || start == 0) {
-            [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context]; //todo, only works for one date! and is a mess
-        }
-        
-        NSArray *segmentsForDate = self.segmentsDict[dateParam];
+        NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context];
         if (start >= segmentsForDate.count) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Start index is out of range\"}";
