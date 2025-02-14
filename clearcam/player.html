@@ -687,39 +687,20 @@
                                 const oldTotalDuration = totalDuration;
 
                                 let cumulativeStart = totalDuration;
-                                let i = 0;
-                                while (i < newSegments.length - 1) {
-                                    // Find the next valid segment with a timeStamp
-                                    while (i < newSegments.length - 1 && newSegments[i].timeStamp == null) {
-                                        i++; // Skip this segment
-                                    }
-                                    if (i >= newSegments.length - 1) break; // Stop if no valid segment is found
-
+                                for (let i = 0; i < newSegments.length - 1; i++) {
                                     const segment = newSegments[i];
-
-                                    // Find the next valid segment with a timeStamp
-                                    let nextIndex = i + 1;
-                                    while (nextIndex < newSegments.length && newSegments[nextIndex].timeStamp == null) {
-                                        nextIndex++; // Skip invalid segments
-                                    }
-                                    if (nextIndex >= newSegments.length) break; // No more valid segments
-
-                                    const timeDifference = newSegments[nextIndex].timeStamp - segment.timeStamp;
+                                    const timeDifference = newSegments[i+1].timeStamp - newSegments[i].timeStamp;
                                     const lostFrames = timeDifference - segment.duration;
                                     const currentCumulativeStart = cumulativeStart;
                                     cumulativeStart += timeDifference;
-
                                     segments.push({
                                         ...segment,
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
-
-                                    if (lostFrames > 60) { // TODO: Why 60?
-                                        gaps.push([currentCumulativeStart + segment.duration, lostFrames]);
+                                    if(lostFrames > 60){ //todo why 60
+                                        gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
                                     }
-
-                                    i = nextIndex; //
                                 }
                                 totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
                                 if (totalDuration !== oldTotalDuration) {
@@ -1094,4 +1075,5 @@
     </script>
 </body>
 </html>
+
 
