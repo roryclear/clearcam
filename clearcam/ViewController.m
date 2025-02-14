@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 20500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 20800  //threshold to start deleting
 
 @end
 
@@ -475,12 +475,10 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)ensureFreeDiskSpace {
-    double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
-    NSLog(@"Current free space: %.2f MB", freeSpace);
-    if(freeSpace < MIN_FREE_SPACE_MB){
+    while ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
         NSLog(@"NOT ENOUGH SPACE!");
+        
         NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-
         NSError *fetchError = nil;
         NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
 
@@ -489,14 +487,40 @@ NSMutableDictionary *classColorMap;
             return;
         }
 
-        // Loop through all fetched objects and delete them
+        BOOL deletedFile = NO;
+
         for (NSManagedObject *dayEntity in dayEntities) {
-            NSLog(@"day entity found: %@",[dayEntity valueForKey:@"date"]);
-            for(NSManagedObject *segmentEntity in [dayEntity valueForKey:@"segments"]){
-                NSLog(@"\t segment found %@",[segmentEntity valueForKey:@"url"]);
+            NSLog(@"day entity found: %@", [dayEntity valueForKey:@"date"]);
+            
+            for (NSManagedObject *segmentEntity in [dayEntity valueForKey:@"segments"]) {
+                NSLog(@"\t segment found %@", [segmentEntity valueForKey:@"url"]);
+                
+                if (![[segmentEntity valueForKey:@"url"] isEqual:@""]) {
+                    NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:[segmentEntity valueForKey:@"url"]];
+                    
+                    if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:nil]) {
+                        NSLog(@"\t deleted %@", [segmentEntity valueForKey:@"url"]);
+                        [segmentEntity setValue:@"" forKey:@"url"];
+                        deletedFile = YES;
+                    }
+                    
+                    // Check free space again
+                    double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
+                    if (freeSpace >= MIN_FREE_SPACE_MB) {
+                        NSLog(@"Enough space freed: %.2f MB", freeSpace);
+                        return;
+                    }
+                }
             }
         }
+
+        // If no file was deleted but still low on space, break to avoid infinite loop
+        if (!deletedFile) {
+            NSLog(@"No more files to delete but still low on space!");
+            return;
+        }
     }
+    NSLog(@"free space = %f",(double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
 }
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
