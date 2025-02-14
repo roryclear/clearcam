@@ -346,6 +346,7 @@
         </div>
     </div>
     <script>
+        let n_segments = 0; //not all new segments will get added to segments if some are removed, indexes will be maintained at backend though
         const yolo_classes = [
                     ["person", "red"], ["bicycle", "green"], ["car", "blue"],
                     ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
@@ -666,6 +667,7 @@
                     const datePicker = document.getElementById('datePicker');
                     datePicker.value = currentDate;
                     datePicker.addEventListener('change', function() {
+                        n_segments = 0;
                         const selectedDate = new Date(this.value);
                         const formattedDate = formatDate(selectedDate);
                         window.location.href = `${window.location.pathname}?date=${formattedDate}`;
@@ -678,9 +680,7 @@
                     isFetchingSegments = true;
 
                     try {
-                        const startParam = segments.length;
-                        const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
-
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${n_segments}`);
                         if (response.ok) {
                             const newSegments = await response.json();
                             if (Array.isArray(newSegments)) {
@@ -698,6 +698,7 @@
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
+                                    n_segments += 1;
                                     if(lostFrames > 60){ //todo why 60
                                         gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
                                     }
