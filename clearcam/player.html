@@ -690,11 +690,11 @@
                                 let i = 0;
                                 let next_i = 1;
                                 while(next_i < newSegments.length) {
-                                    if(newSegments[i].timeStamp == 0.0){
+                                    if(newSegments[i].url.length == 0){
                                         i=next_i;
                                         next_i+=1;
                                     }
-                                    while(newSegments[next_i].timeStamp == 0.0 && next_i < newSegments.length){
+                                    while(newSegments[next_i].url.length == 0 && next_i < newSegments.length){
                                         next_i += 1;
                                     }
                                     if(next_i >= newSegments.length){
@@ -710,7 +710,7 @@
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
-                                    if(lostFrames > 60){ //todo why 60
+                                    if(lostFrames > 1){ //todo why 60
                                         gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
                                     }
                                     i=next_i;
