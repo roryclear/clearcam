@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 42800  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 21000  //threshold to start deleting
 
 @end
 
@@ -126,11 +126,16 @@ NSMutableDictionary *classColorMap;
     [self startNewRecording];
 }
 
-- (void)startNewRecording {
+- (NSString*)getDateString {
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
-    NSString *dayFolderName = [formatter stringFromDate:[NSDate date]];
+    return [formatter stringFromDate:[NSDate date]];
+}
+
+- (void)startNewRecording {
+    NSString *dayFolderName = [self getDateString];
     
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
     self.current_file_timestamp = [NSDate date];
     NSString *timestamp = [formatter stringFromDate:self.current_file_timestamp];
@@ -318,9 +323,7 @@ NSMutableDictionary *classColorMap;
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
 
-            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-            [dateFormatter setDateFormat:@"yyyy-MM-dd"];
-            NSString *dateFolderName = [dateFormatter stringFromDate:self.current_file_timestamp];
+            NSString *dateFolderName = [self getDateString];
 
             // Get the documents directory
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
@@ -337,7 +340,6 @@ NSMutableDictionary *classColorMap;
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
             NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
-            NSString *dateKey = [NSString stringWithFormat:@"%04ld-%02ld-%02ld", (long)components.year, (long)components.month, (long)components.day];
 
             NSArray *currentSegmentSquaresCopy = [self.current_segment_squares copy];
 
@@ -364,9 +366,7 @@ NSMutableDictionary *classColorMap;
                 NSError *error = nil;
 
                 // Fetch DayEntity
-                NSDateFormatter *formatter = [NSDateFormatter new];
-                formatter.dateFormat = @"yyyy-MM-dd";
-                NSString *dateParam = [formatter stringFromDate:[NSDate date]];
+                NSString *dateParam = [self getDateString];
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
                 fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
                 NSArray *fetchedDays = [backgroundContext executeFetchRequest:fetchRequest error:&error];
