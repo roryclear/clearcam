@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 
-#define MIN_FREE_SPACE_MB 21000  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
 @end
 
@@ -130,6 +130,18 @@ NSMutableDictionary *classColorMap;
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd"];
     return [formatter stringFromDate:[NSDate date]];
+}
+
+- (NSString*)fake_getDateString { //todo remove
+    NSDate *now = [NSDate date];
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    NSDateComponents *nowComponents = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute) fromDate:now];
+    
+    if (nowComponents.hour < 12 || (nowComponents.hour == 12 && nowComponents.minute < 20)) {
+        return @"2025-02-14";
+    } else {
+        return @"2025-02-15";
+    }
 }
 
 - (void)startNewRecording {
@@ -499,7 +511,6 @@ NSMutableDictionary *classColorMap;
             NSLog(@"No more DayEntities available. Resetting deletion indexes.");
             [defaults removeObjectForKey:@"LastDeletedDayIndex"];
             [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-            [defaults synchronize];
             return;
         }
 

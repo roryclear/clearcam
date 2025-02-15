@@ -26,9 +26,9 @@
 
     
     //TODO REMOVE THIS
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    //[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+    //[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+    //[[NSUserDefaults standardUserDefaults] synchronize];
 
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
@@ -59,7 +59,6 @@
     
     // Save a new string
     NSLog(@"core data segments?:");
-    //[self fetchAllSegmentsInContext:self.context];
     [self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
     // Fetch all saved strings
     // coredata stuff
@@ -465,60 +464,6 @@
             break;
         }
         bytesToSend -= bytesSent;
-    }
-}
-
-- (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
-    
-    // Execute the fetch request
-    NSError *error = nil;
-    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
-    
-    if (error) {
-        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
-    } else {
-        NSLog(@"Fetched segments:");
-        for (NSManagedObject *segment in results) {
-            NSString *url = [segment valueForKey:@"url"];
-            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
-            double duration = [[segment valueForKey:@"duration"] doubleValue];
-            
-            NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
-            
-            // Fetch the ordered frames
-            NSOrderedSet *frames = [segment valueForKey:@"frames"];
-            if (frames.count == 0) {
-                NSLog(@"  No frames associated with this segment.");
-            } else {
-                NSLog(@"  Frames:");
-                for (NSManagedObject *frame in frames) {
-                    double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-                    double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-                    int res = [[frame valueForKey:@"res"] intValue];
-
-                    NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
-
-                    // Fetch the ordered squares within this frame
-                    NSOrderedSet *squares = [frame valueForKey:@"squares"];
-                    if (squares.count == 0) {
-                        NSLog(@"      No squares associated with this frame.");
-                    } else {
-                        NSLog(@"      Squares:");
-                        for (NSManagedObject *square in squares) {
-                            double originX = [[square valueForKey:@"originX"] doubleValue];
-                            double originY = [[square valueForKey:@"originY"] doubleValue];
-                            double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                            double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                            int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                            NSLog(@"        - Square: Origin(%.2f, %.2f), BottomRight(%.2f, %.2f), Class Index: %d",
-                                  originX, originY, bottomRightX, bottomRightY, classIndex);
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
