@@ -27,8 +27,9 @@
 @property (nonatomic, strong) NSMutableDictionary *digits;
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
+@property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 
-#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 42500  //threshold to start deleting
 
 @end
 
@@ -38,7 +39,6 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-            
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -60,6 +60,8 @@ NSMutableDictionary *classColorMap;
     self.seg_number = 0;
     self.fileServer = [[FileServer alloc] init];
     [self.fileServer start];
+    self.backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+    self.backgroundContext.parentContext = self.fileServer.context;
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDeviceOrientationChange)
@@ -370,34 +372,30 @@ NSMutableDictionary *classColorMap;
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
             segmentEntry[@"timeStamp"] = @(timeStamp);
 
-            // Core Data - Background Processing
-            NSManagedObjectContext *backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
-            backgroundContext.parentContext = self.fileServer.context;
-
-            [backgroundContext performBlock:^{
+            [self.backgroundContext performBlock:^{
                 NSError *error = nil;
 
                 // Fetch DayEntity
                 NSString *dateParam = [self getDateString];
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
                 fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
-                NSArray *fetchedDays = [backgroundContext executeFetchRequest:fetchRequest error:&error];
+                NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
 
                 NSManagedObject *dayEntity;
                 if (fetchedDays.count > 0) {
                     dayEntity = fetchedDays.firstObject;
                 } else {
-                    dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:backgroundContext];
+                    dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
                     [dayEntity setValue:dateParam forKey:@"date"];
                 }
 
                 // Check for existing segment
                 NSFetchRequest *segmentFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
                 segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", segmentURL];
-                NSArray *existingSegments = [backgroundContext executeFetchRequest:segmentFetchRequest error:&error];
+                NSArray *existingSegments = [self.backgroundContext executeFetchRequest:segmentFetchRequest error:&error];
 
                 if (existingSegments.count == 0) { // Only insert if no duplicate exists
-                    NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:backgroundContext];
+                    NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
 
                     [newSegment setValue:segmentURL forKey:@"url"];
                     [newSegment setValue:@(timeStamp) forKey:@"timeStamp"];
@@ -406,7 +404,7 @@ NSMutableDictionary *classColorMap;
                     NSMutableArray<NSManagedObject *> *segmentFrames = [[NSMutableArray alloc] init];
 
                     for (NSDictionary *frameData in currentSegmentSquaresCopy) {
-                        NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:backgroundContext];
+                        NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.backgroundContext];
                         [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
                         [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
                         [newFrame setValue:frameData[@"res"] forKey:@"res"];
@@ -414,7 +412,7 @@ NSMutableDictionary *classColorMap;
                         NSMutableArray<NSManagedObject *> *frameSquares = [[NSMutableArray alloc] init];
 
                         for (NSDictionary *squareData in frameData[@"squares"]) {
-                            NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:backgroundContext];
+                            NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.backgroundContext];
                             [newSquare setValue:squareData[@"originX"] forKey:@"originX"];
                             [newSquare setValue:squareData[@"originY"] forKey:@"originY"];
                             [newSquare setValue:squareData[@"bottomRightX"] forKey:@"bottomRightX"];
@@ -435,7 +433,7 @@ NSMutableDictionary *classColorMap;
                     NSMutableOrderedSet *daySegments = [dayEntity mutableOrderedSetValueForKey:@"segments"];
                     [daySegments addObject:newSegment];
 
-                    if (![backgroundContext save:&error]) {
+                    if (![self.backgroundContext save:&error]) {
                         NSLog(@"Failed to save segment: %@", error.localizedDescription);
                     } else {
                         NSLog(@"Segment saved successfully under DayEntity with date %@", dateParam);
@@ -819,4 +817,5 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
