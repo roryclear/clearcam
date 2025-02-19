@@ -28,8 +28,9 @@
 @property (nonatomic, strong) NSMutableArray *current_segment_squares;
 @property (nonatomic, strong) NSLock *segmentLock;
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
+@property (nonatomic, strong) NSString *dayFolderName;
 
-#define MIN_FREE_SPACE_MB 40000  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 20000  //threshold to start deleting
 
 @end
 
@@ -147,7 +148,7 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)startNewRecording {
-    NSString *dayFolderName = [self getDateString];
+    self.dayFolderName = [self getDateString];
     
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
@@ -162,7 +163,7 @@ NSMutableDictionary *classColorMap;
     
     // Create a folder for the day within the documents directory
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *dayFolderURL = [documentsDirectory URLByAppendingPathComponent:dayFolderName];
+    NSURL *dayFolderURL = [documentsDirectory URLByAppendingPathComponent:self.dayFolderName];
     
     // Ensure the directory exists
     NSError *error = nil;
@@ -417,11 +418,9 @@ NSMutableDictionary *classColorMap;
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
 
-            NSString *dateFolderName = [self getDateString];
-
             // Get the documents directory
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:dateFolderName];
+            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:self.dayFolderName];
 
             // Create the folder if it doesn't exist
             NSError *error = nil;
@@ -456,9 +455,8 @@ NSMutableDictionary *classColorMap;
                 NSError *error = nil;
 
                 // Fetch DayEntity
-                NSString *dateParam = [self getDateString];
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
 
                 NSManagedObject *dayEntity;
@@ -466,7 +464,7 @@ NSMutableDictionary *classColorMap;
                     dayEntity = fetchedDays.firstObject;
                 } else {
                     dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
-                    [dayEntity setValue:dateParam forKey:@"date"];
+                    [dayEntity setValue:self.dayFolderName forKey:@"date"];
                 }
 
                 // Check for existing segment
@@ -516,7 +514,7 @@ NSMutableDictionary *classColorMap;
                     if (![self.backgroundContext save:&error]) {
                         NSLog(@"Failed to save segment: %@", error.localizedDescription);
                     } else {
-                        NSLog(@"Segment saved successfully under DayEntity with date %@", dateParam);
+                        NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
 
                         [self.fileServer.context performBlock:^{
                             NSError *mainContextError = nil;
