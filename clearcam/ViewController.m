@@ -30,7 +30,7 @@
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
 
-#define MIN_FREE_SPACE_MB 20000  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
 @end
 
