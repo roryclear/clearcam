@@ -346,6 +346,7 @@
         </div>
     </div>
     <script>
+        let n_segments = 0; //not all new segments will get added to segments if some are removed, indexes will be maintained at backend though
         const yolo_classes = [
                     ["person", "red"], ["bicycle", "green"], ["car", "blue"],
                     ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
@@ -666,6 +667,7 @@
                     const datePicker = document.getElementById('datePicker');
                     datePicker.value = currentDate;
                     datePicker.addEventListener('change', function() {
+                        n_segments = 0;
                         const selectedDate = new Date(this.value);
                         const formattedDate = formatDate(selectedDate);
                         window.location.href = `${window.location.pathname}?date=${formattedDate}`;
@@ -678,18 +680,28 @@
                     isFetchingSegments = true;
 
                     try {
-                        const startParam = segments.length;
-                        const response = await fetch(`/get-segments?date=${currentDate}&start=${startParam}`);
-
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${n_segments}`);
                         if (response.ok) {
                             const newSegments = await response.json();
                             if (Array.isArray(newSegments)) {
                                 const oldTotalDuration = totalDuration;
 
                                 let cumulativeStart = totalDuration;
-                                for (let i = 0; i < newSegments.length - 1; i++) {
+                                let i = 0;
+                                let next_i = 1;
+                                while(next_i < newSegments.length) {
+                                    if(newSegments[i].url.length == 0){
+                                        i=next_i;
+                                        next_i+=1;
+                                    }
+                                    while(newSegments[next_i].url.length == 0 && next_i < newSegments.length){
+                                        next_i += 1;
+                                    }
+                                    if(next_i >= newSegments.length){
+                                        break;
+                                    }
                                     const segment = newSegments[i];
-                                    const timeDifference = newSegments[i+1].timeStamp - newSegments[i].timeStamp;
+                                    const timeDifference = newSegments[next_i].timeStamp - newSegments[i].timeStamp;
                                     const lostFrames = timeDifference - segment.duration;
                                     const currentCumulativeStart = cumulativeStart;
                                     cumulativeStart += timeDifference;
@@ -698,10 +710,13 @@
                                         cumulativeStart: currentCumulativeStart,
                                         lostFrames: lostFrames > 0 ? lostFrames : 0,
                                     });
-                                    if(lostFrames > 60){ //todo why 60
+                                    if(lostFrames > 1){ //todo why 60
                                         gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
                                     }
+                                    i=next_i;
+                                    next_i+=1;
                                 }
+                                n_segments += i;
                                 totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
                                 if (totalDuration !== oldTotalDuration) {
                                     updateTimeline();
@@ -1075,4 +1090,6 @@
     </script>
 </body>
 </html>
+
+
 

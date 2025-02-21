@@ -26,6 +26,10 @@
 
     
     //TODO REMOVE THIS
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
     NSString *documentsPath = [documentsURL path];
@@ -55,7 +59,6 @@
     
     // Save a new string
     NSLog(@"core data segments?:");
-    //[self fetchAllSegmentsInContext:self.context];
     [self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
     // Fetch all saved strings
     // coredata stuff
@@ -64,7 +67,6 @@
         self.segment_length = 60;
         self.scanner = [[PortScanner alloc] init];
         self.last_req_time = [NSDate now];
-        self.segmentsDict = [[NSMutableDictionary alloc] init];
         self.basePath = [self getDocumentsDirectory];
         self.durationCache = [[NSMutableDictionary alloc] init];
         [self startHTTPServerWithBasePath:self.basePath];
@@ -76,101 +78,91 @@
     return [paths firstObject];
 }
 
-- (void)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
-    // Create a private queue context for fetching
-    NSManagedObjectContext *backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
-    backgroundContext.parentContext = context; // Link it to the main context
+- (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+    // Create a temporary array for the segment dictionaries
+    NSMutableArray *tempSegmentDicts = [NSMutableArray array];
+    NSError *error = nil;
+    // Fetch the DayEntity for the given date
+    NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
+    dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
 
-    [backgroundContext performBlock:^{
-        NSError *error = nil;
-        
-        // Fetch the DayEntity for the given date
-        NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
-        dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+    NSArray *fetchedDays = [context executeFetchRequest:dayFetchRequest error:&error];
 
-        NSArray *fetchedDays = [backgroundContext executeFetchRequest:dayFetchRequest error:&error];
+    if (error) {
+        NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
+        return tempSegmentDicts;
+    }
 
-        if (error) {
-            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
-            return;
-        }
+    if (fetchedDays.count == 0) {
+        NSLog(@"No DayEntity found for date %@",dateParam);
+        return tempSegmentDicts;
+    }
 
-        if (fetchedDays.count == 0) {
-            NSLog(@"No DayEntity found for date %@",dateParam);
-            return;
-        }
+    NSManagedObject *dayEntity = fetchedDays.firstObject;
+    NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
-        NSManagedObject *dayEntity = fetchedDays.firstObject;
-        NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
+    for (NSManagedObject *segment in segments) {
+        NSString *url = [segment valueForKey:@"url"];
+        double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
+        double duration = [[segment valueForKey:@"duration"] doubleValue];
 
-        // Create a temporary array for the segment dictionaries
-        NSMutableArray *tempSegmentDicts = [NSMutableArray array];
+        NSMutableArray *frameDicts = [NSMutableArray array];
 
-        for (NSManagedObject *segment in segments) {
-            NSString *url = [segment valueForKey:@"url"];
-            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
-            double duration = [[segment valueForKey:@"duration"] doubleValue];
+        // Fetch the ordered frames
+        NSOrderedSet *frames = [segment valueForKey:@"frames"];
 
-            NSMutableArray *frameDicts = [NSMutableArray array];
+        for (NSManagedObject *frame in frames) {
+            double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+            double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+            int res = [[frame valueForKey:@"res"] intValue];
 
-            // Fetch the ordered frames
-            NSOrderedSet *frames = [segment valueForKey:@"frames"];
+            NSMutableArray *squareDicts = [NSMutableArray array];
 
-            for (NSManagedObject *frame in frames) {
-                double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-                double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-                int res = [[frame valueForKey:@"res"] intValue];
+            // Fetch the ordered squares within this frame
+            NSOrderedSet *squares = [frame valueForKey:@"squares"];
 
-                NSMutableArray *squareDicts = [NSMutableArray array];
+            for (NSManagedObject *square in squares) {
+                double originX = [[square valueForKey:@"originX"] doubleValue];
+                double originY = [[square valueForKey:@"originY"] doubleValue];
+                double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                int classIndex = [[square valueForKey:@"classIndex"] intValue];
 
-                // Fetch the ordered squares within this frame
-                NSOrderedSet *squares = [frame valueForKey:@"squares"];
-
-                for (NSManagedObject *square in squares) {
-                    double originX = [[square valueForKey:@"originX"] doubleValue];
-                    double originY = [[square valueForKey:@"originY"] doubleValue];
-                    double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                    double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                    int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                    NSDictionary *squareDict = @{
-                        @"originX": @(originX),
-                        @"originY": @(originY),
-                        @"bottomRightX": @(bottomRightX),
-                        @"bottomRightY": @(bottomRightY),
-                        @"classIndex": @(classIndex)
-                    };
-
-                    [squareDicts addObject:squareDict];
-                }
-
-                NSDictionary *frameDict = @{
-                    @"frame_timeStamp": @(frameTimeStamp),
-                    @"aspect_ratio": @(aspectRatio),
-                    @"res": @(res),
-                    @"squares": squareDicts
+                NSDictionary *squareDict = @{
+                    @"originX": @(originX),
+                    @"originY": @(originY),
+                    @"bottomRightX": @(bottomRightX),
+                    @"bottomRightY": @(bottomRightY),
+                    @"classIndex": @(classIndex)
                 };
 
-                [frameDicts addObject:frameDict];
+                [squareDicts addObject:squareDict];
             }
 
-            NSDictionary *segmentDict = @{
-                @"url": url,
-                @"timeStamp": @(timeStamp),
-                @"duration": @(duration),
-                @"frames": frameDicts
+            NSDictionary *frameDict = @{
+                @"frame_timeStamp": @(frameTimeStamp),
+                @"aspect_ratio": @(aspectRatio),
+                @"res": @(res),
+                @"squares": squareDicts
             };
 
-            [tempSegmentDicts addObject:segmentDict];
+            [frameDicts addObject:frameDict];
         }
 
-        // Assign tempSegmentDicts to the final array
-        self.segmentsDict[dateParam] = tempSegmentDicts;
+        NSDictionary *segmentDict = @{
+            @"url": url,
+            @"timeStamp": @(timeStamp),
+            @"duration": @(duration),
+            @"frames": frameDicts
+        };
 
-        // Log the results
-        NSLog(@"rory length of init segments = %lu", (unsigned long)tempSegmentDicts.count);
-        NSLog(@"Fetched and processed %lu segments for date %@", (unsigned long)tempSegmentDicts.count,dateParam);
-    }];
+        [tempSegmentDicts addObject:segmentDict];
+    }
+
+    // Log the results
+    NSLog(@"rory length of init segments = %lu", (unsigned long)tempSegmentDicts.count);
+    NSLog(@"Fetched and processed %lu segments for date %@", (unsigned long)tempSegmentDicts.count,dateParam);
+    return tempSegmentDicts;
 }
 
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
@@ -351,11 +343,7 @@
         }
         
         NSInteger start = startParam ? [startParam integerValue] : 0;
-        if (!self.segmentsDict[dateParam] || start == 0) {
-            [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context]; //todo, only works for one date! and is a mess
-        }
-        
-        NSArray *segmentsForDate = self.segmentsDict[dateParam];
+        NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context];
         if (start >= segmentsForDate.count) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Start index is out of range\"}";
@@ -476,60 +464,6 @@
             break;
         }
         bytesToSend -= bytesSent;
-    }
-}
-
-- (void)fetchAllSegmentsInContext:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
-    
-    // Execute the fetch request
-    NSError *error = nil;
-    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
-    
-    if (error) {
-        NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
-    } else {
-        NSLog(@"Fetched segments:");
-        for (NSManagedObject *segment in results) {
-            NSString *url = [segment valueForKey:@"url"];
-            double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
-            double duration = [[segment valueForKey:@"duration"] doubleValue];
-            
-            NSLog(@"Segment - URL: %@, TimeStamp: %f, Duration: %f", url, timeStamp, duration);
-            
-            // Fetch the ordered frames
-            NSOrderedSet *frames = [segment valueForKey:@"frames"];
-            if (frames.count == 0) {
-                NSLog(@"  No frames associated with this segment.");
-            } else {
-                NSLog(@"  Frames:");
-                for (NSManagedObject *frame in frames) {
-                    double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-                    double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-                    int res = [[frame valueForKey:@"res"] intValue];
-
-                    NSLog(@"    - Frame: TimeStamp: %f, Aspect Ratio: %f, Resolution: %d", frameTimeStamp, aspectRatio, res);
-
-                    // Fetch the ordered squares within this frame
-                    NSOrderedSet *squares = [frame valueForKey:@"squares"];
-                    if (squares.count == 0) {
-                        NSLog(@"      No squares associated with this frame.");
-                    } else {
-                        NSLog(@"      Squares:");
-                        for (NSManagedObject *square in squares) {
-                            double originX = [[square valueForKey:@"originX"] doubleValue];
-                            double originY = [[square valueForKey:@"originY"] doubleValue];
-                            double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                            double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                            int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                            NSLog(@"        - Square: Origin(%.2f, %.2f), BottomRight(%.2f, %.2f), Class Index: %d",
-                                  originX, originY, bottomRightX, bottomRightY, classIndex);
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
