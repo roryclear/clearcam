@@ -4,6 +4,25 @@
 #import "Yolo.h"
 #import "FileServer.h"
 
+@interface Resolution : NSObject //todo move
+@property (nonatomic, assign) int width;
+@property (nonatomic, assign) int height;
+@property (nonatomic, strong) NSString *preset;
+- (instancetype)initWithWidth:(int)width height:(int)height preset:(NSString *)preset;
+@end
+@implementation Resolution
+
+- (instancetype)initWithWidth:(int)width height:(int)height preset:(NSString *)preset {
+    self = [super init];
+    if (self) {
+        _width = width;
+        _height = height;
+        _preset = preset;
+    }
+    return self;
+}
+@end
+
 @interface ViewController ()
 
 @property (nonatomic, strong) AVCaptureSession *captureSession;
@@ -29,6 +48,7 @@
 @property (nonatomic, strong) NSLock *segmentLock;
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
+@property (nonatomic, strong) Resolution *res;
 
 #define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
@@ -40,6 +60,8 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.res = [[Resolution alloc] initWithWidth:1920 height:1080 preset:AVCaptureSessionPreset1920x1080];
+    
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -73,6 +95,7 @@ NSMutableDictionary *classColorMap;
     [self handleDeviceOrientationChange];
     [self setupCamera];
     [self setupFPSLabel];
+    
 }
 
 - (void)dealloc {
@@ -107,7 +130,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)setupCamera {
     self.captureSession = [[AVCaptureSession alloc] init];
-    self.captureSession.sessionPreset = AVCaptureSessionPreset1920x1080;
+    self.captureSession.sessionPreset = self.res.preset;
     AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
     NSError *error = nil;
     AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
@@ -184,8 +207,8 @@ NSMutableDictionary *classColorMap;
     
     NSDictionary *videoSettings = @{
         AVVideoCodecKey: AVVideoCodecTypeH264,
-        AVVideoWidthKey: @1280,
-        AVVideoHeightKey: @720,
+        AVVideoWidthKey: @(self.res.width),
+        AVVideoHeightKey: @(self.res.height),
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -199,8 +222,8 @@ NSMutableDictionary *classColorMap;
     
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
-        (NSString *)kCVPixelBufferWidthKey: @1280,
-        (NSString *)kCVPixelBufferHeightKey: @720
+        (NSString *)kCVPixelBufferWidthKey: @(self.res.width),
+        (NSString *)kCVPixelBufferHeightKey: @(self.res.height)
     };
     self.adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:sourcePixelBufferAttributes];
     
