@@ -62,7 +62,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+        
     //todo, move theses
     //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
     self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
@@ -178,7 +178,6 @@ NSMutableDictionary *classColorMap;
 
 - (void)startNewRecording {
     self.dayFolderName = [self getDateString];
-    
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"yyyy-MM-dd_HH:mm:ss:SSS"];
     self.current_file_timestamp = [NSDate date];
@@ -211,26 +210,44 @@ NSMutableDictionary *classColorMap;
         return;
     }
     
-    NSDictionary *videoSettings = @{
-        AVVideoCodecKey: AVVideoCodecTypeH264,
+    // Check if the device supports HEVC encoding
+    
+    NSDictionary *videoSettings;
+    videoSettings = @{
+        AVVideoCodecKey: AVVideoCodecTypeH264, // Fallback to H.264
         AVVideoWidthKey: @(self.res.width),
         AVVideoHeightKey: @(self.res.height),
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
+    
+    NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
+    if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
+        // HEVC is supported
+        videoSettings = @{
+            AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
+            AVVideoWidthKey: @(self.res.width),
+            AVVideoHeightKey: @(self.res.height),
+            AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
+        };
+    } else {
+        NSLog(@"device doesn't support H265");
+    }
+        
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
     self.videoWriterInput.expectsMediaDataInRealTime = YES;
-    if(self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationPortrait){
-        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI_2);//does this work?
-    } else if (self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationLandscapeLeft) {
-        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI);
-    }
     
+    if (self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationPortrait) {
+        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI_2); // Rotate for portrait
+    } else if (self.previewLayer.connection.videoOrientation == AVCaptureVideoOrientationLandscapeLeft) {
+        self.videoWriterInput.transform = CGAffineTransformMakeRotation(M_PI); // Rotate for landscape left
+    }
     
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
         (NSString *)kCVPixelBufferWidthKey: @(self.res.width),
         (NSString *)kCVPixelBufferHeightKey: @(self.res.height)
     };
+    
     self.adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:sourcePixelBufferAttributes];
     
     if ([self.assetWriter canAddInput:self.videoWriterInput]) {
