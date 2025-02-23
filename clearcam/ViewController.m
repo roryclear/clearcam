@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 20000  //threshold to start deleting
 
 @end
 
@@ -419,25 +419,58 @@ NSMutableDictionary *classColorMap;
             [self.backgroundContext performBlock:^{
                 NSError *error = nil;
 
-                // Fetch DayEntity
+                if (!self.backgroundContext) {
+                    NSLog(@"Error: Background context is nil, delaying execution.");
+                    return;
+                }
+
+                // Ensure the context is ready before executing fetch requests
+                if (![self.backgroundContext persistentStoreCoordinator]) {
+                    NSLog(@"Persistent store coordinator is nil. Context is not ready.");
+                    return;
+                }
+
+                // Fetch DayEntity safely
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
+                
+                @try {
+                    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
+                } @catch (NSException *exception) {
+                    NSLog(@"Exception in predicateWithFormat: %@", exception);
+                    return;
+                }
+
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
 
-                NSManagedObject *dayEntity;
-                if (fetchedDays.count > 0) {
-                    dayEntity = fetchedDays.firstObject;
-                } else {
-                    dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
+                if (error) {
+                    NSLog(@"Error fetching DayEntity: %@", error.localizedDescription);
+                    return;
+                }
+
+                NSManagedObject *dayEntity = fetchedDays.count > 0 ? fetchedDays.firstObject : [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
+
+                if (fetchedDays.count == 0) {
                     [dayEntity setValue:self.dayFolderName forKey:@"date"];
                 }
 
-                // Check for existing segment
+                // Check if segment already exists
                 NSFetchRequest *segmentFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
-                segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", segmentURL];
+                
+                @try {
+                    segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", segmentURL];
+                } @catch (NSException *exception) {
+                    NSLog(@"Exception in predicateWithFormat for SegmentEntity: %@", exception);
+                    return;
+                }
+
                 NSArray *existingSegments = [self.backgroundContext executeFetchRequest:segmentFetchRequest error:&error];
 
-                if (existingSegments.count == 0) { // Only insert if no duplicate exists
+                if (error) {
+                    NSLog(@"Error fetching SegmentEntity: %@", error.localizedDescription);
+                    return;
+                }
+
+                if (existingSegments.count == 0) { // Insert only if segment doesn't exist
                     NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
 
                     [newSegment setValue:segmentURL forKey:@"url"];
@@ -532,82 +565,101 @@ NSMutableDictionary *classColorMap;
     NSInteger lastDeletedDayIndex = [defaults integerForKey:@"LastDeletedDayIndex"];
     NSInteger lastDeletedSegmentIndex = [defaults integerForKey:@"LastDeletedSegmentIndex"];
 
-    while ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
-        NSLog(@"NOT ENOUGH SPACE!");
+    @try {
+        while ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
+            NSLog(@"NOT ENOUGH SPACE!");
 
-        // Fetch all DayEntities, sorted by date
-        NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-        fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];
+            // Fetch all DayEntities, sorted by date
+            NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+            fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];
 
-        NSError *fetchError = nil;
-        NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
+            NSError *fetchError = nil;
+            NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
 
-        if (fetchError) {
-            NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-            return;
-        }
-
-        if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
-            NSLog(@"No more DayEntities available. Resetting deletion indexes.");
-            [defaults removeObjectForKey:@"LastDeletedDayIndex"];
-            [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-            return;
-        }
-
-        BOOL deletedFile = NO;
-
-        for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
-            NSManagedObject *dayEntity = dayEntities[dayIndex];
-            NSLog(@"Checking DayEntity: %@", [dayEntity valueForKey:@"date"]);
-
-            NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
-
-            if (lastDeletedSegmentIndex >= segments.count) {
-                lastDeletedSegmentIndex = 0; // Reset segment index if we move to the next day
+            if (fetchError) {
+                NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
+                return;
             }
 
-            for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
-                NSManagedObject *segmentEntity = segments[segmentIndex];
-                NSString *segmentURL = [segmentEntity valueForKey:@"url"];
-                NSLog(@"\tChecking Segment: %@", segmentURL);
+            if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
+                NSLog(@"No more DayEntities available. Resetting deletion indexes.");
+                [defaults removeObjectForKey:@"LastDeletedDayIndex"];
+                [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
+                return;
+            }
 
-                if (![segmentURL isEqualToString:@""]) {
-                    NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
+            BOOL deletedFile = NO;
 
-                    if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:nil]) {
-                        NSLog(@"\tDeleted %@", segmentURL);
-                        [segmentEntity setValue:@"" forKey:@"url"];
-                        deletedFile = YES;
+            for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
+                NSManagedObject *dayEntity = dayEntities[dayIndex];
+                NSLog(@"Checking DayEntity: %@", [dayEntity valueForKey:@"date"]);
 
-                        // Save indexes
-                        [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
-                        [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
-                        [defaults synchronize];
+                NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
+
+                if (lastDeletedSegmentIndex >= segments.count) {
+                    lastDeletedSegmentIndex = 0; // Reset segment index if we move to the next day
+                }
+
+                for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
+                    NSManagedObject *segmentEntity = segments[segmentIndex];
+                    NSString *segmentURL = [segmentEntity valueForKey:@"url"];
+
+                    if (!segmentURL || [segmentURL isEqualToString:@""]) {
+                        continue;
                     }
 
-                    // Check free space again
-                    double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
-                    if (freeSpace >= MIN_FREE_SPACE_MB) {
-                        NSLog(@"Enough space freed: %.2f MB", freeSpace);
-                        return;
+                    NSLog(@"\tChecking Segment: %@", segmentURL);
+
+                    @try {
+                        NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
+
+                        NSError *deleteError = nil;
+                        if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+                            if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
+                                NSLog(@"\tDeleted %@", segmentURL);
+                                [segmentEntity setValue:@"" forKey:@"url"];
+                                deletedFile = YES;
+
+                                // Save indexes
+                                [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
+                                [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
+                                [defaults synchronize];
+                            } else {
+                                NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
+                            }
+                        }
+
+                        // Check free space again
+                        double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
+                        if (freeSpace >= MIN_FREE_SPACE_MB) {
+                            NSLog(@"Enough space freed: %.2f MB", freeSpace);
+                            return;
+                        }
+                    } @catch (NSException *exception) {
+                        NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason);
                     }
                 }
+
+                // If we finish all segments in a day, move to the next one
+                lastDeletedSegmentIndex = 0;
             }
 
-            // If we finish all segments in a day, move to the next one
-            lastDeletedSegmentIndex = 0;
+            // If nothing was deleted, reset the indexes to avoid getting stuck
+            if (!deletedFile) {
+                NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
+                [defaults removeObjectForKey:@"LastDeletedDayIndex"];
+                [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
+                [defaults synchronize];
+                return;
+            }
         }
-        // If nothing was deleted, reset the indexes to avoid getting stuck
-        if (!deletedFile) {
-            NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
-            [defaults removeObjectForKey:@"LastDeletedDayIndex"];
-            [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-            [defaults synchronize];
-            return;
-        }
+    } @catch (NSException *exception) {
+        NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
     }
+
     NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
 }
+
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
