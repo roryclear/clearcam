@@ -7,17 +7,19 @@
 @interface Resolution : NSObject //todo move
 @property (nonatomic, assign) int width;
 @property (nonatomic, assign) int height;
+@property (nonatomic, assign) int text_size;
 @property (nonatomic, strong) NSString *preset;
-- (instancetype)initWithWidth:(int)width height:(int)height preset:(NSString *)preset;
+- (instancetype)initWithWidth:(int)width height:(int)height text_size:(int)text_size preset:(NSString *)preset;
 @end
 @implementation Resolution
 
-- (instancetype)initWithWidth:(int)width height:(int)height preset:(NSString *)preset {
+- (instancetype)initWithWidth:(int)width height:(int)height text_size:(int)text_size preset:(NSString *)preset {
     self = [super init];
     if (self) {
         _width = width;
         _height = height;
         _preset = preset;
+        _text_size = text_size;
     }
     return self;
 }
@@ -60,7 +62,11 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.res = [[Resolution alloc] initWithWidth:1920 height:1080 preset:AVCaptureSessionPreset1920x1080];
+    
+    //todo, move theses
+    //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
+    self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
+    //self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
     
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
@@ -731,8 +737,8 @@ NSMutableDictionary *classColorMap;
 }
 
 - (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
-    NSInteger pixelSize = 6;
-    NSInteger spaceSize = 3;
+    NSInteger pixelSize = self.res.text_size*2;
+    NSInteger spaceSize = self.res.text_size;
     NSInteger digitOriginX = spaceSize;
     NSInteger digitOriginY = spaceSize;
     NSInteger height = spaceSize*2 + pixelSize*5;
