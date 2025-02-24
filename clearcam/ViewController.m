@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 20000  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
 @end
 
@@ -90,6 +90,7 @@ NSMutableDictionary *classColorMap;
     self.fileServer = [[FileServer alloc] init];
     [self.fileServer start];
     self.backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+    self.backgroundContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy; //prevents crash??
     self.backgroundContext.parentContext = self.fileServer.context;
     
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -378,30 +379,44 @@ NSMutableDictionary *classColorMap;
     if (self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
         self.isRecording = NO;
         [self.videoWriterInput markAsFinished];
+        
         [self.assetWriter finishWritingWithCompletionHandler:^{
+            if (!self.assetWriter.outputURL) {
+                NSLog(@"Error: Asset writer output URL is nil.");
+                return;
+            }
 
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
 
-            // Get the documents directory
+            // Ensure valid file path
             NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+            if (!documentsDirectory) {
+                NSLog(@"Error: Could not find documents directory.");
+                return;
+            }
+            
             NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:self.dayFolderName];
 
             // Create the folder if it doesn't exist
             NSError *error = nil;
-            if (![[NSFileManager defaultManager] fileExistsAtPath:segmentsDirectory]) {
-                [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error];
-                if (error) {
-                    NSLog(@"Error creating directory: %@", error);
+            NSFileManager *fileManager = [NSFileManager defaultManager];
+            if (![fileManager fileExistsAtPath:segmentsDirectory]) {
+                if (![fileManager createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:&error]) {
+                    NSLog(@"Error creating directory: %@", error.localizedDescription);
+                    return;
                 }
             }
 
-            NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour fromDate:self.current_file_timestamp];
+            // Construct segment URL
+            NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
+
+            if (!segmentURL || segmentURL.length == 0) {
+                NSLog(@"Error: Invalid segment URL.");
+                return;
+            }
 
             NSArray *currentSegmentSquaresCopy = [self.current_segment_squares copy];
-
-            NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
 
             NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
                 @"url": segmentURL,
@@ -410,35 +425,24 @@ NSMutableDictionary *classColorMap;
             }];
 
             // Get timestamp
-            calendar = [NSCalendar currentCalendar];
-            components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+            NSCalendar *calendar = [NSCalendar currentCalendar];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
             NSDate *midnight = [calendar dateFromComponents:components];
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
             segmentEntry[@"timeStamp"] = @(timeStamp);
 
-            [self.backgroundContext performBlock:^{
+            // Ensure backgroundContext is valid
+            if (!self.backgroundContext) {
+                NSLog(@"Error: Background context is nil. Aborting save operation.");
+                return;
+            }
+
+            [self.backgroundContext performBlockAndWait:^{
                 NSError *error = nil;
 
-                if (!self.backgroundContext) {
-                    NSLog(@"Error: Background context is nil, delaying execution.");
-                    return;
-                }
-
-                // Ensure the context is ready before executing fetch requests
-                if (![self.backgroundContext persistentStoreCoordinator]) {
-                    NSLog(@"Persistent store coordinator is nil. Context is not ready.");
-                    return;
-                }
-
-                // Fetch DayEntity safely
+                // Fetch or create DayEntity
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-                
-                @try {
-                    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
-                } @catch (NSException *exception) {
-                    NSLog(@"Exception in predicateWithFormat: %@", exception);
-                    return;
-                }
+                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
 
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
 
@@ -447,21 +451,15 @@ NSMutableDictionary *classColorMap;
                     return;
                 }
 
-                NSManagedObject *dayEntity = fetchedDays.count > 0 ? fetchedDays.firstObject : [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
-
-                if (fetchedDays.count == 0) {
+                NSManagedObject *dayEntity = fetchedDays.firstObject;
+                if (!dayEntity) {
+                    dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
                     [dayEntity setValue:self.dayFolderName forKey:@"date"];
                 }
 
                 // Check if segment already exists
                 NSFetchRequest *segmentFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
-                
-                @try {
-                    segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", segmentURL];
-                } @catch (NSException *exception) {
-                    NSLog(@"Exception in predicateWithFormat for SegmentEntity: %@", exception);
-                    return;
-                }
+                segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", segmentURL];
 
                 NSArray *existingSegments = [self.backgroundContext executeFetchRequest:segmentFetchRequest error:&error];
 
@@ -498,16 +496,13 @@ NSMutableDictionary *classColorMap;
                             [frameSquares addObject:newSquare];
                         }
 
-                        NSOrderedSet *orderedSquares = [NSOrderedSet orderedSetWithArray:frameSquares];
-                        [newFrame setValue:orderedSquares forKey:@"squares"];
+                        [newFrame setValue:[NSOrderedSet orderedSetWithArray:frameSquares] forKey:@"squares"];
                         [segmentFrames addObject:newFrame];
                     }
 
-                    NSOrderedSet *orderedFrames = [NSOrderedSet orderedSetWithArray:segmentFrames];
-                    [newSegment setValue:orderedFrames forKey:@"frames"];
+                    [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
 
-                    NSMutableOrderedSet *daySegments = [dayEntity mutableOrderedSetValueForKey:@"segments"];
-                    [daySegments addObject:newSegment];
+                    [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
 
                     if (![self.backgroundContext save:&error]) {
                         NSLog(@"Failed to save segment: %@", error.localizedDescription);
@@ -522,13 +517,15 @@ NSMutableDictionary *classColorMap;
                         }];
                     }
                 } else {
-                    NSLog(@"Segment with URL %@ already exists. Skipping insertion.", segmentURL);
+                    NSLog(@"Segment already exists: %@", segmentURL);
                 }
             }];
+
             [self startNewRecording];
-            [self.segmentLock lock];
-            [self.current_segment_squares removeAllObjects];
-            [self.segmentLock unlock];
+            
+            @synchronized (self.current_segment_squares) {
+                [self.current_segment_squares removeAllObjects];
+            }
         }];
     } else {
         NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);

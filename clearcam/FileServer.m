@@ -78,10 +78,17 @@
     return [paths firstObject];
 }
 
-- (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+- (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context { //todo, this can cause a crash?
     __block NSMutableArray *tempSegmentDicts = [NSMutableArray array];
 
     [context performBlockAndWait:^{
+        if (!context) {
+            NSLog(@"Context is nil, skipping fetch.");
+            return;
+        }
+        // Ensure latest changes are processed before fetching
+        [context processPendingChanges];
+
         NSError *error = nil;
 
         // Fetch the DayEntity for the given date
