@@ -509,7 +509,7 @@ NSMutableDictionary *classColorMap;
                     } else {
                         NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
 
-                        [self.fileServer.context performBlock:^{
+                        [self.fileServer.context performBlockAndWait:^{
                             NSError *mainContextError = nil;
                             if (![self.fileServer.context save:&mainContextError]) {
                                 NSLog(@"Failed to save main context: %@", mainContextError.localizedDescription);
