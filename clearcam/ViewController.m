@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 20500  //threshold to start deleting
 
 @end
 
@@ -389,14 +389,7 @@ NSMutableDictionary *classColorMap;
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
 
-            // Ensure valid file path
-            NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-            if (!documentsDirectory) {
-                NSLog(@"Error: Could not find documents directory.");
-                return;
-            }
-            
-            NSString *segmentsDirectory = [documentsDirectory stringByAppendingPathComponent:self.dayFolderName];
+            NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
 
             // Create the folder if it doesn't exist
             NSError *error = nil;
@@ -407,17 +400,8 @@ NSMutableDictionary *classColorMap;
                     return;
                 }
             }
-
-            // Construct segment URL
             NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
-
-            if (!segmentURL || segmentURL.length == 0) {
-                NSLog(@"Error: Invalid segment URL.");
-                return;
-            }
-
             NSArray *currentSegmentSquaresCopy = [self.current_segment_squares copy];
-
             NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
                 @"url": segmentURL,
                 @"duration": @(CMTimeGetSeconds(time)),
@@ -431,13 +415,8 @@ NSMutableDictionary *classColorMap;
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
             segmentEntry[@"timeStamp"] = @(timeStamp);
 
-            // Ensure backgroundContext is valid
-            if (!self.backgroundContext) {
-                NSLog(@"Error: Background context is nil. Aborting save operation.");
-                return;
-            }
 
-            [self.backgroundContext performBlock:^{
+            [self.backgroundContext performBlockAndWait:^{
                 NSError *error = nil;
 
                 // Fetch or create DayEntity
@@ -457,72 +436,55 @@ NSMutableDictionary *classColorMap;
                     [dayEntity setValue:self.dayFolderName forKey:@"date"];
                 }
 
-                // Check if segment already exists
-                NSFetchRequest *segmentFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"SegmentEntity"];
-                segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", segmentURL];
+                NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
 
-                NSArray *existingSegments = [self.backgroundContext executeFetchRequest:segmentFetchRequest error:&error];
+                [newSegment setValue:segmentURL forKey:@"url"];
+                [newSegment setValue:@(timeStamp) forKey:@"timeStamp"];
+                [newSegment setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
 
-                if (error) {
-                    NSLog(@"Error fetching SegmentEntity: %@", error.localizedDescription);
-                    return;
+                NSMutableArray<NSManagedObject *> *segmentFrames = [[NSMutableArray alloc] init];
+
+                for (NSDictionary *frameData in currentSegmentSquaresCopy) {
+                    NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.backgroundContext];
+                    [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
+                    [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
+                    [newFrame setValue:frameData[@"res"] forKey:@"res"];
+
+                    NSMutableArray<NSManagedObject *> *frameSquares = [[NSMutableArray alloc] init];
+
+                    for (NSDictionary *squareData in frameData[@"squares"]) {
+                        NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.backgroundContext];
+                        [newSquare setValue:squareData[@"originX"] forKey:@"originX"];
+                        [newSquare setValue:squareData[@"originY"] forKey:@"originY"];
+                        [newSquare setValue:squareData[@"bottomRightX"] forKey:@"bottomRightX"];
+                        [newSquare setValue:squareData[@"bottomRightY"] forKey:@"bottomRightY"];
+                        [newSquare setValue:squareData[@"classIndex"] forKey:@"classIndex"];
+
+                        [frameSquares addObject:newSquare];
+                    }
+
+                    [newFrame setValue:[NSOrderedSet orderedSetWithArray:frameSquares] forKey:@"squares"];
+                    [segmentFrames addObject:newFrame];
                 }
 
-                if (existingSegments.count == 0) { // Insert only if segment doesn't exist
-                    NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
+                [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
 
-                    [newSegment setValue:segmentURL forKey:@"url"];
-                    [newSegment setValue:@(timeStamp) forKey:@"timeStamp"];
-                    [newSegment setValue:@(CMTimeGetSeconds(time)) forKey:@"duration"];
+                [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
 
-                    NSMutableArray<NSManagedObject *> *segmentFrames = [[NSMutableArray alloc] init];
-
-                    for (NSDictionary *frameData in currentSegmentSquaresCopy) {
-                        NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.backgroundContext];
-                        [newFrame setValue:frameData[@"frame_timeStamp"] forKey:@"frame_timeStamp"];
-                        [newFrame setValue:frameData[@"aspect_ratio"] forKey:@"aspect_ratio"];
-                        [newFrame setValue:frameData[@"res"] forKey:@"res"];
-
-                        NSMutableArray<NSManagedObject *> *frameSquares = [[NSMutableArray alloc] init];
-
-                        for (NSDictionary *squareData in frameData[@"squares"]) {
-                            NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.backgroundContext];
-                            [newSquare setValue:squareData[@"originX"] forKey:@"originX"];
-                            [newSquare setValue:squareData[@"originY"] forKey:@"originY"];
-                            [newSquare setValue:squareData[@"bottomRightX"] forKey:@"bottomRightX"];
-                            [newSquare setValue:squareData[@"bottomRightY"] forKey:@"bottomRightY"];
-                            [newSquare setValue:squareData[@"classIndex"] forKey:@"classIndex"];
-
-                            [frameSquares addObject:newSquare];
-                        }
-
-                        [newFrame setValue:[NSOrderedSet orderedSetWithArray:frameSquares] forKey:@"squares"];
-                        [segmentFrames addObject:newFrame];
-                    }
-
-                    [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
-
-                    [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
-
-                    if (![self.backgroundContext save:&error]) {
-                        NSLog(@"Failed to save segment: %@", error.localizedDescription);
-                    } else {
-                        NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
-
-                        [self.fileServer.context performBlockAndWait:^{
-                            NSError *mainContextError = nil;
-                            if (![self.fileServer.context save:&mainContextError]) {
-                                NSLog(@"Failed to save main context: %@", mainContextError.localizedDescription);
-                            }
-                        }];
-                    }
+                if (![self.backgroundContext save:&error]) {
+                    NSLog(@"Failed to save segment: %@", error.localizedDescription);
                 } else {
-                    NSLog(@"Segment already exists: %@", segmentURL);
+                    NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
+
+                    [self.fileServer.context performBlockAndWait:^{
+                        NSError *mainContextError = nil;
+                        if (![self.fileServer.context save:&mainContextError]) {
+                            NSLog(@"Failed to save main context: %@", mainContextError.localizedDescription);
+                        }
+                    }];
                 }
             }];
-
             [self startNewRecording];
-            
             @synchronized (self.current_segment_squares) {
                 [self.current_segment_squares removeAllObjects];
             }
