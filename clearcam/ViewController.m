@@ -64,8 +64,8 @@ NSMutableDictionary *classColorMap;
     [super viewDidLoad];
         
     //todo, move theses
-    //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
-    self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
+    self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
+    //self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
     //self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
     
     self.current_segment_squares = [[NSMutableArray alloc] init];
@@ -627,12 +627,6 @@ NSMutableDictionary *classColorMap;
                                 }
                             }
 
-                            // Check free space again
-                            double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
-                            if (freeSpace >= MIN_FREE_SPACE_MB) {
-                                NSLog(@"Enough space freed: %.2f MB", freeSpace);
-                                return;
-                            }
                         } @catch (NSException *exception) {
                             NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason);
                         }
