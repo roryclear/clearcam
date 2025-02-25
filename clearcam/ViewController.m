@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 20500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 42000  //threshold to start deleting
 
 @end
 
@@ -65,8 +65,8 @@ NSMutableDictionary *classColorMap;
         
     //todo, move theses
     //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
-    //self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
-    self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
+    self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
+    //self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
     
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
@@ -563,23 +563,61 @@ NSMutableDictionary *classColorMap;
                     for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
                         NSManagedObject *segmentEntity = segments[segmentIndex];
                         NSString *segmentURL = [segmentEntity valueForKey:@"url"];
-                        
+
                         if (!segmentURL || [segmentURL isEqualToString:@""]) {
                             continue;
                         }
-                        
+
+                        NSNumber *segmentTimeStampNumber = [segmentEntity valueForKey:@"timeStamp"];
+                        if (!segmentTimeStampNumber) {
+                            continue;
+                        }
+
+                        // Get segment timestamp (seconds since midnight)
+                        double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
+
+                        NSLog(@"Checking segment: %@ (Seconds since midnight: %.2f)", segmentURL, segmentSecondsSinceMidnight);
+
+                        // Validate event times
+                        if (!self.yolo.scene.event_times || self.yolo.scene.event_times.count == 0) {
+                            NSLog(@"Warning: No event times found, skipping timestamp check.");
+                        }
+
+                        // Check if the segment is within ±60 seconds of any event time
+                        BOOL shouldSkipDeletion = NO;
+                        for (NSDate *eventTime in self.yolo.scene.event_times) {
+                            NSCalendar *calendar = [NSCalendar currentCalendar];
+                            NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventTime];
+
+                            // Convert event time to seconds since midnight
+                            double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
+                            double timeDifference = fabs(segmentSecondsSinceMidnight - eventSecondsSinceMidnight);
+
+                            NSLog(@"Comparing with event time: %@ (Event Seconds: %.2f, Difference: %.2f sec)", eventTime, eventSecondsSinceMidnight, timeDifference);
+
+                            if (timeDifference <= 60) { // Within one minute
+                                shouldSkipDeletion = YES;
+                                NSLog(@"Skipping deletion for segment at %.2f sec because it is close to an event time!", segmentSecondsSinceMidnight);
+                                break;
+                            }
+                        }
+
+                        if (shouldSkipDeletion) {
+                            continue;
+                        }
+
                         NSLog(@"\tChecking Segment: %@", segmentURL);
-                        
+
                         @try {
                             NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
-                            
+
                             NSError *deleteError = nil;
                             if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                                 if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
                                     NSLog(@"\tDeleted %@", segmentURL);
                                     [segmentEntity setValue:@"" forKey:@"url"];
                                     deletedFile = YES;
-                                    
+
                                     // Save indexes
                                     [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
                                     [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
@@ -588,7 +626,7 @@ NSMutableDictionary *classColorMap;
                                     NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
                                 }
                             }
-                            
+
                             // Check free space again
                             double freeSpace = (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0);
                             if (freeSpace >= MIN_FREE_SPACE_MB) {
