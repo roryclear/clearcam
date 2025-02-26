@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 42000  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
 @end
 
@@ -64,9 +64,9 @@ NSMutableDictionary *classColorMap;
     [super viewDidLoad];
         
     //todo, move theses
-    self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
+    //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
     //self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
-    //self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
+    self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
     
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
@@ -379,7 +379,7 @@ NSMutableDictionary *classColorMap;
     if (self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
         self.isRecording = NO;
         [self.videoWriterInput markAsFinished];
-        
+
         [self.assetWriter finishWritingWithCompletionHandler:^{
             if (!self.assetWriter.outputURL) {
                 NSLog(@"Error: Asset writer output URL is nil.");
@@ -400,23 +400,17 @@ NSMutableDictionary *classColorMap;
                     return;
                 }
             }
+
             NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
             NSArray *currentSegmentSquaresCopy = [self.current_segment_squares copy];
-            NSMutableDictionary *segmentEntry = [NSMutableDictionary dictionaryWithDictionary:@{
-                @"url": segmentURL,
-                @"duration": @(CMTimeGetSeconds(time)),
-                @"frames": currentSegmentSquaresCopy
-            }];
 
             // Get timestamp
             NSCalendar *calendar = [NSCalendar currentCalendar];
             NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
             NSDate *midnight = [calendar dateFromComponents:components];
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:midnight];
-            segmentEntry[@"timeStamp"] = @(timeStamp);
 
-
-            [self.backgroundContext performBlockAndWait:^{
+            [self.backgroundContext performBlock:^{ //todo, does this crash SE1?
                 NSError *error = nil;
 
                 // Fetch or create DayEntity
@@ -468,7 +462,6 @@ NSMutableDictionary *classColorMap;
                 }
 
                 [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
-
                 [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
 
                 if (![self.backgroundContext save:&error]) {
@@ -476,7 +469,8 @@ NSMutableDictionary *classColorMap;
                 } else {
                     NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
 
-                    [self.fileServer.context performBlockAndWait:^{
+                    // Save the main context asynchronously to avoid blocking
+                    [self.fileServer.context performBlock:^{
                         NSError *mainContextError = nil;
                         if (![self.fileServer.context save:&mainContextError]) {
                             NSLog(@"Failed to save main context: %@", mainContextError.localizedDescription);
@@ -484,7 +478,9 @@ NSMutableDictionary *classColorMap;
                     }];
                 }
             }];
+
             [self startNewRecording];
+
             @synchronized (self.current_segment_squares) {
                 [self.current_segment_squares removeAllObjects];
             }
