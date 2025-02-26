@@ -683,10 +683,8 @@ NSMutableDictionary *classColorMap;
             size_t height = CVPixelBufferGetHeight(imageBuffer);
             CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
             
-            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];//todo, init elsewhere
-            NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];;
-            NSMutableArray *frameSquares = [[NSMutableArray alloc] init];;
-            
+            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
+            NSMutableArray *frameSquares = [[NSMutableArray alloc] init];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
             NSDate *now = [NSDate date];
@@ -718,29 +716,29 @@ NSMutableDictionary *classColorMap;
                 @try {
                     [weak_self resetSquares];
                     for (int i = 0; i < output.count; i++) {
+                        NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];
+                        frameSquare[@"originX"] = output[i][0];
+                        frameSquare[@"originY"] = output[i][1];
+                        frameSquare[@"bottomRightX"] = output[i][2];
+                        frameSquare[@"bottomRightY"] = output[i][3];
+                        frameSquare[@"classIndex"] = output[i][4];
+                        [frameSquares addObject:frameSquare];
+
                         [weak_self drawSquareWithTopLeftX:[output[i][0] floatValue]
                                                   topLeftY:[output[i][1] floatValue]
                                               bottomRightX:[output[i][2] floatValue]
                                               bottomRightY:[output[i][3] floatValue]
                                                 classIndex:[output[i][4] intValue]
                                                aspectRatio:aspect_ratio];
-                        frameSquare[@"originX"] = output[i][0];
-                        frameSquare[@"originY"] = output[i][1];
-                        frameSquare[@"bottomRightX"] = output[i][2];
-                        frameSquare[@"bottomRightY"] = output[i][3];
-                        frameSquare[@"classIndex"] = output[i][4];
-                        [frameSquares addObject:[frameSquare copy]];
                     }
                     frame[@"squares"] = frameSquares;
 
-                    // Ensure thread safety and check for nil
+                    // Ensure thread safety and check for nil values
                     @synchronized(weak_self) {
-                        if (frame) {
-                            [self.segmentLock lock];
+                        if (weak_self && weak_self.current_segment_squares && frame) {
                             [weak_self.current_segment_squares addObject:frame];
-                            [self.segmentLock unlock];
                         } else {
-                            NSLog(@"Warning: Attempted to insert nil frame into array.");
+                            NSLog(@"Warning: weak_self, current_segment_squares, or frame is nil.");
                         }
                     }
 
@@ -752,10 +750,9 @@ NSMutableDictionary *classColorMap;
             });
         });
     } @catch (NSException *exception) {
-            NSLog(@"Exception occurred: %@, %@", exception, [exception callStackSymbols]);
+        NSLog(@"Exception occurred: %@, %@", exception, [exception callStackSymbols]);
     }
 }
-
 - (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height opacity:(CGFloat)opacity {
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
 
