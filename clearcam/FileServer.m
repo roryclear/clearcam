@@ -78,7 +78,9 @@
     return [paths firstObject];
 }
 
-- (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam context:(NSManagedObjectContext *)context {
+- (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam
+                                                      start:(NSInteger)start
+                                                    context:(NSManagedObjectContext *)context {
     if (!context) {
         NSLog(@"Context is nil, skipping fetch.");
         return @[];
@@ -108,12 +110,17 @@
         NSManagedObject *dayEntity = fetchedDays.firstObject;
         NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
-        // Create an immutable copy of the segments
-        copiedSegments = [segments array];
+        // Slice the segments based on the 'start' parameter to avoid fetching everything
+        if (start >= segments.count) {
+            NSLog(@"Start index out of range (%ld/%lu)", (long)start, (unsigned long)segments.count);
+            return;
+        }
+
+        copiedSegments = [[segments array] subarrayWithRange:NSMakeRange(start, segments.count - start)];
     }];
 
     // Process outside of performBlockAndWait to avoid blocking Core Data
-    NSMutableArray *tempSegmentDicts = [NSMutableArray array];
+    NSMutableArray *processedSegments = [NSMutableArray array];
 
     for (NSManagedObject *segment in copiedSegments) {
         NSString *url = [segment valueForKey:@"url"];
@@ -166,12 +173,15 @@
             @"frames": frameDicts
         };
 
-        [tempSegmentDicts addObject:segmentDict];
+        [processedSegments addObject:segmentDict];
     }
 
-    NSLog(@"Fetched and processed %lu segments for date %@", (unsigned long)tempSegmentDicts.count, dateParam);
-    return tempSegmentDicts;
+    NSLog(@"Fetched and processed %lu segments (start=%ld) for date %@",
+          (unsigned long)processedSegments.count, (long)start, dateParam);
+
+    return processedSegments;
 }
+
 
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
     @try {
@@ -341,30 +351,31 @@
                 }
             }
         }
-        
-        if(!dateParam){
+
+        if (!dateParam) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-        
+
         NSInteger start = startParam ? [startParam integerValue] : 0;
-        NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam context:self.context];
-        if (start >= segmentsForDate.count) {
+        NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam
+                                                                                   start:start
+                                                                                 context:self.context];
+        if (segmentsForDate.count == 0) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"Start index is out of range\"}";
+            NSString *errorMessage = @"{\"error\": \"No segments found or start index out of range\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-        NSArray *slicedSegments = [segmentsForDate subarrayWithRange:NSMakeRange(start, segmentsForDate.count - start)];
-        NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:slicedSegments options:0 error:nil];
-        NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+
+        NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:segmentsForDate options:0 error:nil];
+        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)slicedJsonData.length];
         send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
-        return;
     }
     
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
