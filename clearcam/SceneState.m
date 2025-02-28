@@ -1,5 +1,6 @@
 #import "SceneState.h"
 #import "SettingsManager.h"
+#import "AppDelegate.h"
 
 @implementation SceneState
 
@@ -11,6 +12,10 @@
         self.events = [SettingsManager sharedManager].events;
         self.alerts = [SettingsManager sharedManager].alerts;
         self.event_times = [[NSMutableArray alloc] init]; //todo init from txt on launch
+
+        // Get Core Data context from AppDelegate
+        AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
+        self.backgroundContext = appDelegate.persistentContainer.newBackgroundContext;
     }
     return self;
 }
@@ -35,7 +40,7 @@
         int current_state = (int)roundf((totalValue ? [totalValue floatValue] : 0.0) / 10.0);
         int last_state = (int)roundf((last_totalValue ? [last_totalValue floatValue] : 0.0) / 10.0);
         self.lastN_total[self.events[i]] = totalValue;
-        if(current_state != last_state){
+        if (current_state != last_state) {
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
             NSString *documentsDirectory = [paths firstObject];
             NSString *filePath = [documentsDirectory stringByAppendingPathComponent:@"events.txt"];
@@ -55,8 +60,8 @@
             [fileHandle seekToEndOfFile];
             [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
             [fileHandle closeFile];
-            
-            if(current_state == [self.alerts[self.events[i]] intValue]){
+
+            if (current_state == [self.alerts[self.events[i]] intValue]) {
                 filePath = [documentsDirectory stringByAppendingPathComponent:@"alerts.txt"];
                 if (![fileManager fileExistsAtPath:filePath]) {
                     [fileManager createFileAtPath:filePath contents:nil attributes:nil];
@@ -66,8 +71,19 @@
                 [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
                 [fileHandle closeFile];
             }
+
+            // **Add EventEntity to Core Data (SegmentsModel)**
+            [self.backgroundContext performBlockAndWait:^{
+                NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
+                                                                          inManagedObjectContext:self.backgroundContext];
+                [newEvent setValue:@([date timeIntervalSince1970]) forKey:@"timeStamp"]; // Float value of timestamp
+
+                NSError *saveError = nil;
+                if (![self.backgroundContext save:&saveError]) {
+                    NSLog(@"Failed to save EventEntity: %@, %@", saveError, saveError.userInfo);
+                }
+            }];
         }
-        
     }
     if(self.lastN.count > 10){
         [self.lastN removeObjectAtIndex:0];

@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreData/CoreData.h>
 
 @interface SceneState : NSObject
 
@@ -7,6 +8,7 @@
 @property (nonatomic, strong) NSArray<NSNumber *> *events;
 @property (nonatomic, strong) NSMutableArray<NSDate *> *event_times;
 @property (nonatomic, strong) NSDictionary *alerts;
+@property (strong, nonatomic) NSManagedObjectContext *backgroundContext;
 - (void)processOutput:(NSArray *)array;
 - (void)writeToFileWithString:(NSString *)customString;
 
