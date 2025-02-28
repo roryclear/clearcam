@@ -306,8 +306,10 @@
     }
 
     
-    if ([filePath hasPrefix:@"main"]) {
-        NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"html"];
+    if ([filePath hasPrefix:@"main"] || [filePath hasPrefix:@"downloads"]) {
+        NSString *fileName = [filePath hasPrefix:@"main"] ? @"main.html" : @"downloads.html";
+        NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:[fileName stringByDeletingPathExtension] ofType:@"html"];
+        
         if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
             FILE *file = fopen([playerFilePath UTF8String], "rb");
             if (file) {
