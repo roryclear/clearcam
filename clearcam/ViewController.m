@@ -611,7 +611,20 @@ NSMutableDictionary *classColorMap;
                         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                             if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
                                 NSLog(@"\tDeleted %@", segmentURL);
+                                // Keep the segmentEntity but clear all but URL (blank)
                                 [segmentEntity setValue:@"" forKey:@"url"];
+                                [segmentEntity setValue:nil forKey:@"frames"];
+                                [segmentEntity setValue:nil forKey:@"duration"];
+
+                                // Save the changes to Core Data
+                                NSManagedObjectContext *context = self.fileServer.context;
+                                NSError *saveError = nil;
+                                if (![context save:&saveError]) {
+                                    NSLog(@"Failed to update segment entity: %@", saveError.localizedDescription);
+                                } else {
+                                    NSLog(@"Successfully cleared segment entity data.");
+                                }
+
                                 deletedFile = YES;
                                 if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return;
 
