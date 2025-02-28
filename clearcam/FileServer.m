@@ -373,6 +373,24 @@
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
     }
     
+    if ([filePath hasPrefix:@"get-events"]) {
+        NSArray *eventTimestamps = [self fetchEventTimestampsFromCoreData:self.context];
+
+        if (eventTimestamps.count == 0) {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"No events found\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:eventTimestamps options:0 error:nil];
+        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+    }
+
+    
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     NSRange queryRange = [fullPath rangeOfString:@"?"];
     if (queryRange.location != NSNotFound) {
@@ -464,6 +482,27 @@
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
     fclose(file);
+}
+
+- (NSArray *)fetchEventTimestampsFromCoreData:(NSManagedObjectContext *)context {
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    fetchRequest.resultType = NSDictionaryResultType;
+    fetchRequest.propertiesToFetch = @[@"timeStamp"];
+
+    NSError *error = nil;
+    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
+
+    if (error) {
+        NSLog(@"Error fetching events: %@", error);
+        return @[];
+    }
+
+    NSMutableArray *timestamps = [NSMutableArray arrayWithCapacity:results.count];
+    for (NSDictionary *event in results) {
+        [timestamps addObject:event[@"timeStamp"]];
+    }
+
+    return timestamps;
 }
 
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {
