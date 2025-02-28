@@ -26,9 +26,9 @@
 
     
     //TODO REMOVE THIS
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    //[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+    //[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+    //[[NSUserDefaults standardUserDefaults] synchronize];
 
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
@@ -43,7 +43,7 @@
     }
 
     for (NSString *file in contents) {
-        //continue;
+        continue;
         if ([file hasPrefix:@"batch_req"]) continue;
         NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
         BOOL success = [fileManager removeItemAtPath:filePath error:&error];
@@ -59,7 +59,7 @@
     
     // Save a new string
     NSLog(@"core data segments?:");
-    [self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
+    //[self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
     // Fetch all saved strings
     // coredata stuff
     

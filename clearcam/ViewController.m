@@ -646,7 +646,7 @@ NSMutableDictionary *classColorMap;
             if (self.videoWriterInput.readyForMoreMediaData) {
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
                 pixelBuffer = [self addTimeStampToPixelBuffer:pixelBuffer];
-                
+
                 BOOL success = NO;
                 int retryCount = 3;
 
@@ -659,8 +659,9 @@ NSMutableDictionary *classColorMap;
                 }
                 if (!success) [self finishRecording];
             }
+
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60){
+            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
                 self.fileServer.segment_length = 60;
             }
             if (elapsedTime >= self.fileServer.segment_length) {
@@ -682,8 +683,7 @@ NSMutableDictionary *classColorMap;
             size_t width = CVPixelBufferGetWidth(imageBuffer);
             size_t height = CVPixelBufferGetHeight(imageBuffer);
             CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
-            
-            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
+
             NSMutableArray *frameSquares = [[NSMutableArray alloc] init];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
@@ -691,59 +691,65 @@ NSMutableDictionary *classColorMap;
             NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
             NSDate *midnight = [calendar dateFromComponents:components];
             NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
-            
+
+            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
             frame[@"frame_timeStamp"] = @(timeStamp);
             frame[@"res"] = @(self.yolo.yolo_res);
             frame[@"aspect_ratio"] = @(aspect_ratio);
-            
+
             CGFloat targetWidth = self.yolo.yolo_res;
             CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
 
             CGFloat scaleX = targetSize.width / width;
             CGFloat scaleY = targetSize.height / height;
             CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
-            
+
             CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
             CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
-            
+
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
-            
+
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
             CGImageRelease(cgImage);
-            
+
             __weak typeof(self) weak_self = self;
             dispatch_async(dispatch_get_main_queue(), ^{
                 @try {
-                    [weak_self resetSquares];
-                    for (int i = 0; i < output.count; i++) {
+                    __strong typeof(weak_self) strongSelf = weak_self;
+                    if (!strongSelf) {
+                        return;
+                    }
+
+                    [strongSelf resetSquares];
+
+                    for (NSArray *detection in output) {
                         NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];
-                        frameSquare[@"originX"] = output[i][0];
-                        frameSquare[@"originY"] = output[i][1];
-                        frameSquare[@"bottomRightX"] = output[i][2];
-                        frameSquare[@"bottomRightY"] = output[i][3];
-                        frameSquare[@"classIndex"] = output[i][4];
+                        frameSquare[@"originX"] = detection[0];
+                        frameSquare[@"originY"] = detection[1];
+                        frameSquare[@"bottomRightX"] = detection[2];
+                        frameSquare[@"bottomRightY"] = detection[3];
+                        frameSquare[@"classIndex"] = detection[4];
                         [frameSquares addObject:frameSquare];
 
-                        [weak_self drawSquareWithTopLeftX:[output[i][0] floatValue]
-                                                  topLeftY:[output[i][1] floatValue]
-                                              bottomRightX:[output[i][2] floatValue]
-                                              bottomRightY:[output[i][3] floatValue]
-                                                classIndex:[output[i][4] intValue]
-                                               aspectRatio:aspect_ratio];
+                        [strongSelf drawSquareWithTopLeftX:[detection[0] floatValue]
+                                                   topLeftY:[detection[1] floatValue]
+                                               bottomRightX:[detection[2] floatValue]
+                                               bottomRightY:[detection[3] floatValue]
+                                                 classIndex:[detection[4] intValue]
+                                                aspectRatio:aspect_ratio];
                     }
+
                     frame[@"squares"] = frameSquares;
 
-                    // Ensure thread safety and check for nil values
-                    @synchronized(weak_self) {
-                        if (weak_self && weak_self.current_segment_squares && frame) {
-                            [weak_self.current_segment_squares addObject:frame];
-                        } else {
-                            NSLog(@"Warning: weak_self, current_segment_squares, or frame is nil.");
+                    @synchronized(strongSelf) {
+                        if (!strongSelf.current_segment_squares) {
+                            strongSelf.current_segment_squares = [[NSMutableArray alloc] init];
                         }
+                        [strongSelf.current_segment_squares addObject:frame];
                     }
 
-                    [weak_self updateFPS];
-                    weak_self.isProcessing = NO;
+                    [strongSelf updateFPS];
+                    strongSelf.isProcessing = NO;
                 } @catch (NSException *exception) {
                     NSLog(@"Exception in main queue block: %@", exception);
                 }
@@ -753,6 +759,8 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Exception occurred: %@, %@", exception, [exception callStackSymbols]);
     }
 }
+
+
 - (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height opacity:(CGFloat)opacity {
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
 
