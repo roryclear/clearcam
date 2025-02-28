@@ -11,7 +11,6 @@
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.events = [SettingsManager sharedManager].events;
         self.alerts = [SettingsManager sharedManager].alerts;
-        self.event_times = [[NSMutableArray alloc] init]; //todo init from txt on launch
 
         // Get Core Data context from AppDelegate
         AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
@@ -43,30 +42,23 @@
         if (current_state != last_state) {
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
             NSString *documentsDirectory = [paths firstObject];
-            NSString *filePath = [documentsDirectory stringByAppendingPathComponent:@"events.txt"];
 
             NSFileManager *fileManager = [NSFileManager defaultManager];
-            if (![fileManager fileExistsAtPath:filePath]) {
-                [fileManager createFileAtPath:filePath contents:nil attributes:nil];
-            }
+
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
             NSDate *date = [NSDate date];
             [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
             NSString *timestamp = [dateFormatter stringFromDate:date];
-            [self.event_times addObject:date];
 
             NSString *contentToWrite = [NSString stringWithFormat:@"%@ class: %@ x%@\n", timestamp, self.events[i], @(current_state)];
-            NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
-            [fileHandle seekToEndOfFile];
-            [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
-            [fileHandle closeFile];
 
+            // Handle alerts.txt if needed
             if (current_state == [self.alerts[self.events[i]] intValue]) {
-                filePath = [documentsDirectory stringByAppendingPathComponent:@"alerts.txt"];
+                NSString *filePath = [documentsDirectory stringByAppendingPathComponent:@"alerts.txt"];
                 if (![fileManager fileExistsAtPath:filePath]) {
                     [fileManager createFileAtPath:filePath contents:nil attributes:nil];
                 }
-                fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
+                NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
                 [fileHandle seekToEndOfFile];
                 [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
                 [fileHandle closeFile];

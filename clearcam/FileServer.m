@@ -50,7 +50,7 @@
                 NSLog(@"Deleted: %@", file);
             }
         }
-        [self deleteAllDayEntitiesInContext:self.context];
+        [self deleteAllDayEntitiesAndEventsInContext:self.context];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
         [[NSUserDefaults standardUserDefaults] synchronize];
@@ -398,7 +398,7 @@
         fullPath = [fullPath substringToIndex:queryRange.location];
     }
     
-    BOOL isDirectory = NO;
+    BOOL isDirectory = YES;
     if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
         dprintf(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
         return;
@@ -529,18 +529,31 @@
     }
 }
 
-- (void)deleteAllDayEntitiesInContext:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-
+- (void)deleteAllDayEntitiesAndEventsInContext:(NSManagedObjectContext *)context {
     NSError *fetchError = nil;
-    NSArray *dayEntities = [context executeFetchRequest:fetchRequest error:&fetchError];
+
+    // Fetch and delete all EventEntity objects
+    NSFetchRequest *eventFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    NSArray *eventEntities = [context executeFetchRequest:eventFetchRequest error:&fetchError];
+
+    if (fetchError) {
+        NSLog(@"Failed to fetch EventEntity objects: %@", fetchError.localizedDescription);
+        return;
+    }
+
+    for (NSManagedObject *eventEntity in eventEntities) {
+        [context deleteObject:eventEntity];
+    }
+
+    // Fetch and delete all DayEntity objects
+    NSFetchRequest *dayFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+    NSArray *dayEntities = [context executeFetchRequest:dayFetchRequest error:&fetchError];
 
     if (fetchError) {
         NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
         return;
     }
 
-    // Loop through all fetched objects and delete them
     for (NSManagedObject *dayEntity in dayEntities) {
         [context deleteObject:dayEntity];
     }
@@ -548,10 +561,11 @@
     // Save the context after deletion
     NSError *saveError = nil;
     if (![context save:&saveError]) {
-        NSLog(@"Failed to delete DayEntity objects: %@", saveError.localizedDescription);
+        NSLog(@"Failed to delete DayEntity and EventEntity objects: %@", saveError.localizedDescription);
     } else {
-        NSLog(@"All DayEntity objects deleted successfully");
+        NSLog(@"All DayEntity and EventEntity objects deleted successfully");
     }
 }
+
     
 @end
