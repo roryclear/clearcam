@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 3000  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
 @end
 
@@ -505,124 +505,123 @@ NSMutableDictionary *classColorMap;
     @try {
         if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB){
             NSLog(@"deleting stuff");
-            while ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB + 500) {
-                NSLog(@"NOT ENOUGH SPACE!");
+            NSLog(@"NOT ENOUGH SPACE!");
+            
+            // Fetch all DayEntities, sorted by date
+            NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+            fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];
+            
+            NSError *fetchError = nil;
+            NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
+            
+            if (fetchError) {
+                NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
+                return;
+            }
+            
+            if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
+                NSLog(@"No more DayEntities available. Resetting deletion indexes.");
+                [defaults removeObjectForKey:@"LastDeletedDayIndex"];
+                [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
+                return;
+            }
+            
+            BOOL deletedFile = NO;
+            
+            for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
+                NSManagedObject *dayEntity = dayEntities[dayIndex];
+                NSLog(@"Checking DayEntity: %@", [dayEntity valueForKey:@"date"]);
                 
-                // Fetch all DayEntities, sorted by date
-                NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-                fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];
+                NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
                 
-                NSError *fetchError = nil;
-                NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
-                
-                if (fetchError) {
-                    NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-                    return;
+                if (lastDeletedSegmentIndex >= segments.count) {
+                    lastDeletedSegmentIndex = 0; // Reset segment index if we move to the next day
                 }
                 
-                if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
-                    NSLog(@"No more DayEntities available. Resetting deletion indexes.");
-                    [defaults removeObjectForKey:@"LastDeletedDayIndex"];
-                    [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-                    return;
-                }
-                
-                BOOL deletedFile = NO;
-                
-                for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
-                    NSManagedObject *dayEntity = dayEntities[dayIndex];
-                    NSLog(@"Checking DayEntity: %@", [dayEntity valueForKey:@"date"]);
-                    
-                    NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
-                    
-                    if (lastDeletedSegmentIndex >= segments.count) {
-                        lastDeletedSegmentIndex = 0; // Reset segment index if we move to the next day
+                for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
+                    NSManagedObject *segmentEntity = segments[segmentIndex];
+                    NSString *segmentURL = [segmentEntity valueForKey:@"url"];
+
+                    if (!segmentURL || [segmentURL isEqualToString:@""]) {
+                        continue;
                     }
-                    
-                    for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
-                        NSManagedObject *segmentEntity = segments[segmentIndex];
-                        NSString *segmentURL = [segmentEntity valueForKey:@"url"];
 
-                        if (!segmentURL || [segmentURL isEqualToString:@""]) {
-                            continue;
+                    NSNumber *segmentTimeStampNumber = [segmentEntity valueForKey:@"timeStamp"];
+                    if (!segmentTimeStampNumber) {
+                        continue;
+                    }
+
+                    // Get segment timestamp (seconds since midnight)
+                    double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
+
+                    NSLog(@"Checking segment: %@ (Seconds since midnight: %.2f)", segmentURL, segmentSecondsSinceMidnight);
+
+                    // Validate event times
+                    if (!self.yolo.scene.event_times || self.yolo.scene.event_times.count == 0) {
+                        NSLog(@"Warning: No event times found, skipping timestamp check.");
+                    }
+
+                    // Check if the segment is within ±60 seconds of any event time
+                    BOOL shouldSkipDeletion = NO;
+                    for (NSDate *eventTime in self.yolo.scene.event_times) {
+                        NSCalendar *calendar = [NSCalendar currentCalendar];
+                        NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventTime];
+
+                        // Convert event time to seconds since midnight
+                        double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
+                        double timeDifference = fabs(segmentSecondsSinceMidnight - eventSecondsSinceMidnight);
+
+                        NSLog(@"Comparing with event time: %@ (Event Seconds: %.2f, Difference: %.2f sec)", eventTime, eventSecondsSinceMidnight, timeDifference);
+
+                        if (timeDifference <= 60) { // Within one minute
+                            shouldSkipDeletion = YES;
+                            NSLog(@"Skipping deletion for segment at %.2f sec because it is close to an event time!", segmentSecondsSinceMidnight);
+                            break;
                         }
+                    }
 
-                        NSNumber *segmentTimeStampNumber = [segmentEntity valueForKey:@"timeStamp"];
-                        if (!segmentTimeStampNumber) {
-                            continue;
-                        }
+                    if (shouldSkipDeletion) {
+                        continue;
+                    }
 
-                        // Get segment timestamp (seconds since midnight)
-                        double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
+                    NSLog(@"\tChecking Segment: %@", segmentURL);
 
-                        NSLog(@"Checking segment: %@ (Seconds since midnight: %.2f)", segmentURL, segmentSecondsSinceMidnight);
+                    @try {
+                        NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
-                        // Validate event times
-                        if (!self.yolo.scene.event_times || self.yolo.scene.event_times.count == 0) {
-                            NSLog(@"Warning: No event times found, skipping timestamp check.");
-                        }
+                        NSError *deleteError = nil;
+                        if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+                            if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
+                                NSLog(@"\tDeleted %@", segmentURL);
+                                [segmentEntity setValue:@"" forKey:@"url"];
+                                deletedFile = YES;
+                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return;
 
-                        // Check if the segment is within ±60 seconds of any event time
-                        BOOL shouldSkipDeletion = NO;
-                        for (NSDate *eventTime in self.yolo.scene.event_times) {
-                            NSCalendar *calendar = [NSCalendar currentCalendar];
-                            NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventTime];
-
-                            // Convert event time to seconds since midnight
-                            double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
-                            double timeDifference = fabs(segmentSecondsSinceMidnight - eventSecondsSinceMidnight);
-
-                            NSLog(@"Comparing with event time: %@ (Event Seconds: %.2f, Difference: %.2f sec)", eventTime, eventSecondsSinceMidnight, timeDifference);
-
-                            if (timeDifference <= 60) { // Within one minute
-                                shouldSkipDeletion = YES;
-                                NSLog(@"Skipping deletion for segment at %.2f sec because it is close to an event time!", segmentSecondsSinceMidnight);
-                                break;
+                                // Save indexes
+                                [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
+                                [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
+                                [defaults synchronize];
+                            } else {
+                                NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
                             }
                         }
 
-                        if (shouldSkipDeletion) {
-                            continue;
-                        }
-
-                        NSLog(@"\tChecking Segment: %@", segmentURL);
-
-                        @try {
-                            NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
-
-                            NSError *deleteError = nil;
-                            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-                                if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
-                                    NSLog(@"\tDeleted %@", segmentURL);
-                                    [segmentEntity setValue:@"" forKey:@"url"];
-                                    deletedFile = YES;
-
-                                    // Save indexes
-                                    [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
-                                    [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
-                                    [defaults synchronize];
-                                } else {
-                                    NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
-                                }
-                            }
-
-                        } @catch (NSException *exception) {
-                            NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason);
-                        }
+                    } @catch (NSException *exception) {
+                        NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason);
                     }
-                    
-                    // If we finish all segments in a day, move to the next one
-                    lastDeletedSegmentIndex = 0;
                 }
                 
-                // If nothing was deleted, reset the indexes to avoid getting stuck
-                if (!deletedFile) {
-                    NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
-                    [defaults removeObjectForKey:@"LastDeletedDayIndex"];
-                    [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-                    [defaults synchronize];
-                    return;
-                }
+                // If we finish all segments in a day, move to the next one
+                lastDeletedSegmentIndex = 0;
+            }
+            
+            // If nothing was deleted, reset the indexes to avoid getting stuck
+            if (!deletedFile) {
+                NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
+                [defaults removeObjectForKey:@"LastDeletedDayIndex"];
+                [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
+                [defaults synchronize];
+                return;
             }
     }
     } @catch (NSException *exception) {
