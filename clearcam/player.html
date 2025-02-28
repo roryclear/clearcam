@@ -301,50 +301,56 @@
 </head>
 <body>
     <div id="videoContainer">
-        <div class="video-wrapper">
-            <!-- Video elements remain the same -->
-            <video class="videoPlayer" playsinline webkit-playsinline muted></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
-            <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+            <div class="video-wrapper">
+                <!-- Video elements remain the same -->
+                <video class="videoPlayer" playsinline webkit-playsinline muted></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
 
-            <!-- New top controls bar -->
-            <div id="topControls">
-                <input type="date" id="datePicker" name="datePicker">
-                <select id="classSelector" name="classSelector" onchange="changeClasses()">
-                    <option value="all">Detect All</option>
-                    <option value="vehiclesPeople">People+Vehicles</option>
-                </select>
-            </div>
-            <!-- Bottom controls (progress bar, time display, fullscreen button) -->
-            <div id="controls">
-                <div class="top-controls">
-                    <div id="timeDisplay">0:00 / 0:00</div>
-                    <button id="fullscreenBtn">
-                        <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
-                            <path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm6 12v6h-6v-2h4v-4zm-12 6H3v-6h2v4h4z"/>
+                <!-- New top controls bar, to find less shit icon -->
+                <div id="topControls">
+                    <a href="/downloads.html" id="downloadIcon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                            <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.48-4.23C15.91 6.01 13.43 3.5 10.5 3.5S5.09 6.01 5.09 9.5 7.57 15.5 10.5 15.5c1.61 0 3.09-.59 4.23-1.48l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-5 0C8.01 14 6 11.99 6 9.5S8.01 5 10.5 5 15 7.01 15 9.5 12.99 14 10.5 14z"/>
                         </svg>
-                    </button>
+                    </a>
+                    <input type="date" id="datePicker" name="datePicker">
+                    <select id="classSelector" name="classSelector" onchange="changeClasses()">
+                        <option value="all">Detect All</option>
+                        <option value="vehiclesPeople">People+Vehicles</option>
+                    </select>
                 </div>
-                <div id="progress">
-                    <div id="progress-bar"></div>
-                    <div id="gaps-container"></div>
-                </div>
-            </div>
 
-            <!-- Play/Pause button -->
-            <button id="playPauseBtn">
-                <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
-                    <path d="M8 5v14l11-7z"/>
-                </svg>
-                <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
-                    <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
-                </svg>
-            </button>
+                <!-- Bottom controls (progress bar, time display, fullscreen button) -->
+                <div id="controls">
+                    <div class="top-controls">
+                        <div id="timeDisplay">0:00 / 0:00</div>
+                        <button id="fullscreenBtn">
+                            <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                                <path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm6 12v6h-6v-2h4v-4zm-12 6H3v-6h2v4h4z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="progress">
+                        <div id="progress-bar"></div>
+                        <div id="gaps-container"></div>
+                    </div>
+                </div>
+
+                <!-- Play/Pause button -->
+                <button id="playPauseBtn">
+                    <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
+                        <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
+                    </svg>
+                </button>
+            </div>
         </div>
-    </div>
     <script>
         let n_segments = 0; //not all new segments will get added to segments if some are removed, indexes will be maintained at backend though
         const yolo_classes = [
