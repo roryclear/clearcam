@@ -16,6 +16,7 @@
     if (self) {
         [self loadYoloIndexes];
         [self loadEvents];
+        [self loadDeleteOnLaunch];
     }
     return self;
 }
@@ -46,10 +47,6 @@
     for (int i = 0; i < 80; i++) { //todo unhardcode 80
         [defaultIndexes addObject:@(i)];
     }
-    
-    /*
-    NSArray<NSNumber *> *defaultIndexes = @[@0, @1, @2, @3, @5, @7]; //vehicles+people preset for now (person, bicycle, car, motorcycle, bus, truck)
-     */
     return [defaultIndexes copy];
 }
 
@@ -64,16 +61,37 @@
 
 - (NSArray<NSNumber *> *)generateDefaultEvents {
     NSMutableArray<NSNumber *> *defaultEvents = [NSMutableArray array];
-    [defaultEvents addObject:@0]; // 1 person for now // todo, default will be none, +/- person will be a bool
-    [defaultEvents addObject:@2];
-    [defaultEvents addObject:@63]; //laptop for now
+    //[defaultEvents addObject:@0]; // 1 person for now
+    //[defaultEvents addObject:@2];
+    [defaultEvents addObject:@63]; // laptop for now
     return [defaultEvents copy];
 }
 
-- (NSDictionary*)generateDefaultAlerts { //todo, alerts events, min-max all in one object?
+- (NSDictionary*)generateDefaultAlerts {
     NSMutableDictionary *defaultAlerts = [[NSMutableDictionary alloc] init];
-    defaultAlerts[@2] = 0; //just min 0 for now
+    defaultAlerts[@2] = @0; // just min 0 for now
     return [defaultAlerts copy];
 }
+
+// New property: delete_on_launch
+- (void)saveDeleteOnLaunch {
+    [[NSUserDefaults standardUserDefaults] setBool:self.delete_on_launch forKey:@"delete_on_launch"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)loadDeleteOnLaunch {
+    if ([[NSUserDefaults standardUserDefaults] objectForKey:@"delete_on_launch"] == nil) {
+        NSLog(@"no delete_on_launch value found");
+        self.delete_on_launch = NO;
+    } else {
+        self.delete_on_launch = [[NSUserDefaults standardUserDefaults] boolForKey:@"delete_on_launch"];
+    }
+}
+
+- (void)updateDeleteOnLaunch:(BOOL)value {
+    self.delete_on_launch = value;
+    [self saveDeleteOnLaunch];
+}
+
 
 @end

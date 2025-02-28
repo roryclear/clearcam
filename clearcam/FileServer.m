@@ -24,11 +24,6 @@
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     self.context = appDelegate.persistentContainer.viewContext;
 
-    
-    //TODO REMOVE THIS
-    //[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-    //[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-    //[[NSUserDefaults standardUserDefaults] synchronize];
 
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
@@ -42,26 +37,24 @@
         return;
     }
 
-    for (NSString *file in contents) {
-        continue;
-        if ([file hasPrefix:@"batch_req"]) continue;
-        NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
-        BOOL success = [fileManager removeItemAtPath:filePath error:&error];
+    if ([SettingsManager sharedManager].delete_on_launch) {
+        for (NSString *file in contents) {
+            if ([file hasPrefix:@"batch_req"]) continue;
+            NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
+            NSError *error = nil;
+            BOOL success = [fileManager removeItemAtPath:filePath error:&error];
 
-        if (!success) {
-            NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
-        } else {
-            NSLog(@"Deleted: %@", file);
+            if (!success) {
+                NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
+            } else {
+                NSLog(@"Deleted: %@", file);
+            }
         }
+        [self deleteAllDayEntitiesInContext:self.context];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
     }
-
-    ///TODO
-    
-    // Save a new string
-    NSLog(@"core data segments?:");
-    //[self deleteAllDayEntitiesInContext:self.context]; //to delete all, not thread safe yet!
-    // Fetch all saved strings
-    // coredata stuff
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.segment_length = 60;

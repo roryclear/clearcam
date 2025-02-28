@@ -52,7 +52,7 @@
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) Resolution *res;
 
-#define MIN_FREE_SPACE_MB 500  //threshold to start deleting
+#define MIN_FREE_SPACE_MB 3000  //threshold to start deleting
 
 @end
 
@@ -504,6 +504,7 @@ NSMutableDictionary *classColorMap;
 
     @try {
         if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB){
+            NSLog(@"deleting stuff");
             while ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB + 500) {
                 NSLog(@"NOT ENOUGH SPACE!");
                 
