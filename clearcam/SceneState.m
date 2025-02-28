@@ -76,7 +76,10 @@
             [self.backgroundContext performBlockAndWait:^{
                 NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
                                                                           inManagedObjectContext:self.backgroundContext];
+
                 [newEvent setValue:@([date timeIntervalSince1970]) forKey:@"timeStamp"]; // Float value of timestamp
+                [newEvent setValue:self.events[i] forKey:@"classType"]; // Class type
+                [newEvent setValue:@(current_state) forKey:@"quantity"]; // Quantity (current state)
 
                 NSError *saveError = nil;
                 if (![self.backgroundContext save:&saveError]) {

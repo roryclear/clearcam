@@ -374,9 +374,9 @@
     }
     
     if ([filePath hasPrefix:@"get-events"]) {
-        NSArray *eventTimestamps = [self fetchEventTimestampsFromCoreData:self.context];
+        NSArray *eventDataArray = [self fetchEventDataFromCoreData:self.context];
 
-        if (eventTimestamps.count == 0) {
+        if (eventDataArray.count == 0) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"No events found\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
@@ -384,11 +384,12 @@
             return;
         }
 
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:eventTimestamps options:0 error:nil];
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:eventDataArray options:0 error:nil];
         NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
         send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
         send(clientSocket, jsonData.bytes, jsonData.length, 0);
     }
+
 
     
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
@@ -484,25 +485,33 @@
     fclose(file);
 }
 
-- (NSArray *)fetchEventTimestampsFromCoreData:(NSManagedObjectContext *)context {
+- (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-    fetchRequest.resultType = NSDictionaryResultType;
-    fetchRequest.propertiesToFetch = @[@"timeStamp"];
-
     NSError *error = nil;
-    NSArray *results = [context executeFetchRequest:fetchRequest error:&error];
+    NSArray *fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
 
     if (error) {
-        NSLog(@"Error fetching events: %@", error);
+        NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
         return @[];
     }
 
-    NSMutableArray *timestamps = [NSMutableArray arrayWithCapacity:results.count];
-    for (NSDictionary *event in results) {
-        [timestamps addObject:event[@"timeStamp"]];
+    NSMutableArray *eventDataArray = [NSMutableArray arrayWithCapacity:fetchedEvents.count];
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+
+    for (NSManagedObject *event in fetchedEvents) {
+        NSTimeInterval timestamp = [[event valueForKey:@"timeStamp"] doubleValue];
+        NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
+        
+        NSDictionary *eventDict = @{
+            @"timeStamp": readableDate,  // Readable date format
+            @"classType": [event valueForKey:@"classType"] ?: @"unknown",
+            @"quantity": [event valueForKey:@"quantity"] ?: @(0)
+        };
+        [eventDataArray addObject:eventDict];
     }
 
-    return timestamps;
+    return eventDataArray;
 }
 
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {

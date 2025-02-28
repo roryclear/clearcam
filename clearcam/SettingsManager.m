@@ -61,8 +61,8 @@
 
 - (NSArray<NSNumber *> *)generateDefaultEvents {
     NSMutableArray<NSNumber *> *defaultEvents = [NSMutableArray array];
-    //[defaultEvents addObject:@0]; // 1 person for now
-    //[defaultEvents addObject:@2];
+    [defaultEvents addObject:@0]; // 1 person for now
+    [defaultEvents addObject:@2];
     [defaultEvents addObject:@63]; // laptop for now
     return [defaultEvents copy];
 }

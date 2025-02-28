@@ -5,6 +5,8 @@
         <relationship name="segments" optional="YES" toMany="YES" deletionRule="Nullify" ordered="YES" destinationEntity="SegmentEntity" inverseName="day" inverseEntity="SegmentEntity"/>
     </entity>
     <entity name="EventEntity" representedClassName="EventEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="classType" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="quantity" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="timeStamp" optional="YES" attributeType="Float" defaultValueString="0.0" usesScalarValueType="YES"/>
     </entity>
     <entity name="FrameEntity" representedClassName="FrameEntity" syncable="YES" codeGenerationType="class">
