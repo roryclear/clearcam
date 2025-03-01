@@ -42,12 +42,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-        
-    //todo, move theses
-    //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
-    //self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
-    //self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
-    
+            
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -80,7 +75,8 @@ NSMutableDictionary *classColorMap;
     
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
     [self handleDeviceOrientationChange];
-    [self setupCameraWithWidth:@"1920" height:@"1080"];
+    SettingsManager *settings = [SettingsManager sharedManager];
+    [self setupCameraWithWidth:settings.width height:settings.height]; //todo, use defaults!
     [self setupFPSLabel];
 }
 

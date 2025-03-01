@@ -80,6 +80,10 @@
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
+//old
+//self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
+//self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
+//self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
 - (void)loadResolutionSettings {
     self.width = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_width"] ?: @"1920";
     self.height = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_height"] ?: @"1080";
