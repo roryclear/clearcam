@@ -108,7 +108,7 @@
 - (void)loadDeleteOnLaunch {
     if ([[NSUserDefaults standardUserDefaults] objectForKey:@"delete_on_launch"] == nil) {
         NSLog(@"no delete_on_launch value found");
-        self.delete_on_launch = NO;
+        self.delete_on_launch = YES;
     } else {
         self.delete_on_launch = [[NSUserDefaults standardUserDefaults] boolForKey:@"delete_on_launch"];
     }
