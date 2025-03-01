@@ -46,43 +46,16 @@
         self.lastN_total[self.events[i]] = totalValue;
         
         if (current_state != last_state) {
-            // Get current timestamp
-            NSDate *date = [NSDate date]; // NOW inside the loop (fix)
-            NSTimeInterval unixTimestamp = [date timeIntervalSince1970]; // Float UNIX timestamp
+            NSDate *date = [NSDate date];
+            NSTimeInterval unixTimestamp = [date timeIntervalSince1970];
             
-            // Format human-readable timestamp for logging
-            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-            [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-            NSString *formattedTimestamp = [dateFormatter stringFromDate:date];
-
-            // Logging
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths firstObject];
-
-            NSFileManager *fileManager = [NSFileManager defaultManager];
-            NSString *contentToWrite = [NSString stringWithFormat:@"%@ class: %@ x%@\n",
-                                        formattedTimestamp, self.events[i], @(current_state)];
-
-            // Handle alerts.txt if needed
-            if (current_state == [self.alerts[self.events[i]] intValue]) {
-                NSString *filePath = [documentsDirectory stringByAppendingPathComponent:@"alerts.txt"];
-                if (![fileManager fileExistsAtPath:filePath]) {
-                    [fileManager createFileAtPath:filePath contents:nil attributes:nil];
-                }
-                NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath];
-                [fileHandle seekToEndOfFile];
-                [fileHandle writeData:[contentToWrite dataUsingEncoding:NSUTF8StringEncoding]];
-                [fileHandle closeFile];
-            }
-
-            // **Add EventEntity to Core Data (SegmentsModel)**
             [self.backgroundContext performBlockAndWait:^{
                 NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
                                                                           inManagedObjectContext:self.backgroundContext];
 
-                [newEvent setValue:@(unixTimestamp) forKey:@"timeStamp"]; // Correct per-event timestamp
-                [newEvent setValue:self.events[i] forKey:@"classType"]; // Class type
-                [newEvent setValue:@(current_state) forKey:@"quantity"]; // Quantity (current state)
+                [newEvent setValue:@(unixTimestamp) forKey:@"timeStamp"];
+                [newEvent setValue:self.events[i] forKey:@"classType"];
+                [newEvent setValue:@(current_state) forKey:@"quantity"];
 
                 NSError *saveError = nil;
                 if (![self.backgroundContext save:&saveError]) {
