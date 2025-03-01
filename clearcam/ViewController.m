@@ -254,6 +254,7 @@ NSMutableDictionary *classColorMap;
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
     if(![self ensureFreeDiskSpace]) {
         [self stopRecording];
+        NSLog(@"no space, recording stopped. Delete some stuff");
     }
 }
 
