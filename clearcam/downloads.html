@@ -1,1 +1,75 @@
-hello
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event List</title>
+    <script>
+        async function fetchEvents() {
+            try {
+                const response = await fetch('/get-events');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch events');
+                }
+                const events = await response.json();
+                renderEvents(events);
+            } catch (error) {
+                console.error('Error fetching events:', error);
+                document.getElementById('eventsTableBody').innerHTML = '<tr><td colspan="4">Failed to load events.</td></tr>';
+            }
+        }
+
+        function renderEvents(events) {
+            const tableBody = document.getElementById('eventsTableBody');
+            tableBody.innerHTML = ''; // Clear existing data
+
+            events.forEach(event => {
+                const unixTimestamp = new Date(event.timeStamp).getTime() / 1000; // Convert to Unix timestamp
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${event.classType}</td>
+                    <td>${event.quantity}</td>
+                    <td>${event.timeStamp}</td>
+                    <td><button onclick="deleteEvent(${unixTimestamp})">Delete</button></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        async function deleteEvent(timeStamp) {
+            try {
+                const response = await fetch(`/delete-event?timeStamp=${timeStamp}`, { method: 'GET' });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete event');
+                }
+
+                // Refresh event list after delete
+                fetchEvents();
+            } catch (error) {
+                console.error('Error deleting event:', error);
+            }
+        }
+
+        // Load events when the page loads
+        window.onload = fetchEvents;
+    </script>
+</head>
+<body>
+    <h1>Event List</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Class Type</th>
+                <th>Quantity</th>
+                <th>Time Stamp</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="eventsTableBody">
+            <tr><td colspan="4">Loading events...</td></tr>
+        </tbody>
+    </table>
+</body>
+</html>
