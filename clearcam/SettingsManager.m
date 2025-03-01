@@ -14,6 +14,7 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
+        [self loadResolutionSettings];
         [self loadYoloIndexes];
         [self loadEvents];
         [self loadDeleteOnLaunch];
@@ -77,6 +78,31 @@
 - (void)saveDeleteOnLaunch {
     [[NSUserDefaults standardUserDefaults] setBool:self.delete_on_launch forKey:@"delete_on_launch"];
     [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)loadResolutionSettings {
+    self.width = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_width"] ?: @"1920";
+    self.height = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_height"] ?: @"1080";
+    self.text_size = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_text_size"] ?: @"3";
+    self.preset = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_preset"] ?: @"AVCaptureSessionPreset1920x1080";
+}
+
+// Save resolution settings to UserDefaults
+- (void)saveResolutionSettings {
+    [[NSUserDefaults standardUserDefaults] setObject:self.width forKey:@"resolution_width"];
+    [[NSUserDefaults standardUserDefaults] setObject:self.height forKey:@"resolution_height"];
+    [[NSUserDefaults standardUserDefaults] setObject:self.text_size forKey:@"resolution_text_size"];
+    [[NSUserDefaults standardUserDefaults] setObject:self.preset forKey:@"resolution_preset"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+// Update resolution settings
+- (void)updateResolutionWithWidth:(NSString *)width height:(NSString *)height textSize:(NSString *)textSize preset:(NSString *)preset {
+    self.width = width;
+    self.height = height;
+    self.text_size = textSize;
+    self.preset = preset;
+    [self saveResolutionSettings];
 }
 
 - (void)loadDeleteOnLaunch {
