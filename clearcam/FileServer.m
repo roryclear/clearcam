@@ -375,7 +375,7 @@
     
     if ([filePath hasPrefix:@"get-events"]) {
         NSArray *eventDataArray = [self fetchEventDataFromCoreData:self.context];
-
+        
         if (eventDataArray.count == 0) {
             NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"No events found\"}";
@@ -390,7 +390,44 @@
         send(clientSocket, jsonData.bytes, jsonData.length, 0);
     }
 
+    if ([filePath hasPrefix:@"delete-event"]) {
+        // Extract the timeStamp from the URL query
+        NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
+        NSString *eventTimeStamp = nil;
+        
+        for (NSURLQueryItem *item in components.queryItems) {
+            if ([item.name isEqualToString:@"timeStamp"]) {
+                eventTimeStamp = item.value;
+                break;
+            }
+        }
+        
+        if (!eventTimeStamp) {
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Missing timeStamp parameter\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
 
+        // Convert the timeStamp to a number
+        NSTimeInterval timeStamp = [eventTimeStamp doubleValue];
+        
+        BOOL success = [self deleteEventWithTimeStamp:timeStamp];
+        
+        if (success) {
+            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+            NSString *successMessage = @"{\"success\": \"Event deleted\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [successMessage UTF8String], successMessage.length, 0);
+        } else {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Event not found\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        }
+    }
+    
     
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     NSRange queryRange = [fullPath rangeOfString:@"?"];
@@ -484,6 +521,42 @@
     }
     fclose(file);
 }
+
+- (BOOL)deleteEventWithTimeStamp:(NSTimeInterval)timeStamp {
+    if (!self.context) {
+        NSLog(@"Error: Core Data context is nil!");
+        return NO;
+    }
+
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"]; // Updated entity name
+    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"timeStamp == %lf", timeStamp]; // Matching timeStamp
+
+    NSError *error = nil;
+    NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
+
+    if (error) {
+        NSLog(@"Core Data Fetch Error: %@", error.localizedDescription);
+        return NO;
+    }
+
+    if (events.count == 0) {
+        NSLog(@"No EventEntity found for timeStamp: %lf", timeStamp);
+        return NO;
+    }
+
+    for (NSManagedObject *event in events) {
+        [self.context deleteObject:event];
+    }
+
+    if (![self.context save:&error]) {
+        NSLog(@"Core Data Save Error: %@", error.localizedDescription);
+        return NO;
+    }
+
+    NSLog(@"Successfully deleted EventEntity with timeStamp: %lf", timeStamp);
+    return YES;
+}
+
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
