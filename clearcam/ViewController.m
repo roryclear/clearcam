@@ -80,9 +80,8 @@ NSMutableDictionary *classColorMap;
     
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
     [self handleDeviceOrientationChange];
-    [self setupCamera];
+    [self setupCameraWithWidth:@"1920" height:@"1080"];
     [self setupFPSLabel];
-    
 }
 
 - (void)dealloc {
@@ -115,12 +114,16 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)setupCamera {
+- (void)setupCameraWithWidth:(NSString *)width height:(NSString *)height {
     self.captureSession = [[AVCaptureSession alloc] init];
+    NSString *presetString = [NSString stringWithFormat:@"AVCaptureSessionPreset%@x%@", width, height];
 
-    // Get preset from SettingsManager
-    SettingsManager *settings = [SettingsManager sharedManager];
-    self.captureSession.sessionPreset = settings.preset;
+    if ([self.captureSession canSetSessionPreset:presetString]) {
+        self.captureSession.sessionPreset = presetString;
+    } else {
+        NSLog(@"Unsupported preset: %@", presetString);
+        return;
+    }
 
     AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
     NSError *error = nil;
@@ -130,14 +133,17 @@ NSMutableDictionary *classColorMap;
         return;
     }
     [self.captureSession addInput:input];
+
     AVCaptureVideoDataOutput *output = [[AVCaptureVideoDataOutput alloc] init];
     output.videoSettings = @{(NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
     output.alwaysDiscardsLateVideoFrames = YES;
     [output setSampleBufferDelegate:self queue:dispatch_get_main_queue()];
     [self.captureSession addOutput:output];
+
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
     self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspect;
     [self.view.layer addSublayer:self.previewLayer];
+
     [self.captureSession startRunning];
     [self startNewRecording];
 }
