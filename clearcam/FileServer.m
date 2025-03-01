@@ -528,8 +528,11 @@
         return NO;
     }
 
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"]; // Updated entity name
-    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"timeStamp == %lf", timeStamp]; // Matching timeStamp
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    
+    // TODO, this delete everything within a second of the rounded timestamp, fine for now
+    double epsilon = 1;
+    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
 
     NSError *error = nil;
     NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
@@ -556,7 +559,6 @@
     NSLog(@"Successfully deleted EventEntity with timeStamp: %lf", timeStamp);
     return YES;
 }
-
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
