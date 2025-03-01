@@ -416,6 +416,13 @@
         BOOL success = [self deleteEventWithTimeStamp:timeStamp];
         
         if (success) {
+            
+            //TODO//
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            //THIS WILL BE SLOW LONG TERM, use a queue or something
+            
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
             NSString *successMessage = @"{\"success\": \"Event deleted\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);

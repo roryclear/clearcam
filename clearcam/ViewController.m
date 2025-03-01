@@ -531,7 +531,6 @@ NSMutableDictionary *classColorMap;
 
             if (!eventDataArray || eventDataArray.count == 0) {
                 NSLog(@"No event timestamps found.");
-                return;
             }
 
             NSMutableArray<NSNumber *> *eventTimestamps = [NSMutableArray array];
