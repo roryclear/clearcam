@@ -252,7 +252,9 @@ NSMutableDictionary *classColorMap;
     self.isRecording = YES;
     [self.assetWriter startWriting];
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
-    [self ensureFreeDiskSpace];
+    if(![self ensureFreeDiskSpace]) {
+        [self stopRecording];
+    }
 }
 
 
@@ -364,6 +366,21 @@ NSMutableDictionary *classColorMap;
 
     return resizedImage.CGImage;
 }
+
+- (void)stopRecording {
+    if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) {
+        NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
+        return;
+    }
+    
+    self.isRecording = NO;
+    [self.videoWriterInput markAsFinished];
+    
+    [self.assetWriter finishWritingWithCompletionHandler:^{
+        NSLog(@"Recording stopped.");
+    }];
+}
+
 
 - (void)finishRecording {
     if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) {
@@ -486,7 +503,7 @@ NSMutableDictionary *classColorMap;
     return freeSpace;
 }
 
-- (void)ensureFreeDiskSpace {
+- (BOOL)ensureFreeDiskSpace {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
     NSInteger lastDeletedDayIndex = [defaults integerForKey:@"LastDeletedDayIndex"];
@@ -506,14 +523,14 @@ NSMutableDictionary *classColorMap;
             
             if (fetchError) {
                 NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-                return;
+                return YES;
             }
             
             if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
                 NSLog(@"No more DayEntities available. Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-                return;
+                return YES;
             }
             
             // Fetch event timestamps from Core Data
@@ -615,7 +632,7 @@ NSMutableDictionary *classColorMap;
                                 }
 
                                 deletedFile = YES;
-                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return;
+                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return YES;
 
                                 // Save indexes
                                 [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
@@ -641,14 +658,16 @@ NSMutableDictionary *classColorMap;
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
                 [defaults synchronize];
-                return;
+                return NO;
             }
         }
     } @catch (NSException *exception) {
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
+        return YES;
     }
 
     NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
+    return YES;
 }
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
