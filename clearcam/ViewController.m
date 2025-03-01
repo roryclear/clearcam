@@ -503,7 +503,7 @@ NSMutableDictionary *classColorMap;
     NSInteger lastDeletedSegmentIndex = [defaults integerForKey:@"LastDeletedSegmentIndex"];
 
     @try {
-        if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB){
+        if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
             NSLog(@"deleting stuff");
             NSLog(@"NOT ENOUGH SPACE!");
             
@@ -526,6 +526,34 @@ NSMutableDictionary *classColorMap;
                 return;
             }
             
+            // Fetch event timestamps from Core Data
+            NSArray *eventDataArray = [self.fileServer fetchEventDataFromCoreData:self.fileServer.context];
+
+            if (!eventDataArray || eventDataArray.count == 0) {
+                NSLog(@"No event timestamps found.");
+            }
+
+            NSMutableArray<NSNumber *> *eventTimestamps = [NSMutableArray array];
+            NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+            [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+
+            NSCalendar *calendar = [NSCalendar currentCalendar];
+
+            for (NSDictionary *eventData in eventDataArray) {
+                NSString *timestampString = eventData[@"timeStamp"];
+                NSDate *eventDate = [dateFormatter dateFromString:timestampString];
+
+                if (eventDate) {
+                    NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventDate];
+
+                    // Convert to seconds since midnight
+                    double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
+                    [eventTimestamps addObject:@(eventSecondsSinceMidnight)];
+                }
+            }
+
+
+
             BOOL deletedFile = NO;
             
             for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
@@ -551,27 +579,16 @@ NSMutableDictionary *classColorMap;
                         continue;
                     }
 
-                    // Get segment timestamp (seconds since midnight)
                     double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
-
                     NSLog(@"Checking segment: %@ (Seconds since midnight: %.2f)", segmentURL, segmentSecondsSinceMidnight);
 
-                    // Validate event times
-                    if (!self.yolo.scene.event_times || self.yolo.scene.event_times.count == 0) {
-                        NSLog(@"Warning: No event times found, skipping timestamp check.");
-                    }
-
-                    // Check if the segment is within ±60 seconds of any event time
+                    // Check if the segment is within ±60 seconds of any event timestamp
                     BOOL shouldSkipDeletion = NO;
-                    for (NSDate *eventTime in self.yolo.scene.event_times) {
-                        NSCalendar *calendar = [NSCalendar currentCalendar];
-                        NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventTime];
-
-                        // Convert event time to seconds since midnight
-                        double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
+                    for (NSNumber *eventTimestamp in eventTimestamps) {
+                        double eventSecondsSinceMidnight = eventTimestamp.doubleValue;
                         double timeDifference = fabs(segmentSecondsSinceMidnight - eventSecondsSinceMidnight);
 
-                        NSLog(@"Comparing with event time: %@ (Event Seconds: %.2f, Difference: %.2f sec)", eventTime, eventSecondsSinceMidnight, timeDifference);
+                        NSLog(@"Comparing with event time: %.2f sec (Difference: %.2f sec)", eventSecondsSinceMidnight, timeDifference);
 
                         if (timeDifference <= 60) { // Within one minute
                             shouldSkipDeletion = YES;
@@ -593,7 +610,20 @@ NSMutableDictionary *classColorMap;
                         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                             if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
                                 NSLog(@"\tDeleted %@", segmentURL);
+                                // Keep the segmentEntity but clear all but URL (blank)
                                 [segmentEntity setValue:@"" forKey:@"url"];
+                                [segmentEntity setValue:nil forKey:@"frames"];
+                                [segmentEntity setValue:nil forKey:@"duration"];
+
+                                // Save the changes to Core Data
+                                NSManagedObjectContext *context = self.fileServer.context;
+                                NSError *saveError = nil;
+                                if (![context save:&saveError]) {
+                                    NSLog(@"Failed to update segment entity: %@", saveError.localizedDescription);
+                                } else {
+                                    NSLog(@"Successfully cleared segment entity data.");
+                                }
+
                                 deletedFile = YES;
                                 if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return;
 
@@ -623,14 +653,13 @@ NSMutableDictionary *classColorMap;
                 [defaults synchronize];
                 return;
             }
-    }
+        }
     } @catch (NSException *exception) {
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
     }
 
     NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
 }
-
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {

@@ -50,7 +50,7 @@
                 NSLog(@"Deleted: %@", file);
             }
         }
-        [self deleteAllDayEntitiesInContext:self.context];
+        [self deleteAllDayEntitiesAndEventsInContext:self.context];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
         [[NSUserDefaults standardUserDefaults] synchronize];
@@ -306,8 +306,10 @@
     }
 
     
-    if ([filePath hasPrefix:@"main"]) {
-        NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"html"];
+    if ([filePath hasPrefix:@"main"] || [filePath hasPrefix:@"downloads"]) {
+        NSString *fileName = [filePath hasPrefix:@"main"] ? @"main.html" : @"downloads.html";
+        NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:[fileName stringByDeletingPathExtension] ofType:@"html"];
+        
         if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
             FILE *file = fopen([playerFilePath UTF8String], "rb");
             if (file) {
@@ -371,13 +373,76 @@
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
     }
     
+    if ([filePath hasPrefix:@"get-events"]) {
+        NSArray *eventDataArray = [self fetchEventDataFromCoreData:self.context];
+        
+        if (eventDataArray.count == 0) {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"No events found\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:eventDataArray options:0 error:nil];
+        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+    }
+
+    if ([filePath hasPrefix:@"delete-event"]) {
+        // Extract the timeStamp from the URL query
+        NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
+        NSString *eventTimeStamp = nil;
+        
+        for (NSURLQueryItem *item in components.queryItems) {
+            if ([item.name isEqualToString:@"timeStamp"]) {
+                eventTimeStamp = item.value;
+                break;
+            }
+        }
+        
+        if (!eventTimeStamp) {
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Missing timeStamp parameter\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        // Convert the timeStamp to a number
+        NSTimeInterval timeStamp = [eventTimeStamp doubleValue];
+        
+        BOOL success = [self deleteEventWithTimeStamp:timeStamp];
+        
+        if (success) {
+            
+            //TODO//
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            //THIS WILL BE SLOW LONG TERM, use a queue or something
+            
+            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+            NSString *successMessage = @"{\"success\": \"Event deleted\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [successMessage UTF8String], successMessage.length, 0);
+        } else {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Event not found\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        }
+    }
+    
+    
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     NSRange queryRange = [fullPath rangeOfString:@"?"];
     if (queryRange.location != NSNotFound) {
         fullPath = [fullPath substringToIndex:queryRange.location];
     }
     
-    BOOL isDirectory = NO;
+    BOOL isDirectory = YES;
     if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath isDirectory:&isDirectory]) {
         dprintf(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
         return;
@@ -464,6 +529,73 @@
     fclose(file);
 }
 
+- (BOOL)deleteEventWithTimeStamp:(NSTimeInterval)timeStamp {
+    if (!self.context) {
+        NSLog(@"Error: Core Data context is nil!");
+        return NO;
+    }
+
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    
+    // TODO, this delete everything within a second of the rounded timestamp, fine for now
+    double epsilon = 1;
+    fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
+
+    NSError *error = nil;
+    NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
+
+    if (error) {
+        NSLog(@"Core Data Fetch Error: %@", error.localizedDescription);
+        return NO;
+    }
+
+    if (events.count == 0) {
+        NSLog(@"No EventEntity found for timeStamp: %lf", timeStamp);
+        return NO;
+    }
+
+    for (NSManagedObject *event in events) {
+        [self.context deleteObject:event];
+    }
+
+    if (![self.context save:&error]) {
+        NSLog(@"Core Data Save Error: %@", error.localizedDescription);
+        return NO;
+    }
+
+    NSLog(@"Successfully deleted EventEntity with timeStamp: %lf", timeStamp);
+    return YES;
+}
+
+- (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
+    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    NSError *error = nil;
+    NSArray *fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
+
+    if (error) {
+        NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
+        return @[];
+    }
+
+    NSMutableArray *eventDataArray = [NSMutableArray arrayWithCapacity:fetchedEvents.count];
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+
+    for (NSManagedObject *event in fetchedEvents) {
+        NSTimeInterval timestamp = [[event valueForKey:@"timeStamp"] doubleValue];
+        NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
+        
+        NSDictionary *eventDict = @{
+            @"timeStamp": readableDate,  // Readable date format
+            @"classType": [event valueForKey:@"classType"] ?: @"unknown",
+            @"quantity": [event valueForKey:@"quantity"] ?: @(0)
+        };
+        [eventDataArray addObject:eventDict];
+    }
+
+    return eventDataArray;
+}
+
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {
     char buffer[64 * 1024];
     size_t bytesToSend = contentLength;
@@ -479,18 +611,31 @@
     }
 }
 
-- (void)deleteAllDayEntitiesInContext:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-
+- (void)deleteAllDayEntitiesAndEventsInContext:(NSManagedObjectContext *)context {
     NSError *fetchError = nil;
-    NSArray *dayEntities = [context executeFetchRequest:fetchRequest error:&fetchError];
+
+    // Fetch and delete all EventEntity objects
+    NSFetchRequest *eventFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    NSArray *eventEntities = [context executeFetchRequest:eventFetchRequest error:&fetchError];
+
+    if (fetchError) {
+        NSLog(@"Failed to fetch EventEntity objects: %@", fetchError.localizedDescription);
+        return;
+    }
+
+    for (NSManagedObject *eventEntity in eventEntities) {
+        [context deleteObject:eventEntity];
+    }
+
+    // Fetch and delete all DayEntity objects
+    NSFetchRequest *dayFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+    NSArray *dayEntities = [context executeFetchRequest:dayFetchRequest error:&fetchError];
 
     if (fetchError) {
         NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
         return;
     }
 
-    // Loop through all fetched objects and delete them
     for (NSManagedObject *dayEntity in dayEntities) {
         [context deleteObject:dayEntity];
     }
@@ -498,10 +643,11 @@
     // Save the context after deletion
     NSError *saveError = nil;
     if (![context save:&saveError]) {
-        NSLog(@"Failed to delete DayEntity objects: %@", saveError.localizedDescription);
+        NSLog(@"Failed to delete DayEntity and EventEntity objects: %@", saveError.localizedDescription);
     } else {
-        NSLog(@"All DayEntity objects deleted successfully");
+        NSLog(@"All DayEntity and EventEntity objects deleted successfully");
     }
 }
+
     
 @end
