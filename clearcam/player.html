@@ -825,15 +825,35 @@
                     document.removeEventListener("touchend", stopScrubbing);
                 }
                 
-                function preloadNextSegments() {
+                async function preloadNextSegments() {
                     let x = 1;
-                    while(x < videoPlayers.length){
+                    while (x < videoPlayers.length) {
                         let current_x = x;
+
                         if (currentSegment + x < segments.length) {
-                            if(!videoPlayers[(video_index + current_x) % videoPlayers.length].src.endsWith(segments[currentSegment + current_x].url)){
-                                videoPlayers[(video_index + current_x) % videoPlayers.length].src = segments[currentSegment + current_x].url;
-                                videoPlayers[(video_index + current_x) % videoPlayers.length].load();
-                                videoPlayers[(video_index + current_x) % videoPlayers.length].preload = 'auto';
+                            let segment = segments[currentSegment + current_x];
+                            let player = videoPlayers[(video_index + current_x) % videoPlayers.length];
+
+                            // Preload video if not already loaded
+                            if (!player.src.endsWith(segment.url)) {
+                                player.src = segment.url;
+                                player.load();
+                                player.preload = 'auto';
+                            }
+
+                            // Preload frames if not already loaded or fetching
+                            if (!segment.frames && !segment.fetchingFrames) {
+                                segment.fetchingFrames = true; // Set fetching flag to avoid duplicate requests
+                                try {
+                                    const response = await fetch(`/get-frames?url=${encodeURIComponent(segment.url)}`);
+                                    if (!response.ok) throw new Error(`Failed to fetch frames for ${segment.url}`);
+
+                                    const frames = await response.json();
+                                    segment.frames = frames; // Store frames to prevent refetching
+                                } catch (error) {
+                                    console.error("Error fetching frames:", error);
+                                }
+                                segment.fetchingFrames = false; // Reset fetching flag
                             }
                         }
                         x++;
