@@ -534,57 +534,77 @@
                     }, retryTimeout);
                 }
 
-                function updateTimeline() {
-                    const startTimestamp = segments[0].timeStamp;
-                    let adjustedStartTimestamp;
+        async function updateTimeline() {
+            const startTimestamp = segments[0].timeStamp;
+            let adjustedStartTimestamp;
 
-                    if (startTimestamp < 0) {
-                        adjustedStartTimestamp = (24 * 3600) + startTimestamp; //todo hack?
-                    } else {
-                        adjustedStartTimestamp = startTimestamp;
-                    }
-                    
-                    const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
-                    
-                    let frames = segments[currentSegment].frames;
-                    let show_new = false;
-                    if(frames){
-                        while((shape_idx+1 < frames.length) && (currentTime > frames[shape_idx+1].frame_timeStamp)) {
-                            shape_idx += 1;
-                            show_new = true;
-                        }
-                        
-                        if(show_new == true){
-                            let n_boxes = document.querySelectorAll(".bounding-box").length;
-                            let aspect_ratio = frames[shape_idx].aspect_ratio;
-                            let res = frames[shape_idx].res;
-                            //drawBoundingBox(0.0,0.0,0.5,0.5,"red","rory");
-                            for(let i = 0; i < frames[shape_idx].squares.length; i++){
-                                if(portrait){ //todo, can just send the correct aspect ratio instead?
-                                    let originX = (frames[shape_idx].squares[i].originX / (res / aspect_ratio));
-                                    let originY = (frames[shape_idx].squares[i].originY / res);
-                                    let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / (res / aspect_ratio));
-                                    let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / res);
-                                    drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
-                                } else {
-                                    let originX = (frames[shape_idx].squares[i].originX / res);
-                                    let originY = (frames[shape_idx].squares[i].originY / (res / aspect_ratio));
-                                    let length = ((frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res);
-                                    let height = ((frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio));
-                                    drawBoundingBox(originX, originY, length, height,yolo_classes[frames[shape_idx].squares[i].classIndex][1],yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
-                                }
-                            }
-                            let boundingBoxes = document.querySelectorAll(".bounding-box");
-                            for (let i = 0; i < n_boxes; i++) {
-                                boundingBoxes[i].remove();
-                            }
-                        }
-                    }
-                    
-                    progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
-                    timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
-                    updateGaps();
+            if (startTimestamp < 0) {
+                adjustedStartTimestamp = (24 * 3600) + startTimestamp; // Possible hack?
+            } else {
+                adjustedStartTimestamp = startTimestamp;
+            }
+
+            const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
+
+            // Check if frames exist; otherwise, fetch them dynamically (if not already fetching)
+            if (!segments[currentSegment].frames && !segments[currentSegment].fetchingFrames) {
+                segments[currentSegment].fetchingFrames = true; // Set fetching flag
+                try {
+                    const response = await fetch(`/get-frames?url=${encodeURIComponent(segments[currentSegment].url)}`);
+                    if (!response.ok) throw new Error(`Failed to fetch frames for ${segments[currentSegment].url}`);
+
+                    const frames = await response.json();
+                    segments[currentSegment].frames = frames; // Store fetched frames to avoid re-fetching
+                } catch (error) {
+                    console.error("Error fetching frames:", error);
                 }
+                segments[currentSegment].fetchingFrames = false; // Reset fetching flag
+            }
+
+            let frames = segments[currentSegment].frames;
+            let show_new = false;
+
+            if (frames) {
+                while ((shape_idx + 1 < frames.length) && (currentTime > frames[shape_idx + 1].frame_timeStamp)) {
+                    shape_idx += 1;
+                    show_new = true;
+                }
+
+                if (show_new) {
+                    let n_boxes = document.querySelectorAll(".bounding-box").length;
+                    let aspect_ratio = frames[shape_idx].aspect_ratio;
+                    let res = frames[shape_idx].res;
+
+                    for (let i = 0; i < frames[shape_idx].squares.length; i++) {
+                        if (portrait) {
+                            let originX = frames[shape_idx].squares[i].originX / (res / aspect_ratio);
+                            let originY = frames[shape_idx].squares[i].originY / res;
+                            let length = (frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / (res / aspect_ratio);
+                            let height = (frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / res;
+                            drawBoundingBox(originX, originY, length, height, yolo_classes[frames[shape_idx].squares[i].classIndex][1], yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                        } else {
+                            let originX = frames[shape_idx].squares[i].originX / res;
+                            let originY = frames[shape_idx].squares[i].originY / (res / aspect_ratio);
+                            let length = (frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res;
+                            let height = (frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio);
+                            drawBoundingBox(originX, originY, length, height, yolo_classes[frames[shape_idx].squares[i].classIndex][1], yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                        }
+                    }
+
+                    // Remove old bounding boxes
+                    let boundingBoxes = document.querySelectorAll(".bounding-box");
+                    for (let i = 0; i < n_boxes; i++) {
+                        boundingBoxes[i].remove();
+                    }
+                }
+            }
+
+            progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
+            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
+            updateGaps();
+        }
+
+
             
         
                 function updateGaps() {
