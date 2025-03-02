@@ -120,50 +120,10 @@
         double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
         double duration = [[segment valueForKey:@"duration"] doubleValue];
 
-        NSMutableArray *frameDicts = [NSMutableArray array];
-        NSArray *frames = [[segment valueForKey:@"frames"] array]; // Copy frames
-
-        for (NSManagedObject *frame in frames) {
-            double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-            double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-            int res = [[frame valueForKey:@"res"] intValue];
-
-            NSMutableArray *squareDicts = [NSMutableArray array];
-            NSArray *squares = [[frame valueForKey:@"squares"] array]; // Copy squares
-
-            for (NSManagedObject *square in squares) {
-                double originX = [[square valueForKey:@"originX"] doubleValue];
-                double originY = [[square valueForKey:@"originY"] doubleValue];
-                double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                NSDictionary *squareDict = @{
-                    @"originX": @(originX),
-                    @"originY": @(originY),
-                    @"bottomRightX": @(bottomRightX),
-                    @"bottomRightY": @(bottomRightY),
-                    @"classIndex": @(classIndex)
-                };
-
-                [squareDicts addObject:squareDict];
-            }
-
-            NSDictionary *frameDict = @{
-                @"frame_timeStamp": @(frameTimeStamp),
-                @"aspect_ratio": @(aspectRatio),
-                @"res": @(res),
-                @"squares": squareDicts
-            };
-
-            [frameDicts addObject:frameDict];
-        }
-
         NSDictionary *segmentDict = @{
             @"url": url,
             @"timeStamp": @(timeStamp),
-            @"duration": @(duration),
-            @"frames": frameDicts
+            @"duration": @(duration)
         };
 
         [processedSegments addObject:segmentDict];
