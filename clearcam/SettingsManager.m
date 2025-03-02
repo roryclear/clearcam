@@ -14,6 +14,7 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
+        [self loadResolutionSettings];
         [self loadYoloIndexes];
         [self loadEvents];
         [self loadDeleteOnLaunch];
@@ -79,10 +80,39 @@
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
+//old
+//self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
+//self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
+//self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
+- (void)loadResolutionSettings {
+    self.width = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_width"] ?: @"1920";
+    self.height = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_height"] ?: @"1080";
+    self.text_size = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_text_size"] ?: @"3";
+    self.preset = [[NSUserDefaults standardUserDefaults] stringForKey:@"resolution_preset"] ?: @"AVCaptureSessionPreset1920x1080";
+}
+
+// Save resolution settings to UserDefaults
+- (void)saveResolutionSettings {
+    [[NSUserDefaults standardUserDefaults] setObject:self.width forKey:@"resolution_width"];
+    [[NSUserDefaults standardUserDefaults] setObject:self.height forKey:@"resolution_height"];
+    [[NSUserDefaults standardUserDefaults] setObject:self.text_size forKey:@"resolution_text_size"];
+    [[NSUserDefaults standardUserDefaults] setObject:self.preset forKey:@"resolution_preset"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+// Update resolution settings
+- (void)updateResolutionWithWidth:(NSString *)width height:(NSString *)height textSize:(NSString *)textSize preset:(NSString *)preset {
+    self.width = width;
+    self.height = height;
+    self.text_size = textSize;
+    self.preset = preset;
+    [self saveResolutionSettings];
+}
+
 - (void)loadDeleteOnLaunch {
     if ([[NSUserDefaults standardUserDefaults] objectForKey:@"delete_on_launch"] == nil) {
         NSLog(@"no delete_on_launch value found");
-        self.delete_on_launch = NO;
+        self.delete_on_launch = YES;
     } else {
         self.delete_on_launch = [[NSUserDefaults standardUserDefaults] boolForKey:@"delete_on_launch"];
     }

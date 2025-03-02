@@ -3,27 +3,7 @@
 #import <Metal/Metal.h>
 #import "Yolo.h"
 #import "FileServer.h"
-
-@interface Resolution : NSObject //todo move
-@property (nonatomic, assign) int width;
-@property (nonatomic, assign) int height;
-@property (nonatomic, assign) int text_size;
-@property (nonatomic, strong) NSString *preset;
-- (instancetype)initWithWidth:(int)width height:(int)height text_size:(int)text_size preset:(NSString *)preset;
-@end
-@implementation Resolution
-
-- (instancetype)initWithWidth:(int)width height:(int)height text_size:(int)text_size preset:(NSString *)preset {
-    self = [super init];
-    if (self) {
-        _width = width;
-        _height = height;
-        _preset = preset;
-        _text_size = text_size;
-    }
-    return self;
-}
-@end
+#import "SettingsManager.h"
 
 @interface ViewController ()
 
@@ -50,7 +30,7 @@
 @property (nonatomic, strong) NSLock *segmentLock;
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
-@property (nonatomic, strong) Resolution *res;
+
 
 #define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
@@ -62,12 +42,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-        
-    //todo, move theses
-    //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
-    self.res = [[Resolution alloc] initWithWidth:1920 height:1080 text_size:3 preset:AVCaptureSessionPreset1920x1080];
-    //self.res = [[Resolution alloc] initWithWidth:1280 height:720 text_size:2 preset:AVCaptureSessionPreset1280x720];
-    
+            
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -100,9 +75,9 @@ NSMutableDictionary *classColorMap;
     
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
     [self handleDeviceOrientationChange];
-    [self setupCamera];
+    SettingsManager *settings = [SettingsManager sharedManager];
+    [self setupCameraWithWidth:settings.width height:settings.height]; //todo, use defaults!
     [self setupFPSLabel];
-    
 }
 
 - (void)dealloc {
@@ -135,9 +110,17 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)setupCamera {
+- (void)setupCameraWithWidth:(NSString *)width height:(NSString *)height {
     self.captureSession = [[AVCaptureSession alloc] init];
-    self.captureSession.sessionPreset = self.res.preset;
+    NSString *presetString = [NSString stringWithFormat:@"AVCaptureSessionPreset%@x%@", width, height];
+
+    if ([self.captureSession canSetSessionPreset:presetString]) {
+        self.captureSession.sessionPreset = presetString;
+    } else {
+        NSLog(@"Unsupported preset: %@", presetString);
+        return;
+    }
+
     AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
     NSError *error = nil;
     AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
@@ -146,15 +129,17 @@ NSMutableDictionary *classColorMap;
         return;
     }
     [self.captureSession addInput:input];
-    
+
     AVCaptureVideoDataOutput *output = [[AVCaptureVideoDataOutput alloc] init];
     output.videoSettings = @{(NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
     output.alwaysDiscardsLateVideoFrames = YES;
     [output setSampleBufferDelegate:self queue:dispatch_get_main_queue()];
     [self.captureSession addOutput:output];
+
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
     self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspect;
     [self.view.layer addSublayer:self.previewLayer];
+
     [self.captureSession startRunning];
     [self startNewRecording];
 }
@@ -190,6 +175,11 @@ NSMutableDictionary *classColorMap;
                                 segNumberString,
                                 [[timestamp componentsSeparatedByString:@"_"] lastObject]];
     
+    // Get resolution settings from SettingsManager
+    SettingsManager *settings = [SettingsManager sharedManager];
+    int videoWidth = [settings.width intValue];
+    int videoHeight = [settings.height intValue];
+    
     // Create a folder for the day within the documents directory
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
     NSURL *dayFolderURL = [documentsDirectory URLByAppendingPathComponent:self.dayFolderName];
@@ -212,12 +202,11 @@ NSMutableDictionary *classColorMap;
     }
     
     // Check if the device supports HEVC encoding
-    
     NSDictionary *videoSettings;
     videoSettings = @{
         AVVideoCodecKey: AVVideoCodecTypeH264, // Fallback to H.264
-        AVVideoWidthKey: @(self.res.width),
-        AVVideoHeightKey: @(self.res.height),
+        AVVideoWidthKey: @(videoWidth),
+        AVVideoHeightKey: @(videoHeight),
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
     
@@ -226,12 +215,12 @@ NSMutableDictionary *classColorMap;
         // HEVC is supported
         videoSettings = @{
             AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
-            AVVideoWidthKey: @(self.res.width),
-            AVVideoHeightKey: @(self.res.height),
+            AVVideoWidthKey: @(videoWidth),
+            AVVideoHeightKey: @(videoHeight),
             AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
         };
     } else {
-        NSLog(@"device doesn't support H265");
+        NSLog(@"Device doesn't support H265");
     }
         
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -245,8 +234,8 @@ NSMutableDictionary *classColorMap;
     
     NSDictionary *sourcePixelBufferAttributes = @{
         (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
-        (NSString *)kCVPixelBufferWidthKey: @(self.res.width),
-        (NSString *)kCVPixelBufferHeightKey: @(self.res.height)
+        (NSString *)kCVPixelBufferWidthKey: @(videoWidth),
+        (NSString *)kCVPixelBufferHeightKey: @(videoHeight)
     };
     
     self.adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:sourcePixelBufferAttributes];
@@ -263,8 +252,12 @@ NSMutableDictionary *classColorMap;
     self.isRecording = YES;
     [self.assetWriter startWriting];
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
-    [self ensureFreeDiskSpace];
+    if(![self ensureFreeDiskSpace]) {
+        [self stopRecording];
+        NSLog(@"no space, recording stopped. Delete some stuff");
+    }
 }
+
 
 - (void)drawSquareWithTopLeftX:(CGFloat)xOrigin topLeftY:(CGFloat)yOrigin bottomRightX:(CGFloat)bottomRightX bottomRightY:(CGFloat)bottomRightY classIndex:(int)classIndex aspectRatio:(float)aspectRatio {
     CGFloat leftEdgeX = (self.view.bounds.size.width - (self.view.bounds.size.height * aspectRatio)) / 2;
@@ -374,6 +367,21 @@ NSMutableDictionary *classColorMap;
 
     return resizedImage.CGImage;
 }
+
+- (void)stopRecording {
+    if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) {
+        NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
+        return;
+    }
+    
+    self.isRecording = NO;
+    [self.videoWriterInput markAsFinished];
+    
+    [self.assetWriter finishWritingWithCompletionHandler:^{
+        NSLog(@"Recording stopped.");
+    }];
+}
+
 
 - (void)finishRecording {
     if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) {
@@ -496,7 +504,7 @@ NSMutableDictionary *classColorMap;
     return freeSpace;
 }
 
-- (void)ensureFreeDiskSpace {
+- (BOOL)ensureFreeDiskSpace {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
     NSInteger lastDeletedDayIndex = [defaults integerForKey:@"LastDeletedDayIndex"];
@@ -516,14 +524,14 @@ NSMutableDictionary *classColorMap;
             
             if (fetchError) {
                 NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-                return;
+                return YES;
             }
             
             if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
                 NSLog(@"No more DayEntities available. Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
-                return;
+                return YES;
             }
             
             // Fetch event timestamps from Core Data
@@ -625,7 +633,7 @@ NSMutableDictionary *classColorMap;
                                 }
 
                                 deletedFile = YES;
-                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return;
+                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return YES;
 
                                 // Save indexes
                                 [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
@@ -651,14 +659,16 @@ NSMutableDictionary *classColorMap;
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
                 [defaults synchronize];
-                return;
+                return NO;
             }
         }
     } @catch (NSException *exception) {
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
+        return YES;
     }
 
     NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
+    return YES;
 }
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
@@ -810,77 +820,97 @@ NSMutableDictionary *classColorMap;
     return pixelBuffer;
 }
 
-- (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer{
-    NSInteger pixelSize = self.res.text_size*2;
-    NSInteger spaceSize = self.res.text_size;
+- (CVPixelBufferRef)addTimeStampToPixelBuffer:(CVPixelBufferRef)pixelBuffer {
+    // Get text_size from SettingsManager
+    SettingsManager *settings = [SettingsManager sharedManager];
+    NSInteger textSize = [settings.text_size intValue];
+    
+    NSInteger pixelSize = textSize * 2;
+    NSInteger spaceSize = textSize;
     NSInteger digitOriginX = spaceSize;
     NSInteger digitOriginY = spaceSize;
-    NSInteger height = spaceSize*2 + pixelSize*5;
+    NSInteger height = spaceSize * 2 + pixelSize * 5;
 
     NSDate *currentDate = [NSDate date];
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
     NSString *timestamp = [dateFormatter stringFromDate:currentDate];
-        
-    
-    //check roatation
+
+    // Check rotation
     CGAffineTransform transform = self.videoWriterInput.transform;
     CGFloat angle = atan2(transform.b, transform.a);
 
     // Convert radians to degrees
     CGFloat degrees = angle * (180.0 / M_PI);
-    
+
     size_t width_res = CVPixelBufferGetWidth(pixelBuffer);
     size_t height_res = CVPixelBufferGetHeight(pixelBuffer);
+
     if (degrees == 90 || degrees == -90) {
-        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:height_res-(pixelSize*3+spaceSize)*timestamp.length width:height height:(pixelSize*3+spaceSize)*timestamp.length opacity:0.4];
+        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                   withColor:[UIColor blackColor]
+                                                    originX:0
+                                                    originY:height_res - (pixelSize * 3 + spaceSize) * timestamp.length
+                                                     width:height
+                                                    height:(pixelSize * 3 + spaceSize) * timestamp.length
+                                                   opacity:0.4];
     } else if (degrees == 180 || degrees == -180) {
-        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:width_res-(pixelSize*3+spaceSize)*timestamp.length originY:height_res-height width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
+        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                   withColor:[UIColor blackColor]
+                                                    originX:width_res - (pixelSize * 3 + spaceSize) * timestamp.length
+                                                    originY:height_res - height
+                                                     width:(pixelSize * 3 + spaceSize) * timestamp.length
+                                                    height:height
+                                                   opacity:0.4];
     } else {
-        //no rotation
-        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer withColor:[UIColor blackColor] originX:0 originY:0 width:(pixelSize*3+spaceSize)*timestamp.length height:height opacity:0.4];
+        // No rotation
+        pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
+                                                   withColor:[UIColor blackColor]
+                                                    originX:0
+                                                    originY:0
+                                                     width:(pixelSize * 3 + spaceSize) * timestamp.length
+                                                    height:height
+                                                   opacity:0.4];
     }
-    
-    
+
     for (NSUInteger k = 0; k < [timestamp length]; k++) {
         unichar character = [timestamp characterAtIndex:k];
-        if(character == ' '){
-            digitOriginX += pixelSize*3;
+        if (character == ' ') {
+            digitOriginX += pixelSize * 3;
             continue;
         }
         NSString *key = [NSString stringWithFormat:@"%C", character];
         for (int i = 0; i < [self.digits[key] count]; i++) {
             if (degrees == 90 || degrees == -90) {
                 pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
-                                                            withColor:[UIColor whiteColor]
+                                                           withColor:[UIColor whiteColor]
                                                             originX:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
-                                                             originY:height_res - (digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize) - ([self.digits[key][i][2] doubleValue] * pixelSize)
-                                                            width:[self.digits[key][i][3] doubleValue] * pixelSize
+                                                            originY:height_res - (digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize) - ([self.digits[key][i][2] doubleValue] * pixelSize)
+                                                             width:[self.digits[key][i][3] doubleValue] * pixelSize
                                                             height:[self.digits[key][i][2] doubleValue] * pixelSize
-                                                            opacity:1];
+                                                           opacity:1];
             } else if (degrees == 180 || degrees == -180) {
                 pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
-                                                            withColor:[UIColor whiteColor]
-                                                            originX: width_res - (digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize) - ([self.digits[key][i][2] doubleValue] * pixelSize)
-                                                            originY: height_res - (digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize) - ([self.digits[key][i][3] doubleValue] * pixelSize)
-                                                            width:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                           withColor:[UIColor whiteColor]
+                                                            originX:width_res - (digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize) - ([self.digits[key][i][2] doubleValue] * pixelSize)
+                                                            originY:height_res - (digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize) - ([self.digits[key][i][3] doubleValue] * pixelSize)
+                                                             width:[self.digits[key][i][2] doubleValue] * pixelSize
                                                             height:[self.digits[key][i][3] doubleValue] * pixelSize
-                                                            opacity:1];
+                                                           opacity:1];
             } else {
                 pixelBuffer = [self addColoredRectangleToPixelBuffer:pixelBuffer
-                                                            withColor:[UIColor whiteColor]
-                                                             originX:digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize
-                                                             originY:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
-                                                               width:[self.digits[key][i][2] doubleValue] * pixelSize
-                                                               height:[self.digits[key][i][3] doubleValue] * pixelSize
-                                                             opacity:1];
+                                                           withColor:[UIColor whiteColor]
+                                                            originX:digitOriginX + [self.digits[key][i][0] doubleValue] * pixelSize
+                                                            originY:digitOriginY + [self.digits[key][i][1] doubleValue] * pixelSize
+                                                             width:[self.digits[key][i][2] doubleValue] * pixelSize
+                                                            height:[self.digits[key][i][3] doubleValue] * pixelSize
+                                                           opacity:1];
             }
         }
-        digitOriginX += pixelSize*3 + spaceSize;
+        digitOriginX += pixelSize * 3 + spaceSize;
     }
     return pixelBuffer;
 }
-
 
 // Helper method to create a CGContext for a CVPixelBufferRef
 - (CGContextRef)createContextForPixelBuffer:(CVPixelBufferRef)pixelBuffer {
