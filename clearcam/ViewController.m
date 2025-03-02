@@ -30,7 +30,7 @@
 @property (nonatomic, strong) NSLock *segmentLock;
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
-
+@property (nonatomic, strong) dispatch_queue_t segmentQueue;
 
 #define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
@@ -42,7 +42,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-            
+    self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -409,10 +409,10 @@ NSMutableDictionary *classColorMap;
         NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
 
         // Create a local copy of current_segment_squares to avoid mutation issues
-        NSArray *segmentSquaresCopy;
-        @synchronized (self.current_segment_squares) {
+        __block NSArray *segmentSquaresCopy;
+        dispatch_sync(self.segmentQueue, ^{
             segmentSquaresCopy = [self.current_segment_squares copy];
-        }
+        });
 
         [self.backgroundContext performBlockAndWait:^{
             NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
@@ -468,9 +468,9 @@ NSMutableDictionary *classColorMap;
             }
 
             // Clean up memory after saving, still within the same thread
-            @synchronized (self.current_segment_squares) {
+            dispatch_async(self.segmentQueue, ^{
                 [self.current_segment_squares removeAllObjects];
-            }
+            });
         }];
 
         // Start new recording after the block completes
@@ -780,12 +780,12 @@ NSMutableDictionary *classColorMap;
 
                     frame[@"squares"] = frameSquares;
 
-                    @synchronized(strongSelf) {
-                        if (!strongSelf.current_segment_squares) {
-                            strongSelf.current_segment_squares = [[NSMutableArray alloc] init];
+                    dispatch_async(self.segmentQueue, ^{
+                        if (!self.current_segment_squares) {
+                            self.current_segment_squares = [[NSMutableArray alloc] init];
                         }
-                        [strongSelf.current_segment_squares addObject:frame];
-                    }
+                        [self.current_segment_squares addObject:frame];
+                    });
 
                     [strongSelf updateFPS];
                     strongSelf.isProcessing = NO;
