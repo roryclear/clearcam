@@ -1019,7 +1019,9 @@
                             currentSegment = i;
                         }
                         videoPlayers[video_index].src = segments[currentSegment].url;
-                        videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                        if(!startParam){ //play start of segment if start param, otherwise go to live
+                            videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                        }
                         videoPlayers[video_index].play().catch(() => {});
                     }
                     //alert(segments.length);
