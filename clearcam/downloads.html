@@ -33,7 +33,7 @@
                 const startSeconds =
                     dateObj.getHours() * 3600 +
                     dateObj.getMinutes() * 60 +
-                    dateObj.getSeconds();
+                    dateObj.getSeconds() - 2; //slightly before so you can see?
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -65,9 +65,11 @@
         }
 
         function playEvent(date, startSeconds) {
-            const referrer = document.referrer || '/';
+            let referrer = document.referrer || '/';
+            referrer = referrer.split('?')[0];
             window.location.href = `${referrer}?date=${date}&start=${startSeconds}`;
         }
+
 
         // Load events when the page loads
         window.onload = fetchEvents;
