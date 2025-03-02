@@ -1003,13 +1003,24 @@
                     const dateParam = getQueryParam("date");
                     const fetchStartTime = new Date();
                     currentDate = formatDate(fetchStartTime);
-                    if(currentDate == dateParam || !dateParam) {
+                    const startParam = getQueryParam("start");
+                    if((currentDate == dateParam || !dateParam) && !startParam) {
                         if (isPlaying && segments.length > 0) {
                             currentSegment = segments.length - 1;
                             videoPlayers[video_index].src = segments[currentSegment].url;
                             videoPlayers[video_index].currentTime = segments[currentSegment].duration;
                             videoPlayers[video_index].play().catch(() => {});
                         }
+                    } else if(startParam){
+                        for(let i = 0; i < segments.length; i++){
+                            if(segments[i].timeStamp > startParam){
+                                break;
+                            }
+                            currentSegment = i;
+                        }
+                        videoPlayers[video_index].src = segments[currentSegment].url;
+                        videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                        videoPlayers[video_index].play().catch(() => {});
                     }
                 }
 
@@ -1096,6 +1107,3 @@
     </script>
 </body>
 </html>
-
-
-
