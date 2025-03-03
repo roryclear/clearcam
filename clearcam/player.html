@@ -752,7 +752,26 @@
 
                                     if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
                                         (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
-                                        playSegment();
+                                        const currentVideo = videoPlayers[video_index];
+                                        currentVideo.src = segments[currentSegment].url;
+                                        currentVideo.currentTime = 0;
+                                        currentVideo.style.display = "block";
+
+                                        // Hide other video players
+                                        for (let i = 1; i < videoPlayers.length; i++) {
+                                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                                        }
+
+                                        currentVideo.play();
+                                        isPlaying = true;
+                                        playIcon.style.display = "none";
+                                        pauseIcon.style.display = "block";
+
+                                        // Adjust container dimensions based on video orientation
+                                        currentVideo.addEventListener('loadedmetadata', () => {
+                                            adjustContainerForOrientation(currentVideo);
+                                        });
+                                        preloadNextSegments();
                                     }
                                     if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
                                         isWaitingForNextSegment = false;
@@ -916,31 +935,6 @@
             adjustContainerForOrientation(videoElement);
         });
 
-                function playSegment() {
-                    if (segments.length > 0) {
-                        const currentVideo = videoPlayers[video_index];
-                        currentVideo.src = segments[currentSegment].url;
-                        currentVideo.currentTime = 0;
-                        currentVideo.style.display = "block";
-
-                        // Hide other video players
-                        for (let i = 1; i < videoPlayers.length; i++) {
-                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
-                        }
-
-                        currentVideo.play();
-                        isPlaying = true;
-                        playIcon.style.display = "none";
-                        pauseIcon.style.display = "block";
-
-                        // Adjust container dimensions based on video orientation
-                        currentVideo.addEventListener('loadedmetadata', () => {
-                            adjustContainerForOrientation(currentVideo);
-                        });
-
-                        preloadNextSegments();
-                    }
-                }
 
                 function switchToNextSegment() {
                     if (currentSegment + 1 < segments.length) {
