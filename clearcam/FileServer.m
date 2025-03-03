@@ -120,7 +120,67 @@
         double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
         double duration = [[segment valueForKey:@"duration"] doubleValue];
 
-        NSMutableArray *frameDicts = [NSMutableArray array];
+        NSDictionary *segmentDict = @{
+            @"url": url,
+            @"timeStamp": @(timeStamp),
+            @"duration": @(duration)
+        };
+
+        [processedSegments addObject:segmentDict];
+    }
+
+    NSLog(@"Fetched and processed %lu segments (start=%ld) for date %@",
+          (unsigned long)processedSegments.count, (long)start, dateParam);
+
+    return processedSegments;
+}
+
+- (NSArray *)fetchFramesWithURLsFromCoreDataForDateParam:(NSString *)dateParam
+                                                   start:(NSInteger)start
+                                                 context:(NSManagedObjectContext *)context {
+    if (!context) {
+        NSLog(@"Context is nil, skipping fetch.");
+        return @[];
+    }
+
+    __block NSArray *copiedSegments = @[];
+
+    [context performBlockAndWait:^{
+        NSError *error = nil;
+
+        // Fetch the DayEntity for the given date
+        NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
+        dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+
+        NSArray *fetchedDays = [context executeFetchRequest:dayFetchRequest error:&error];
+
+        if (error) {
+            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
+            return;
+        }
+
+        if (fetchedDays.count == 0) {
+            NSLog(@"No DayEntity found for date %@", dateParam);
+            return;
+        }
+
+        NSManagedObject *dayEntity = fetchedDays.firstObject;
+        NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
+
+        // Slice the segments based on the 'start' parameter to avoid fetching everything
+        if (start >= segments.count) {
+            NSLog(@"Start index out of range (%ld/%lu)", (long)start, (unsigned long)segments.count);
+            return;
+        }
+
+        copiedSegments = [[segments array] subarrayWithRange:NSMakeRange(start, segments.count - start)];
+    }];
+
+    // Process outside of performBlockAndWait to avoid blocking Core Data
+    NSMutableArray *framesWithURLs = [NSMutableArray array];
+
+    for (NSManagedObject *segment in copiedSegments) {
+        NSString *url = [segment valueForKey:@"url"];
         NSArray *frames = [[segment valueForKey:@"frames"] array]; // Copy frames
 
         for (NSManagedObject *frame in frames) {
@@ -150,31 +210,22 @@
             }
 
             NSDictionary *frameDict = @{
+                @"url": url,  // Include the segment's URL
                 @"frame_timeStamp": @(frameTimeStamp),
                 @"aspect_ratio": @(aspectRatio),
                 @"res": @(res),
                 @"squares": squareDicts
             };
 
-            [frameDicts addObject:frameDict];
+            [framesWithURLs addObject:frameDict];
         }
-
-        NSDictionary *segmentDict = @{
-            @"url": url,
-            @"timeStamp": @(timeStamp),
-            @"duration": @(duration),
-            @"frames": frameDicts
-        };
-
-        [processedSegments addObject:segmentDict];
     }
 
-    NSLog(@"Fetched and processed %lu segments (start=%ld) for date %@",
-          (unsigned long)processedSegments.count, (long)start, dateParam);
+    NSLog(@"Fetched and processed %lu frames with URLs (start=%ld) for date %@",
+          (unsigned long)framesWithURLs.count, (long)start, dateParam);
 
-    return processedSegments;
+    return framesWithURLs;
 }
-
 
 - (void)startHTTPServerWithBasePath:(NSString *)basePath {
     @try {
@@ -373,6 +424,45 @@
         send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
     }
     
+    if ([filePath hasPrefix:@"get-frames"]) {
+        NSString *urlParam = nil;
+        NSRange queryRange = [filePath rangeOfString:@"?"];
+        if (queryRange.location != NSNotFound) {
+            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
+            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
+            for (NSString *item in queryItems) {
+                NSArray *keyValue = [item componentsSeparatedByString:@"="];
+                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"url"]) {
+                    urlParam = keyValue[1];
+                    break;
+                }
+            }
+        }
+
+        if (!urlParam) {
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Missing or invalid url parameter\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        NSArray *framesForURL = [self fetchFramesForURL:urlParam context:self.context];
+        
+        if (framesForURL.count == 0) {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"No frames found for the given URL\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:framesForURL options:0 error:nil];
+        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+    }
+    
     if ([filePath hasPrefix:@"get-events"]) {
         NSArray *eventDataArray = [self fetchEventDataFromCoreData:self.context];
         
@@ -566,6 +656,84 @@
     NSLog(@"Successfully deleted EventEntity with timeStamp: %lf", timeStamp);
     return YES;
 }
+
+- (NSArray *)fetchFramesForURL:(NSString *)url context:(NSManagedObjectContext *)context {
+    if (!context) {
+        NSLog(@"Context is nil, skipping fetch.");
+        return @[];
+    }
+
+    __block NSArray *copiedSegments = @[];
+
+    [context performBlockAndWait:^{
+        NSError *error = nil;
+
+        // Fetch the SegmentEntity that matches the given URL
+        NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+        segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", url];
+
+        copiedSegments = [context executeFetchRequest:segmentFetchRequest error:&error];
+
+        if (error) {
+            NSLog(@"Failed to fetch segments for URL %@: %@", url, error.localizedDescription);
+            return;
+        }
+
+        if (copiedSegments.count == 0) {
+            NSLog(@"No segments found for URL %@", url);
+            return;
+        }
+    }];
+
+    // Process frames outside of performBlockAndWait to avoid blocking Core Data
+    NSMutableArray *framesForURL = [NSMutableArray array];
+
+    for (NSManagedObject *segment in copiedSegments) {
+        NSArray *frames = [[segment valueForKey:@"frames"] array]; // Copy frames
+
+        for (NSManagedObject *frame in frames) {
+            double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+            double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+            int res = [[frame valueForKey:@"res"] intValue];
+
+            NSMutableArray *squareDicts = [NSMutableArray array];
+            NSArray *squares = [[frame valueForKey:@"squares"] array]; // Copy squares
+
+            for (NSManagedObject *square in squares) {
+                double originX = [[square valueForKey:@"originX"] doubleValue];
+                double originY = [[square valueForKey:@"originY"] doubleValue];
+                double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
+                double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
+                int classIndex = [[square valueForKey:@"classIndex"] intValue];
+
+                NSDictionary *squareDict = @{
+                    @"originX": @(originX),
+                    @"originY": @(originY),
+                    @"bottomRightX": @(bottomRightX),
+                    @"bottomRightY": @(bottomRightY),
+                    @"classIndex": @(classIndex)
+                };
+
+                [squareDicts addObject:squareDict];
+            }
+
+            NSDictionary *frameDict = @{
+                @"url": url,  // Include the segment's URL
+                @"frame_timeStamp": @(frameTimeStamp),
+                @"aspect_ratio": @(aspectRatio),
+                @"res": @(res),
+                @"squares": squareDicts
+            };
+
+            [framesForURL addObject:frameDict];
+        }
+    }
+
+    NSLog(@"Fetched and processed %lu frames for URL %@", (unsigned long)framesForURL.count, url);
+
+    return framesForURL;
+}
+
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
