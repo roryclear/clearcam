@@ -1026,7 +1026,7 @@
                     document.getElementById('fullscreenBtn').style.display = 'none';
                 }
 
-                function handleVisibilityAndLoad() { //todo, clean
+                async function handleVisibilityAndLoad() { //todo, clean
                     let currentDate = "";
                     const dateParam = getQueryParam("date");
                     const fetchStartTime = new Date();
@@ -1037,7 +1037,6 @@
                             currentSegment = segments.length - 1;
                             videoPlayers[video_index].src = segments[currentSegment].url;
                             videoPlayers[video_index].currentTime = segments[currentSegment].duration;
-                            videoPlayers[video_index].play().catch(() => {});
                         }
                     } else if(startParam){
                         for(let i = 0; i < segments.length; i++){
@@ -1057,9 +1056,22 @@
                                 videoPlayers[video_index].currentTime = segments[currentSegment].duration;
                             }
                         }
-                        videoPlayers[video_index].play().catch(() => {});
-                        window.history.replaceState({}, document.title, window.location.pathname); //remove params
                     }
+
+                    try { //todo hack fix because it fetches segment and frames for 0
+                        segments[currentSegment].fetchingFrames = true;
+                        const response = await fetch(`/get-frames?url=${encodeURIComponent(segments[currentSegment].url)}`);
+                        if (!response.ok) throw new Error(`Failed to fetch frames for ${segments[currentSegment].url}`);
+                        const frames = await response.json();
+                        segments[currentSegment].frames = frames; // Store frames to prevent refetching
+                        segments[currentSegment].fetchingFrames = false;
+                    } catch (error) {
+                        console.error("Error fetching frames:", error);
+                    }
+                    
+                    //alert("PLAY!");
+                    videoPlayers[video_index].play().catch(() => {});
+                    window.history.replaceState({}, document.title, window.location.pathname); //remove params
                     //alert(segments.length);
                 }
 
@@ -1067,14 +1079,14 @@
                 document.addEventListener("visibilitychange", async () => {
                     if (!document.hidden) {
                         await fetchSegments();
-                        handleVisibilityAndLoad();
+                        await handleVisibilityAndLoad();
                     }
                 });
 
                 // Handle page load/refresh
                 window.addEventListener("load", async () => {
                     await fetchSegments();
-                    handleVisibilityAndLoad();
+                    await handleVisibilityAndLoad();
                 });
                 
                 function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
