@@ -847,7 +847,6 @@
                                 try {
                                     const response = await fetch(`/get-frames?url=${encodeURIComponent(segment.url)}`);
                                     if (!response.ok) throw new Error(`Failed to fetch frames for ${segment.url}`);
-
                                     const frames = await response.json();
                                     segment.frames = frames; // Store frames to prevent refetching
                                 } catch (error) {
@@ -929,7 +928,6 @@
                             videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
                         }
 
-                        // Play the video
                         currentVideo.play();
                         isPlaying = true;
                         playIcon.style.display = "none";
@@ -1034,12 +1032,6 @@
                     document.getElementById('fullscreenBtn').style.display = 'none';
                 }
 
-                
-                async function fetchSegmentsAndHandleVisibilityAndLoad() {
-                    await fetchSegments();
-                    handleVisibilityAndLoad();
-                }
-
                 function handleVisibilityAndLoad() { //todo, clean
                     let currentDate = "";
                     const dateParam = getQueryParam("date");
@@ -1080,13 +1072,15 @@
                 // Handle visibility change
                 document.addEventListener("visibilitychange", async () => {
                     if (!document.hidden) {
-                        await fetchSegmentsAndHandleVisibilityAndLoad();
+                        await fetchSegments();
+                        handleVisibilityAndLoad();
                     }
                 });
 
                 // Handle page load/refresh
                 window.addEventListener("load", async () => {
-                    await fetchSegmentsAndHandleVisibilityAndLoad();
+                    await fetchSegments();
+                    handleVisibilityAndLoad();
                 });
                 
                 function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
@@ -1160,3 +1154,4 @@
     </script>
 </body>
 </html>
+
