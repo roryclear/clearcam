@@ -393,18 +393,7 @@
         NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam
                                                                                    start:start
                                                                                  context:self.context];
-        if (segmentsForDate.count == 0) {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"No segments found or start index out of range\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-            return;
-        }
-
-        NSData *slicedJsonData = [NSJSONSerialization dataWithJSONObject:segmentsForDate options:0 error:nil];
-        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)slicedJsonData.length];
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        send(clientSocket, slicedJsonData.bytes, slicedJsonData.length, 0);
+        [self sendJson200:segmentsForDate toClient:clientSocket];
     }
     
     if ([filePath hasPrefix:@"get-frames"]) {
