@@ -768,6 +768,71 @@
                     }
                 }
 
+            async function fetchSegmentsAndLoad() { //todo, this is not a great fix
+                if (isFetchingSegments) return;
+                isFetchingSegments = true;
+
+                try {
+                    const response = await fetch(`/get-segments?date=${currentDate}&start=${n_segments}`);
+                    if (response.ok) {
+                        const newSegments = await response.json();
+                        if (Array.isArray(newSegments)) {
+                            const oldTotalDuration = totalDuration;
+
+                            let cumulativeStart = totalDuration;
+                            let i = 0;
+                            let next_i = 1;
+                            while(next_i < newSegments.length) {
+                                if(newSegments[i].url.length == 0){
+                                    i=next_i;
+                                    next_i+=1;
+                                }
+                                while(newSegments[next_i].url.length == 0 && next_i < newSegments.length){
+                                    next_i += 1;
+                                }
+                                if(next_i >= newSegments.length){
+                                    break;
+                                }
+                                const segment = newSegments[i];
+                                const timeDifference = newSegments[next_i].timeStamp - newSegments[i].timeStamp;
+                                const lostFrames = timeDifference - segment.duration;
+                                const currentCumulativeStart = cumulativeStart;
+                                cumulativeStart += timeDifference;
+                                segments.push({
+                                    ...segment,
+                                    cumulativeStart: currentCumulativeStart,
+                                    lostFrames: lostFrames > 0 ? lostFrames : 0,
+                                });
+                                if(lostFrames > 1){ //todo why 60
+                                    gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
+                                }
+                                i=next_i;
+                                next_i+=1;
+                            }
+                            n_segments += i;
+                            totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
+                            if (totalDuration !== oldTotalDuration) {
+                                handleVisibilityAndLoad();
+                                updateTimeline();
+                                preloadNextSegments();
+                                if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
+                                    (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
+                                    playSegment();
+                                }
+                                if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
+                                    isWaitingForNextSegment = false;
+                                    switchToNextSegment();
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch segments:', error);
+                } finally {
+                    isFetchingSegments = false;
+                }
+            }
+        
 
                 function formatTime(seconds) {
                     const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -1072,14 +1137,13 @@
                 // Handle visibility change
                 document.addEventListener("visibilitychange", async () => {
                     if (!document.hidden) {
-                        await fetchSegments();
-                        handleVisibilityAndLoad();
+                        await fetchSegmentsAndLoad();
                     }
                 });
 
                 // Handle page load/refresh
                 window.addEventListener("load", async () => {
-                    await fetchSegments();
+                    await fetchSegmentsAndLoad();
                     handleVisibilityAndLoad();
                 });
                 
