@@ -261,6 +261,14 @@
     }
 }
 
+- (void)sendJson200:(NSArray *)array toClient:(int)clientSocket {
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:array options:0 error:&error];
+    NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
+    send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+    send(clientSocket, jsonData.bytes, jsonData.length, 0);
+}
+
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
     if(self.segment_length == 60){ //todo, only for live req
         self.segment_length = 1;
@@ -315,19 +323,7 @@
     }
     if ([filePath hasPrefix:@"get-classes"]) {
         NSArray<NSNumber *> *currentClasses = [SettingsManager sharedManager].yolo_indexes;
-        NSError *error;
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:currentClasses options:0 error:&error];
-        
-        if (!jsonData) {
-            NSLog(@"Error serializing JSON: %@", error);
-            NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            return;
-        }
-        
-        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+        [self sendJson200:currentClasses toClient:clientSocket];
         return;
     }
     
@@ -336,22 +332,9 @@
         
         // Respond immediately with cached list
         @synchronized (self.scanner.cachedOpenPorts) {
-            NSError *error;
-            NSData *jsonData = [NSJSONSerialization dataWithJSONObject:self.scanner.cachedOpenPorts options:0 error:&error];
-            
-            if (!jsonData) {
-                NSLog(@"Error serializing JSON: %@", error);
-                NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
-                send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-                return;
-            }
-            
-            NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, jsonData.bytes, jsonData.length, 0);
+            [self sendJson200:self.scanner.cachedOpenPorts toClient:clientSocket];
         }
         
-        // Update cached list asynchronously
         [self.scanner updateCachedOpenPortsForPort:8080];
         return;
     }
@@ -446,21 +429,11 @@
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-
-        NSArray *framesForURL = [self fetchFramesForURL:urlParam context:self.context];
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:framesForURL options:0 error:nil];
-        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        send(clientSocket, jsonData.bytes, jsonData.length, 0);
+        
+        [self sendJson200:[self fetchFramesForURL:urlParam context:self.context] toClient:clientSocket];
     }
     
-    if ([filePath hasPrefix:@"get-events"]) {
-        NSArray *eventDataArray = [self fetchEventDataFromCoreData:self.context];
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:eventDataArray options:0 error:nil];
-        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        send(clientSocket, jsonData.bytes, jsonData.length, 0);
-    }
+    if ([filePath hasPrefix:@"get-events"]) [self sendJson200: [self fetchEventDataFromCoreData:self.context] toClient:clientSocket];
 
     if ([filePath hasPrefix:@"delete-event"]) {
         NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
