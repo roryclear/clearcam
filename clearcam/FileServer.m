@@ -563,40 +563,15 @@
 }
 
 - (BOOL)deleteEventWithTimeStamp:(NSTimeInterval)timeStamp {
-    if (!self.context) {
-        NSLog(@"Error: Core Data context is nil!");
-        return NO;
-    }
-
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-    
-    // TODO, this delete everything within a second of the rounded timestamp, fine for now
     double epsilon = 1;
     fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
-
     NSError *error = nil;
     NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
-
-    if (error) {
-        NSLog(@"Core Data Fetch Error: %@", error.localizedDescription);
-        return NO;
-    }
-
-    if (events.count == 0) {
-        NSLog(@"No EventEntity found for timeStamp: %lf", timeStamp);
-        return NO;
-    }
-
-    for (NSManagedObject *event in events) {
-        [self.context deleteObject:event];
-    }
-
-    if (![self.context save:&error]) {
-        NSLog(@"Core Data Save Error: %@", error.localizedDescription);
-        return NO;
-    }
-
-    NSLog(@"Successfully deleted EventEntity with timeStamp: %lf", timeStamp);
+    if (error) return NO;
+    if (events.count == 0) return YES; //already gone?
+    for (NSManagedObject *event in events) [self.context deleteObject:event];
+    if (![self.context save:&error]) return NO;
     return YES;
 }
 
