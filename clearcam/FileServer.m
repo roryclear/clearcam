@@ -448,15 +448,6 @@
         }
 
         NSArray *framesForURL = [self fetchFramesForURL:urlParam context:self.context];
-        
-        if (framesForURL.count == 0) {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"No frames found for the given URL\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-            return;
-        }
-
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:framesForURL options:0 error:nil];
         NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
         send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
@@ -465,15 +456,6 @@
     
     if ([filePath hasPrefix:@"get-events"]) {
         NSArray *eventDataArray = [self fetchEventDataFromCoreData:self.context];
-        
-        if (eventDataArray.count == 0) {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"No events found\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-            return;
-        }
-
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:eventDataArray options:0 error:nil];
         NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)jsonData.length];
         send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
@@ -481,7 +463,6 @@
     }
 
     if ([filePath hasPrefix:@"delete-event"]) {
-        // Extract the timeStamp from the URL query
         NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
         NSString *eventTimeStamp = nil;
         
@@ -816,6 +797,5 @@
         NSLog(@"All DayEntity and EventEntity objects deleted successfully");
     }
 }
-
     
 @end
