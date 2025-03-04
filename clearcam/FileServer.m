@@ -421,32 +421,75 @@
             return;
         }
 
-        // Convert timeStamp to YYYY-MM-DD format
         NSTimeInterval timeStamp = [timeStampParam doubleValue];
         NSDate *date = [NSDate dateWithTimeIntervalSince1970:timeStamp];
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         [formatter setDateFormat:@"yyyy-MM-dd"];
         NSString *formattedDate = [formatter stringFromDate:date];
 
-        // Fetch segments from Core Data
         NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate
                                                                             start:0
                                                                           context:self.context];
 
-        // Get the first segment's URL
-        NSString *firstSegmentURL = nil;
-        if (segments.count > 0) {
-            NSDictionary *firstSegment = segments.firstObject;
-            firstSegmentURL = firstSegment[@"url"];
+        if (segments.count == 0) {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"[{\"error\": \"No segments found for this date\"}]";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
         }
 
-        // Prepare response
-        NSArray *responseArray = firstSegmentURL ? @[@{@"url": firstSegmentURL}] : @[];
+        NSString *segmentURL = segments.firstObject[@"url"];
+        if (!segmentURL || segmentURL.length == 0) {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"[{\"error\": \"Segment URL is empty\"}]";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
 
-        // Send JSON response
-        [self sendJson200:responseArray toClient:clientSocket];
+        NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
+
+        if (![[NSFileManager defaultManager] fileExistsAtPath:fullFilePath]) {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"[{\"error\": \"File not found\"}]";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        // 🔹 Open the file
+        FILE *file = fopen([fullFilePath UTF8String], "rb");
+        if (!file) {
+            NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"[{\"error\": \"Failed to open file\"}]";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        fseek(file, 0, SEEK_END);
+        NSUInteger fileSize = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: video/mp4\r\n");
+        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"video.mp4\"\r\n"); // 🔹 Forces download
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
+        dprintf(clientSocket, "\r\n");
+
+        char buffer[64 * 1024];
+        size_t bytesRead;
+        while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+            ssize_t bytesSent = send(clientSocket, buffer, bytesRead, 0);
+            if (bytesSent < 0) {
+                NSLog(@"Error sending file data: %s", strerror(errno));
+                break;
+            }
+        }
+
+        fclose(file);
     }
-
     
     if ([filePath hasPrefix:@"get-frames"]) {
         NSString *urlParam = nil;
