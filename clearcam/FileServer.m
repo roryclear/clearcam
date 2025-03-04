@@ -397,7 +397,6 @@
     }
 
     if ([filePath hasPrefix:@"download"]) {
-        NSUInteger numSegments = 10;
         NSString *timeStampParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
 
@@ -441,28 +440,38 @@
             return;
         }
 
-        // ✅ Find last segment with timeStamp < relativeTimeStamp
+        // ✅ Find the last segment that starts more than 60 seconds before `relativeTimeStamp`
         NSInteger startIndex = -1;
         for (NSInteger i = segments.count - 1; i >= 0; i--) {
-            NSDictionary *segment = segments[i];
-            NSTimeInterval segmentTimeStamp = [segment[@"timeStamp"] doubleValue];
+            NSTimeInterval segmentTimeStamp = [segments[i][@"timeStamp"] doubleValue];
 
-            if (segmentTimeStamp < relativeTimeStamp) {
+            if (segmentTimeStamp < relativeTimeStamp - 60) {
                 startIndex = i;
                 break;
             }
         }
 
-        if (startIndex == -1) {
-            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No valid starting segment found\"}]";
-            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
-            return;
+        if (startIndex == -1) startIndex = 0; // If nothing is 60 sec behind, start from the first segment
+
+        // ✅ Find the first segment that ENDS more than 60 seconds AFTER `relativeTimeStamp`
+        NSInteger endIndex = -1;
+        for (NSInteger i = startIndex; i < segments.count; i++) {
+            NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
+            NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
+            NSTimeInterval segmentEnd = segmentStart + segmentDuration;
+
+            if (segmentEnd > relativeTimeStamp + 60) {
+                endIndex = i;
+                break;
+            }
         }
 
-        // ✅ Get `n` segments from this starting point
-        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray arrayWithCapacity:numSegments];
+        if (endIndex == -1) endIndex = segments.count - 1; // If nothing extends 60 sec past, include everything
 
-        for (NSUInteger i = startIndex; i < segments.count && segmentFilePaths.count < numSegments; i++) {
+        // ✅ Collect segment file paths
+        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray array];
+
+        for (NSInteger i = startIndex; i <= endIndex; i++) {
             NSString *segmentURL = segments[i][@"url"];
             NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
@@ -480,7 +489,7 @@
             return;
         }
 
-        // ✅ Merge `n` files synchronously
+        // ✅ Merge files synchronously
         dispatch_semaphore_t sema = dispatch_semaphore_create(0);
         
         __block NSString *outputPath = nil;
