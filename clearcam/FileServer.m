@@ -703,7 +703,7 @@
             NSArray<NSString *> *rangeParts = [byteRange componentsSeparatedByString:@"-"];
             NSUInteger start = [rangeParts[0] integerValue];
             NSUInteger end = (rangeParts.count > 1 && rangeParts[1].length > 0) ? [rangeParts[1] integerValue] : fileSize - 1;
-            
+
             if (start >= fileSize || end >= fileSize || start > end) {
                 dprintf(clientSocket, "HTTP/1.1 416 Requested Range Not Satisfiable\r\n");
                 dprintf(clientSocket, "Content-Range: bytes */%lu\r\n", fileSize);
@@ -732,7 +732,14 @@
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
+    } else if ([fileExtension isEqualToString:@"png"]) {
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: image/png\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
+
     fclose(file);
 }
 
@@ -910,7 +917,8 @@
         NSDictionary *eventDict = @{
             @"timeStamp": readableDate,  // Readable date format
             @"classType": [event valueForKey:@"classType"] ?: @"unknown",
-            @"quantity": [event valueForKey:@"quantity"] ?: @(0)
+            @"quantity": [event valueForKey:@"quantity"] ?: @(0),
+            @"imageURL": [NSString stringWithFormat:@"images/%f.png", timestamp]
         };
         [eventDataArray addObject:eventDict];
     }

@@ -47,8 +47,12 @@
                     dateObj.getMinutes() * 60 +
                     dateObj.getSeconds() - 2; // Slightly before so you can see
 
+                // Directly use the imageURL from event data
+                const imageURL = event.imageURL;
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
+                    <td><img src="${imageURL}" alt="Event Image" style="width: 100px; height: auto; max-height: 100px;"></td>
                     <td>${event.classType}</td>
                     <td>${event.quantity}</td>
                     <td>${event.timeStamp}</td>
@@ -181,6 +185,7 @@
     <table border="1">
         <thead>
             <tr>
+                <th>Image</th> <!-- Added column for image -->
                 <th>Class Type</th>
                 <th>Quantity</th>
                 <th>Time Stamp</th>
