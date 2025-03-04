@@ -747,7 +747,7 @@ NSMutableDictionary *classColorMap;
             CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
 
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
-
+            
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
             CGImageRelease(cgImage);
 

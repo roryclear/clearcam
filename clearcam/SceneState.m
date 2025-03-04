@@ -19,7 +19,7 @@
     return self;
 }
 
-- (void)processOutput:(NSArray *)array {
+- (void)processOutput:(NSArray *)array withImage:(CGImageRef)image {
     NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
     
     // Count occurrences in the current frame
@@ -48,7 +48,36 @@
         if (current_state != last_state) {
             NSDate *date = [NSDate date];
             NSTimeInterval unixTimestamp = [date timeIntervalSince1970];
+
+            // Convert CGImageRef to UIImage
+            UIImage *uiImage = [UIImage imageWithCGImage:image];
+
+            // Get the app's Documents directory
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+            NSString *documentsDirectory = [paths firstObject];
+            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+
+            // Create the images directory if it doesn't exist
+            if (![[NSFileManager defaultManager] fileExistsAtPath:imagesDirectory]) {
+                [[NSFileManager defaultManager] createDirectoryAtPath:imagesDirectory
+                                          withIntermediateDirectories:YES
+                                                           attributes:nil
+                                                                error:nil];
+            }
+
+            // File path for the image
+            NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%f.png", unixTimestamp]];
             
+            // Convert UIImage to PNG data
+            NSData *imageData = UIImagePNGRepresentation(uiImage);
+            
+            // Write the image data to file
+            if (![imageData writeToFile:filePath atomically:YES]) {
+                NSLog(@"Failed to save image at path: %@", filePath);
+            } else {
+                NSLog(@"Image saved at path: %@", filePath);
+            }
+
             [self.backgroundContext performBlockAndWait:^{
                 NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
                                                                           inManagedObjectContext:self.backgroundContext];

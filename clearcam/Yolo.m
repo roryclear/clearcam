@@ -361,14 +361,14 @@ UInt8 *rgbData;
 
     memcpy(floatArray, bufferPointer, buffer.length);
     NSArray *output = [self processOutput:floatArray];
-
+    free(floatArray);
+    
     NSMutableString *classNamesString = [NSMutableString string];
     for (int i = 0; i < output.count; i++) {
         [classNamesString appendString:self.yolo_classes[[output[i][4] intValue]][0]];
         if (i < output.count - 1) [classNamesString appendString:@", "];
     }
-    //NSLog(@"Class Names: %@", classNamesString);
-    [self.scene processOutput:output];
+    [self.scene processOutput:output withImage:cgImage];
     if(output.count > 0){
         NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
         [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
@@ -380,9 +380,6 @@ UInt8 *rgbData;
         [fileHandle writeData:[[logEntry stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
         [fileHandle closeFile];
     }
-
-    free(floatArray);
-
     return output;
 }
 

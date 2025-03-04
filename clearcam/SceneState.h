@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <CoreData/CoreData.h>
+#import <AVFoundation/AVFoundation.h>
 
 @interface SceneState : NSObject
 
@@ -8,7 +9,7 @@
 @property (nonatomic, strong) NSArray<NSNumber *> *events;
 @property (nonatomic, strong) NSDictionary *alerts;
 @property (strong, nonatomic) NSManagedObjectContext *backgroundContext;
-- (void)processOutput:(NSArray *)array;
+- (void)processOutput:(NSArray *)array withImage:(CGImageRef)image;
 - (void)writeToFileWithString:(NSString *)customString;
 
 @end

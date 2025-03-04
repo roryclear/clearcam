@@ -862,12 +862,10 @@
         currentTime = CMTimeAdd(currentTime, asset.duration);
     }
 
-    // 🔹 Output file setup
     NSString *outputPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
                                stringByAppendingPathComponent:@"merged_video.mp4"];
     NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
-    // Remove existing file if it exists
-    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];//todo remove after user has downloaded too?
 
     AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:composition presetName:AVAssetExportPresetHighestQuality];
     exportSession.outputURL = outputURL;
