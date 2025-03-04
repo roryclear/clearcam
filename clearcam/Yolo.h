@@ -1,7 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <AVFoundation/AVFoundation.h>
-#import "SceneState.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -20,7 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) NSString *input_buffer;
 @property (nonatomic, strong) NSString *output_buffer;
 @property (nonatomic, assign) UInt8 *rgbData;
-@property (nonatomic, strong) SceneState *scene;
 - (NSArray *)yolo_infer:(CGImageRef)cgImage withOrientation:(AVCaptureVideoOrientation)orientation;
 
 // Initializer

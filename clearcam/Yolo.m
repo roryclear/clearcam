@@ -3,7 +3,6 @@
 #import <UIKit/UIKit.h>
 #import <sys/utsname.h>
 #import "SettingsManager.h"
-#import "SceneState.h"
 
 @implementation Yolo
 
@@ -23,7 +22,6 @@ UInt8 *rgbData;
 
 - (instancetype)init {
     self = [super init];
-    self.scene = [[SceneState alloc] init];
     self.device = MTLCreateSystemDefaultDevice();
     self.pipeline_states = [[NSMutableDictionary alloc] init];
     self.buffers = [[NSMutableDictionary alloc] init];
@@ -368,7 +366,7 @@ UInt8 *rgbData;
         [classNamesString appendString:self.yolo_classes[[output[i][4] intValue]][0]];
         if (i < output.count - 1) [classNamesString appendString:@", "];
     }
-    [self.scene processOutput:output withImage:cgImage];
+    /* todo, move or remove?
     if(output.count > 0){
         NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
         [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
@@ -380,6 +378,7 @@ UInt8 *rgbData;
         [fileHandle writeData:[[logEntry stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
         [fileHandle closeFile];
     }
+    */
     return output;
 }
 
