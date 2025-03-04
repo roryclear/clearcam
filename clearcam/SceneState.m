@@ -19,7 +19,7 @@
     return self;
 }
 
-- (void)processOutput:(NSArray *)array withImage:(CGImageRef)image {
+- (void)processOutput:(NSArray *)array withImage:(CIImage *)image {
     NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
     
     // Count occurrences in the current frame
@@ -49,33 +49,44 @@
             NSDate *date = [NSDate date];
             NSTimeInterval unixTimestamp = [date timeIntervalSince1970];
 
-            // Convert CGImageRef to UIImage
-            UIImage *uiImage = [UIImage imageWithCGImage:image];
+            // Convert CIImage to CGImage
+            CIContext *ciContext = [CIContext context];
+            CGImageRef cgImage = [ciContext createCGImage:image fromRect:image.extent];
 
-            // Get the app's Documents directory
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths firstObject];
-            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+            if (cgImage) {
+                // Convert CGImage to UIImage
+                UIImage *uiImage = [UIImage imageWithCGImage:cgImage];
 
-            // Create the images directory if it doesn't exist
-            if (![[NSFileManager defaultManager] fileExistsAtPath:imagesDirectory]) {
-                [[NSFileManager defaultManager] createDirectoryAtPath:imagesDirectory
-                                          withIntermediateDirectories:YES
-                                                           attributes:nil
-                                                                error:nil];
-            }
+                // Release CGImage since it was manually created
+                CGImageRelease(cgImage);
 
-            // File path for the image
-            NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%f.png", unixTimestamp]];
-            
-            // Convert UIImage to PNG data
-            NSData *imageData = UIImagePNGRepresentation(uiImage);
-            
-            // Write the image data to file
-            if (![imageData writeToFile:filePath atomically:YES]) {
-                NSLog(@"Failed to save image at path: %@", filePath);
+                // Get the app's Documents directory
+                NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+                NSString *documentsDirectory = [paths firstObject];
+                NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+
+                // Create the images directory if it doesn't exist
+                if (![[NSFileManager defaultManager] fileExistsAtPath:imagesDirectory]) {
+                    [[NSFileManager defaultManager] createDirectoryAtPath:imagesDirectory
+                                              withIntermediateDirectories:YES
+                                                               attributes:nil
+                                                                    error:nil];
+                }
+
+                // File path for the image
+                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%f.png", unixTimestamp]];
+                
+                // Convert UIImage to PNG data
+                NSData *imageData = UIImagePNGRepresentation(uiImage);
+                
+                // Write the image data to file
+                if (![imageData writeToFile:filePath atomically:YES]) {
+                    NSLog(@"Failed to save image at path: %@", filePath);
+                } else {
+                    NSLog(@"Image saved at path: %@", filePath);
+                }
             } else {
-                NSLog(@"Image saved at path: %@", filePath);
+                NSLog(@"Failed to create CGImage from CIImage");
             }
 
             [self.backgroundContext performBlockAndWait:^{
@@ -92,6 +103,7 @@
                 }
             }];
         }
+
     }
     
     // Keep lastN size within 10

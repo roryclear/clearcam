@@ -752,7 +752,7 @@ NSMutableDictionary *classColorMap;
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
             
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-            [self.scene processOutput:output withImage:cgImage];
+            [self.scene processOutput:output withImage:ciImage];
             CGImageRelease(cgImage);
 
             __weak typeof(self) weak_self = self;

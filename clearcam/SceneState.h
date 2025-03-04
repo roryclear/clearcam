@@ -9,7 +9,7 @@
 @property (nonatomic, strong) NSArray<NSNumber *> *events;
 @property (nonatomic, strong) NSDictionary *alerts;
 @property (strong, nonatomic) NSManagedObjectContext *backgroundContext;
-- (void)processOutput:(NSArray *)array withImage:(CGImageRef)image;
+- (void)processOutput:(NSArray *)array withImage:(CIImage *)image;
 - (void)writeToFileWithString:(NSString *)customString;
 
 @end
