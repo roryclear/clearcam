@@ -397,7 +397,7 @@
     }
 
     if ([filePath hasPrefix:@"download"]) {
-        NSUInteger numSegments = 10; // 🔥 Change this to merge more or fewer segments
+        NSUInteger numSegments = 10;
         NSString *timeStampParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
 
@@ -420,34 +420,64 @@
             return;
         }
 
-        NSTimeInterval timeStamp = [timeStampParam doubleValue];
-        NSDate *date = [NSDate dateWithTimeIntervalSince1970:timeStamp];
+        NSTimeInterval absoluteTimeStamp = [timeStampParam doubleValue];
+
+        // ✅ Convert absolute timestamp to "seconds since midnight"
+        NSDate *fullDate = [NSDate dateWithTimeIntervalSince1970:absoluteTimeStamp];
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         [formatter setDateFormat:@"yyyy-MM-dd"];
-        NSString *formattedDate = [formatter stringFromDate:date];
+        NSString *formattedDate = [formatter stringFromDate:fullDate];
 
+        NSCalendar *calendar = [NSCalendar currentCalendar];
+        NSDate *midnight = [calendar startOfDayForDate:fullDate];
+        NSTimeInterval relativeTimeStamp = [fullDate timeIntervalSinceDate:midnight];
+
+        // ✅ Fetch segments for this date
         NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate start:0 context:self.context];
 
-        if (segments.count < numSegments) {
-            NSString *errorResponse = [NSString stringWithFormat:@"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Not enough segments found (found %lu, need %lu)\"}]", (unsigned long)segments.count, (unsigned long)numSegments];
+        if (segments.count == 0) {
+            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No segments found for this date\"}]";
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
-        // ✅ Collect `n` segment file paths
+        // ✅ Find last segment with timeStamp < relativeTimeStamp
+        NSInteger startIndex = -1;
+        for (NSInteger i = segments.count - 1; i >= 0; i--) {
+            NSDictionary *segment = segments[i];
+            NSTimeInterval segmentTimeStamp = [segment[@"timeStamp"] doubleValue];
+
+            if (segmentTimeStamp < relativeTimeStamp) {
+                startIndex = i;
+                break;
+            }
+        }
+
+        if (startIndex == -1) {
+            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No valid starting segment found\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
+            return;
+        }
+
+        // ✅ Get `n` segments from this starting point
         NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray arrayWithCapacity:numSegments];
 
-        for (NSUInteger i = 0; i < numSegments; i++) {
+        for (NSUInteger i = startIndex; i < segments.count && segmentFilePaths.count < numSegments; i++) {
             NSString *segmentURL = segments[i][@"url"];
             NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
             if (![[NSFileManager defaultManager] fileExistsAtPath:fullFilePath]) {
-                NSString *errorResponse = [NSString stringWithFormat:@"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Segment file not found: %@\"}]", segmentURL];
-                send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
-                return;
+                NSLog(@"❌ Segment file not found: %@", segmentURL);
+                continue;
             }
 
             [segmentFilePaths addObject:fullFilePath];
+        }
+
+        if (segmentFilePaths.count == 0) {
+            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No valid segments to merge\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
+            return;
         }
 
         // ✅ Merge `n` files synchronously
@@ -462,7 +492,6 @@
             dispatch_semaphore_signal(sema);
         }];
 
-        // Wait for merge to finish
         dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
 
         if (mergeError || !outputPath || ![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
@@ -511,7 +540,6 @@
         fclose(mergedFile);
         NSLog(@"✅ Merged video sent successfully.");
     }
-
 
     
     if ([filePath hasPrefix:@"get-frames"]) {
