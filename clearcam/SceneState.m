@@ -48,6 +48,7 @@
         if (current_state != last_state) {
             NSDate *date = [NSDate date];
             NSTimeInterval unixTimestamp = [date timeIntervalSince1970];
+            long long roundedUnixTimestamp = (long long)unixTimestamp;
 
             // Convert CIImage to CGImage
             CIContext *ciContext = [CIContext context];
@@ -74,7 +75,7 @@
                 }
 
                 // File path for the image
-                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%f.jpg", unixTimestamp]];  // Changed file extension to .jpg
+                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%lld.jpg", roundedUnixTimestamp]];  // Changed file extension to .jpg
 
                 // Convert UIImage to JPEG data
                 NSData *imageData = UIImageJPEGRepresentation(uiImage, 1.0); // 1.0 for maximum quality

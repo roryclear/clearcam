@@ -623,15 +623,33 @@
         BOOL success = [self deleteEventWithTimeStamp:timeStamp];
         
         if (success) {
-            
-            //TODO//
+            // Get the app's Documents directory
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+            NSString *documentsDirectory = [paths firstObject];
+            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+
+            // File path for the image (with .jpg extension)
+            NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
+
+            NSError *error = nil;
+
+            // Check if the image file exists and delete it
+            if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
+                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error]) {
+                    NSLog(@"Failed to delete image: %@", error.localizedDescription);
+                } else {
+                    NSLog(@"Image deleted at path: %@", imageFilePath);
+                }
+            }
+
+            // Optional cleanup: remove cached preferences for the last deleted event
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
             [[NSUserDefaults standardUserDefaults] synchronize];
-            //THIS WILL BE SLOW LONG TERM, use a queue or something
-            
+
+            // Respond with success
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
-            NSString *successMessage = @"{\"success\": \"Event deleted\"}";
+            NSString *successMessage = @"{\"success\": \"Event and associated image deleted\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [successMessage UTF8String], successMessage.length, 0);
         } else {
@@ -912,13 +930,14 @@
 
     for (NSManagedObject *event in fetchedEvents) {
         NSTimeInterval timestamp = [[event valueForKey:@"timeStamp"] doubleValue];
+        long long roundedTimestamp = (long long)timestamp;
         NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
         
         NSDictionary *eventDict = @{
-            @"timeStamp": readableDate,  // Readable date format
+            @"timeStamp": readableDate,
             @"classType": [event valueForKey:@"classType"] ?: @"unknown",
             @"quantity": [event valueForKey:@"quantity"] ?: @(0),
-            @"imageURL": [NSString stringWithFormat:@"images/%f.jpg", timestamp]
+            @"imageURL": [NSString stringWithFormat:@"images/%lld.jpg", roundedTimestamp]
         };
         [eventDataArray addObject:eventDict];
     }
