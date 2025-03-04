@@ -43,6 +43,7 @@
                     <td>
                         <button onclick="deleteEvent(${dateObj.getTime() / 1000})">Delete</button>
                         <button onclick="playEvent('${date}', ${startSeconds})">Play</button>
+                        <button onclick="downloadEvent(${dateObj.getTime() / 1000})">Download</button>
                     </td>
                 `;
                 tableBody.appendChild(row);
@@ -70,6 +71,9 @@
             window.location.href = `${referrer}?date=${date}&start=${startSeconds}`;
         }
 
+        function downloadEvent(timeStamp) {
+            window.location.href = `/download?timeStamp=${timeStamp}`;
+        }
 
         // Load events when the page loads
         window.onload = fetchEvents;
@@ -92,3 +96,4 @@
     </table>
 </body>
 </html>
+
