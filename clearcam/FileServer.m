@@ -396,6 +396,58 @@
         [self sendJson200:segmentsForDate toClient:clientSocket];
     }
     
+    if ([filePath hasPrefix:@"download"]) {
+        NSString *timeStampParam = nil;
+        NSRange queryRange = [filePath rangeOfString:@"?"];
+        
+        if (queryRange.location != NSNotFound) {
+            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
+            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
+            
+            for (NSString *item in queryItems) {
+                NSArray *keyValue = [item componentsSeparatedByString:@"="];
+                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"timeStamp"]) {
+                    timeStampParam = keyValue[1];
+                    break;
+                }
+            }
+        }
+
+        if (!timeStampParam) {
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"[{\"error\": \"Missing or invalid timeStamp parameter\"}]";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+
+        // Convert timeStamp to YYYY-MM-DD format
+        NSTimeInterval timeStamp = [timeStampParam doubleValue];
+        NSDate *date = [NSDate dateWithTimeIntervalSince1970:timeStamp];
+        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+        [formatter setDateFormat:@"yyyy-MM-dd"];
+        NSString *formattedDate = [formatter stringFromDate:date];
+
+        // Fetch segments from Core Data
+        NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate
+                                                                            start:0
+                                                                          context:self.context];
+
+        // Get the first segment's URL
+        NSString *firstSegmentURL = nil;
+        if (segments.count > 0) {
+            NSDictionary *firstSegment = segments.firstObject;
+            firstSegmentURL = firstSegment[@"url"];
+        }
+
+        // Prepare response
+        NSArray *responseArray = firstSegmentURL ? @[@{@"url": firstSegmentURL}] : @[];
+
+        // Send JSON response
+        [self sendJson200:responseArray toClient:clientSocket];
+    }
+
+    
     if ([filePath hasPrefix:@"get-frames"]) {
         NSString *urlParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
