@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Event List</title>
     <script>
+        let currentTimestamp = null;
+        let defaultOffset = 30; // Default to ±30 seconds
+
+        // Load user settings if available
+        function loadSettings() {
+            const savedOffset = localStorage.getItem("defaultOffset");
+            if (savedOffset !== null) {
+                defaultOffset = parseInt(savedOffset, 10);
+                document.getElementById("offsetInput").value = defaultOffset;
+            }
+        }
+
         async function fetchEvents() {
             try {
                 const response = await fetch('/get-events');
@@ -33,7 +45,7 @@
                 const startSeconds =
                     dateObj.getHours() * 3600 +
                     dateObj.getMinutes() * 60 +
-                    dateObj.getSeconds() - 2; //slightly before so you can see?
+                    dateObj.getSeconds() - 2; // Slightly before so you can see
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -72,15 +84,100 @@
         }
 
         function downloadEvent(timeStamp) {
-            window.location.href = `/download?start=${timeStamp-30}&end=${timeStamp+30}`;
+            currentTimestamp = timeStamp; // Store timestamp for use when confirming download
+            const eventTime = new Date(timeStamp * 1000);
+
+            // Set default start and end times (using the customizable offset)
+            const startTime = new Date(eventTime.getTime() - defaultOffset * 1000);
+            const endTime = new Date(eventTime.getTime() + defaultOffset * 1000);
+
+            // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
+            document.getElementById("startTime").value = formatDateTimeLocal(startTime);
+            document.getElementById("endTime").value = formatDateTimeLocal(endTime);
+
+            document.getElementById("timePickerModal").style.display = "block";
         }
 
-        // Load events when the page loads
-        window.onload = fetchEvents;
+        function formatDateTimeLocal(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+
+            return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+        }
+
+        function confirmDownload() {
+            const startTime = new Date(document.getElementById("startTime").value).getTime() / 1000;
+            const endTime = new Date(document.getElementById("endTime").value).getTime() / 1000;
+
+            if (!startTime || !endTime) {
+                alert("Please select both start and end times.");
+                return;
+            }
+
+            window.location.href = `/download?start=${startTime}&end=${endTime}`;
+            closeModal();
+        }
+
+        function closeModal() {
+            document.getElementById("timePickerModal").style.display = "none";
+        }
+
+        function openSettings() {
+            document.getElementById("settingsModal").style.display = "block";
+        }
+
+        function closeSettings() {
+            document.getElementById("settingsModal").style.display = "none";
+        }
+
+        function saveSettings() {
+            const newOffset = parseInt(document.getElementById("offsetInput").value, 10);
+            if (isNaN(newOffset) || newOffset < 1) {
+                alert("Please enter a valid number greater than 0.");
+                return;
+            }
+            defaultOffset = newOffset;
+            localStorage.setItem("defaultOffset", newOffset);
+            closeSettings();
+        }
+
+        window.onload = function() {
+            fetchEvents();
+            loadSettings();
+        };
     </script>
+    <style>
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .modal label {
+            display: block;
+            margin-top: 10px;
+        }
+        .modal button {
+            margin: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
     <h1>Event List</h1>
+    <button onclick="openSettings()">⚙ Settings</button>
     <table border="1">
         <thead>
             <tr>
@@ -94,6 +191,28 @@
             <tr><td colspan="5">Loading events...</td></tr>
         </tbody>
     </table>
+
+    <!-- Modal for Time Picker -->
+    <div id="timePickerModal" class="modal">
+        <h3>Select Start and End Time</h3>
+        <label for="startTime">Start Time:</label>
+        <input type="datetime-local" id="startTime">
+        <br>
+        <label for="endTime">End Time:</label>
+        <input type="datetime-local" id="endTime">
+        <br><br>
+        <button onclick="confirmDownload()">Download</button>
+        <button onclick="closeModal()">Cancel</button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <h3>Settings</h3>
+        <label for="offsetInput">Default time offset (seconds):</label>
+        <input type="number" id="offsetInput" min="1" value="30">
+        <br><br>
+        <button onclick="saveSettings()">Save</button>
+        <button onclick="closeSettings()">Cancel</button>
+    </div>
 </body>
 </html>
-
