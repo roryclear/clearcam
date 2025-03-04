@@ -399,11 +399,11 @@
     if ([filePath hasPrefix:@"download"]) {
         NSString *timeStampParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
-        
+
         if (queryRange.location != NSNotFound) {
             NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
             NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
-            
+
             for (NSString *item in queryItems) {
                 NSArray *keyValue = [item componentsSeparatedByString:@"="];
                 if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"timeStamp"]) {
@@ -414,10 +414,8 @@
         }
 
         if (!timeStampParam) {
-            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"[{\"error\": \"Missing or invalid timeStamp parameter\"}]";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            NSString *errorResponse = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Missing or invalid timeStamp parameter\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
@@ -427,69 +425,91 @@
         [formatter setDateFormat:@"yyyy-MM-dd"];
         NSString *formattedDate = [formatter stringFromDate:date];
 
-        NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate
-                                                                            start:0
-                                                                          context:self.context];
+        NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate start:0 context:self.context];
 
-        if (segments.count == 0) {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"[{\"error\": \"No segments found for this date\"}]";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        if (segments.count < 2) {
+            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Not enough segments found to merge\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
-        NSString *segmentURL = segments.firstObject[@"url"];
-        if (!segmentURL || segmentURL.length == 0) {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"[{\"error\": \"Segment URL is empty\"}]";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray arrayWithCapacity:2];
+
+        for (NSUInteger i = 0; i < 2; i++) {
+            NSString *segmentURL = segments[i][@"url"];
+            NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
+
+            if (![[NSFileManager defaultManager] fileExistsAtPath:fullFilePath]) {
+                NSString *errorResponse = [NSString stringWithFormat:@"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Segment file not found: %@\"}]", segmentURL];
+                send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
+                return;
+            }
+
+            [segmentFilePaths addObject:fullFilePath];
+        }
+
+        // ✅ Ensure this runs synchronously
+        dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+        
+        __block NSString *outputPath = nil;
+        __block NSError *mergeError = nil;
+
+        [self concatenateMP4Files:segmentFilePaths completion:^(NSString *resultPath, NSError *error) {
+            outputPath = resultPath;
+            mergeError = error;
+            dispatch_semaphore_signal(sema);
+        }];
+
+        // Wait for merge to finish
+        dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+
+        if (mergeError || !outputPath || ![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
+            NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Failed to merge video\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
-        NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
-
-        if (![[NSFileManager defaultManager] fileExistsAtPath:fullFilePath]) {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"[{\"error\": \"File not found\"}]";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        // ✅ Open merged file
+        FILE *mergedFile = fopen([outputPath UTF8String], "rb");
+        if (!mergedFile) {
+            NSLog(@"❌ Failed to open merged video file for sending: %s", strerror(errno));
             return;
         }
 
-        // 🔹 Open the file
-        FILE *file = fopen([fullFilePath UTF8String], "rb");
-        if (!file) {
-            NSString *httpHeader = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"[{\"error\": \"Failed to open file\"}]";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        if (clientSocket < 0) {
+            NSLog(@"❌ Invalid socket: %d", clientSocket);
+            fclose(mergedFile);
             return;
         }
 
-        fseek(file, 0, SEEK_END);
-        NSUInteger fileSize = ftell(file);
-        fseek(file, 0, SEEK_SET);
+        // ✅ Get file size
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        NSDictionary *fileAttributes = [fileManager attributesOfItemAtPath:outputPath error:nil];
+        NSUInteger fileSize = [fileAttributes[NSFileSize] unsignedIntegerValue];
+
+        // ✅ Send HTTP Headers
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: video/mp4\r\n");
-        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"video.mp4\"\r\n"); // 🔹 Forces download
-        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"merged_video.mp4\"\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", (unsigned long)fileSize);
         dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
         dprintf(clientSocket, "\r\n");
 
+        // ✅ Send File Data
         char buffer[64 * 1024];
         size_t bytesRead;
-        while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        while ((bytesRead = fread(buffer, 1, sizeof(buffer), mergedFile)) > 0) {
             ssize_t bytesSent = send(clientSocket, buffer, bytesRead, 0);
             if (bytesSent < 0) {
-                NSLog(@"Error sending file data: %s", strerror(errno));
+                NSLog(@"❌ Error sending file data: %s", strerror(errno));
                 break;
             }
         }
 
-        fclose(file);
+        fclose(mergedFile);
+        NSLog(@"✅ Merged video sent successfully.");
     }
+
     
     if ([filePath hasPrefix:@"get-frames"]) {
         NSString *urlParam = nil;
@@ -754,6 +774,63 @@
     return framesForURL;
 }
 
+- (void)concatenateMP4Files:(NSArray<NSString *> *)filePaths completion:(void (^)(NSString *outputPath, NSError *error))completion {
+    AVMutableComposition *composition = [AVMutableComposition composition];
+    AVMutableCompositionTrack *videoTrack = [composition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+
+    CMTime currentTime = kCMTimeZero;
+
+    for (NSString *filePath in filePaths) {
+        AVAsset *asset = [AVAsset assetWithURL:[NSURL fileURLWithPath:filePath]];
+
+        if (asset.tracks.count == 0) {
+            NSLog(@"❌ Error: No tracks found in asset %@", filePath);
+            continue;
+        }
+
+        AVAssetTrack *videoAssetTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+
+        NSError *error = nil;
+        [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, asset.duration)
+                            ofTrack:videoAssetTrack
+                             atTime:currentTime
+                              error:&error];
+
+        if (error) {
+            NSLog(@"❌ Error inserting video track: %@", error.localizedDescription);
+        }
+
+        currentTime = CMTimeAdd(currentTime, asset.duration);
+    }
+
+    // 🔹 Output file setup
+    NSString *outputPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
+                               stringByAppendingPathComponent:@"merged_video.mp4"];
+    NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
+    // Remove existing file if it exists
+    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+
+    AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:composition presetName:AVAssetExportPresetHighestQuality];
+    exportSession.outputURL = outputURL;
+    exportSession.outputFileType = AVFileTypeMPEG4;
+    exportSession.shouldOptimizeForNetworkUse = YES;
+
+    [exportSession exportAsynchronouslyWithCompletionHandler:^{
+        if (exportSession.status == AVAssetExportSessionStatusCompleted) {
+            NSLog(@"✅ Export successful: %@", outputPath);
+            if (![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
+                NSLog(@"❌ File not found in Documents: %@", outputPath);
+            } else {
+                NSLog(@"✅ File successfully saved at: %@", outputPath);
+            }
+
+            completion(outputPath, nil);
+        } else {
+            NSLog(@"❌ Export failed: %@", exportSession.error.localizedDescription);
+            completion(nil, exportSession.error);
+        }
+    }];
+}
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
