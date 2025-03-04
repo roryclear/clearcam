@@ -74,11 +74,11 @@
                 }
 
                 // File path for the image
-                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%f.png", unixTimestamp]];
-                
-                // Convert UIImage to PNG data
-                NSData *imageData = UIImagePNGRepresentation(uiImage);
-                
+                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%f.jpg", unixTimestamp]];  // Changed file extension to .jpg
+
+                // Convert UIImage to JPEG data
+                NSData *imageData = UIImageJPEGRepresentation(uiImage, 1.0); // 1.0 for maximum quality
+
                 // Write the image data to file
                 if (![imageData writeToFile:filePath atomically:YES]) {
                     NSLog(@"Failed to save image at path: %@", filePath);

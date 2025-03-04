@@ -732,9 +732,9 @@
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
-    } else if ([fileExtension isEqualToString:@"png"]) {
+    } else if ([fileExtension isEqualToString:@"jpg"]) {
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
-        dprintf(clientSocket, "Content-Type: image/png\r\n");
+        dprintf(clientSocket, "Content-Type: image/jpg\r\n");
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
@@ -918,7 +918,7 @@
             @"timeStamp": readableDate,  // Readable date format
             @"classType": [event valueForKey:@"classType"] ?: @"unknown",
             @"quantity": [event valueForKey:@"quantity"] ?: @(0),
-            @"imageURL": [NSString stringWithFormat:@"images/%f.png", timestamp]
+            @"imageURL": [NSString stringWithFormat:@"images/%f.jpg", timestamp]
         };
         [eventDataArray addObject:eventDict];
     }
