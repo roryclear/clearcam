@@ -72,7 +72,7 @@
         }
 
         function downloadEvent(timeStamp) {
-            window.location.href = `/download?timeStamp=${timeStamp}`;
+            window.location.href = `/download?start=${timeStamp-30}&end=${timeStamp+30}`;
         }
 
         // Load events when the page loads

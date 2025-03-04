@@ -397,42 +397,61 @@
     }
 
     if ([filePath hasPrefix:@"download"]) {
-        NSString *timeStampParam = nil;
+        NSString *startParam = nil;
+        NSString *endParam = nil;
+        
+        // ✅ Extract query params
         NSRange queryRange = [filePath rangeOfString:@"?"];
-
         if (queryRange.location != NSNotFound) {
             NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
             NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
 
             for (NSString *item in queryItems) {
                 NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"timeStamp"]) {
-                    timeStampParam = keyValue[1];
-                    break;
+                if (keyValue.count == 2) {
+                    if ([keyValue[0] isEqualToString:@"start"]) {
+                        startParam = keyValue[1];
+                    } else if ([keyValue[0] isEqualToString:@"end"]) {
+                        endParam = keyValue[1];
+                    }
                 }
             }
         }
 
-        if (!timeStampParam) {
-            NSString *errorResponse = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Missing or invalid timeStamp parameter\"}]";
+        // ✅ Validate params
+        if (!startParam || !endParam) {
+            NSString *errorResponse = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Missing or invalid start/end parameter\"}]";
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
-        NSTimeInterval absoluteTimeStamp = [timeStampParam doubleValue];
+        NSTimeInterval startTimeStamp = [startParam doubleValue];
+        NSTimeInterval endTimeStamp = [endParam doubleValue];
 
-        // ✅ Convert absolute timestamp to "seconds since midnight"
-        NSDate *fullDate = [NSDate dateWithTimeIntervalSince1970:absoluteTimeStamp];
+        // ✅ Convert timestamps to "seconds since midnight"
+        NSDate *startDate = [NSDate dateWithTimeIntervalSince1970:startTimeStamp];
+        NSDate *endDate = [NSDate dateWithTimeIntervalSince1970:endTimeStamp];
+
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         [formatter setDateFormat:@"yyyy-MM-dd"];
-        NSString *formattedDate = [formatter stringFromDate:fullDate];
+
+        NSString *formattedStartDate = [formatter stringFromDate:startDate];
+        NSString *formattedEndDate = [formatter stringFromDate:endDate];
+
+        if (![formattedStartDate isEqualToString:formattedEndDate]) {
+            NSString *errorResponse = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Start and end must be on the same day\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
+            return;
+        }
 
         NSCalendar *calendar = [NSCalendar currentCalendar];
-        NSDate *midnight = [calendar startOfDayForDate:fullDate];
-        NSTimeInterval relativeTimeStamp = [fullDate timeIntervalSinceDate:midnight];
+        NSDate *midnight = [calendar startOfDayForDate:startDate];
 
-        // ✅ Fetch segments for this date
-        NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate start:0 context:self.context];
+        NSTimeInterval relativeStart = [startDate timeIntervalSinceDate:midnight];
+        NSTimeInterval relativeEnd = [endDate timeIntervalSinceDate:midnight];
+
+        // ✅ Fetch segments for the date
+        NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedStartDate start:0 context:self.context];
 
         if (segments.count == 0) {
             NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No segments found for this date\"}]";
@@ -440,33 +459,33 @@
             return;
         }
 
-        // ✅ Find the last segment that starts more than 60 seconds before `relativeTimeStamp`
+        // ✅ Find the last segment that starts BEFORE `relativeStart`
         NSInteger startIndex = -1;
         for (NSInteger i = segments.count - 1; i >= 0; i--) {
             NSTimeInterval segmentTimeStamp = [segments[i][@"timeStamp"] doubleValue];
 
-            if (segmentTimeStamp < relativeTimeStamp - 60) {
+            if (segmentTimeStamp < relativeStart) {
                 startIndex = i;
                 break;
             }
         }
 
-        if (startIndex == -1) startIndex = 0; // If nothing is 60 sec behind, start from the first segment
+        if (startIndex == -1) startIndex = 0; // If none found, start from the first segment
 
-        // ✅ Find the first segment that ENDS more than 60 seconds AFTER `relativeTimeStamp`
+        // ✅ Find the first segment that ENDS AFTER `relativeEnd`
         NSInteger endIndex = -1;
         for (NSInteger i = startIndex; i < segments.count; i++) {
             NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
             NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
             NSTimeInterval segmentEnd = segmentStart + segmentDuration;
 
-            if (segmentEnd > relativeTimeStamp + 60) {
+            if (segmentEnd > relativeEnd) {
                 endIndex = i;
                 break;
             }
         }
 
-        if (endIndex == -1) endIndex = segments.count - 1; // If nothing extends 60 sec past, include everything
+        if (endIndex == -1) endIndex = segments.count - 1; // If none found, include everything
 
         // ✅ Collect segment file paths
         NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray array];
