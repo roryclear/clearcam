@@ -395,8 +395,9 @@
                                                                                  context:self.context];
         [self sendJson200:segmentsForDate toClient:clientSocket];
     }
-    
+
     if ([filePath hasPrefix:@"download"]) {
+        NSUInteger numSegments = 10; // 🔥 Change this to merge more or fewer segments
         NSString *timeStampParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
 
@@ -427,15 +428,16 @@
 
         NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedDate start:0 context:self.context];
 
-        if (segments.count < 2) {
-            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Not enough segments found to merge\"}]";
+        if (segments.count < numSegments) {
+            NSString *errorResponse = [NSString stringWithFormat:@"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Not enough segments found (found %lu, need %lu)\"}]", (unsigned long)segments.count, (unsigned long)numSegments];
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
-        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray arrayWithCapacity:2];
+        // ✅ Collect `n` segment file paths
+        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray arrayWithCapacity:numSegments];
 
-        for (NSUInteger i = 0; i < 2; i++) {
+        for (NSUInteger i = 0; i < numSegments; i++) {
             NSString *segmentURL = segments[i][@"url"];
             NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
@@ -448,7 +450,7 @@
             [segmentFilePaths addObject:fullFilePath];
         }
 
-        // ✅ Ensure this runs synchronously
+        // ✅ Merge `n` files synchronously
         dispatch_semaphore_t sema = dispatch_semaphore_create(0);
         
         __block NSString *outputPath = nil;
@@ -509,6 +511,7 @@
         fclose(mergedFile);
         NSLog(@"✅ Merged video sent successfully.");
     }
+
 
     
     if ([filePath hasPrefix:@"get-frames"]) {
