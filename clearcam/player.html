@@ -1114,7 +1114,7 @@
                             videoPlayers[video_index].currentTime = segments[currentSegment].duration;
                         } else {
                             let eventTime = startParam - segments[currentSegment].timeStamp; //fast forward within minute long segment
-                            if(eventTime < segments[currentSegment].duration){7
+                            if(eventTime < segments[currentSegment].duration){
                                 videoPlayers[video_index].currentTime = eventTime;
                             } else{
                                 videoPlayers[video_index].currentTime = segments[currentSegment].duration;
