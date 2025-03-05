@@ -545,22 +545,6 @@
             }
 
             const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
-
-            // Check if frames exist; otherwise, fetch them dynamically (if not already fetching)
-            if (!segments[currentSegment].frames && !segments[currentSegment].fetchingFrames) {
-                segments[currentSegment].fetchingFrames = true; // Set fetching flag
-                try {
-                    const response = await fetch(`/get-frames?url=${encodeURIComponent(segments[currentSegment].url)}`);
-                    if (!response.ok) throw new Error(`Failed to fetch frames for ${segments[currentSegment].url}`);
-
-                    const frames = await response.json();
-                    segments[currentSegment].frames = frames; // Store fetched frames to avoid re-fetching
-                } catch (error) {
-                    console.error("Error fetching frames:", error);
-                }
-                segments[currentSegment].fetchingFrames = false; // Reset fetching flag
-            }
-
             let frames = segments[currentSegment].frames;
             let show_new = false;
 
@@ -786,6 +770,90 @@
                         isFetchingSegments = false;
                     }
                 }
+        
+        
+        async function fetchSegmentsInit() {
+            if (isFetchingSegments) return;
+            isFetchingSegments = true;
+
+            try {
+                const response = await fetch(`/get-segments?date=${currentDate}&start=${n_segments}`);
+                if (response.ok) {
+                    const newSegments = await response.json();
+                    if (Array.isArray(newSegments)) {
+                        const oldTotalDuration = totalDuration;
+
+                        let cumulativeStart = totalDuration;
+                        let i = 0;
+                        let next_i = 1;
+                        while(next_i < newSegments.length) {
+                            if(newSegments[i].url.length == 0){
+                                i=next_i;
+                                next_i+=1;
+                            }
+                            while(newSegments[next_i].url.length == 0 && next_i < newSegments.length){
+                                next_i += 1;
+                            }
+                            if(next_i >= newSegments.length){
+                                break;
+                            }
+                            const segment = newSegments[i];
+                            const timeDifference = newSegments[next_i].timeStamp - newSegments[i].timeStamp;
+                            const lostFrames = timeDifference - segment.duration;
+                            const currentCumulativeStart = cumulativeStart;
+                            cumulativeStart += timeDifference;
+                            segments.push({
+                                ...segment,
+                                cumulativeStart: currentCumulativeStart,
+                                lostFrames: lostFrames > 0 ? lostFrames : 0,
+                            });
+                            if(lostFrames > 1){ //todo why 60
+                                gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
+                            }
+                            i=next_i;
+                            next_i+=1;
+                        }
+                        n_segments += i;
+                        totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
+                        if (totalDuration !== oldTotalDuration) {
+                            updateTimeline();
+                            //await preloadNextSegments();
+
+                            if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
+                                (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
+                                const currentVideo = videoPlayers[video_index];
+                                currentVideo.src = segments[currentSegment].url;
+                                currentVideo.currentTime = 0;
+                                currentVideo.style.display = "block";
+
+                                // Hide other video players
+                                for (let i = 1; i < videoPlayers.length; i++) {
+                                    videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                                }
+
+                                currentVideo.play();
+                                isPlaying = true;
+                                playIcon.style.display = "none";
+                                pauseIcon.style.display = "block";
+
+                                // Adjust container dimensions based on video orientation
+                                currentVideo.addEventListener('loadedmetadata', () => {
+                                    adjustContainerForOrientation(currentVideo);
+                                });
+                            }
+                            if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
+                                isWaitingForNextSegment = false;
+                                switchToNextSegment();
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch segments:', error);
+            } finally {
+                isFetchingSegments = false;
+            }
+        }
 
 
                 function formatTime(seconds) {
@@ -1050,24 +1118,29 @@
                             videoPlayers[video_index].currentTime = segments[currentSegment].duration;
                         } else {
                             let eventTime = startParam - segments[currentSegment].timeStamp; //fast forward within minute long segment
-                            if(eventTime < segments[currentSegment].duration){
+                            if(eventTime < segments[currentSegment].duration){7
                                 videoPlayers[video_index].currentTime = eventTime;
                             } else{
                                 videoPlayers[video_index].currentTime = segments[currentSegment].duration;
                             }
                         }
                     }
-
-                    try { //todo hack fix because it fetches segment and frames for 0
-                        segments[currentSegment].fetchingFrames = true;
-                        const response = await fetch(`/get-frames?url=${encodeURIComponent(segments[currentSegment].url)}`);
-                        if (!response.ok) throw new Error(`Failed to fetch frames for ${segments[currentSegment].url}`);
-                        const frames = await response.json();
-                        segments[currentSegment].frames = frames; // Store frames to prevent refetching
-                        segments[currentSegment].fetchingFrames = false;
-                    } catch (error) {
-                        console.error("Error fetching frames:", error);
+                    
+                    //fetch first segment's frames! preload only does future ones
+                    if (!segments[currentSegment].frames && !segments[currentSegment].fetchingFrames) {
+                        segments[currentSegment].fetchingFrames = true; // Set fetching flag to avoid duplicate requests
+                        try {
+                            const response = await fetch(`/get-frames?url=${encodeURIComponent(segments[currentSegment].url)}`);
+                            if (!response.ok) throw new Error(`Failed to fetch frames for ${segments[currentSegment].url}`);
+                            const frames = await response.json();
+                            segments[currentSegment].frames = frames; // Store frames to prevent refetching
+                        } catch (error) {
+                            console.error("Error fetching frames:", error);
+                        }
+                        segments[currentSegment].fetchingFrames = false; // Reset fetching flag
                     }
+                    
+                    await preloadNextSegments();
                     
                     //alert("PLAY!");
                     videoPlayers[video_index].play().catch(() => {});
@@ -1078,14 +1151,14 @@
                 // Handle visibility change
                 document.addEventListener("visibilitychange", async () => {
                     if (!document.hidden) {
-                        await fetchSegments();
+                        await fetchSegmentsInit();
                         await handleVisibilityAndLoad();
                     }
                 });
 
                 // Handle page load/refresh
                 window.addEventListener("load", async () => {
-                    await fetchSegments();
+                    await fetchSegmentsInit();
                     await handleVisibilityAndLoad();
                 });
                 
@@ -1160,5 +1233,6 @@
     </script>
 </body>
 </html>
+
 
 
