@@ -1096,13 +1096,20 @@
                     const fetchStartTime = new Date();
                     currentDate = formatDate(fetchStartTime);
                     const startParam = getQueryParam("start");
-                    if((currentDate == dateParam || !dateParam) && !startParam) {
+                    if ((currentDate == dateParam || !dateParam) && !startParam) {
                         if (isPlaying && segments.length > 0) {
                             currentSegment = segments.length - 1;
-                            videoPlayers[video_index].src = segments[currentSegment].url;
-                            videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+                            const currentVideo = videoPlayers[video_index];
+                            currentVideo.src = segments[currentSegment].url;
+
+                            currentVideo.addEventListener('loadedmetadata', function onMetadata() {
+                                currentVideo.currentTime = segments[currentSegment].duration;
+                                currentVideo.play().catch(() => {}); // Ensure play() is only called after metadata is loaded
+                                currentVideo.removeEventListener('loadedmetadata', onMetadata); // Cleanup event listener
+                            });
+                            }
                         }
-                    } else if(startParam){
+                    else if(startParam){
                         for(let i = 0; i < segments.length; i++){
                             if(segments[i].timeStamp > startParam){
                                 break;
