@@ -1097,37 +1097,41 @@
                     currentDate = formatDate(fetchStartTime);
                     const startParam = getQueryParam("start");
                     if ((currentDate == dateParam || !dateParam) && !startParam) {
-                        if (isPlaying && segments.length > 0) {
-                            currentSegment = segments.length - 1;
-                            const currentVideo = videoPlayers[video_index];
-                            currentVideo.src = segments[currentSegment].url;
+                    if (isPlaying && segments.length > 0) {
+                        currentSegment = segments.length - 1;
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.src = segments[currentSegment].url;
 
-                            currentVideo.addEventListener('loadedmetadata', function onMetadata() {
-                                currentVideo.currentTime = segments[currentSegment].duration;
-                                currentVideo.play().catch(() => {}); // Ensure play() is only called after metadata is loaded
-                                currentVideo.removeEventListener('loadedmetadata', onMetadata); // Cleanup event listener
-                            });
-                            }
+                        currentVideo.addEventListener('loadedmetadata', function onMetadata() {
+                            currentVideo.currentTime = segments[currentSegment].duration;
+                            currentVideo.play().catch(() => {}); // Ensure play() is only called after metadata is loaded
+                            currentVideo.removeEventListener('loadedmetadata', onMetadata); // Cleanup event listener
+                        });
                         }
-                    else if(startParam){
-                        for(let i = 0; i < segments.length; i++){
-                            if(segments[i].timeStamp > startParam){
+                    } else if (startParam) {
+                        for (let i = 0; i < segments.length; i++) {
+                            if (segments[i].timeStamp > startParam) {
                                 break;
                             }
                             currentSegment = i;
                         }
-                        videoPlayers[video_index].src = segments[currentSegment].url;
-                        if(!startParam){ //play start of segment if start param, otherwise go to live
-                            videoPlayers[video_index].currentTime = segments[currentSegment].duration;
-                        } else {
-                            let eventTime = startParam - segments[currentSegment].timeStamp; //fast forward within minute long segment
-                            if(eventTime < segments[currentSegment].duration){
-                                videoPlayers[video_index].currentTime = eventTime;
-                            } else{
-                                videoPlayers[video_index].currentTime = segments[currentSegment].duration;
+
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.src = segments[currentSegment].url;
+
+                        currentVideo.addEventListener('loadedmetadata', function onMetadata() {
+                            let eventTime = startParam - segments[currentSegment].timeStamp;
+                            if (eventTime < segments[currentSegment].duration) {
+                                currentVideo.currentTime = eventTime;
+                            } else {
+                                currentVideo.currentTime = segments[currentSegment].duration;
                             }
-                        }
+                            
+                            currentVideo.play().catch(() => {}); // Ensure play() is only called after metadata is loaded
+                            currentVideo.removeEventListener('loadedmetadata', onMetadata); // Cleanup listener
+                        });
                     }
+
                     
                     //fetch first segment's frames! preload only does future ones
                     if (!segments[currentSegment].frames && !segments[currentSegment].fetchingFrames) {
