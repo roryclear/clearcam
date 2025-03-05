@@ -623,15 +623,33 @@
         BOOL success = [self deleteEventWithTimeStamp:timeStamp];
         
         if (success) {
-            
-            //TODO//
+            // Get the app's Documents directory
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+            NSString *documentsDirectory = [paths firstObject];
+            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+
+            // File path for the image (with .jpg extension)
+            NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
+
+            NSError *error = nil;
+
+            // Check if the image file exists and delete it
+            if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
+                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error]) {
+                    NSLog(@"Failed to delete image: %@", error.localizedDescription);
+                } else {
+                    NSLog(@"Image deleted at path: %@", imageFilePath);
+                }
+            }
+
+            // Optional cleanup: remove cached preferences for the last deleted event
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
             [[NSUserDefaults standardUserDefaults] synchronize];
-            //THIS WILL BE SLOW LONG TERM, use a queue or something
-            
+
+            // Respond with success
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
-            NSString *successMessage = @"{\"success\": \"Event deleted\"}";
+            NSString *successMessage = @"{\"success\": \"Event and associated image deleted\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [successMessage UTF8String], successMessage.length, 0);
         } else {
@@ -703,7 +721,7 @@
             NSArray<NSString *> *rangeParts = [byteRange componentsSeparatedByString:@"-"];
             NSUInteger start = [rangeParts[0] integerValue];
             NSUInteger end = (rangeParts.count > 1 && rangeParts[1].length > 0) ? [rangeParts[1] integerValue] : fileSize - 1;
-            
+
             if (start >= fileSize || end >= fileSize || start > end) {
                 dprintf(clientSocket, "HTTP/1.1 416 Requested Range Not Satisfiable\r\n");
                 dprintf(clientSocket, "Content-Range: bytes */%lu\r\n", fileSize);
@@ -732,7 +750,14 @@
         dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
         dprintf(clientSocket, "\r\n");
         [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
+    } else if ([fileExtension isEqualToString:@"jpg"]) {
+        dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
+        dprintf(clientSocket, "Content-Type: image/jpg\r\n");
+        dprintf(clientSocket, "Content-Length: %lu\r\n", fileSize);
+        dprintf(clientSocket, "\r\n");
+        [self sendFileData:file toSocket:clientSocket withContentLength:fileSize];
     }
+
     fclose(file);
 }
 
@@ -862,12 +887,10 @@
         currentTime = CMTimeAdd(currentTime, asset.duration);
     }
 
-    // 🔹 Output file setup
     NSString *outputPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject
                                stringByAppendingPathComponent:@"merged_video.mp4"];
     NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
-    // Remove existing file if it exists
-    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];//todo remove after user has downloaded too?
 
     AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:composition presetName:AVAssetExportPresetHighestQuality];
     exportSession.outputURL = outputURL;
@@ -907,12 +930,14 @@
 
     for (NSManagedObject *event in fetchedEvents) {
         NSTimeInterval timestamp = [[event valueForKey:@"timeStamp"] doubleValue];
+        long long roundedTimestamp = (long long)timestamp;
         NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
         
         NSDictionary *eventDict = @{
-            @"timeStamp": readableDate,  // Readable date format
+            @"timeStamp": readableDate,
             @"classType": [event valueForKey:@"classType"] ?: @"unknown",
-            @"quantity": [event valueForKey:@"quantity"] ?: @(0)
+            @"quantity": [event valueForKey:@"quantity"] ?: @(0),
+            @"imageURL": [NSString stringWithFormat:@"images/%lld.jpg", roundedTimestamp]
         };
         [eventDataArray addObject:eventDict];
     }

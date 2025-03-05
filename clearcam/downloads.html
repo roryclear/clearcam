@@ -27,7 +27,7 @@
                 renderEvents(events);
             } catch (error) {
                 console.error('Error fetching events:', error);
-                document.getElementById('eventsTableBody').innerHTML = '<tr><td colspan="5">Failed to load events.</td></tr>';
+                document.getElementById('eventsTableBody').innerHTML = '<tr><td colspan="4">Failed to load events.</td></tr>';
             }
         }
 
@@ -47,14 +47,22 @@
                     dateObj.getMinutes() * 60 +
                     dateObj.getSeconds() - 2; // Slightly before so you can see
 
+                // Directly use the imageURL from event data
+                const imageURL = event.imageURL;
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${event.classType}</td>
-                    <td>${event.quantity}</td>
-                    <td>${event.timeStamp}</td>
-                    <td>
+                    <!-- Combined Image and Timestamp -->
+                    <td style="text-align: center;">
+                        <img src="${imageURL}" alt="Event Image" style="width: 150px; height: auto; max-height: 150px; cursor: pointer;" onclick="playEvent('${date}', ${startSeconds})">
+                        <div>${event.timeStamp}</div>
+                    </td>
+                    <!-- Delete Column -->
+                    <td style="text-align: center;">
                         <button onclick="deleteEvent(${dateObj.getTime() / 1000})">Delete</button>
-                        <button onclick="playEvent('${date}', ${startSeconds})">Play</button>
+                    </td>
+                    <!-- Download Column -->
+                    <td style="text-align: center;">
                         <button onclick="downloadEvent(${dateObj.getTime() / 1000})">Download</button>
                     </td>
                 `;
@@ -181,14 +189,13 @@
     <table border="1">
         <thead>
             <tr>
-                <th>Class Type</th>
-                <th>Quantity</th>
-                <th>Time Stamp</th>
-                <th>Action</th>
+                <th>Image & Timestamp</th> <!-- Combined Image and Timestamp -->
+                <th>Delete</th> <!-- Delete column -->
+                <th>Download</th> <!-- Download column -->
             </tr>
         </thead>
         <tbody id="eventsTableBody">
-            <tr><td colspan="5">Loading events...</td></tr>
+            <tr><td colspan="3">Loading events...</td></tr>
         </tbody>
     </table>
 
@@ -216,3 +223,4 @@
     </div>
 </body>
 </html>
+

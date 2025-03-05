@@ -4,6 +4,7 @@
 #import "Yolo.h"
 #import "FileServer.h"
 #import "SettingsManager.h"
+#import "SceneState.h"
 
 @interface ViewController ()
 
@@ -31,6 +32,7 @@
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) dispatch_queue_t segmentQueue;
+@property (nonatomic, strong) SceneState *scene;
 
 #define MIN_FREE_SPACE_MB 500  //threshold to start deleting
 
@@ -42,6 +44,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
@@ -747,8 +750,9 @@ NSMutableDictionary *classColorMap;
             CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
 
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
-
+            
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
+            [self.scene processOutput:output withImage:ciImage];
             CGImageRelease(cgImage);
 
             __weak typeof(self) weak_self = self;
