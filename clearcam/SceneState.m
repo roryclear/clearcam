@@ -11,6 +11,7 @@
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.events = [SettingsManager sharedManager].events;
         self.alerts = [SettingsManager sharedManager].alerts;
+        self.last_email_time = [NSDate dateWithTimeIntervalSince1970:0];
 
         // Get Core Data context from AppDelegate
         AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
@@ -88,6 +89,13 @@
                 }
             } else {
                 NSLog(@"Failed to create CGImage from CIImage");
+            }
+            
+            if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 3600) { // only once per hour, enforce server side!
+                self.last_email_time = [NSDate date]; // Set to now
+                NSLog(@"sending email");
+            } else {
+                NSLog(@"NOT sending an email");
             }
 
             [self.backgroundContext performBlockAndWait:^{
