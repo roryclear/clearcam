@@ -87,10 +87,10 @@
                     NSLog(@"Failed to save image at path: %@", filePath);
                 } else {
                     NSLog(@"Image saved at path: %@", filePath);
-                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour, enforce server side!
+                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 600) { // only once per hour? enforce server side!
                         self.last_email_time = [NSDate date]; // Set to now
                         NSLog(@"sending email");
-                        [self sendEmailWithImageAtPath:filePath];
+                        //[self sendEmailWithImageAtPath:filePath];
                     } else {
                         NSLog(@"NOT sending an email");
                     }
