@@ -1,6 +1,7 @@
 #import "SceneState.h"
 #import "SettingsManager.h"
 #import "AppDelegate.h"
+#import <MobileCoreServices/MobileCoreServices.h> // Add this import
 
 @implementation SceneState
 
@@ -11,6 +12,7 @@
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.events = [SettingsManager sharedManager].events;
         self.alerts = [SettingsManager sharedManager].alerts;
+        self.last_email_time = [NSDate dateWithTimeIntervalSince1970:0];
 
         // Get Core Data context from AppDelegate
         AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
@@ -85,11 +87,18 @@
                     NSLog(@"Failed to save image at path: %@", filePath);
                 } else {
                     NSLog(@"Image saved at path: %@", filePath);
+                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
+                        self.last_email_time = [NSDate date]; // Set to now
+                        NSLog(@"sending email");
+                        //[self sendEmailWithImageAtPath:filePath];
+                    } else {
+                        NSLog(@"NOT sending an email");
+                    }
                 }
             } else {
                 NSLog(@"Failed to create CGImage from CIImage");
             }
-
+            
             [self.backgroundContext performBlockAndWait:^{
                 NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
                                                                           inManagedObjectContext:self.backgroundContext];
@@ -111,6 +120,73 @@
     if (self.lastN.count > 10) {
         [self.lastN removeObjectAtIndex:0];
     }
+}
+
+- (void)sendEmailWithImageAtPath:(NSString *)imagePath {
+    // Server details
+    NSString *server = @"http://192.168.1.103:8080";
+    NSString *endpoint = @"/";
+
+    // Email recipient address (hardcoded)
+    NSString *toEmail = @"email@gmail.com";
+
+    // Read image file
+    NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
+    if (!imageData) {
+        NSLog(@"Failed to read image data from path: %@", imagePath);
+        return;
+    }
+
+    // Generate a unique boundary
+    NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
+
+    // Construct multipart request body
+    NSMutableData *bodyData = [NSMutableData data];
+
+    // Add email field
+    [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[@"Content-Disposition: form-data; name=\"to\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[toEmail dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+    // Add image file
+    [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", [imagePath lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: %@\r\n\r\n", [self mimeTypeForFileAtPath:imagePath]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:imageData];
+    [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+    // End boundary
+    [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+
+    // Create URL request
+    NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setHTTPMethod:@"POST"];
+    [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
+    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
+    [request setHTTPBody:bodyData];
+
+    // Send request using NSURLSession
+    NSURLSession *session = [NSURLSession sharedSession];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error: %@", error.localizedDescription);
+        } else {
+            NSString *responseString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            NSLog(@"Server Response: %@", responseString);
+        }
+    }];
+    [task resume];
+}
+
+// Helper function to get MIME type for a file
+- (NSString *)mimeTypeForFileAtPath:(NSString *)path {
+    CFStringRef fileExtension = (__bridge CFStringRef)[path pathExtension];
+    CFStringRef UTI = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, fileExtension, NULL);
+    CFStringRef mimeType = UTTypeCopyPreferredTagWithClass(UTI, kUTTagClassMIMEType);
+    CFRelease(UTI);
+    return (__bridge_transfer NSString *)mimeType ?: @"application/octet-stream";
 }
 
 @end

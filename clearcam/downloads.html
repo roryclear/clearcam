@@ -6,9 +6,8 @@
     <title>Event List</title>
     <script>
         let currentTimestamp = null;
-        let defaultOffset = 30; // Default to ±30 seconds
+        let defaultOffset = 30;
 
-        // Load user settings if available
         function loadSettings() {
             const savedOffset = localStorage.getItem("defaultOffset");
             if (savedOffset !== null) {
@@ -20,20 +19,18 @@
         async function fetchEvents() {
             try {
                 const response = await fetch('/get-events');
-                if (!response.ok) {
-                    throw new Error('Failed to fetch events');
-                }
+                if (!response.ok) throw new Error('Failed to fetch events');
                 const events = await response.json();
                 renderEvents(events);
             } catch (error) {
                 console.error('Error fetching events:', error);
-                document.getElementById('eventsTableBody').innerHTML = '<tr><td colspan="4">Failed to load events.</td></tr>';
+                document.getElementById('eventsContainer').innerHTML = '<p>Failed to load events.</p>';
             }
         }
 
         function renderEvents(events) {
-            const tableBody = document.getElementById('eventsTableBody');
-            tableBody.innerHTML = ''; // Clear existing data
+            const container = document.getElementById('eventsContainer');
+            container.innerHTML = '';
 
             events.forEach(event => {
                 const dateObj = new Date(event.timeStamp);
@@ -45,40 +42,27 @@
                 const startSeconds =
                     dateObj.getHours() * 3600 +
                     dateObj.getMinutes() * 60 +
-                    dateObj.getSeconds() - 2; // Slightly before so you can see
+                    dateObj.getSeconds() - 2;
 
-                // Directly use the imageURL from event data
                 const imageURL = event.imageURL;
 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <!-- Combined Image and Timestamp -->
-                    <td style="text-align: center;">
-                        <img src="${imageURL}" alt="Event Image" style="width: 150px; height: auto; max-height: 150px; cursor: pointer;" onclick="playEvent('${date}', ${startSeconds})">
-                        <div>${event.timeStamp}</div>
-                    </td>
-                    <!-- Delete Column -->
-                    <td style="text-align: center;">
-                        <button onclick="deleteEvent(${dateObj.getTime() / 1000})">Delete</button>
-                    </td>
-                    <!-- Download Column -->
-                    <td style="text-align: center;">
-                        <button onclick="downloadEvent(${dateObj.getTime() / 1000})">Download</button>
-                    </td>
+                const card = document.createElement('div');
+                card.className = 'event-card';
+                card.innerHTML = `
+                    <img src="${imageURL}" alt="Event Image" class="event-image" onclick="playEvent('${date}', ${startSeconds})">
+                    <div class="button-group">
+                        <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">Delete</button>
+                        <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">Download</button>
+                    </div>
                 `;
-                tableBody.appendChild(row);
+                container.appendChild(card);
             });
         }
 
         async function deleteEvent(timeStamp) {
             try {
                 const response = await fetch(`/delete-event?timeStamp=${timeStamp}`, { method: 'GET' });
-
-                if (!response.ok) {
-                    throw new Error('Failed to delete event');
-                }
-
-                // Refresh event list after delete
+                if (!response.ok) throw new Error('Failed to delete event');
                 fetchEvents();
             } catch (error) {
                 console.error('Error deleting event:', error);
@@ -92,17 +76,13 @@
         }
 
         function downloadEvent(timeStamp) {
-            currentTimestamp = timeStamp; // Store timestamp for use when confirming download
+            currentTimestamp = timeStamp;
             const eventTime = new Date(timeStamp * 1000);
-
-            // Set default start and end times (using the customizable offset)
             const startTime = new Date(eventTime.getTime() - defaultOffset * 1000);
             const endTime = new Date(eventTime.getTime() + defaultOffset * 1000);
 
-            // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
             document.getElementById("startTime").value = formatDateTimeLocal(startTime);
             document.getElementById("endTime").value = formatDateTimeLocal(endTime);
-
             document.getElementById("timePickerModal").style.display = "block";
         }
 
@@ -120,12 +100,10 @@
         function confirmDownload() {
             const startTime = new Date(document.getElementById("startTime").value).getTime() / 1000;
             const endTime = new Date(document.getElementById("endTime").value).getTime() / 1000;
-
             if (!startTime || !endTime) {
                 alert("Please select both start and end times.");
                 return;
             }
-
             window.location.href = `/download?start=${startTime}&end=${endTime}`;
             closeModal();
         }
@@ -159,7 +137,66 @@
         };
     </script>
     <style>
-        /* Modal styles */
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        .event-card {
+            background: white;
+            padding: 15px;
+            margin: 10px auto;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 800px;
+        }
+
+        .event-image {
+            width: 100%;
+            height: auto;
+            cursor: pointer;
+            border-radius: 0px;
+        }
+
+        .button-group {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .action-btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .delete-btn {
+            background-color: red;
+            color: white;
+        }
+
+        .download-btn {
+            background-color: blue;
+            color: white;
+        }
+
+        @media (max-width: 600px) {
+            .event-card {
+                max-width: 90%;
+            }
+
+            .action-btn {
+                width: 45%;
+                font-size: 14px;
+            }
+        }
+
         .modal {
             display: none;
             position: fixed;
@@ -172,34 +209,13 @@
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
         }
-        .modal label {
-            display: block;
-            margin-top: 10px;
-        }
-        .modal button {
-            margin: 10px;
-            padding: 5px 10px;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
     <h1>Event List</h1>
     <button onclick="openSettings()">⚙ Settings</button>
-    <table border="1">
-        <thead>
-            <tr>
-                <th>Image & Timestamp</th> <!-- Combined Image and Timestamp -->
-                <th>Delete</th> <!-- Delete column -->
-                <th>Download</th> <!-- Download column -->
-            </tr>
-        </thead>
-        <tbody id="eventsTableBody">
-            <tr><td colspan="3">Loading events...</td></tr>
-        </tbody>
-    </table>
+    <div id="eventsContainer"></div>
 
-    <!-- Modal for Time Picker -->
     <div id="timePickerModal" class="modal">
         <h3>Select Start and End Time</h3>
         <label for="startTime">Start Time:</label>
@@ -212,7 +228,6 @@
         <button onclick="closeModal()">Cancel</button>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settingsModal" class="modal">
         <h3>Settings</h3>
         <label for="offsetInput">Default time offset (seconds):</label>
