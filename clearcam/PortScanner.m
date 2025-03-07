@@ -169,12 +169,14 @@
     NSString *deviceIP = [self getDeviceIPAddress];
     NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
     
-    //if (deviceIP) {
-    //    [foundIPs addObject:deviceIP];
-    //}
+    // Check device IP first
+    if (deviceIP && [self isAppRunningAtIP:deviceIP port:port]) {
+        [foundIPs addObject:deviceIP];
+        NSLog(@"[+] App instance found at device IP: %@", deviceIP);
+    }
 
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
-    NSLog(@"Scanning %lu IPs for open port %d...", (unsigned long)ipList.count, port);
+    NSLog(@"Scanning %lu IPs for app instances on port %d...", (unsigned long)ipList.count, port);
     
     dispatch_group_t scanGroup = dispatch_group_create();
     dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
@@ -184,12 +186,21 @@
         NSArray *batch = [ipList subarrayWithRange:range];
         
         for (NSString *ip in batch) {
+            // Skip device IP since we already checked it
+            if ([ip isEqualToString:deviceIP]) {
+                continue;
+            }
+            
             dispatch_group_enter(scanGroup);
             dispatch_async(scanQueue, ^{
+                // First check if port is open
                 if ([self isPortOpen:ip port:port]) {
-                    @synchronized(self) {
-                        NSLog(@"[+] Open port %d found at %@", port, ip);
-                        [foundIPs addObject:ip];
+                    // Then verify if it's our app
+                    if ([self isAppRunningAtIP:ip port:port]) {
+                        @synchronized(self) {
+                            NSLog(@"[+] App instance found at %@", ip);
+                            [foundIPs addObject:ip];
+                        }
                     }
                 }
                 dispatch_group_leave(scanGroup);
@@ -201,11 +212,39 @@
     }
     
     dispatch_group_notify(scanGroup, dispatch_get_main_queue(), ^{
-        NSLog(@"Scan complete. Found %lu open ports.", (unsigned long)foundIPs.count);
+        NSLog(@"Scan complete. Found %lu app instances.", (unsigned long)foundIPs.count);
         if (completion) {
             completion([foundIPs copy]);
         }
     });
+}
+
+// Helper method to verify if our app is running at the IP:port
+- (BOOL)isAppRunningAtIP:(NSString *)ip port:(int)port {
+    NSString *urlString = [NSString stringWithFormat:@"http://%@:%d/get-devices", ip, port];
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block BOOL isOurApp = NO;
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (!error && data) {
+            // Check if the response matches what your app would return
+            id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if ([json isKindOfClass:[NSArray class]]) {
+                isOurApp = YES;
+            }
+        }
+        dispatch_semaphore_signal(semaphore);
+    }];
+    
+    [task resume];
+    
+    // Wait with a 2-second timeout
+    dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC);
+    dispatch_semaphore_wait(semaphore, timeout);
+    
+    return isOurApp;
 }
 
 - (NSString *)getDeviceIPAddress {
