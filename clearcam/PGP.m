@@ -36,6 +36,14 @@
                 return nil;
             }
         }
+        
+        //todo dont need
+        CFErrorRef error = NULL;
+        CFDataRef publicKeyData = SecKeyCopyExternalRepresentation(self.publicKey, &error);
+        NSData *keyData = (__bridge_transfer NSData *)publicKeyData;
+        NSString *base64Key = [keyData base64EncodedStringWithOptions:0];
+        NSLog(@"Public Key (Base64): %@", base64Key);
+        //
 
         NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
         NSString *documentsDirectory = [paths firstObject];
@@ -43,6 +51,7 @@
         NSString *encryptedImagePath = [documentsDirectory stringByAppendingPathComponent:@"image.pgp"];
         [self encryptImageWithPublicKey:imagePath];
         [self decryptImageWithPrivateKey:encryptedImagePath];
+        //[self deleteKeysFromKeychain];
     }
     return self;
 }
@@ -52,11 +61,29 @@
     if (_publicKey) CFRelease(_publicKey);
 }
 
+//only way to delete them
+- (void)deleteKeysFromKeychain {
+    NSString *privateKeyIdentifier = @"com.clearcam.pgp.privateKey";
+    NSString *publicKeyIdentifier = @"com.clearcam.pgp.publicKey";
+
+    NSDictionary *privateDeleteQuery = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassKey,
+        (__bridge id)kSecAttrApplicationTag: privateKeyIdentifier
+    };
+    SecItemDelete((__bridge CFDictionaryRef)privateDeleteQuery);
+
+    NSDictionary *publicDeleteQuery = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassKey,
+        (__bridge id)kSecAttrApplicationTag: publicKeyIdentifier
+    };
+    SecItemDelete((__bridge CFDictionaryRef)publicDeleteQuery);
+}
+
 // Method to save keys to Keychain
 - (BOOL)saveKeysToKeychain {
     // Keychain identifiers
-    NSString *privateKeyIdentifier = @"com.yourapp.pgp.privateKey";
-    NSString *publicKeyIdentifier = @"com.yourapp.pgp.publicKey";
+    NSString *privateKeyIdentifier = @"com.clearcam.pgp.privateKey";
+    NSString *publicKeyIdentifier = @"com.clearcam.pgp.publicKey";
 
     // Export private key
     CFErrorRef error = NULL;
@@ -74,7 +101,7 @@
         if (privateKeyData) CFRelease(privateKeyData);
         return NO;
     }
-
+    
     // Save private key to Keychain
     NSDictionary *privateKeyQuery = @{
         (__bridge id)kSecClass: (__bridge id)kSecClassKey,
@@ -125,8 +152,8 @@
 // Method to load keys from Keychain
 - (BOOL)loadKeysFromKeychain {
     // Keychain identifiers
-    NSString *privateKeyIdentifier = @"com.yourapp.pgp.privateKey";
-    NSString *publicKeyIdentifier = @"com.yourapp.pgp.publicKey";
+    NSString *privateKeyIdentifier = @"com.clearcam.pgp.privateKey";
+    NSString *publicKeyIdentifier = @"com.clearcam.pgp.publicKey";
 
     // Query for private key
     NSDictionary *privateKeyQuery = @{
@@ -191,8 +218,8 @@
     publicKeyAttr[(__bridge id)kSecAttrIsPermanent] = @YES;
     
     // Add application tags to help identify keys in Keychain
-    NSString *privateKeyIdentifier = @"com.yourapp.pgp.privateKey";
-    NSString *publicKeyIdentifier = @"com.yourapp.pgp.publicKey";
+    NSString *privateKeyIdentifier = @"com.clearcam.pgp.privateKey";
+    NSString *publicKeyIdentifier = @"com.clearcam.pgp.publicKey";
     privateKeyAttr[(__bridge id)kSecAttrApplicationTag] = privateKeyIdentifier;
     publicKeyAttr[(__bridge id)kSecAttrApplicationTag] = publicKeyIdentifier;
 
