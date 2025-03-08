@@ -9,24 +9,45 @@
             <string>PGP File</string>
             <key>LSItemContentTypes</key>
             <array>
-                <string>public.data</string>
+                <string>com.clearcam.pgpfile</string>
             </array>
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>pgp</string>
             </array>
-            <!--<key>CFBundleTypeIconFile</key> -->
-            <!--<string>icon.png</string>  Optional: specify an icon for .pgp files -->
-            <!--<key>LSHandlerRank</key>-->
-            <!--<string>Alternate</string> <!-- Optional: specify handler rank -->
+            <key>LSHandlerRank</key>
+            <string>Owner</string> <!-- Makes app the default handler -->
         </dict>
     </array>
+
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.clearcam.pgpfile</string>
+            <key>UTTypeDescription</key>
+            <string>PGP Encrypted File</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>pgp</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
+
     <key>UIFileSharingEnabled</key>
     <true/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
     <key>NSCameraUsageDescription</key>
     <string>We need access to your camera to take photos and videos.</string>
+    
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

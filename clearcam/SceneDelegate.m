@@ -72,20 +72,29 @@
     // Destination path inside the app's Documents directory
     NSURL *localPGPFileURL = [documentsDirectoryURL URLByAppendingPathComponent:url.lastPathComponent];
 
-    // Check if file is already in Documents, otherwise copy it
-    if (![url.path isEqualToString:localPGPFileURL.path]) {
-        NSError *copyError = nil;
-        [[NSFileManager defaultManager] copyItemAtURL:url toURL:localPGPFileURL error:&copyError];
+    // If the file already exists, remove it before copying
+    if ([[NSFileManager defaultManager] fileExistsAtPath:localPGPFileURL.path]) {
+        NSError *removeError = nil;
+        [[NSFileManager defaultManager] removeItemAtURL:localPGPFileURL error:&removeError];
         
-        if (copyError) {
-            NSLog(@"Error copying file: %@", copyError.localizedDescription);
+        if (removeError) {
+            NSLog(@"Error removing existing file: %@", removeError.localizedDescription);
             [url stopAccessingSecurityScopedResource]; // Stop access before returning
             return;
         }
     }
 
+    // Copy the file to Documents directory
+    NSError *copyError = nil;
+    [[NSFileManager defaultManager] copyItemAtURL:url toURL:localPGPFileURL error:&copyError];
+
     // Stop accessing the security-scoped resource after copying
     [url stopAccessingSecurityScopedResource];
+
+    if (copyError) {
+        NSLog(@"Error copying file: %@", copyError.localizedDescription);
+        return;
+    }
 
     // Decrypt the copied .pgp file using your PGP class
     NSString *encryptedFilePath = localPGPFileURL.path;
@@ -109,7 +118,6 @@
         NSLog(@"Decrypted file not found at %@", decryptedFilePath);
     }
 }
-
 
 #pragma mark - UIDocumentInteractionControllerDelegate
 
