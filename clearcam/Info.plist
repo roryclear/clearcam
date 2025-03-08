@@ -2,6 +2,25 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>PGP File</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>pgp</string>
+            </array>
+            <!--<key>CFBundleTypeIconFile</key> -->
+            <!--<string>icon.png</string>  Optional: specify an icon for .pgp files -->
+            <!--<key>LSHandlerRank</key>-->
+            <!--<string>Alternate</string> <!-- Optional: specify handler rank -->
+        </dict>
+    </array>
     <key>UIFileSharingEnabled</key>
     <true/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
