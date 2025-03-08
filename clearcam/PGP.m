@@ -1,34 +1,42 @@
 #import "pgp.h"
-#import <Security/Security.h>
 #import <CommonCrypto/CommonCrypto.h>
+
+@interface PGP ()
+
+@property (nonatomic) SecKeyRef privateKey;
+@property (nonatomic) SecKeyRef publicKey;
+
+@end
 
 @implementation PGP
 
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // Generate RSA Key Pair
         NSArray *keyPair = [self generateRSAKeyPair:3072];
-
-        SecKeyRef privateKey = (__bridge SecKeyRef)keyPair[0];
-        SecKeyRef publicKey = (__bridge SecKeyRef)keyPair[1];
-
-        NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        NSString *imagePath = [documentsDirectory stringByAppendingPathComponent:@"image.jpg"];
-        [self encryptImageWithPublicKey:publicKey filePath:imagePath];
-
-        NSString *encryptedImagePath = [documentsDirectory stringByAppendingPathComponent:@"image.pgp"];
-        [self decryptImageWithPrivateKey:privateKey filePath:encryptedImagePath];
+        _privateKey = (__bridge_retained SecKeyRef)keyPair[0];
+        _publicKey = (__bridge_retained SecKeyRef)keyPair[1];
     }
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths firstObject];
+    NSString *imagePath = [documentsDirectory stringByAppendingPathComponent:@"image.jpg"];
+    NSString *encryptedImagePath = [documentsDirectory stringByAppendingPathComponent:@"image.pgp"];
+    [self encryptImageWithPublicKey:imagePath];
+    [self decryptImageWithPrivateKey:encryptedImagePath];
     return self;
 }
 
-- (void)encryptImageWithPublicKey:(SecKeyRef)publicKey filePath:(NSString *)filePath {
+- (void)dealloc {
+    if (_privateKey) CFRelease(_privateKey);
+    if (_publicKey) CFRelease(_publicKey);
+}
+
+- (void)encryptImageWithPublicKey:(NSString *)filePath {
     NSString *encryptedFilePath = [[filePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"pgp"];
     NSData *imageData = [NSData dataWithContentsOfFile:filePath];
-
+    
     NSMutableData *symmetricKey = [NSMutableData dataWithLength:32];
-    NSData *encryptedSymmetricKey = [self rsaEncryptData:symmetricKey publicKey:publicKey];
+    NSData *encryptedSymmetricKey = [self rsaEncryptData:symmetricKey publicKey:self.publicKey];
 
     NSMutableData *iv = [NSMutableData dataWithLength:kCCBlockSizeAES128];
     NSData *encryptedImageData = [self aesEncryptData:imageData key:symmetricKey iv:iv];
@@ -41,11 +49,11 @@
     if ([encryptedFileData writeToFile:encryptedFilePath atomically:YES]) {
         NSLog(@"Encryption complete: %@", encryptedFilePath);
     } else {
-        NSLog(@"Failed to write encrypted file to %@", encryptedFilePath);
+        NSLog(@"Failed to write encrypted file");
     }
 }
 
-- (void)decryptImageWithPrivateKey:(SecKeyRef)privateKey filePath:(NSString *)encryptedFilePath {
+- (void)decryptImageWithPrivateKey:(NSString *)encryptedFilePath {
     NSString *decryptedFilePath = [[encryptedFilePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"jpg"];
     NSData *loadedEncryptedFileData = [NSData dataWithContentsOfFile:encryptedFilePath];
 
@@ -53,13 +61,13 @@
     NSData *loadedIV = [loadedEncryptedFileData subdataWithRange:NSMakeRange(384, kCCBlockSizeAES128)];
     NSData *loadedEncryptedImageData = [loadedEncryptedFileData subdataWithRange:NSMakeRange(384 + kCCBlockSizeAES128, loadedEncryptedFileData.length - 384 - kCCBlockSizeAES128)];
 
-    NSData *decryptedSymmetricKey = [self rsaDecryptData:loadedEncryptedSymmetricKey privateKey:privateKey];
+    NSData *decryptedSymmetricKey = [self rsaDecryptData:loadedEncryptedSymmetricKey privateKey:self.privateKey];
     NSData *decryptedImageData = [self aesDecryptData:loadedEncryptedImageData key:decryptedSymmetricKey iv:loadedIV];
 
     if ([decryptedImageData writeToFile:decryptedFilePath atomically:YES]) {
         NSLog(@"Decryption complete: %@", decryptedFilePath);
     } else {
-        NSLog(@"Failed to write decrypted file to %@", decryptedFilePath);
+        NSLog(@"Failed to write decrypted file");
     }
 }
 
@@ -75,24 +83,16 @@
         return nil;
     }
 
-    return @[(__bridge id)privateKey, (__bridge id)publicKey];
+    return @[(__bridge_transfer id)privateKey, (__bridge_transfer id)publicKey];
 }
 
 - (NSData *)rsaEncryptData:(NSData *)data publicKey:(SecKeyRef)publicKey {
     size_t cipherBufferSize = SecKeyGetBlockSize(publicKey);
     uint8_t *cipherBuffer = malloc(cipherBufferSize);
-
-    OSStatus status = SecKeyEncrypt(
-        publicKey,
-        kSecPaddingOAEP,
-        data.bytes,
-        data.length,
-        cipherBuffer,
-        &cipherBufferSize
-    );
+    OSStatus status = SecKeyEncrypt(publicKey, kSecPaddingOAEP, data.bytes, data.length, cipherBuffer, &cipherBufferSize);
 
     if (status != errSecSuccess) {
-        NSLog(@"Error encrypting data with RSA: %d", (int)status);
+        NSLog(@"Error encrypting data: %d", (int)status);
         free(cipherBuffer);
         return nil;
     }
@@ -105,18 +105,10 @@
 - (NSData *)rsaDecryptData:(NSData *)data privateKey:(SecKeyRef)privateKey {
     size_t plainBufferSize = SecKeyGetBlockSize(privateKey);
     uint8_t *plainBuffer = malloc(plainBufferSize);
-
-    OSStatus status = SecKeyDecrypt(
-        privateKey,
-        kSecPaddingOAEP,
-        data.bytes,
-        data.length,
-        plainBuffer,
-        &plainBufferSize
-    );
+    OSStatus status = SecKeyDecrypt(privateKey, kSecPaddingOAEP, data.bytes, data.length, plainBuffer, &plainBufferSize);
 
     if (status != errSecSuccess) {
-        NSLog(@"Error decrypting data with RSA: %d", (int)status);
+        NSLog(@"Error decrypting data: %d", (int)status);
         free(plainBuffer);
         return nil;
     }
@@ -131,22 +123,10 @@
     void *buffer = malloc(bufferSize);
     size_t numBytesEncrypted = 0;
 
-    CCCryptorStatus status = CCCrypt(
-        kCCEncrypt,
-        kCCAlgorithmAES,
-        kCCOptionPKCS7Padding,
-        key.bytes,
-        key.length,
-        iv.bytes,
-        data.bytes,
-        data.length,
-        buffer,
-        bufferSize,
-        &numBytesEncrypted
-    );
+    CCCryptorStatus status = CCCrypt(kCCEncrypt, kCCAlgorithmAES, kCCOptionPKCS7Padding, key.bytes, key.length, iv.bytes, data.bytes, data.length, buffer, bufferSize, &numBytesEncrypted);
 
     if (status != kCCSuccess) {
-        NSLog(@"Error encrypting data with AES: %d", (int)status);
+        NSLog(@"AES encryption failed: %d", (int)status);
         free(buffer);
         return nil;
     }
@@ -159,22 +139,10 @@
     void *buffer = malloc(bufferSize);
     size_t numBytesDecrypted = 0;
 
-    CCCryptorStatus status = CCCrypt(
-        kCCDecrypt,
-        kCCAlgorithmAES,
-        kCCOptionPKCS7Padding,
-        key.bytes,
-        key.length,
-        iv.bytes,
-        data.bytes,
-        data.length,
-        buffer,
-        bufferSize,
-        &numBytesDecrypted
-    );
+    CCCryptorStatus status = CCCrypt(kCCDecrypt, kCCAlgorithmAES, kCCOptionPKCS7Padding, key.bytes, key.length, iv.bytes, data.bytes, data.length, buffer, bufferSize, &numBytesDecrypted);
 
     if (status != kCCSuccess) {
-        NSLog(@"Error decrypting data with AES: %d", (int)status);
+        NSLog(@"AES decryption failed: %d", (int)status);
         free(buffer);
         return nil;
     }
@@ -183,3 +151,4 @@
 }
 
 @end
+

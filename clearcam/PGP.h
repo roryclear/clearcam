@@ -3,8 +3,11 @@
 
 @interface PGP : NSObject
 
+@property (nonatomic, readonly) SecKeyRef privateKey;
+@property (nonatomic, readonly) SecKeyRef publicKey;
+
 - (instancetype)init;
-- (void)encryptImageWithPublicKey:(SecKeyRef)publicKey filePath:(NSString *)filePath;
-- (void)decryptImageWithPrivateKey:(SecKeyRef)privateKey filePath:(NSString *)encryptedFilePath;
+- (void)encryptImageWithPublicKey:(NSString *)filePath;
+- (void)decryptImageWithPrivateKey:(NSString *)encryptedFilePath;
 
 @end
