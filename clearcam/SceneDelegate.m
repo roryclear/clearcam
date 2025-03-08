@@ -54,29 +54,62 @@
 }
 
 - (void)handlePGPFileAtURL:(NSURL *)url {
-    // Decrypt the .pgp file using the PGP class
-    NSString *encryptedFilePath = url.path;
+    if (!url) {
+        NSLog(@"Error: URL is nil.");
+        return;
+    }
+
+    // Start accessing security-scoped resource (for iCloud/Downloads files)
+    BOOL isSecured = [url startAccessingSecurityScopedResource];
+    if (!isSecured) {
+        NSLog(@"Error: Unable to access security-scoped resource.");
+        return;
+    }
+
+    // Get the path to the app's Documents directory
+    NSURL *documentsDirectoryURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+
+    // Destination path inside the app's Documents directory
+    NSURL *localPGPFileURL = [documentsDirectoryURL URLByAppendingPathComponent:url.lastPathComponent];
+
+    // Check if file is already in Documents, otherwise copy it
+    if (![url.path isEqualToString:localPGPFileURL.path]) {
+        NSError *copyError = nil;
+        [[NSFileManager defaultManager] copyItemAtURL:url toURL:localPGPFileURL error:&copyError];
+        
+        if (copyError) {
+            NSLog(@"Error copying file: %@", copyError.localizedDescription);
+            [url stopAccessingSecurityScopedResource]; // Stop access before returning
+            return;
+        }
+    }
+
+    // Stop accessing the security-scoped resource after copying
+    [url stopAccessingSecurityScopedResource];
+
+    // Decrypt the copied .pgp file using your PGP class
+    NSString *encryptedFilePath = localPGPFileURL.path;
     [self.pgp decryptImageWithPrivateKey:encryptedFilePath];
-    
+
     // Get the path to the decrypted .jpg file
     NSString *decryptedFilePath = [[encryptedFilePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"jpg"];
     NSURL *decryptedFileURL = [NSURL fileURLWithPath:decryptedFilePath];
-    
+
     // Check if the decrypted file exists
     if ([[NSFileManager defaultManager] fileExistsAtPath:decryptedFilePath]) {
         // Create a UIDocumentInteractionController for the decrypted file
         self.docController = [UIDocumentInteractionController interactionControllerWithURL:decryptedFileURL];
-        
+
         // Set the delegate to self
         self.docController.delegate = self;
-        
+
         // Present the document interaction controller from the root view controller
         [self.docController presentPreviewAnimated:YES];
     } else {
-        // If the file doesn't exist, log an error or show an alert
         NSLog(@"Decrypted file not found at %@", decryptedFilePath);
     }
 }
+
 
 #pragma mark - UIDocumentInteractionControllerDelegate
 

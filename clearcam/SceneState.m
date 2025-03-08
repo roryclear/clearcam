@@ -92,7 +92,7 @@
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
                         self.last_email_time = [NSDate date]; // Set to now
                         NSLog(@"sending email");
-                        [self sendEmailWithImageAtPath:filePath encryptImage:NO];
+                        [self sendEmailWithImageAtPath:filePath encryptImage:YES];
                     } else {
                         NSLog(@"NOT sending an email");
                     }
