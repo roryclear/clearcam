@@ -44,13 +44,15 @@
         NSString *base64Key = [keyData base64EncodedStringWithOptions:0];
         NSLog(@"Public Key (Base64): %@", base64Key);
         //
-
+        
+        /*
         NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
         NSString *documentsDirectory = [paths firstObject];
         NSString *imagePath = [documentsDirectory stringByAppendingPathComponent:@"image.jpg"];
         NSString *encryptedImagePath = [documentsDirectory stringByAppendingPathComponent:@"image.pgp"];
         [self encryptImageWithPublicKey:imagePath];
         [self decryptImageWithPrivateKey:encryptedImagePath];
+         */
         //[self deleteKeysFromKeychain];
     }
     return self;

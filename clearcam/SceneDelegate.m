@@ -1,11 +1,13 @@
 #import "SceneDelegate.h"
 #import "ViewController.h" // Import your main view controller
+#import "PGP.h" // Import your PGP class
 #import <UIKit/UIKit.h>
 
 @interface SceneDelegate () <UIDocumentInteractionControllerDelegate>
 
 @property (strong, nonatomic) UIDocumentInteractionController *docController;
 @property (strong, nonatomic) NSURL *pendingURL; // Store the URL if the app is launched from scratch
+@property (strong, nonatomic) PGP *pgp; // Instance of your PGP class
 
 @end
 
@@ -20,6 +22,12 @@
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:rootViewController];
     self.window.rootViewController = navigationController;
     [self.window makeKeyAndVisible];
+    
+    // Initialize the PGP instance
+    self.pgp = [[PGP alloc] init];
+    if (!self.pgp) {
+        NSLog(@"Failed to initialize PGP.");
+    }
     
     // Check if the app was launched with a URL (e.g., opening a .pgp file)
     if (connectionOptions.URLContexts.count > 0) {
@@ -46,16 +54,18 @@
 }
 
 - (void)handlePGPFileAtURL:(NSURL *)url {
-    // Get the path to the app's documents directory
-    NSURL *documentsDirectoryURL = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+    // Decrypt the .pgp file using the PGP class
+    NSString *encryptedFilePath = url.path;
+    [self.pgp decryptImageWithPrivateKey:encryptedFilePath];
     
-    // Create a URL for the "image.jpg" file in the documents directory
-    NSURL *imageURL = [documentsDirectoryURL URLByAppendingPathComponent:@"image.jpg"];
+    // Get the path to the decrypted .jpg file
+    NSString *decryptedFilePath = [[encryptedFilePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"jpg"];
+    NSURL *decryptedFileURL = [NSURL fileURLWithPath:decryptedFilePath];
     
-    // Check if the file exists at the path
-    if ([[NSFileManager defaultManager] fileExistsAtPath:imageURL.path]) {
-        // Create a UIDocumentInteractionController for the image file
-        self.docController = [UIDocumentInteractionController interactionControllerWithURL:imageURL];
+    // Check if the decrypted file exists
+    if ([[NSFileManager defaultManager] fileExistsAtPath:decryptedFilePath]) {
+        // Create a UIDocumentInteractionController for the decrypted file
+        self.docController = [UIDocumentInteractionController interactionControllerWithURL:decryptedFileURL];
         
         // Set the delegate to self
         self.docController.delegate = self;
@@ -64,7 +74,7 @@
         [self.docController presentPreviewAnimated:YES];
     } else {
         // If the file doesn't exist, log an error or show an alert
-        NSLog(@"File 'image.jpg' not found in documents folder.");
+        NSLog(@"Decrypted file not found at %@", decryptedFilePath);
     }
 }
 

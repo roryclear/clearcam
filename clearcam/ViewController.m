@@ -5,7 +5,7 @@
 #import "FileServer.h"
 #import "SettingsManager.h"
 #import "SceneState.h"
-#import "pgp.h"
+//#import "pgp.h"
 
 @interface ViewController ()
 
@@ -45,7 +45,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    PGP *pgp = [[PGP alloc] init];
+    //PGP *pgp = [[PGP alloc] init];
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
     self.current_segment_squares = [[NSMutableArray alloc] init];
