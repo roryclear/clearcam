@@ -17,51 +17,32 @@
     SecKeyRef privateKey = (__bridge SecKeyRef)keyPair[0];
     SecKeyRef publicKey = (__bridge SecKeyRef)keyPair[1];
 
-    // Encrypt Image
-    [self encryptImageWithPublicKey:publicKey];
-
-    // Decrypt Image
-    [self decryptImageWithPrivateKey:privateKey];
-}
-
-- (void)encryptImageWithPublicKey:(SecKeyRef)publicKey {
     NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     NSString *imagePath = [documentsDirectory stringByAppendingPathComponent:@"image.jpg"];
-    NSString *encryptedFilePath = [documentsDirectory stringByAppendingPathComponent:@"image_encrypted.pgp"];
+    [self encryptImageWithPublicKey:publicKey filePath:imagePath];
 
-    NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
-    if (!imageData) {
-        NSLog(@"Failed to read image file");
-        return;
-    }
+    NSString *encryptedImagePath = [documentsDirectory stringByAppendingPathComponent:@"image.pgp"];
+    [self decryptImageWithPrivateKey:privateKey filePath:encryptedImagePath];
+}
+
+- (void)encryptImageWithPublicKey:(SecKeyRef)publicKey filePath:(NSString *)filePath {
+    // Generate the output file path by replacing ".jpg" with ".pgp"
+    NSString *encryptedFilePath = [[filePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"pgp"];
+
+    // Read the image data
+    NSData *imageData = [NSData dataWithContentsOfFile:filePath];
 
     // Generate a random symmetric key
     NSMutableData *symmetricKey = [NSMutableData dataWithLength:32];
-    if (SecRandomCopyBytes(kSecRandomDefault, symmetricKey.length, symmetricKey.mutableBytes) != errSecSuccess) {
-        NSLog(@"Failed to generate symmetric key");
-        return;
-    }
 
     // Encrypt the symmetric key using RSA
     NSData *encryptedSymmetricKey = [self rsaEncryptData:symmetricKey publicKey:publicKey];
-    if (!encryptedSymmetricKey) {
-        NSLog(@"Failed to encrypt symmetric key");
-        return;
-    }
 
     // Generate IV
     NSMutableData *iv = [NSMutableData dataWithLength:kCCBlockSizeAES128];
-    if (SecRandomCopyBytes(kSecRandomDefault, iv.length, iv.mutableBytes) != errSecSuccess) {
-        NSLog(@"Failed to generate IV");
-        return;
-    }
 
     // Encrypt the image data using AES
     NSData *encryptedImageData = [self aesEncryptData:imageData key:symmetricKey iv:iv];
-    if (!encryptedImageData) {
-        NSLog(@"Failed to encrypt image data");
-        return;
-    }
 
     // Save encrypted data
     NSMutableData *encryptedFileData = [NSMutableData data];
@@ -69,20 +50,19 @@
     [encryptedFileData appendData:iv];
     [encryptedFileData appendData:encryptedImageData];
 
-    [encryptedFileData writeToFile:encryptedFilePath atomically:YES];
-    NSLog(@"Encryption complete: %@", encryptedFilePath);
+    if ([encryptedFileData writeToFile:encryptedFilePath atomically:YES]) {
+        NSLog(@"Encryption complete: %@", encryptedFilePath);
+    } else {
+        NSLog(@"Failed to write encrypted file to %@", encryptedFilePath);
+    }
 }
 
-- (void)decryptImageWithPrivateKey:(SecKeyRef)privateKey {
-    NSString *documentsDirectory = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSString *encryptedFilePath = [documentsDirectory stringByAppendingPathComponent:@"image_encrypted.pgp"];
-    NSString *decryptedFilePath = [documentsDirectory stringByAppendingPathComponent:@"image_decrypted.jpg"];
+- (void)decryptImageWithPrivateKey:(SecKeyRef)privateKey filePath:(NSString *)encryptedFilePath {
+    // Generate the output file path by replacing ".pgp" with ".jpg"
+    NSString *decryptedFilePath = [[encryptedFilePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"jpg"];
 
+    // Read the encrypted file
     NSData *loadedEncryptedFileData = [NSData dataWithContentsOfFile:encryptedFilePath];
-    if (!loadedEncryptedFileData) {
-        NSLog(@"Failed to read encrypted file");
-        return;
-    }
 
     // Extract the encrypted symmetric key, IV, and encrypted image data
     NSData *loadedEncryptedSymmetricKey = [loadedEncryptedFileData subdataWithRange:NSMakeRange(0, 384)];
@@ -91,23 +71,16 @@
 
     // Decrypt the symmetric key using RSA
     NSData *decryptedSymmetricKey = [self rsaDecryptData:loadedEncryptedSymmetricKey privateKey:privateKey];
-    if (!decryptedSymmetricKey) {
-        NSLog(@"Failed to decrypt symmetric key");
-        return;
-    }
-
     // Decrypt the image data using AES
     NSData *decryptedImageData = [self aesDecryptData:loadedEncryptedImageData key:decryptedSymmetricKey iv:loadedIV];
-    if (!decryptedImageData) {
-        NSLog(@"Failed to decrypt image data");
-        return;
-    }
 
     // Save the decrypted image
-    [decryptedImageData writeToFile:decryptedFilePath atomically:YES];
-    NSLog(@"Decryption complete: %@", decryptedFilePath);
+    if ([decryptedImageData writeToFile:decryptedFilePath atomically:YES]) {
+        NSLog(@"Decryption complete: %@", decryptedFilePath);
+    } else {
+        NSLog(@"Failed to write decrypted file to %@", decryptedFilePath);
+    }
 }
-
 
 // Helper function to generate RSA key pair
 - (NSArray *)generateRSAKeyPair:(int)keySize {
