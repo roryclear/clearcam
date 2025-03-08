@@ -1,51 +1,59 @@
 #import "SceneDelegate.h"
+#import <UIKit/UIKit.h>
 
-@interface SceneDelegate ()
+@interface SceneDelegate () <UIDocumentInteractionControllerDelegate>
+
+@property (strong, nonatomic) UIDocumentInteractionController *docController;
 
 @end
 
 @implementation SceneDelegate
 
-
-- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
-    // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
-    // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
-    // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
+// This method will be called when your app is opened with a URL (e.g., a .pgp file)
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+    // Get the URL of the opened file
+    NSURL *url = URLContexts.anyObject.URL;
+    
+    // Check if the file has a .pgp extension
+    if ([url.pathExtension isEqualToString:@"pgp"]) {
+        // Handle the .pgp file (e.g., decrypt or process it)
+        [self handlePGPFileAtURL:url];
+    }
 }
 
-
-- (void)sceneDidDisconnect:(UIScene *)scene {
-    // Called as the scene is being released by the system.
-    // This occurs shortly after the scene enters the background, or when its session is discarded.
-    // Release any resources associated with this scene that can be re-created the next time the scene connects.
-    // The scene may re-connect later, as its session was not necessarily discarded (see `application:didDiscardSceneSessions` instead).
+// Custom method to handle the .pgp file and open "image.jpg" from the documents folder
+- (void)handlePGPFileAtURL:(NSURL *)url {
+    // Get the path to the app's documents directory
+    NSURL *documentsDirectoryURL = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+    
+    // Create a URL for the "image.jpg" file in the documents directory
+    NSURL *imageURL = [documentsDirectoryURL URLByAppendingPathComponent:@"image.jpg"];
+    
+    // Check if the file exists at the path
+    if ([[NSFileManager defaultManager] fileExistsAtPath:imageURL.path]) {
+        // Get the root view controller of the window to present the document controller
+        UIWindow *window = [UIApplication sharedApplication].keyWindow;
+        UIViewController *rootViewController = window.rootViewController;
+        
+        // Create a UIDocumentInteractionController for the image file
+        self.docController = [UIDocumentInteractionController interactionControllerWithURL:imageURL];
+        
+        // Set the delegate to self
+        self.docController.delegate = self;
+        
+        // Present the document interaction controller from the root view controller
+        [self.docController presentPreviewAnimated:YES];
+    } else {
+        // If the file doesn't exist, log an error or show an alert
+        NSLog(@"File 'image.jpg' not found in documents folder.");
+    }
 }
 
-
-- (void)sceneDidBecomeActive:(UIScene *)scene {
-    // Called when the scene has moved from an inactive state to an active state.
-    // Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive.
+// Implementing the required delegate method
+- (UIViewController *)documentInteractionControllerViewControllerForPreview:(UIDocumentInteractionController *)controller {
+    // Return the view controller that will present the preview
+    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+    return window.rootViewController;
 }
-
-
-- (void)sceneWillResignActive:(UIScene *)scene {
-    // Called when the scene will move from an active state to an inactive state.
-    // This may occur due to temporary interruptions (ex. an incoming phone call).
-}
-
-
-- (void)sceneWillEnterForeground:(UIScene *)scene {
-    // Called as the scene transitions from the background to the foreground.
-    // Use this method to undo the changes made on entering the background.
-}
-
-
-- (void)sceneDidEnterBackground:(UIScene *)scene {
-    // Called as the scene transitions from the foreground to the background.
-    // Use this method to save data, release shared resources, and store enough scene-specific state information
-    // to restore the scene back to its current state.
-}
-
 
 @end
-
