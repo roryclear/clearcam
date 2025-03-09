@@ -12,6 +12,7 @@
 @property (nonatomic, strong) AVCaptureSession *captureSession;
 @property (nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
 @property (nonatomic, strong) UILabel *fpsLabel;
+@property (nonatomic, strong) UIButton *recordButton;
 @property (nonatomic, assign) CFTimeInterval lastFrameTime;
 @property (nonatomic, assign) NSUInteger frameCount;
 @property (nonatomic, strong) Yolo *yolo;
@@ -82,7 +83,7 @@ NSMutableDictionary *classColorMap;
     [self handleDeviceOrientationChange];
     SettingsManager *settings = [SettingsManager sharedManager];
     [self setupCameraWithWidth:settings.width height:settings.height]; //todo, use defaults!
-    [self setupFPSLabel];
+    [self setupUI];
 }
 
 - (void)dealloc {
@@ -334,13 +335,65 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)setupFPSLabel {
+- (void)setupUI {
     self.fpsLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, 150, 30)];
     self.fpsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
     self.fpsLabel.textColor = [UIColor whiteColor];
     self.fpsLabel.font = [UIFont boldSystemFontOfSize:18];
     self.fpsLabel.text = @"FPS: 0";
     [self.view addSubview:self.fpsLabel];
+
+    // Create the record button
+    self.recordButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
+    self.recordButton.backgroundColor = [UIColor redColor];
+    self.recordButton.tintColor = [UIColor whiteColor];
+    self.recordButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    
+    // Set initial frame (size will be adjusted dynamically)
+    CGFloat buttonSize = 60;
+    self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
+    self.recordButton.layer.cornerRadius = buttonSize / 2; // Make it circular
+    self.recordButton.clipsToBounds = YES; // Ensure it remains circular
+
+    [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
+
+    [self.view addSubview:self.recordButton];
+
+    [self updateRecordButtonFrame]; // Set initial position
+}
+
+// Position the button correctly based on orientation
+- (void)updateRecordButtonFrame {
+    CGFloat screenWidth = self.view.bounds.size.width;
+    CGFloat screenHeight = self.view.bounds.size.height;
+    CGFloat buttonSize = 60; // Circle size
+    CGFloat margin = 20;
+
+    self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
+    self.recordButton.layer.cornerRadius = buttonSize / 2;
+
+    if (screenWidth > screenHeight) { // Landscape: Right side
+        self.recordButton.frame = CGRectMake(screenWidth - buttonSize - margin, screenHeight / 2 - buttonSize / 2, buttonSize, buttonSize);
+    } else { // Portrait: Bottom center
+        self.recordButton.frame = CGRectMake(screenWidth / 2 - buttonSize / 2, screenHeight - buttonSize - margin, buttonSize, buttonSize);
+    }
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self updateRecordButtonFrame];
+}
+
+// Toggle recording state
+- (void)toggleRecording {
+    if ([[self.recordButton titleForState:UIControlStateNormal] isEqualToString:@"Record"]) {
+        [self.recordButton setTitle:@"Stop" forState:UIControlStateNormal];
+        self.recordButton.backgroundColor = [UIColor darkGrayColor]; // Change color to indicate recording
+    } else {
+        [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
+        self.recordButton.backgroundColor = [UIColor redColor]; // Reset to red when stopped
+    }
 }
 
 - (void)viewWillLayoutSubviews {
