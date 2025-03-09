@@ -13,6 +13,7 @@
 @property (nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
 @property (nonatomic, strong) UILabel *fpsLabel;
 @property (nonatomic, strong) UIButton *recordButton;
+@property (nonatomic, strong) UIButton *settingsButton;
 @property (nonatomic, assign) CFTimeInterval lastFrameTime;
 @property (nonatomic, assign) NSUInteger frameCount;
 @property (nonatomic, strong) Yolo *yolo;
@@ -351,41 +352,63 @@ NSMutableDictionary *classColorMap;
     self.recordButton.backgroundColor = [UIColor redColor];
     self.recordButton.tintColor = [UIColor whiteColor];
     self.recordButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    
-    // Set initial frame (size will be adjusted dynamically)
+
     CGFloat buttonSize = 60;
     self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
-    self.recordButton.layer.cornerRadius = buttonSize / 2; // Make it circular
-    self.recordButton.clipsToBounds = YES; // Ensure it remains circular
+    self.recordButton.layer.cornerRadius = buttonSize / 2;
+    self.recordButton.clipsToBounds = YES;
 
     [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
-
     [self.view addSubview:self.recordButton];
 
-    [self updateRecordButtonFrame]; // Set initial position
+    // Create the settings button
+    self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.settingsButton setTitle:@"⚙️" forState:UIControlStateNormal]; // Gear icon
+    self.settingsButton.backgroundColor = [UIColor grayColor];
+    self.settingsButton.tintColor = [UIColor whiteColor];
+    self.settingsButton.titleLabel.font = [UIFont boldSystemFontOfSize:20];
+
+    self.settingsButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
+    self.settingsButton.layer.cornerRadius = buttonSize / 2;
+    self.settingsButton.clipsToBounds = YES;
+
+    [self.settingsButton addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.settingsButton];
+
+    [self updateButtonFrames]; // Set initial positions
 }
 
-// Position the button correctly based on orientation
-- (void)updateRecordButtonFrame {
+// Position the buttons correctly based on orientation
+- (void)updateButtonFrames {
     CGFloat screenWidth = self.view.bounds.size.width;
     CGFloat screenHeight = self.view.bounds.size.height;
-    CGFloat buttonSize = 60; // Circle size
+    CGFloat buttonSize = 60;
     CGFloat margin = 20;
+    CGFloat spacing = 10; // Space between buttons
 
-    self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
     self.recordButton.layer.cornerRadius = buttonSize / 2;
+    self.settingsButton.layer.cornerRadius = buttonSize / 2;
 
     if (screenWidth > screenHeight) { // Landscape: Right side
         self.recordButton.frame = CGRectMake(screenWidth - buttonSize - margin, screenHeight / 2 - buttonSize / 2, buttonSize, buttonSize);
-    } else { // Portrait: Bottom center
-        self.recordButton.frame = CGRectMake(screenWidth / 2 - buttonSize / 2, screenHeight - buttonSize - margin, buttonSize, buttonSize);
+        self.settingsButton.frame = CGRectMake(self.recordButton.frame.origin.x, self.recordButton.frame.origin.y - buttonSize - spacing, buttonSize, buttonSize);
+    } else { // Portrait: Bottom center, settings to the right
+        CGFloat recordX = (screenWidth - buttonSize) / 2;
+        self.recordButton.frame = CGRectMake(recordX, screenHeight - buttonSize - margin, buttonSize, buttonSize);
+        self.settingsButton.frame = CGRectMake(recordX + buttonSize + spacing, self.recordButton.frame.origin.y, buttonSize, buttonSize);
     }
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    [self updateRecordButtonFrame];
+    [self updateButtonFrames];
 }
+
+- (void)openSettings {
+    NSLog(@"Settings button tapped");
+    // Implement settings screen transition here
+}
+
 
 // Toggle recording state
 - (void)toggleRecording {
