@@ -19,6 +19,7 @@
 @property (nonatomic, strong) CIContext *ciContext;
 
 @property (atomic, assign) BOOL isProcessing;
+@property (nonatomic, assign) BOOL recordPressed;
 @property (nonatomic, assign) BOOL isRecording;
 @property (nonatomic, assign) CMTime startTime;
 @property (nonatomic, assign) CMTime currentTime;
@@ -46,6 +47,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.recordPressed = NO;
     //PGP *pgp = [[PGP alloc] init];
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
@@ -388,9 +390,11 @@ NSMutableDictionary *classColorMap;
 // Toggle recording state
 - (void)toggleRecording {
     if ([[self.recordButton titleForState:UIControlStateNormal] isEqualToString:@"Record"]) {
+        self.recordPressed = YES;
         [self.recordButton setTitle:@"Stop" forState:UIControlStateNormal];
         self.recordButton.backgroundColor = [UIColor darkGrayColor]; // Change color to indicate recording
     } else {
+        self.recordPressed = NO;
         [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
         self.recordButton.backgroundColor = [UIColor redColor]; // Reset to red when stopped
     }
@@ -731,7 +735,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
-        if (self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
+        if (self.recordPressed && self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
             CMTime timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
             if (CMTIME_IS_INVALID(self.startTime)) {
                 self.startTime = timestamp;
@@ -807,7 +811,7 @@ NSMutableDictionary *classColorMap;
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
             
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-            [self.scene processOutput:output withImage:ciImage];
+            if(self.recordPressed) [self.scene processOutput:output withImage:ciImage]; //todo, should event detection without recording be a thing?
             CGImageRelease(cgImage);
 
             __weak typeof(self) weak_self = self;
