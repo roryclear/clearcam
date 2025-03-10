@@ -474,6 +474,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)openSettings {
     NSLog(@"Settings button tapped");
+    if(self.recordPressed) [self toggleRecording];
     SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
     [self.navigationController pushViewController:settingsVC animated:YES];
 }
