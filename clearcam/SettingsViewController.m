@@ -1,4 +1,5 @@
 #import "SettingsViewController.h"
+#import "SettingsManager.h" // Import SettingsManager
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -81,7 +82,25 @@
         UIAlertAction *action = [UIAlertAction actionWithTitle:resolution
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
+            // Update the selected resolution
             self.selectedResolution = resolution;
+            
+            // Log the selected resolution
+            NSLog(@"Selected resolution: %@", self.selectedResolution);
+            
+            // Update SettingsManager with the new resolution
+            SettingsManager *settingsManager = [SettingsManager sharedManager];
+            if ([self.selectedResolution isEqualToString:@"720p"]) {
+                [settingsManager updateResolutionWithWidth:@"1280" height:@"720" textSize:@"2" preset:@"AVCaptureSessionPreset1280x720"];
+            } else if ([self.selectedResolution isEqualToString:@"1080p"]) {
+                [settingsManager updateResolutionWithWidth:@"1920" height:@"1080" textSize:@"3" preset:@"AVCaptureSessionPreset1920x1080"];
+            }
+            
+            // Log the updated resolution settings from SettingsManager
+            NSLog(@"Updated resolution settings: %@x%@, text size: %@, preset: %@",
+                  settingsManager.width, settingsManager.height, settingsManager.text_size, settingsManager.preset);
+            
+            // Reload the table view to update the UI
             [self.tableView reloadData];
         }];
         [alert addAction:action];

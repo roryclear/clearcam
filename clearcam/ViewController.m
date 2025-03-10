@@ -86,8 +86,39 @@ NSMutableDictionary *classColorMap;
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
     [self handleDeviceOrientationChange];
     SettingsManager *settings = [SettingsManager sharedManager];
-    [self setupCameraWithWidth:settings.width height:settings.height]; //todo, use defaults!
+    
+    // Add KVO observers for resolution properties
+    [settings addObserver:self forKeyPath:@"width" options:NSKeyValueObservingOptionNew context:nil];
+    [settings addObserver:self forKeyPath:@"height" options:NSKeyValueObservingOptionNew context:nil];
+    [settings addObserver:self forKeyPath:@"text_size" options:NSKeyValueObservingOptionNew context:nil];
+    [settings addObserver:self forKeyPath:@"preset" options:NSKeyValueObservingOptionNew context:nil];
+    
+    [self setupCameraWithWidth:settings.width height:settings.height];
     [self setupUI];
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
+    if ([keyPath isEqualToString:@"preset"]) {
+        NSLog(@"Resolution settings changed");
+        [self finishRecording];
+        SettingsManager *settings = [SettingsManager sharedManager];
+        self.captureSession = [[AVCaptureSession alloc] init];
+        NSString *presetString = [NSString stringWithFormat:@"AVCaptureSessionPreset%@x%@", settings.width, settings.height];
+
+        if ([self.captureSession canSetSessionPreset:presetString]) {
+            self.captureSession.sessionPreset = presetString;
+        } else {
+            NSLog(@"Unsupported preset: %@", presetString);
+            return;
+        }
+        AVCaptureVideoDataOutput *output = [[AVCaptureVideoDataOutput alloc] init];
+        output.videoSettings = @{(NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
+        output.alwaysDiscardsLateVideoFrames = YES;
+        [output setSampleBufferDelegate:self queue:dispatch_get_main_queue()];
+        [self.captureSession addOutput:output];
+        [self.captureSession startRunning];
+        [self startNewRecording];
+    }
 }
 
 - (void)dealloc {
