@@ -17,8 +17,9 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
 
-    // Default resolution
-    self.selectedResolution = @"1080p";
+    // Initialize selectedResolution based on SettingsManager's height
+    SettingsManager *settingsManager = [SettingsManager sharedManager];
+    self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
 
     // Create table view
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
