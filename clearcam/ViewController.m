@@ -5,6 +5,7 @@
 #import "FileServer.h"
 #import "SettingsManager.h"
 #import "SceneState.h"
+#import "SettingsViewController.h"
 //#import "pgp.h"
 
 @interface ViewController ()
@@ -12,12 +13,15 @@
 @property (nonatomic, strong) AVCaptureSession *captureSession;
 @property (nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
 @property (nonatomic, strong) UILabel *fpsLabel;
+@property (nonatomic, strong) UIButton *recordButton;
+@property (nonatomic, strong) UIButton *settingsButton;
 @property (nonatomic, assign) CFTimeInterval lastFrameTime;
 @property (nonatomic, assign) NSUInteger frameCount;
 @property (nonatomic, strong) Yolo *yolo;
 @property (nonatomic, strong) CIContext *ciContext;
 
 @property (atomic, assign) BOOL isProcessing;
+@property (nonatomic, assign) BOOL recordPressed;
 @property (nonatomic, assign) BOOL isRecording;
 @property (nonatomic, assign) CMTime startTime;
 @property (nonatomic, assign) CMTime currentTime;
@@ -45,6 +49,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.recordPressed = NO;
     //PGP *pgp = [[PGP alloc] init];
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
@@ -81,8 +86,27 @@ NSMutableDictionary *classColorMap;
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
     [self handleDeviceOrientationChange];
     SettingsManager *settings = [SettingsManager sharedManager];
-    [self setupCameraWithWidth:settings.width height:settings.height]; //todo, use defaults!
-    [self setupFPSLabel];
+    
+    // Add KVO observers for resolution properties
+    [settings addObserver:self forKeyPath:@"width" options:NSKeyValueObservingOptionNew context:nil];
+    [settings addObserver:self forKeyPath:@"height" options:NSKeyValueObservingOptionNew context:nil];
+    [settings addObserver:self forKeyPath:@"text_size" options:NSKeyValueObservingOptionNew context:nil];
+    [settings addObserver:self forKeyPath:@"preset" options:NSKeyValueObservingOptionNew context:nil];
+    
+    [self setupCameraWithWidth:settings.width height:settings.height];
+    [self startNewRecording];
+    [self setupUI];
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
+    if ([keyPath isEqualToString:@"preset"]) {
+        [self finishRecording];
+        [self resetUI];
+        SettingsManager *settings = [SettingsManager sharedManager];
+        [self setupCameraWithWidth:settings.width height:settings.height];
+        if(self.isRecording) [self startNewRecording];
+        [self setupUI];
+    }
 }
 
 - (void)dealloc {
@@ -146,7 +170,6 @@ NSMutableDictionary *classColorMap;
     [self.view.layer addSublayer:self.previewLayer];
 
     [self.captureSession startRunning];
-    [self startNewRecording];
 }
 
 - (NSString*)getDateString {
@@ -334,13 +357,106 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-- (void)setupFPSLabel {
+- (void)resetUI {
+    // Remove all subviews
+    for (UIView *subview in self.view.subviews) {
+        [subview removeFromSuperview];
+    }
+
+    // Remove all sublayers (using a copy of the sublayers array)
+    NSArray<CALayer *> *sublayers = [self.view.layer.sublayers copy];
+    for (CALayer *sublayer in sublayers) {
+        [sublayer removeFromSuperlayer];
+    }
+
+    // Reset UI-related properties
+    self.previewLayer = nil;
+}
+
+- (void)setupUI {
     self.fpsLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, 150, 30)];
     self.fpsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
     self.fpsLabel.textColor = [UIColor whiteColor];
     self.fpsLabel.font = [UIFont boldSystemFontOfSize:18];
     self.fpsLabel.text = @"FPS: 0";
     [self.view addSubview:self.fpsLabel];
+
+    // Create the record button
+    self.recordButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
+    self.recordButton.backgroundColor = [UIColor redColor];
+    self.recordButton.tintColor = [UIColor whiteColor];
+    self.recordButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+
+    CGFloat buttonSize = 60;
+    self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
+    self.recordButton.layer.cornerRadius = buttonSize / 2;
+    self.recordButton.clipsToBounds = YES;
+
+    [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.recordButton];
+
+    // Create the settings button
+    self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.settingsButton setTitle:@"⚙️" forState:UIControlStateNormal]; // Gear icon
+    self.settingsButton.backgroundColor = [UIColor grayColor];
+    self.settingsButton.tintColor = [UIColor whiteColor];
+    self.settingsButton.titleLabel.font = [UIFont boldSystemFontOfSize:20];
+
+    self.settingsButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
+    self.settingsButton.layer.cornerRadius = buttonSize / 2;
+    self.settingsButton.clipsToBounds = YES;
+
+    [self.settingsButton addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.settingsButton];
+
+    [self updateButtonFrames]; // Set initial positions
+}
+
+// Position the buttons correctly based on orientation
+- (void)updateButtonFrames {
+    CGFloat screenWidth = self.view.bounds.size.width;
+    CGFloat screenHeight = self.view.bounds.size.height;
+    CGFloat buttonSize = 60;
+    CGFloat margin = 20;
+    CGFloat spacing = 10; // Space between buttons
+
+    self.recordButton.layer.cornerRadius = buttonSize / 2;
+    self.settingsButton.layer.cornerRadius = buttonSize / 2;
+
+    if (screenWidth > screenHeight) { // Landscape: Right side
+        self.recordButton.frame = CGRectMake(screenWidth - buttonSize - margin, screenHeight / 2 - buttonSize / 2, buttonSize, buttonSize);
+        self.settingsButton.frame = CGRectMake(self.recordButton.frame.origin.x, self.recordButton.frame.origin.y - buttonSize - spacing, buttonSize, buttonSize);
+    } else { // Portrait: Bottom center, settings to the right
+        CGFloat recordX = (screenWidth - buttonSize) / 2;
+        self.recordButton.frame = CGRectMake(recordX, screenHeight - buttonSize - margin, buttonSize, buttonSize);
+        self.settingsButton.frame = CGRectMake(recordX + buttonSize + spacing, self.recordButton.frame.origin.y, buttonSize, buttonSize);
+    }
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self updateButtonFrames];
+}
+
+- (void)openSettings {
+    NSLog(@"Settings button tapped");
+    if(self.recordPressed) [self toggleRecording];
+    SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
+    [self.navigationController pushViewController:settingsVC animated:YES];
+}
+
+// Toggle recording state
+- (void)toggleRecording {
+    if ([[self.recordButton titleForState:UIControlStateNormal] isEqualToString:@"Record"]) {
+        self.recordPressed = YES;
+        [self.recordButton setTitle:@"Stop" forState:UIControlStateNormal];
+        self.recordButton.backgroundColor = [UIColor darkGrayColor]; // Change color to indicate recording
+    } else {
+        self.recordPressed = NO;
+        [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
+        self.recordButton.backgroundColor = [UIColor redColor]; // Reset to red when stopped
+    }
 }
 
 - (void)viewWillLayoutSubviews {
@@ -678,7 +794,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
     @try {
-        if (self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
+        if (self.recordPressed && self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting) {
             CMTime timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
             if (CMTIME_IS_INVALID(self.startTime)) {
                 self.startTime = timestamp;
@@ -754,7 +870,7 @@ NSMutableDictionary *classColorMap;
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
             
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-            [self.scene processOutput:output withImage:ciImage];
+            if(self.recordPressed) [self.scene processOutput:output withImage:ciImage]; //todo, should event detection without recording be a thing?
             CGImageRelease(cgImage);
 
             __weak typeof(self) weak_self = self;
