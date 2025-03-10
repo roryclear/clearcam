@@ -99,8 +99,8 @@ NSMutableDictionary *classColorMap;
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"preset"]) {
-        NSLog(@"Resolution settings changed");
         [self finishRecording];
+        [self resetUI];
         SettingsManager *settings = [SettingsManager sharedManager];
         self.captureSession = [[AVCaptureSession alloc] init];
         NSString *presetString = [NSString stringWithFormat:@"AVCaptureSessionPreset%@x%@", settings.width, settings.height];
@@ -111,13 +111,33 @@ NSMutableDictionary *classColorMap;
             NSLog(@"Unsupported preset: %@", presetString);
             return;
         }
+
+        AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+        NSError *error = nil;
+        AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
+        if (!input) {
+            NSLog(@"Error setting up camera input: %@", error.localizedDescription);
+            return;
+        }
+        [self.captureSession addInput:input];
+
         AVCaptureVideoDataOutput *output = [[AVCaptureVideoDataOutput alloc] init];
         output.videoSettings = @{(NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)};
         output.alwaysDiscardsLateVideoFrames = YES;
         [output setSampleBufferDelegate:self queue:dispatch_get_main_queue()];
         [self.captureSession addOutput:output];
+        
+        if (self.previewLayer) {
+            [self.previewLayer removeFromSuperlayer]; // Remove from the view's layer hierarchy
+            self.previewLayer = nil; // Optionally, set it to nil if you're done with it
+        }
+        self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
+        self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+        [self.view.layer addSublayer:self.previewLayer];
+        
         [self.captureSession startRunning];
-        [self startNewRecording];
+        if(self.isRecording) [self startNewRecording];
+        [self setupUI];
     }
 }
 
@@ -368,6 +388,21 @@ NSMutableDictionary *classColorMap;
     for (UIView *label in labelsToRemove) {
         [label removeFromSuperview];
     }
+}
+
+- (void)resetUI {
+    // Remove all subviews
+    for (UIView *subview in self.view.subviews) {
+        [subview removeFromSuperview];
+    }
+
+    // Remove all sublayers
+    for (CALayer *sublayer in self.view.layer.sublayers) {
+        [sublayer removeFromSuperlayer];
+    }
+
+    // Reset UI-related properties
+    self.previewLayer = nil;
 }
 
 - (void)setupUI {
