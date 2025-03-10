@@ -5,6 +5,7 @@
 #import "FileServer.h"
 #import "SettingsManager.h"
 #import "SceneState.h"
+#import "SettingsViewController.h"
 //#import "pgp.h"
 
 @interface ViewController ()
@@ -406,9 +407,9 @@ NSMutableDictionary *classColorMap;
 
 - (void)openSettings {
     NSLog(@"Settings button tapped");
-    // Implement settings screen transition here
+    SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
+    [self.navigationController pushViewController:settingsVC animated:YES];
 }
-
 
 // Toggle recording state
 - (void)toggleRecording {
