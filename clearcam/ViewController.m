@@ -396,8 +396,9 @@ NSMutableDictionary *classColorMap;
         [subview removeFromSuperview];
     }
 
-    // Remove all sublayers
-    for (CALayer *sublayer in self.view.layer.sublayers) {
+    // Remove all sublayers (using a copy of the sublayers array)
+    NSArray<CALayer *> *sublayers = [self.view.layer.sublayers copy];
+    for (CALayer *sublayer in sublayers) {
         [sublayer removeFromSuperlayer];
     }
 
