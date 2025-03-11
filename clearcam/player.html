@@ -417,26 +417,22 @@
                         });
                 }
         
-            function fetchCurrentClasses() {
-                fetch('get-classes')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (Array.isArray(data)) {
-                            updateDropdown(data);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching current classes:', error);
-                    });
-            }
+        function fetchCurrentClasses() {
+            fetch('get-classes')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.currentClasses) {
+                        updateDropdown(data.currentClasses);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching current classes:', error);
+                });
+        }
 
         function updateDropdown(currentClasses) {
             const selector = document.getElementById('classSelector');
-            if (currentClasses.length === 80) { //todo, will need to change with more presets + custom !
-                selector.value = 'all';
-            } else if (JSON.stringify(currentClasses) === JSON.stringify([0, 1, 2, 3, 5, 7])) {
-                selector.value = 'vehiclesPeople';
-            }
+            selector.value = currentClasses;
         }
 
         // Call fetchCurrentClasses on page load and every minute

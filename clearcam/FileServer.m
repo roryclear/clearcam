@@ -15,6 +15,7 @@
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
 @property (nonatomic, strong) NSMutableDictionary *durationCache;
+@property (nonatomic, strong) NSString *currentClasses;
 @end
 
 @implementation FileServer
@@ -310,6 +311,7 @@
             NSArray<NSNumber *> *newIndexes = nil;
 
             if ([indexesParam isEqualToString:@"all"]) {
+                self.currentClasses = @"all";
                 newIndexes = @[@0, @1, @2, @3, @4, @5, @6, @7, @8, @9, @10, @11, @12, @13, @14, @15,
                                @16, @17, @18, @19, @20, @21, @22, @23, @24, @25, @26, @27, @28, @29,
                                @30, @31, @32, @33, @34, @35, @36, @37, @38, @39, @40, @41, @42, @43,
@@ -317,15 +319,8 @@
                                @58, @59, @60, @61, @62, @63, @64, @65, @66, @67, @68, @69, @70, @71,
                                @72, @73, @74, @75, @76, @77, @78, @79];
             } else if ([indexesParam isEqualToString:@"vehiclesPeople"]) {
+                self.currentClasses = @"vehiclesPeople";
                 newIndexes = @[@0, @1, @2, @3, @5, @7];
-            } else {
-                NSMutableArray<NSNumber *> *parsedIndexes = [NSMutableArray array];
-                NSArray *indexesArray = [indexesParam componentsSeparatedByString:@","];
-                for (NSString *indexString in indexesArray) {
-                    NSNumber *index = @([indexString intValue]);
-                    [parsedIndexes addObject:index];
-                }
-                newIndexes = [parsedIndexes copy];
             }
 
             [[SettingsManager sharedManager] updateYoloIndexes:newIndexes];
@@ -337,8 +332,8 @@
     }
 
     if ([filePath hasPrefix:@"get-classes"]) {
-        NSArray<NSNumber *> *currentClasses = [SettingsManager sharedManager].yolo_indexes;
-        [self sendJson200:currentClasses toClient:clientSocket];
+        NSString *currentClasses = self.currentClasses ?: @"custom"; // Default to "custom" if not set
+        [self sendJson200:@[currentClasses] toClient:clientSocket]; // Send as an array
         return;
     }
     
