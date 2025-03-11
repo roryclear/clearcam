@@ -16,7 +16,6 @@
 + (instancetype)sharedManager;
 - (void)saveYoloIndexes;
 - (void)loadYoloIndexes;
-- (void)updateYoloIndexes:(NSArray<NSNumber *> *)newIndexes;
 - (void)updateYoloIndexesKey:(NSString *)key;
 - (void)loadResolutionSettings;
 - (void)saveResolutionSettings;

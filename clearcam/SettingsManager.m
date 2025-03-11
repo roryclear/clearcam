@@ -38,11 +38,6 @@
     }
 }
 
-- (void)updateYoloIndexes:(NSArray<NSNumber *> *)newIndexes {
-    self.yolo_indexes = newIndexes;
-    [self saveYoloIndexes];
-}
-
 - (void)updateYoloIndexesKey:(NSString *)key {
     [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"yolo_indexes_key"];
     if([key isEqualToString:@"vehiclesPeople"]){
