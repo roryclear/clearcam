@@ -245,11 +245,9 @@
         SettingsManager *settingsManager = [SettingsManager sharedManager];
         
         //todo deepseek slop
-        // Step 1: Retrieve the yolo_presets dictionary from NSUserDefaults
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
 
-        // If yolo_presets doesn't exist in NSUserDefaults, initialize it as an empty dictionary
         if (!yoloPresets) {
             yoloPresets = [NSMutableDictionary dictionary];
         }
@@ -263,8 +261,6 @@
         // Step 4: Synchronize to save changes immediately (optional but recommended)
         [defaults synchronize];
 
-        // Step 5: Update the settingsManager.yolo_presets to reflect the changes
-        settingsManager.yolo_presets = yoloPresets;
         
         [self.tableView reloadData];
     };
@@ -275,7 +271,6 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Preset"
                                                                    message:@"Select a preset to delete"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    SettingsManager *settingsManager = [SettingsManager sharedManager];
     //todo deepseek slop
     NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
     for (NSString *presetKey in presetKeys) {
@@ -283,14 +278,10 @@
             UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                              style:UIAlertActionStyleDestructive
                                                            handler:^(UIAlertAction * _Nonnull action) {
-                // Step 1: Remove the object from settingsManager.yolo_presets
-                [settingsManager.yolo_presets removeObjectForKey:presetKey];
-
-                // Step 2: Retrieve the yolo_presets dictionary from NSUserDefaults
+                
                 NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
                 NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
 
-                // Step 3: Remove the object from the yolo_presets dictionary
                 if (yoloPresets) {
                     [yoloPresets removeObjectForKey:presetKey];
                 }
