@@ -24,7 +24,6 @@
         if(![[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]) [[NSUserDefaults standardUserDefaults] setObject:@"People+Vehicles" forKey:@"yolo_preset_idx"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self loadResolutionSettings];
-        [self loadEvents];
         [self loadDeleteOnLaunch];
     }
     return self;
@@ -33,16 +32,6 @@
 - (void)updateYoloIndexesKey:(NSString *)key {
     [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"yolo_preset_idx"];
     [[NSUserDefaults standardUserDefaults] synchronize];
-}
-
-
-- (void)loadEvents {
-    NSArray *savedEvents = [[NSUserDefaults standardUserDefaults] arrayForKey:@"events"];
-    if (savedEvents) {
-        self.events = savedEvents;
-    } else {
-        self.events = [self generateDefaultEvents];
-    }
 }
 
 - (NSArray<NSNumber *> *)generateDefaultEvents {
