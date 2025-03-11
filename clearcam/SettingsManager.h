@@ -2,7 +2,6 @@
 
 @interface SettingsManager : NSObject
 
-@property (nonatomic, strong) NSArray<NSNumber *> *yolo_indexes;
 @property (nonatomic, strong) NSArray<NSNumber *> *events;
 @property (nonatomic, strong) NSDictionary *alerts;
 @property (nonatomic, assign) BOOL *delete_on_launch;
@@ -11,6 +10,7 @@
 @property (nonatomic, strong) NSString *height;
 @property (nonatomic, strong) NSString *text_size;
 @property (nonatomic, strong) NSString *preset;
+@property (nonatomic, strong) NSString *yolo_preset;
 @property (nonatomic, strong) NSMutableDictionary *presets;
 
 

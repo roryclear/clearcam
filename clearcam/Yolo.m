@@ -164,7 +164,7 @@ UInt8 *rgbData;
 }
 
 - (NSArray *)processOutput:(const float *)output {
-    NSArray<NSNumber *> *yoloIndexes = [SettingsManager sharedManager].yolo_indexes;
+    NSArray<NSNumber *> *yoloIndexes = [SettingsManager sharedManager].presets[[SettingsManager sharedManager].yolo_preset];
     NSMutableArray *boxes = [NSMutableArray array];
     int numPredictions = pow(self.yolo_res / 32, 2) * 21;
 
