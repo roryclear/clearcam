@@ -11,6 +11,7 @@
 @property (nonatomic, strong) NSString *height;
 @property (nonatomic, strong) NSString *text_size;
 @property (nonatomic, strong) NSString *preset;
+@property (nonatomic, strong) NSMutableDictionary *presets;
 
 
 + (instancetype)sharedManager;
