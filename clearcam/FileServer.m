@@ -21,6 +21,14 @@
 @implementation FileServer
 
 - (void)start {
+    
+    //obv todo
+    if([SettingsManager sharedManager].yolo_indexes.count == 80){
+        self.currentClasses = @"all";
+    } else {
+        self.currentClasses = @"vehiclesPeople";
+    }
+    
     // coredata stuff
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     self.context = appDelegate.persistentContainer.viewContext;
