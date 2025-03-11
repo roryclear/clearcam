@@ -308,7 +308,7 @@
             }
         }
         if (indexesParam) {
-            if ([[SettingsManager sharedManager].presets objectForKey:indexesParam]) {
+            if ([[SettingsManager sharedManager].yolo_presets objectForKey:indexesParam]) {
                 [[SettingsManager sharedManager] updateYoloIndexesKey:indexesParam];
             } else {
                 [[SettingsManager sharedManager] updateYoloIndexesKey:@"all"];
@@ -320,7 +320,7 @@
     }
     
     if ([filePath isEqualToString:@"get-presets"]) {
-        NSDictionary *presets = [SettingsManager sharedManager].presets;
+        NSDictionary *presets = [SettingsManager sharedManager].yolo_presets;
         
         NSError *error;
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:[presets allKeys] options:0 error:&error];

@@ -9,9 +9,9 @@
 @property (nonatomic, strong) NSString *width;
 @property (nonatomic, strong) NSString *height;
 @property (nonatomic, strong) NSString *text_size;
-@property (nonatomic, strong) NSString *preset;
+@property (nonatomic, strong) NSString *preset; //todo, resolution
 @property (nonatomic, strong) NSString *yolo_preset;
-@property (nonatomic, strong) NSMutableDictionary *presets;
+@property (nonatomic, strong) NSMutableDictionary *yolo_presets;
 
 
 + (instancetype)sharedManager;

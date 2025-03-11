@@ -135,7 +135,7 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    NSArray *presetKeys = [settingsManager.presets allKeys];
+    NSArray *presetKeys = [settingsManager.yolo_presets allKeys];
     for (NSString *presetKey in presetKeys) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                          style:UIAlertActionStyleDefault
@@ -220,12 +220,12 @@
                                                                    message:@"Select a preset to edit"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    NSArray *presetKeys = [settingsManager.presets allKeys];
+    NSArray *presetKeys = [settingsManager.yolo_presets allKeys];
     for (NSString *presetKey in presetKeys) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
-            NSArray *selectedIndexes = settingsManager.presets[presetKey];
+            NSArray *selectedIndexes = settingsManager.yolo_presets[presetKey];
             [self showNumberSelectionForPreset:presetKey selectedIndexes:selectedIndexes];
         }];
         [alert addAction:action];
@@ -243,7 +243,7 @@
     numberSelectionVC.selectedIndexes = [selectedIndexes mutableCopy];
     numberSelectionVC.completionHandler = ^(NSArray<NSNumber *> *selectedIndexes) {
         SettingsManager *settingsManager = [SettingsManager sharedManager];
-        settingsManager.presets[presetKey] = selectedIndexes;
+        settingsManager.yolo_presets[presetKey] = selectedIndexes;
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self.tableView reloadData];
     };
@@ -255,13 +255,13 @@
                                                                    message:@"Select a preset to delete"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    NSArray *presetKeys = [settingsManager.presets allKeys];
+    NSArray *presetKeys = [settingsManager.yolo_presets allKeys];
     for (NSString *presetKey in presetKeys) {
         if (![presetKey isEqualToString:@"all"]) { // Prevent deletion of the "all" preset
             UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                              style:UIAlertActionStyleDestructive
                                                            handler:^(UIAlertAction * _Nonnull action) {
-                [settingsManager.presets removeObjectForKey:presetKey];
+                [settingsManager.yolo_presets removeObjectForKey:presetKey];
                 [[NSUserDefaults standardUserDefaults] synchronize];
                 [self.tableView reloadData];
             }];
