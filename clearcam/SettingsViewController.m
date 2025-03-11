@@ -1,5 +1,6 @@
 #import "SettingsViewController.h"
-#import "SettingsManager.h" // Import SettingsManager
+#import "SettingsManager.h"
+#import "NumberSelectionViewController.h" // Import the new class
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -38,7 +39,7 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return 2; // One for resolution, one for YOLO indexes key
+    return 3; // One for resolution, one for YOLO indexes key, one for managing presets
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -60,6 +61,9 @@
     } else if (indexPath.row == 1) {
         cell.textLabel.text = @"Detect objects";
         cell.detailTextLabel.text = self.selectedPresetKey;
+    } else if (indexPath.row == 2) {
+        cell.textLabel.text = @"Manage Presets";
+        cell.detailTextLabel.text = nil; // No detail text for this row
     }
 
     return cell;
@@ -72,6 +76,8 @@
         [self showResolutionPicker];
     } else if (indexPath.row == 1) {
         [self showYoloIndexesPicker];
+    } else if (indexPath.row == 2) {
+        [self showPresetManagementOptions];
     }
 
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -147,6 +153,125 @@
                                                          handler:nil];
     [alert addAction:cancelAction];
 
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - Preset Management
+
+- (void)showPresetManagementOptions {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Manage Presets"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    // Add Preset
+    UIAlertAction *addAction = [UIAlertAction actionWithTitle:@"Add Preset"
+                                                        style:UIAlertActionStyleDefault
+                                                      handler:^(UIAlertAction * _Nonnull action) {
+        [self showAddPresetDialog];
+    }];
+    [alert addAction:addAction];
+
+    // Edit Preset
+    UIAlertAction *editAction = [UIAlertAction actionWithTitle:@"Edit Preset"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        [self showEditPresetDialog];
+    }];
+    [alert addAction:editAction];
+
+    // Delete Preset
+    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"Delete Preset"
+                                                           style:UIAlertActionStyleDestructive
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        [self showDeletePresetDialog];
+    }];
+    [alert addAction:deleteAction];
+
+    // Cancel
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    [alert addAction:cancelAction];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showAddPresetDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Preset"
+                                                                   message:@"Enter a name for the new preset"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Preset Name";
+    }];
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *presetName = alert.textFields.firstObject.text;
+        if (presetName.length > 0) {
+            [self showNumberSelectionForPreset:presetName selectedIndexes:@[]];
+        }
+    }];
+    [alert addAction:saveAction];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showEditPresetDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Edit Preset"
+                                                                   message:@"Select a preset to edit"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    SettingsManager *settingsManager = [SettingsManager sharedManager];
+    NSArray *presetKeys = [settingsManager.presets allKeys];
+    for (NSString *presetKey in presetKeys) {
+        UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+            NSArray *selectedIndexes = settingsManager.presets[presetKey];
+            [self showNumberSelectionForPreset:presetKey selectedIndexes:selectedIndexes];
+        }];
+        [alert addAction:action];
+    }
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    [alert addAction:cancelAction];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showNumberSelectionForPreset:(NSString *)presetKey selectedIndexes:(NSArray<NSNumber *> *)selectedIndexes {
+    NumberSelectionViewController *numberSelectionVC = [[NumberSelectionViewController alloc] init];
+    numberSelectionVC.presetKey = presetKey;
+    numberSelectionVC.selectedIndexes = [selectedIndexes mutableCopy];
+    numberSelectionVC.completionHandler = ^(NSArray<NSNumber *> *selectedIndexes) {
+        SettingsManager *settingsManager = [SettingsManager sharedManager];
+        settingsManager.presets[presetKey] = selectedIndexes;
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        [self.tableView reloadData];
+    };
+    [self.navigationController pushViewController:numberSelectionVC animated:YES];
+}
+
+- (void)showDeletePresetDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Preset"
+                                                                   message:@"Select a preset to delete"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    SettingsManager *settingsManager = [SettingsManager sharedManager];
+    NSArray *presetKeys = [settingsManager.presets allKeys];
+    for (NSString *presetKey in presetKeys) {
+        if (![presetKey isEqualToString:@"all"]) { // Prevent deletion of the "all" preset
+            UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
+                                                             style:UIAlertActionStyleDestructive
+                                                           handler:^(UIAlertAction * _Nonnull action) {
+                [settingsManager.presets removeObjectForKey:presetKey];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+                [self.tableView reloadData];
+            }];
+            [alert addAction:action];
+        }
+    }
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    [alert addAction:cancelAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
