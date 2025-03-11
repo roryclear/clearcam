@@ -316,14 +316,13 @@
             }
         }
         if (indexesParam) {
-            if ([indexesParam isEqualToString:@"all"]) {
+            if ([[SettingsManager sharedManager].presets objectForKey:indexesParam]) {
+                self.currentClasses = indexesParam;
+                [[SettingsManager sharedManager] updateYoloIndexesKey:indexesParam];
+            } else {
                 self.currentClasses = @"all";
                 [[SettingsManager sharedManager] updateYoloIndexesKey:@"all"];
-            } else if ([indexesParam isEqualToString:@"vehiclesPeople"]) {
-                self.currentClasses = @"vehiclesPeople";
-                [[SettingsManager sharedManager] updateYoloIndexesKey:@"vehiclesPeople"];
             }
-
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             return;
