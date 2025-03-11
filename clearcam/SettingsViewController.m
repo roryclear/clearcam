@@ -39,7 +39,7 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return 3; // One for resolution, one for YOLO indexes key, one for managing presets
+    return 4; // One for resolution, one for YOLO indexes key, one for managing presets, one for email
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -64,8 +64,10 @@
     } else if (indexPath.row == 2) {
         cell.textLabel.text = @"Manage Presets";
         cell.detailTextLabel.text = nil; // No detail text for this row
+    } else if (indexPath.row == 3) {
+        cell.textLabel.text = @"Email Address";
+        cell.detailTextLabel.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"] ?: @"Not set"; // Retrieve email from UserDefaults
     }
-
     return cell;
 }
 
@@ -78,9 +80,64 @@
         [self showYoloIndexesPicker];
     } else if (indexPath.row == 2) {
         [self showPresetManagementOptions];
+    } else if (indexPath.row == 3) {
+        [self showEmailInputDialog];
     }
 
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)showEmailInputDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Email Address"
+                                                                   message:@"Please enter a valid email address."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Email Address";
+        textField.keyboardType = UIKeyboardTypeEmailAddress;
+        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"]; // Pre-fill with existing email
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *email = alert.textFields.firstObject.text;
+        if ([self isValidEmail:email]) {
+            [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"]; // Save email to UserDefaults
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            [self.tableView reloadData]; // Refresh the table view to show the updated email
+        } else {
+            [self showInvalidEmailAlert];
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (BOOL)isValidEmail:(NSString *)email {
+    NSString *emailRegex = @"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}";
+    NSPredicate *emailTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", emailRegex];
+    return [emailTest evaluateWithObject:email];
+}
+
+- (void)showInvalidEmailAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Invalid Email"
+                                                                   message:@"Please enter a valid email address."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:nil];
+    
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - Resolution Picker

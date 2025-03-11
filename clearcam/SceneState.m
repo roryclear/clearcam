@@ -131,7 +131,8 @@
     NSString *endpoint = @"/";
 
     // Email recipient address (hardcoded)
-    NSString *toEmail = @"roryclear.rc@gmail.com";
+    NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
+    if(!toEmail) return;
 
     // Read image file
     NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
