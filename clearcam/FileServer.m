@@ -15,20 +15,12 @@
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
 @property (nonatomic, strong) NSMutableDictionary *durationCache;
-@property (nonatomic, strong) NSString *currentClasses;
 @end
 
 @implementation FileServer
 
 - (void)start {
-    
-    //obv todo
-    if([SettingsManager sharedManager].yolo_indexes.count == 80){
-        self.currentClasses = @"all";
-    } else {
-        self.currentClasses = @"vehiclesPeople";
-    }
-    
+        
     // coredata stuff
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     self.context = appDelegate.persistentContainer.viewContext;
@@ -317,10 +309,8 @@
         }
         if (indexesParam) {
             if ([[SettingsManager sharedManager].presets objectForKey:indexesParam]) {
-                self.currentClasses = indexesParam;
                 [[SettingsManager sharedManager] updateYoloIndexesKey:indexesParam];
             } else {
-                self.currentClasses = @"all";
                 [[SettingsManager sharedManager] updateYoloIndexesKey:@"all"];
             }
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
@@ -330,7 +320,7 @@
     }
 
     if ([filePath hasPrefix:@"get-classes"]) {
-        NSString *currentClasses = self.currentClasses ?: @"all"; // Default to "all" if not set
+        NSString *currentClasses = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_indexes_key"] ?: @"all"; // Default to "all" if not set
         [self sendJson200:@[currentClasses] toClient:clientSocket]; // Send as an array
         return;
     }
