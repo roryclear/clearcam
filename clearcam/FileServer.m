@@ -294,33 +294,48 @@
     if ([filePath hasPrefix:@"change-classes"]) {
         NSString *indexesParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
+        
         if (queryRange.location != NSNotFound) {
             NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
             NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
             for (NSString *item in queryItems) {
                 NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2) {
-                    if ([keyValue[0] isEqualToString:@"indexes"]) {
-                        indexesParam = keyValue[1];
-                        break;
-                    }
+                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"indexes"]) {
+                    indexesParam = keyValue[1];
+                    break;
                 }
             }
         }
-        
         if (indexesParam) {
-            NSMutableArray<NSNumber *> *newIndexes = [NSMutableArray array];
-            NSArray *indexesArray = [indexesParam componentsSeparatedByString:@","];
-            for (NSString *indexString in indexesArray) {
-                NSNumber *index = @([indexString intValue]);
-                [newIndexes addObject:index];
+            NSArray<NSNumber *> *newIndexes = nil;
+
+            if ([indexesParam isEqualToString:@"all"]) {
+                newIndexes = @[@0, @1, @2, @3, @4, @5, @6, @7, @8, @9, @10, @11, @12, @13, @14, @15,
+                               @16, @17, @18, @19, @20, @21, @22, @23, @24, @25, @26, @27, @28, @29,
+                               @30, @31, @32, @33, @34, @35, @36, @37, @38, @39, @40, @41, @42, @43,
+                               @44, @45, @46, @47, @48, @49, @50, @51, @52, @53, @54, @55, @56, @57,
+                               @58, @59, @60, @61, @62, @63, @64, @65, @66, @67, @68, @69, @70, @71,
+                               @72, @73, @74, @75, @76, @77, @78, @79];
+            } else if ([indexesParam isEqualToString:@"vehiclesPeople"]) {
+                newIndexes = @[@0, @1, @2, @3, @5, @7];
+            } else {
+                NSMutableArray<NSNumber *> *parsedIndexes = [NSMutableArray array];
+                NSArray *indexesArray = [indexesParam componentsSeparatedByString:@","];
+                for (NSString *indexString in indexesArray) {
+                    NSNumber *index = @([indexString intValue]);
+                    [parsedIndexes addObject:index];
+                }
+                newIndexes = [parsedIndexes copy];
             }
-            [[SettingsManager sharedManager] updateYoloIndexes:[newIndexes copy]];
+
+            [[SettingsManager sharedManager] updateYoloIndexes:newIndexes];
+
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             return;
         }
     }
+
     if ([filePath hasPrefix:@"get-classes"]) {
         NSArray<NSNumber *> *currentClasses = [SettingsManager sharedManager].yolo_indexes;
         [self sendJson200:currentClasses toClient:clientSocket];
