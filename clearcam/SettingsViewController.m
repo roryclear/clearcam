@@ -5,6 +5,7 @@
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSString *selectedResolution;
+@property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 
 @end
 
@@ -17,9 +18,10 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
 
-    // Initialize selectedResolution based on SettingsManager's height
+    // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];
     self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
+    self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_indexes_key"] ?: @"all"; // Default to "all" if no key is saved
 
     // Create table view
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
@@ -36,7 +38,7 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return 1; // More settings can be added later
+    return 2; // One for resolution, one for YOLO indexes key
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -55,6 +57,9 @@
     if (indexPath.row == 0) {
         cell.textLabel.text = @"Resolution";
         cell.detailTextLabel.text = self.selectedResolution;
+    } else if (indexPath.row == 1) {
+        cell.textLabel.text = @"Detect objects";
+        cell.detailTextLabel.text = self.selectedPresetKey;
     }
 
     return cell;
@@ -65,6 +70,8 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.row == 0) {
         [self showResolutionPicker];
+    } else if (indexPath.row == 1) {
+        [self showYoloIndexesPicker];
     }
 
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -114,4 +121,33 @@
 
     [self presentViewController:alert animated:YES completion:nil];
 }
+
+#pragma mark - YOLO Indexes Picker
+
+- (void)showYoloIndexesPicker {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select objects preset"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    SettingsManager *settingsManager = [SettingsManager sharedManager];
+    NSArray *presetKeys = [settingsManager.presets allKeys];
+    for (NSString *presetKey in presetKeys) {
+        UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+            self.selectedPresetKey = presetKey;
+            [settingsManager updateYoloIndexesKey:presetKey];
+            NSLog(@"Selected YOLO indexes key: %@", self.selectedPresetKey);
+            [self.tableView reloadData];
+        }];
+        [alert addAction:action];
+    }
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    [alert addAction:cancelAction];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 @end
