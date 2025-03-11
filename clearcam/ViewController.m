@@ -94,8 +94,16 @@ NSMutableDictionary *classColorMap;
     [settings addObserver:self forKeyPath:@"preset" options:NSKeyValueObservingOptionNew context:nil];
     
     [self setupCameraWithWidth:settings.width height:settings.height];
+    [self.captureSession startRunning];
     [self startNewRecording];
     [self setupUI];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self.captureSession startRunning];
+    });
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
@@ -168,8 +176,6 @@ NSMutableDictionary *classColorMap;
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.captureSession];
     self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspect;
     [self.view.layer addSublayer:self.previewLayer];
-
-    [self.captureSession startRunning];
 }
 
 - (NSString*)getDateString {
@@ -442,6 +448,7 @@ NSMutableDictionary *classColorMap;
 - (void)openSettings {
     NSLog(@"Settings button tapped");
     if(self.recordPressed) [self toggleRecording];
+    [self.captureSession stopRunning];
     SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
     [self.navigationController pushViewController:settingsVC animated:YES];
 }
