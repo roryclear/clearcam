@@ -320,7 +320,7 @@
                     <input type="date" id="datePicker" name="datePicker">
                     <select id="classSelector" name="classSelector" onchange="changeClasses()">
                         <option value="all">Detect All</option>
-                        <option value="vehiclesPeople">People+Vehicles</option>
+                        <option value="People+Vehicles">People+Vehicles</option>
                     </select>
                 </div>
 
@@ -398,14 +398,7 @@
                 function changeClasses() {
                     const selector = document.getElementById('classSelector');
                     const selectedValue = selector.value;
-                    let url = '';
-
-                    if (selectedValue === 'all') {
-                        url = 'change-classes?indexes=all';
-                    } else if (selectedValue === 'vehiclesPeople') {
-                        url = 'change-classes?indexes=vehiclesPeople';
-                    }
-
+                    let url = `change-classes?indexes=${selectedValue}`;
                     fetch(url)
                         .then(response => {
                             if (!response.ok) {
