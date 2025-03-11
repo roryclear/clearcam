@@ -339,7 +339,7 @@
     }
 
     if ([filePath hasPrefix:@"get-classes"]) {
-        NSString *currentClasses = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_indexes_key"] ?: @"all"; // Default to "all" if not set
+        NSString *currentClasses = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all"; // Default to "all" if not set
         [self sendJson200:@[currentClasses] toClient:clientSocket]; // Send as an array
         return;
     }

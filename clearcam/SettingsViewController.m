@@ -1,6 +1,6 @@
 #import "SettingsViewController.h"
 #import "SettingsManager.h"
-#import "NumberSelectionViewController.h" // Import the new class
+#import "NumberSelectionViewController.h"
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -22,7 +22,7 @@
     // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];
     self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
-    self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_indexes_key"] ?: @"all"; // Default to "all" if no key is saved
+    self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all"; // Default to "all" if no key is saved
 
     // Create table view
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
@@ -242,9 +242,6 @@
     numberSelectionVC.presetKey = presetKey;
     numberSelectionVC.selectedIndexes = [selectedIndexes mutableCopy];
     numberSelectionVC.completionHandler = ^(NSArray<NSNumber *> *selectedIndexes) {
-        SettingsManager *settingsManager = [SettingsManager sharedManager];
-        
-        //todo deepseek slop
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
 
@@ -252,16 +249,20 @@
             yoloPresets = [NSMutableDictionary dictionary];
         }
 
-        // Step 2: Update the dictionary with the new key-value pair
+        // Update the dictionary with the new key-value pair
         yoloPresets[presetKey] = selectedIndexes;
 
-        // Step 3: Save the updated dictionary back to NSUserDefaults
+        // Save the updated dictionary back to NSUserDefaults
         [defaults setObject:yoloPresets forKey:@"yolo_presets"];
 
-        // Step 4: Synchronize to save changes immediately (optional but recommended)
+        // Automatically select the new preset
+        self.selectedPresetKey = presetKey;
+        [defaults setObject:presetKey forKey:@"yolo_preset_idx"];
+
+        // Synchronize to save changes immediately
         [defaults synchronize];
 
-        
+        // Reload the table view to update the UI
         [self.tableView reloadData];
     };
     [self.navigationController pushViewController:numberSelectionVC animated:YES];
@@ -271,14 +272,12 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Preset"
                                                                    message:@"Select a preset to delete"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    //todo deepseek slop
     NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
     for (NSString *presetKey in presetKeys) {
         if (![presetKey isEqualToString:@"all"]) { // Prevent deletion of the "all" preset
             UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                              style:UIAlertActionStyleDestructive
                                                            handler:^(UIAlertAction * _Nonnull action) {
-                
                 NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
                 NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
 
@@ -286,13 +285,20 @@
                     [yoloPresets removeObjectForKey:presetKey];
                 }
 
-                // Step 4: Save the updated dictionary back to NSUserDefaults
+                // Save the updated dictionary back to NSUserDefaults
                 [defaults setObject:yoloPresets forKey:@"yolo_presets"];
 
-                // Step 5: Synchronize to save changes immediately (optional but recommended)
+                // Check if the deleted preset was the currently selected one
+                if ([self.selectedPresetKey isEqualToString:presetKey]) {
+                    // Switch to the "all" preset
+                    self.selectedPresetKey = @"all";
+                    [defaults setObject:@"all" forKey:@"yolo_preset_idx"];
+                }
+
+                // Synchronize to save changes immediately
                 [defaults synchronize];
 
-                // Step 6: Reload the table view to reflect the changes
+                // Reload the table view to reflect the changes
                 [self.tableView reloadData];
             }];
             [alert addAction:action];

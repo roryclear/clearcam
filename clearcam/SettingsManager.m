@@ -14,8 +14,6 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        self.yolo_preset = @"all";
-        [[NSUserDefaults standardUserDefaults] setObject:@"all" forKey:@"yolo_indexes_key"];
         NSDictionary *savedPresets = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"];
         if (!savedPresets) {
             [[NSUserDefaults standardUserDefaults] setObject:[[NSMutableDictionary alloc] initWithDictionary:@{
@@ -23,6 +21,7 @@
                 @"People+Vehicles": @[@0, @1, @2, @3, @5, @7]
             }] forKey:@"yolo_presets"];
         }
+        if(![[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]) [[NSUserDefaults standardUserDefaults] setObject:@"People+Vehicles" forKey:@"yolo_preset_idx"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self loadResolutionSettings];
         [self loadEvents];
@@ -32,8 +31,7 @@
 }
 
 - (void)updateYoloIndexesKey:(NSString *)key {
-    [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"yolo_indexes_key"];
-    self.yolo_preset = key;
+    [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"yolo_preset_idx"];
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
