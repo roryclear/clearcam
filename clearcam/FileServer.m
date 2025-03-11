@@ -318,6 +318,25 @@
             return;
         }
     }
+    
+    if ([filePath isEqualToString:@"get-presets"]) {
+        NSDictionary *presets = [SettingsManager sharedManager].presets;
+        
+        NSError *error;
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:[presets allKeys] options:0 error:&error];
+
+        if (!jsonData) {
+            NSLog(@"JSON Serialization Error: %@", error.localizedDescription);
+            NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
+            return;
+        }
+
+        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)[jsonData length]];
+        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+        send(clientSocket, [jsonData bytes], [jsonData length], 0);
+        return;
+    }
 
     if ([filePath hasPrefix:@"get-classes"]) {
         NSString *currentClasses = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_indexes_key"] ?: @"all"; // Default to "all" if not set

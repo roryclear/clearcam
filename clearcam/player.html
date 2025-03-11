@@ -850,6 +850,26 @@
                         x++;
                     }
                 }
+        
+        function fetchPresets() {
+            fetch('get-presets')
+                .then(response => response.json())
+                .then(presets => {
+                    const selector = document.getElementById('classSelector');
+                    selector.innerHTML = ''; // Clear existing options
+
+                    presets.forEach(preset => {
+                        const option = document.createElement('option');
+                        option.value = preset;
+                        option.textContent = preset.replace("+", " "); // Optional formatting
+                        selector.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error fetching presets:', error));
+        }
+        // Call fetchPresets() when the page loads
+        document.addEventListener("DOMContentLoaded", fetchPresets);
+        
         let portrait = false;
 
         function adjustContainerForOrientation(videoElement) {
