@@ -332,7 +332,7 @@
     }
 
     if ([filePath hasPrefix:@"get-classes"]) {
-        NSString *currentClasses = self.currentClasses ?: @"custom"; // Default to "custom" if not set
+        NSString *currentClasses = self.currentClasses ?: @"all"; // Default to "all" if not set
         [self sendJson200:@[currentClasses] toClient:clientSocket]; // Send as an array
         return;
     }

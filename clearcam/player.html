@@ -421,8 +421,8 @@
             fetch('get-classes')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.currentClasses) {
-                        updateDropdown(data.currentClasses);
+                    if (Array.isArray(data) && data.length > 0) {
+                        updateDropdown(data[0]); // Extract the first element
                     }
                 })
                 .catch(error => {
