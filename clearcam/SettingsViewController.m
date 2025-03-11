@@ -135,7 +135,7 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    NSArray *presetKeys = [settingsManager.yolo_presets allKeys];
+    NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
     for (NSString *presetKey in presetKeys) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                          style:UIAlertActionStyleDefault
@@ -220,12 +220,12 @@
                                                                    message:@"Select a preset to edit"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    NSArray *presetKeys = [settingsManager.yolo_presets allKeys];
+    NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
     for (NSString *presetKey in presetKeys) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
-            NSArray *selectedIndexes = settingsManager.yolo_presets[presetKey];
+            NSArray *selectedIndexes = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][presetKey];
             [self showNumberSelectionForPreset:presetKey selectedIndexes:selectedIndexes];
         }];
         [alert addAction:action];
@@ -243,8 +243,29 @@
     numberSelectionVC.selectedIndexes = [selectedIndexes mutableCopy];
     numberSelectionVC.completionHandler = ^(NSArray<NSNumber *> *selectedIndexes) {
         SettingsManager *settingsManager = [SettingsManager sharedManager];
-        settingsManager.yolo_presets[presetKey] = selectedIndexes;
-        [[NSUserDefaults standardUserDefaults] synchronize];
+        
+        //todo deepseek slop
+        // Step 1: Retrieve the yolo_presets dictionary from NSUserDefaults
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
+
+        // If yolo_presets doesn't exist in NSUserDefaults, initialize it as an empty dictionary
+        if (!yoloPresets) {
+            yoloPresets = [NSMutableDictionary dictionary];
+        }
+
+        // Step 2: Update the dictionary with the new key-value pair
+        yoloPresets[presetKey] = selectedIndexes;
+
+        // Step 3: Save the updated dictionary back to NSUserDefaults
+        [defaults setObject:yoloPresets forKey:@"yolo_presets"];
+
+        // Step 4: Synchronize to save changes immediately (optional but recommended)
+        [defaults synchronize];
+
+        // Step 5: Update the settingsManager.yolo_presets to reflect the changes
+        settingsManager.yolo_presets = yoloPresets;
+        
         [self.tableView reloadData];
     };
     [self.navigationController pushViewController:numberSelectionVC animated:YES];
@@ -255,14 +276,32 @@
                                                                    message:@"Select a preset to delete"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    NSArray *presetKeys = [settingsManager.yolo_presets allKeys];
+    //todo deepseek slop
+    NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
     for (NSString *presetKey in presetKeys) {
         if (![presetKey isEqualToString:@"all"]) { // Prevent deletion of the "all" preset
             UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
                                                              style:UIAlertActionStyleDestructive
                                                            handler:^(UIAlertAction * _Nonnull action) {
+                // Step 1: Remove the object from settingsManager.yolo_presets
                 [settingsManager.yolo_presets removeObjectForKey:presetKey];
-                [[NSUserDefaults standardUserDefaults] synchronize];
+
+                // Step 2: Retrieve the yolo_presets dictionary from NSUserDefaults
+                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
+
+                // Step 3: Remove the object from the yolo_presets dictionary
+                if (yoloPresets) {
+                    [yoloPresets removeObjectForKey:presetKey];
+                }
+
+                // Step 4: Save the updated dictionary back to NSUserDefaults
+                [defaults setObject:yoloPresets forKey:@"yolo_presets"];
+
+                // Step 5: Synchronize to save changes immediately (optional but recommended)
+                [defaults synchronize];
+
+                // Step 6: Reload the table view to reflect the changes
                 [self.tableView reloadData];
             }];
             [alert addAction:action];
