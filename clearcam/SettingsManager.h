@@ -17,6 +17,7 @@
 - (void)saveYoloIndexes;
 - (void)loadYoloIndexes;
 - (void)updateYoloIndexes:(NSArray<NSNumber *> *)newIndexes;
+- (void)updateYoloIndexesKey:(NSString *)key;
 - (void)loadResolutionSettings;
 - (void)saveResolutionSettings;
 - (void)updateResolutionWithWidth:(NSString *)width height:(NSString *)height textSize:(NSString *)textSize preset:(NSString *)preset;

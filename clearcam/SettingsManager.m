@@ -30,9 +30,9 @@
 }
 
 - (void)loadYoloIndexes {
-    NSArray *savedIndexes = [[NSUserDefaults standardUserDefaults] arrayForKey:@"yolo_indexes"];
-    if (savedIndexes) {
-        self.yolo_indexes = savedIndexes;
+    NSString *savedKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_indexes_key"];
+    if(savedKey && [savedKey isEqualToString:@"vehiclesPeople"]){
+        self.yolo_indexes = @[@0,@1,@2,@3,@5,@7];
     } else {
         self.yolo_indexes = [self generateDefaultYoloIndexes];
     }
@@ -41,6 +41,11 @@
 - (void)updateYoloIndexes:(NSArray<NSNumber *> *)newIndexes {
     self.yolo_indexes = newIndexes;
     [self saveYoloIndexes];
+}
+
+- (void)updateYoloIndexesKey:(NSString *)key {
+    [[NSUserDefaults standardUserDefaults] setObject:key forKey:@"yolo_indexes_key"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (NSArray<NSNumber *> *)generateDefaultYoloIndexes {
