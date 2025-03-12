@@ -49,7 +49,6 @@ NSMutableDictionary *classColorMap;
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.recordPressed = NO;
-    //PGP *pgp = [[PGP alloc] init];
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
     self.current_segment_squares = [[NSMutableArray alloc] init];
