@@ -30,32 +30,51 @@
     // Initialize sendEmailAlertsEnabled from NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     if ([defaults objectForKey:@"send_email_alerts_enabled"] != nil) {
-        // Key exists, use the stored value
         self.sendEmailAlertsEnabled = [defaults boolForKey:@"send_email_alerts_enabled"];
     } else {
-        // Key does not exist, default to NO
         self.sendEmailAlertsEnabled = NO;
-        [defaults setBool:NO forKey:@"send_email_alerts_enabled"]; // Save the default value
+        [defaults setBool:NO forKey:@"send_email_alerts_enabled"];
         [defaults synchronize];
     }
 
     // Initialize encryptEmailDataEnabled from NSUserDefaults
     if ([defaults objectForKey:@"encrypt_email_data_enabled"] != nil) {
-        // Key exists, use the stored value
         self.encryptEmailDataEnabled = [defaults boolForKey:@"encrypt_email_data_enabled"];
     } else {
-        // Key does not exist, default to NO
         self.encryptEmailDataEnabled = NO;
-        [defaults setBool:NO forKey:@"encrypt_email_data_enabled"]; // Save the default value
+        [defaults setBool:NO forKey:@"encrypt_email_data_enabled"];
         [defaults synchronize];
     }
 
-    // Create table view
-    self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
+    // Create table view with proper Auto Layout constraints
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor]; // Matches dark/light mode
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO; // Enable Auto Layout
     [self.view addSubview:self.tableView];
+
+    // Set up constraints to pin the table view to all edges of the view
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+}
+
+#pragma mark - Orientation Control
+
+- (BOOL)shouldAutorotate {
+    return NO; // Disable autorotation to lock orientation
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIInterfaceOrientationMaskPortrait; // Only allow portrait orientation
+}
+
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
+    return UIInterfaceOrientationPortrait; // Set the preferred orientation to portrait
 }
 
 #pragma mark - UITableView DataSource
