@@ -7,6 +7,7 @@
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSString *selectedResolution;
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
+@property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 
 @end
 
@@ -35,11 +36,18 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 1;
+    return 2; // One for general settings, one for presets
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return 4; // One for resolution, one for YOLO indexes key, one for managing presets, one for email
+    if (section == 0) {
+        return 3; // Resolution, Detect objects, Email
+    } else if (section == 1) {
+        // Presets section: 1 row for "Manage Presets" header, plus rows for each preset, plus "Add New +"
+        NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
+        return self.isPresetsSectionExpanded ? (presetKeys.count + 2) : 1;
+    }
+    return 0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -55,36 +63,128 @@
     cell.textLabel.textColor = [UIColor labelColor];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
 
-    if (indexPath.row == 0) {
-        cell.textLabel.text = @"Resolution";
-        cell.detailTextLabel.text = self.selectedResolution;
-    } else if (indexPath.row == 1) {
-        cell.textLabel.text = @"Detect objects";
-        cell.detailTextLabel.text = self.selectedPresetKey;
-    } else if (indexPath.row == 2) {
-        cell.textLabel.text = @"Manage Presets";
-        cell.detailTextLabel.text = nil; // No detail text for this row
-    } else if (indexPath.row == 3) {
-        cell.textLabel.text = @"Email Address";
-        cell.detailTextLabel.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"] ?: @"Not set"; // Retrieve email from UserDefaults
+    // Clear cell state to prevent lingering text or images
+    cell.textLabel.text = nil;
+    cell.detailTextLabel.text = nil;
+    cell.imageView.image = nil;
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
+    if (indexPath.section == 0) {
+        if (indexPath.row == 0) {
+            // Resolution
+            cell.textLabel.text = @"Resolution";
+            cell.detailTextLabel.text = self.selectedResolution; // Show current resolution
+        } else if (indexPath.row == 1) {
+            // Detect objects
+            cell.textLabel.text = @"Detect objects";
+            cell.detailTextLabel.text = self.selectedPresetKey; // Show current YOLO preset
+        } else if (indexPath.row == 2) {
+            // Email Address
+            cell.textLabel.text = @"Email Address";
+            NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
+            cell.detailTextLabel.text = email ?: @"Not set"; // Show current email or "Not set"
+        }
+    } else if (indexPath.section == 1) {
+        NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
+        if (indexPath.row == 0) {
+            // "Manage Presets" header row
+            cell.textLabel.text = @"Manage Presets";
+            cell.detailTextLabel.text = nil;
+            cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
+        } else if (indexPath.row <= presetKeys.count) {
+            // Preset rows (including "all")
+            NSString *presetKey = presetKeys[indexPath.row - 1];
+            cell.textLabel.text = presetKey;
+            cell.detailTextLabel.text = nil;
+            cell.imageView.image = nil; // Clear any existing image
+        } else if (indexPath.row == presetKeys.count + 1) {
+            // "Add New +" row (only show if expanded)
+            cell.textLabel.text = nil; // Clear text
+            cell.detailTextLabel.text = nil; // Clear detail text
+            cell.imageView.image = [UIImage systemImageNamed:@"plus.circle.fill"]; // Use the system + icon
+            cell.imageView.tintColor = [UIColor systemGreenColor]; // Set the icon color to green
+            cell.accessoryType = UITableViewCellAccessoryNone;
+        }
     }
+
     return cell;
 }
 
 #pragma mark - UITableView Delegate
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.row == 0) {
-        [self showResolutionPicker];
-    } else if (indexPath.row == 1) {
-        [self showYoloIndexesPicker];
-    } else if (indexPath.row == 2) {
-        [self showPresetManagementOptions];
-    } else if (indexPath.row == 3) {
-        [self showEmailInputDialog];
+    if (indexPath.section == 0) {
+        if (indexPath.row == 0) {
+            [self showResolutionPicker];
+        } else if (indexPath.row == 1) {
+            [self showYoloIndexesPicker];
+        } else if (indexPath.row == 2) {
+            [self showEmailInputDialog];
+        }
+    } else if (indexPath.section == 1) {
+        NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
+        if (indexPath.row == 0) {
+            // Toggle presets section expansion
+            self.isPresetsSectionExpanded = !self.isPresetsSectionExpanded;
+            [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationAutomatic];
+        } else if (indexPath.row <= presetKeys.count) {
+            // Edit preset
+            NSString *presetKey = presetKeys[indexPath.row - 1];
+            NSArray *selectedIndexes = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][presetKey];
+            [self showNumberSelectionForPreset:presetKey selectedIndexes:selectedIndexes];
+        } else {
+            // Add new preset
+            [self showAddPresetDialog];
+        }
     }
 
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.section == 1 && indexPath.row > 0 && indexPath.row <= [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count) {
+        NSString *presetKey = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys][indexPath.row - 1];
+        if (![presetKey isEqualToString:@"all"]) {
+            return UITableViewCellEditingStyleDelete; // Enable swipe-to-delete for presets (except "all")
+        }
+    }
+    return UITableViewCellEditingStyleNone;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
+        NSString *presetKey = presetKeys[indexPath.row - 1];
+
+        // Prevent deletion of the "all" preset
+        if ([presetKey isEqualToString:@"all"]) {
+            NSLog(@"Cannot delete the 'all' preset.");
+            return;
+        }
+
+        // Remove the preset
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
+        [yoloPresets removeObjectForKey:presetKey];
+        [defaults setObject:yoloPresets forKey:@"yolo_presets"];
+
+        // Check if the deleted preset was the currently selected one
+        if ([self.selectedPresetKey isEqualToString:presetKey]) {
+            // Switch to the "all" preset
+            self.selectedPresetKey = @"all";
+            [defaults setObject:@"all" forKey:@"yolo_preset_idx"];
+        }
+
+        [defaults synchronize];
+
+        // Animate the deletion of the row
+        [tableView beginUpdates];
+        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+        [tableView endUpdates];
+
+        // Reload both sections to ensure the UI is fully updated
+        [self.tableView reloadSections:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 2)] withRowAnimation:UITableViewRowAnimationAutomatic];
+    }
 }
 
 - (void)showEmailInputDialog {
@@ -355,8 +455,8 @@
                 // Synchronize to save changes immediately
                 [defaults synchronize];
 
-                // Reload the table view to reflect the changes
-                [self.tableView reloadData];
+                // Reload both sections to ensure the UI is fully updated
+                [self.tableView reloadSections:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 2)] withRowAnimation:UITableViewRowAnimationAutomatic];
             }];
             [alert addAction:action];
         }
