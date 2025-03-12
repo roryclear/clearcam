@@ -2,6 +2,7 @@
 #import "SettingsManager.h"
 #import "AppDelegate.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
+#import <CommonCrypto/CommonCryptor.h>
 
 @implementation SceneState
 
@@ -91,7 +92,7 @@
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
                         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]) {
-                            [self sendEmailWithImageAtPath:filePath encryptImage:NO];
+                            [self sendEmailWithImageAtPath:filePath encryptImage:YES];
                             self.last_email_time = [NSDate date]; // Set to now
                         }
                     } else {
@@ -125,54 +126,106 @@
     }
 }
 
+- (NSData *)encryptData:(NSData *)data withKey:(NSString *)key {
+    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
+    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
+    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+
+    size_t bufferSize = data.length + kCCBlockSizeAES128;
+    void *buffer = malloc(bufferSize);
+    
+    size_t numBytesEncrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCEncrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     kCCKeySizeAES256,
+                                     NULL,
+                                     data.bytes,
+                                     data.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesEncrypted);
+    
+    if (status == kCCSuccess) {
+        return [NSData dataWithBytesNoCopy:buffer length:numBytesEncrypted];
+    }
+
+    free(buffer);
+    return nil;
+}
+
+- (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key {
+    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
+    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
+    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+
+    size_t bufferSize = encryptedData.length + kCCBlockSizeAES128;
+    void *buffer = malloc(bufferSize);
+    
+    size_t numBytesDecrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCDecrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     kCCKeySizeAES256,
+                                     NULL,
+                                     encryptedData.bytes,
+                                     encryptedData.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesDecrypted);
+    
+    if (status == kCCSuccess) {
+        return [NSData dataWithBytesNoCopy:buffer length:numBytesDecrypted];
+    }
+
+    free(buffer);
+    return nil;
+}
+
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath encryptImage:(BOOL)encryptImage {
-    // Server details
     NSString *server = @"http://192.168.18.133:8080";
     NSString *endpoint = @"/";
-
-    // Email recipient address (hardcoded)
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
-    if(!toEmail) return;
+    if (!toEmail) return;
 
-    // Read image file
     NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
     if (!imageData) {
         NSLog(@"Failed to read image data from path: %@", imagePath);
         return;
     }
 
-    // Encrypt the image if enabled
+    NSData *fileData = imageData;
     NSString *filePathToSend = imagePath;
-    NSString *fileExtension = @"jpg";
-
-    NSData *fileData = [NSData dataWithContentsOfFile:filePathToSend];
-    if (!fileData) {
-        NSLog(@"Failed to read file data from path: %@", filePathToSend);
-        return;
+    
+    if (encryptImage) {
+        fileData = [self encryptData:imageData withKey:@"opensesame"];
+        fileData = [self decryptData:fileData withKey:@"opensesame"]; //todo, testing
+        if (!fileData) {
+            NSLog(@"Encryption failed.");
+            return;
+        }
     }
 
-    // Generate a unique boundary
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
-
-    // Construct multipart request body
     NSMutableData *bodyData = [NSMutableData data];
 
-    // Add email field
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[@"Content-Disposition: form-data; name=\"to\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[toEmail dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: %@\r\n\r\n", [self mimeTypeForFileAtPath:filePathToSend]] dataUsingEncoding:NSUTF8StringEncoding]];
+    //todo change jpg to aes?
+    //[bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? @"encrypted_image.aes" : [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? @"encrypted_image.jpg" : [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: application/octet-stream\r\n\r\n"] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // End boundary
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // Create URL request
     NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"POST"];
@@ -180,7 +233,6 @@
     [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
     [request setHTTPBody:bodyData];
 
-    // Send request using NSURLSession
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
@@ -193,6 +245,7 @@
     [task resume];
 }
 
+
 // Helper function to get MIME type for a file
 - (NSString *)mimeTypeForFileAtPath:(NSString *)path {
     CFStringRef fileExtension = (__bridge CFStringRef)[path pathExtension];
@@ -203,4 +256,3 @@
 }
 
 @end
-
