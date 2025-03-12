@@ -8,6 +8,7 @@
 @property (nonatomic, strong) NSString *selectedResolution;
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
+@property (nonatomic, assign) BOOL sendEmailAlertsEnabled;
 
 @end
 
@@ -25,6 +26,18 @@
     self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
     self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all"; // Default to "all" if no key is saved
 
+    // Initialize sendEmailAlertsEnabled from NSUserDefaults
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:@"send_email_alerts_enabled"] != nil) {
+        // Key exists, use the stored value
+        self.sendEmailAlertsEnabled = [defaults boolForKey:@"send_email_alerts_enabled"];
+    } else {
+        // Key does not exist, default to YES
+        self.sendEmailAlertsEnabled = YES;
+        [defaults setBool:YES forKey:@"send_email_alerts_enabled"]; // Save the default value
+        [defaults synchronize];
+    }
+
     // Create table view
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
     self.tableView.delegate = self;
@@ -41,7 +54,7 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        return 3; // Resolution, Detect objects, Email
+        return 4; // Resolution, Detect objects, Email, Send Email Alerts
     } else if (section == 1) {
         // Presets section: 1 row for "Manage Presets" header, plus rows for each preset, plus "Add New +"
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -69,6 +82,9 @@
     cell.imageView.image = nil;
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 
+    // Clear accessoryView for all cells initially
+    cell.accessoryView = nil;
+
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
             // Resolution
@@ -83,6 +99,16 @@
             cell.textLabel.text = @"Email Address";
             NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
             cell.detailTextLabel.text = email ?: @"Not set"; // Show current email or "Not set"
+        } else if (indexPath.row == 3) {
+            // Send Email Alerts
+            cell.textLabel.text = @"Send Email Alerts";
+            cell.accessoryType = UITableViewCellAccessoryNone; // No disclosure indicator for switches
+
+            // Add a UISwitch to the cell
+            UISwitch *emailAlertsSwitch = [[UISwitch alloc] init];
+            emailAlertsSwitch.on = self.sendEmailAlertsEnabled;
+            [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = emailAlertsSwitch;
         }
     } else if (indexPath.section == 1) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -110,6 +136,18 @@
     return cell;
 }
 
+- (void)emailAlertsSwitchToggled:(UISwitch *)sender {
+    // Update the property
+    self.sendEmailAlertsEnabled = sender.on;
+
+    // Save the state to NSUserDefaults
+    [[NSUserDefaults standardUserDefaults] setBool:self.sendEmailAlertsEnabled forKey:@"send_email_alerts_enabled"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
+    // Log the change (optional)
+    NSLog(@"Send Email Alerts: %@", self.sendEmailAlertsEnabled ? @"Enabled" : @"Disabled");
+}
+
 #pragma mark - UITableView Delegate
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -121,6 +159,7 @@
         } else if (indexPath.row == 2) {
             [self showEmailInputDialog];
         }
+        // Ignore taps on the "Send Email Alerts" row (indexPath.row == 3)
     } else if (indexPath.section == 1) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row == 0) {

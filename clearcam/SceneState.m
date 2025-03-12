@@ -91,9 +91,11 @@
                 } else {
                     NSLog(@"Image saved at path: %@", filePath);
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
-                        self.last_email_time = [NSDate date]; // Set to now
                         NSLog(@"sending email");
-                        [self sendEmailWithImageAtPath:filePath encryptImage:NO];
+                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]) {
+                            [self sendEmailWithImageAtPath:filePath encryptImage:NO];
+                            self.last_email_time = [NSDate date]; // Set to now
+                        }
                     } else {
                         NSLog(@"NOT sending an email");
                     }
@@ -127,7 +129,7 @@
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath encryptImage:(BOOL)encryptImage {
     // Server details
-    NSString *server = @"http://192.168.1.100:8080";
+    NSString *server = @"http://192.168.1.113:8080";
     NSString *endpoint = @"/";
 
     // Email recipient address (hardcoded)
