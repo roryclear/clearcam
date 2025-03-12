@@ -201,7 +201,8 @@
 
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
     //todo change jpg to aes?
-    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? [[[filePathToSend lastPathComponent] stringByDeletingPathExtension] stringByAppendingString:@".aes"] : [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? [[filePathToSend lastPathComponent] stringByAppendingString:@".aes"] : [filePathToSend lastPathComponent]
+] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: application/octet-stream\r\n\r\n"] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];

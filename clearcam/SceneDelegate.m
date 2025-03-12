@@ -187,10 +187,14 @@
         }
         NSLog(@"Decrypted data successfully. Size: %lu bytes", (unsigned long)decryptedData.length);
 
-        // Save the decrypted data as a .jpg file
-        NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension]; // Remove .aes extension
-        NSString *jpgFileName = [fileName stringByAppendingPathExtension:@"jpg"];
-        NSURL *jpgFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:jpgFileName];
+        // Remove only the .aes extension
+        NSString *fileName = [aesFileURL lastPathComponent];
+        if ([fileName hasSuffix:@".aes"]) {
+            fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
+        }
+        //todo, can be any file type
+        NSURL *jpgFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
+
 
         NSError *writeError = nil; // Temporary error variable for writing
         [decryptedData writeToURL:jpgFileURL options:NSDataWritingAtomic error:&writeError];
