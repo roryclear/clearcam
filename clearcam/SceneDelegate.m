@@ -179,7 +179,7 @@
         NSLog(@"Read .aes file successfully. Size: %lu bytes", (unsigned long)encryptedData.length);
 
         // Attempt to decrypt the data using stored keys
-        NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllStoredKeys];
+        NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
         __block NSData *decryptedData = nil; // Add __block specifier
         __block NSString *successfulKey = nil; // Add __block specifier
 
@@ -202,7 +202,8 @@
                         if (decryptedData) { // Key worked
                             // Save the correct key to the secret manager
                             NSError *saveError = nil;
-                            if (![[SecretManager sharedManager] saveKey:userProvidedKey error:&saveError]) {
+                            //todo can two have the same identifier
+                            if(![[SecretManager sharedManager] saveDecryptionKey:@"MyDecryptionKey" withIdentifier:@"decryption_key" error:&saveError]) {
                                 NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
                             }
                             successfulKey = userProvidedKey;

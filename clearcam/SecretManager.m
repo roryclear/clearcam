@@ -50,40 +50,36 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return [keys copy];
 }
 
-#pragma mark - Key Storage
 
-- (BOOL)saveKey:(NSString *)key error:(NSError **)error {
+- (BOOL)saveEncryptionKey:(NSString *)key error:(NSError **)error {
     if (!key) {
         if (error) {
             *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
                                          code:-1
-                                     userInfo:@{NSLocalizedDescriptionKey: @"Key cannot be nil."}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Encryption key cannot be nil."}];
         }
         return NO;
     }
-    
-    // Convert key to data
+
     NSData *keyData = [key dataUsingEncoding:NSUTF8StringEncoding];
-    
-    // Create a unique identifier for the key (e.g., UUID)
-    NSString *keyIdentifier = [[NSUUID UUID] UUIDString];
-    
-    // Keychain query to add the key
+
+    // Define a fixed identifier for the encryption key
+    NSString *encryptionKeyIdentifier = @"encryption_key";
+
+    // Delete any existing encryption key before saving a new one
+    [self deleteKeyWithIdentifier:encryptionKeyIdentifier error:nil];
+
     NSDictionary *query = @{
         (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
         (__bridge id)kSecAttrService: kServiceIdentifier,
-        (__bridge id)kSecAttrAccount: keyIdentifier,
+        (__bridge id)kSecAttrAccount: encryptionKeyIdentifier,
         (__bridge id)kSecValueData: keyData,
-        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleWhenUnlocked // Restrict access to when device is unlocked
+        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleWhenUnlocked
     };
-    
-    // Delete any existing item with the same identifier (optional, to avoid duplicates)
-    SecItemDelete((__bridge CFDictionaryRef)query);
-    
-    // Add the key to the Keychain
+
     OSStatus status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
     if (status != errSecSuccess) {
-        NSLog(@"Failed to save key to Keychain: %d", (int)status);
+        NSLog(@"Failed to save encryption key: %d", (int)status);
         if (error) {
             *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
                                          code:status
@@ -91,10 +87,104 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         }
         return NO;
     }
-    
-    NSLog(@"Successfully saved key to Keychain with identifier: %@", keyIdentifier);
+
+    NSLog(@"Successfully saved encryption key.");
     return YES;
 }
+
+- (NSArray<NSString *> *)getAllDecryptionKeys {
+    NSMutableArray<NSString *> *keys = [NSMutableArray array];
+
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kServiceIdentifier,
+        (__bridge id)kSecReturnAttributes: @YES,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitAll
+    };
+
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status == errSecSuccess) {
+        NSArray *items = (__bridge_transfer NSArray *)result;
+        for (NSDictionary *item in items) {
+            NSString *identifier = item[(__bridge id)kSecAttrAccount];
+            if (![identifier isEqualToString:@"encryption_key"]) { // Ignore the encryption key
+                NSData *keyData = item[(__bridge id)kSecValueData];
+                NSString *key = [[NSString alloc] initWithData:keyData encoding:NSUTF8StringEncoding];
+                if (key) {
+                    [keys addObject:key];
+                }
+            }
+        }
+    }
+
+    return [keys copy];
+}
+
+
+- (BOOL)saveDecryptionKey:(NSString *)key withIdentifier:(NSString *)identifier error:(NSError **)error {
+    if (!key || !identifier) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
+                                         code:-1
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Decryption key and identifier cannot be nil."}];
+        }
+        return NO;
+    }
+
+    NSData *keyData = [key dataUsingEncoding:NSUTF8StringEncoding];
+
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kServiceIdentifier,
+        (__bridge id)kSecAttrAccount: identifier,
+        (__bridge id)kSecValueData: keyData,
+        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleWhenUnlocked
+    };
+
+    // Ensure we don't overwrite an existing key with the same identifier
+    SecItemDelete((__bridge CFDictionaryRef)query);
+
+    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
+    if (status != errSecSuccess) {
+        NSLog(@"Failed to save decryption key: %d", (int)status);
+        if (error) {
+            *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
+                                         code:status
+                                     userInfo:@{NSLocalizedDescriptionKey: [self errorMessageForStatus:status]}];
+        }
+        return NO;
+    }
+
+    NSLog(@"Successfully saved decryption key with identifier: %@", identifier);
+    return YES;
+}
+
+
+- (NSString *)getEncryptionKey {
+    NSString *encryptionKeyIdentifier = @"encryption_key";
+
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kServiceIdentifier,
+        (__bridge id)kSecAttrAccount: encryptionKeyIdentifier,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne
+    };
+
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+
+    if (status == errSecSuccess) {
+        NSData *keyData = (__bridge_transfer NSData *)result;
+        return [[NSString alloc] initWithData:keyData encoding:NSUTF8StringEncoding];
+    }
+
+    NSLog(@"Encryption key not found.");
+    return nil;
+}
+
 
 #pragma mark - Key Deletion
 

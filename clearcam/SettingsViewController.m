@@ -261,7 +261,7 @@
     }
     
     NSError *error = nil;
-    BOOL success = [[SecretManager sharedManager] saveKey:password error:&error];
+    BOOL success = [[SecretManager sharedManager] saveEncryptionKey:password error:&error];
     
     if (!success) {
         NSLog(@"Failed to save password to Keychain: %@", error.localizedDescription);
@@ -271,12 +271,10 @@
 }
 
 - (NSString *)retrievePasswordFromSecretsManager {
-    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllStoredKeys];
-    
-    if (storedKeys.count > 0) {
-        return storedKeys.firstObject; // Assuming only one password is stored
+    NSString *storedKey = [[SecretManager sharedManager] getEncryptionKey];
+    if (storedKey) {
+        return storedKey; // Assuming only one password is stored
     }
-    
     NSLog(@"No password found in Keychain.");
     return nil;
 }

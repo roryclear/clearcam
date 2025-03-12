@@ -189,7 +189,7 @@
     
     if (encryptImage) {
         // Retrieve the user's password from the Keychain
-        NSString *encryptionKey = [[[SecretManager sharedManager] getAllStoredKeys] firstObject];
+        NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
 
         if (!encryptionKey) {
             NSLog(@"Encryption key not found in Keychain. Encryption aborted.");

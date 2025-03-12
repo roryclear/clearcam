@@ -8,18 +8,20 @@
 // Singleton instance
 + (instancetype)sharedManager;
 
-// Retrieve all stored keys from the Keychain
-- (NSArray<NSString *> *)getAllStoredKeys;
+// Encryption Key Management (Single Key)
+- (BOOL)saveEncryptionKey:(NSString *)key error:(NSError **)error;
+- (NSString *)getEncryptionKey;
 
-// Save a key to the Keychain
-- (BOOL)saveKey:(NSString *)key error:(NSError **)error;
+// Decryption Key Management (Multiple Keys)
+- (BOOL)saveDecryptionKey:(NSString *)key withIdentifier:(NSString *)identifier error:(NSError **)error;
+- (NSArray<NSString *> *)getAllDecryptionKeys;
+- (BOOL)deleteDecryptionKeyWithIdentifier:(NSString *)identifier error:(NSError **)error;
 
-// Delete a specific key from the Keychain using its identifier
+// Generic Key Management
 - (BOOL)deleteKeyWithIdentifier:(NSString *)identifier error:(NSError **)error;
-
-// Delete all keys from the Keychain
 - (BOOL)deleteAllKeysWithError:(NSError **)error;
 
 @end
 
 #endif /* SecretManager_h */
+
