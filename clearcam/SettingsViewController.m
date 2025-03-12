@@ -1,5 +1,6 @@
 #import "SettingsViewController.h"
 #import "SettingsManager.h"
+#import "SecretManager.h"
 #import "NumberSelectionViewController.h"
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
@@ -254,14 +255,30 @@
 }
 
 - (void)savePasswordToSecretsManager:(NSString *)password {
-    // Replace this with your actual secrets manager logic
-    [[NSUserDefaults standardUserDefaults] setObject:password forKey:@"email_encryption_password"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    if (!password) {
+        NSLog(@"Error: Password cannot be nil.");
+        return;
+    }
+    
+    NSError *error = nil;
+    BOOL success = [[SecretManager sharedManager] saveKey:password error:&error];
+    
+    if (!success) {
+        NSLog(@"Failed to save password to Keychain: %@", error.localizedDescription);
+    } else {
+        NSLog(@"Password successfully saved to Keychain.");
+    }
 }
 
 - (NSString *)retrievePasswordFromSecretsManager {
-    // Replace this with your actual secrets manager logic
-    return [[NSUserDefaults standardUserDefaults] stringForKey:@"email_encryption_password"];
+    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllStoredKeys];
+    
+    if (storedKeys.count > 0) {
+        return storedKeys.firstObject; // Assuming only one password is stored
+    }
+    
+    NSLog(@"No password found in Keychain.");
+    return nil;
 }
 
 - (void)showInvalidPasswordAlert {

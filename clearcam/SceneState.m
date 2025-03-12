@@ -1,5 +1,6 @@
 #import "SceneState.h"
 #import "SettingsManager.h"
+#import "SecretManager.h"
 #import "AppDelegate.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
 #import <CommonCrypto/CommonCryptor.h>
@@ -169,7 +170,7 @@
 }
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
-    NSString *server = @"http://192.168.1.113:8080";
+    NSString *server = @"http://192.168.1.100:8080";
     NSString *endpoint = @"/";
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
     if (!toEmail) return;
@@ -187,20 +188,22 @@
     BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
     
     if (encryptImage) {
-        // Retrieve the user's password from the secrets manager
-        NSString *encryptionKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"email_encryption_password"];
+        // Retrieve the user's password from the Keychain
+        NSString *encryptionKey = [[[SecretManager sharedManager] getAllStoredKeys] firstObject];
+
         if (!encryptionKey) {
-            NSLog(@"Encryption key not found. Encryption aborted.");
+            NSLog(@"Encryption key not found in Keychain. Encryption aborted.");
             return;
         }
         
-        // Encrypt the image data using the user's password
+        // Encrypt the image data using the retrieved key
         fileData = [self encryptData:imageData withKey:encryptionKey];
         if (!fileData) {
             NSLog(@"Encryption failed.");
             return;
         }
     }
+
 
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
     NSMutableData *bodyData = [NSMutableData data];
