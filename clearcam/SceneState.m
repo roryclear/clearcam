@@ -12,7 +12,6 @@
     if (self) {
         self.lastN = [NSMutableArray array];
         self.lastN_total = [[NSMutableDictionary alloc] init];
-        self.events = [SettingsManager sharedManager].events;
         self.alerts = [SettingsManager sharedManager].alerts;
         self.last_email_time = [NSDate dateWithTimeIntervalSince1970:0];
 
@@ -24,6 +23,8 @@
 }
 
 - (void)processOutput:(NSArray *)array withImage:(CIImage *)image {
+    NSArray *events = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]];
+    if(!events) return;
     NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
     
     // Count occurrences in the current frame
@@ -34,20 +35,20 @@
     [self.lastN addObject:frame]; // Store this frame's data
 
     // Process events
-    for (int i = 0; i < self.events.count; i++) {
-        NSNumber *totalValue = self.lastN_total[self.events[i]] ?: @0;
+    for (int i = 0; i < events.count; i++) {
+        NSNumber *totalValue = self.lastN_total[events[i]] ?: @0;
         NSNumber *last_totalValue = [totalValue copy];
-        NSNumber *frameValue = frame[self.events[i]] ?: @0;
+        NSNumber *frameValue = frame[events[i]] ?: @0;
         totalValue = @(totalValue.intValue + frameValue.intValue);
         
         if (self.lastN.count > 10) {
-            frameValue = self.lastN[0][self.events[i]] ?: @0;
+            frameValue = self.lastN[0][events[i]] ?: @0;
             totalValue = @(totalValue.intValue - frameValue.intValue);
         }
         
         int current_state = (int)roundf((totalValue ? [totalValue floatValue] : 0.0) / 10.0);
         int last_state = (int)roundf((last_totalValue ? [last_totalValue floatValue] : 0.0) / 10.0);
-        self.lastN_total[self.events[i]] = totalValue;
+        self.lastN_total[events[i]] = totalValue;
         
         if (current_state != last_state) {
             NSDate *date = [NSDate date];
@@ -90,9 +91,11 @@
                 } else {
                     NSLog(@"Image saved at path: %@", filePath);
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
-                        self.last_email_time = [NSDate date]; // Set to now
                         NSLog(@"sending email");
-                        [self sendEmailWithImageAtPath:filePath encryptImage:YES];
+                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]) {
+                            [self sendEmailWithImageAtPath:filePath encryptImage:NO];
+                            self.last_email_time = [NSDate date]; // Set to now
+                        }
                     } else {
                         NSLog(@"NOT sending an email");
                     }
@@ -106,7 +109,7 @@
                                                                           inManagedObjectContext:self.backgroundContext];
 
                 [newEvent setValue:@(unixTimestamp) forKey:@"timeStamp"];
-                [newEvent setValue:self.events[i] forKey:@"classType"];
+                [newEvent setValue:events[i] forKey:@"classType"];
                 [newEvent setValue:@(current_state) forKey:@"quantity"];
 
                 NSError *saveError = nil;
@@ -126,11 +129,12 @@
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath encryptImage:(BOOL)encryptImage {
     // Server details
-    NSString *server = @"http://192.168.1.103:8080";
+    NSString *server = @"http://192.168.1.113:8080";
     NSString *endpoint = @"/";
 
     // Email recipient address (hardcoded)
-    NSString *toEmail = @"roryclear.rc@gmail.com";
+    NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
+    if(!toEmail) return;
 
     // Read image file
     NSData *imageData = [NSData dataWithContentsOfFile:imagePath];

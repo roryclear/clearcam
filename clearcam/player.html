@@ -320,7 +320,7 @@
                     <input type="date" id="datePicker" name="datePicker">
                     <select id="classSelector" name="classSelector" onchange="changeClasses()">
                         <option value="all">Detect All</option>
-                        <option value="vehiclesPeople">People+Vehicles</option>
+                        <option value="People+Vehicles">People+Vehicles</option>
                     </select>
                 </div>
 
@@ -398,14 +398,7 @@
                 function changeClasses() {
                     const selector = document.getElementById('classSelector');
                     const selectedValue = selector.value;
-                    let url = '';
-
-                    if (selectedValue === 'all') {
-                        url = 'change-classes?indexes=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79';
-                    } else if (selectedValue === 'vehiclesPeople') {
-                        url = 'change-classes?indexes=0,1,2,3,5,7';
-                    }
-
+                    let url = `change-classes?indexes=${selectedValue}`;
                     fetch(url)
                         .then(response => {
                             if (!response.ok) {
@@ -417,26 +410,22 @@
                         });
                 }
         
-            function fetchCurrentClasses() {
-                fetch('get-classes')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (Array.isArray(data)) {
-                            updateDropdown(data);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching current classes:', error);
-                    });
-            }
+        function fetchCurrentClasses() {
+            fetch('get-classes')
+                .then(response => response.json())
+                .then(data => {
+                    if (Array.isArray(data) && data.length > 0) {
+                        updateDropdown(data[0]); // Extract the first element
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching current classes:', error);
+                });
+        }
 
         function updateDropdown(currentClasses) {
             const selector = document.getElementById('classSelector');
-            if (currentClasses.length === 80) { //todo, will need to change with more presets + custom !
-                selector.value = 'all';
-            } else if (JSON.stringify(currentClasses) === JSON.stringify([0, 1, 2, 3, 5, 7])) {
-                selector.value = 'vehiclesPeople';
-            }
+            selector.value = currentClasses;
         }
 
         // Call fetchCurrentClasses on page load and every minute
@@ -861,6 +850,26 @@
                         x++;
                     }
                 }
+        
+        function fetchPresets() {
+            fetch('get-presets')
+                .then(response => response.json())
+                .then(presets => {
+                    const selector = document.getElementById('classSelector');
+                    selector.innerHTML = ''; // Clear existing options
+
+                    presets.forEach(preset => {
+                        const option = document.createElement('option');
+                        option.value = preset;
+                        option.textContent = preset.replace("+", " "); // Optional formatting
+                        selector.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error fetching presets:', error));
+        }
+        // Call fetchPresets() when the page loads
+        document.addEventListener("DOMContentLoaded", fetchPresets);
+        
         let portrait = false;
 
         function adjustContainerForOrientation(videoElement) {
