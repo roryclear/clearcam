@@ -33,9 +33,9 @@
         // Key exists, use the stored value
         self.sendEmailAlertsEnabled = [defaults boolForKey:@"send_email_alerts_enabled"];
     } else {
-        // Key does not exist, default to YES
-        self.sendEmailAlertsEnabled = YES;
-        [defaults setBool:YES forKey:@"send_email_alerts_enabled"]; // Save the default value
+        // Key does not exist, default to NO
+        self.sendEmailAlertsEnabled = NO;
+        [defaults setBool:NO forKey:@"send_email_alerts_enabled"]; // Save the default value
         [defaults synchronize];
     }
 
@@ -259,15 +259,106 @@
 }
 
 - (void)emailAlertsSwitchToggled:(UISwitch *)sender {
-    // Update the property
-    self.sendEmailAlertsEnabled = sender.on;
-
-    // Save the state to NSUserDefaults
-    [[NSUserDefaults standardUserDefaults] setBool:self.sendEmailAlertsEnabled forKey:@"send_email_alerts_enabled"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    if (sender.on) {
+        // Check if an email address is already set
+        NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
+        if (!email || ![self isValidEmail:email]) {
+            // No valid email address is set, prompt the user to enter one
+            [self showEmailInputDialogWithCompletion:^(BOOL success) {
+                if (success) {
+                    // Email address was successfully set, keep the toggle on
+                    self.sendEmailAlertsEnabled = YES;
+                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_email_alerts_enabled"];
+                    [[NSUserDefaults standardUserDefaults] synchronize];
+                } else {
+                    // User canceled or entered an invalid email, turn the toggle off
+                    sender.on = NO;
+                    self.sendEmailAlertsEnabled = NO;
+                    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_email_alerts_enabled"];
+                    [[NSUserDefaults standardUserDefaults] synchronize];
+                }
+            }];
+        } else {
+            // Email address is valid, update the property and save the state
+            self.sendEmailAlertsEnabled = YES;
+            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_email_alerts_enabled"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+        }
+    } else {
+        // Toggle is turned off, update the property and save the state
+        self.sendEmailAlertsEnabled = NO;
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_email_alerts_enabled"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+    }
 
     // Log the change (optional)
     NSLog(@"Send Email Alerts: %@", self.sendEmailAlertsEnabled ? @"Enabled" : @"Disabled");
+}
+
+- (void)showEmailInputDialogWithCompletion:(void (^)(BOOL success))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Email Address"
+                                                                   message:@"Please enter a valid email address to enable email alerts."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Email Address";
+        textField.keyboardType = UIKeyboardTypeEmailAddress;
+        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"]; // Pre-fill with existing email
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *email = alert.textFields.firstObject.text;
+        if ([self isValidEmail:email]) {
+            // Save the email to UserDefaults
+            [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            
+            // Reload the table view to show the updated email
+            [self.tableView reloadData];
+            
+            // Call the completion handler with success
+            completion(YES);
+        } else {
+            // Show an alert for invalid email
+            [self showInvalidEmailAlert];
+            
+            // Call the completion handler with failure
+            completion(NO);
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        // Call the completion handler with failure
+        completion(NO);
+    }];
+    
+    [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (BOOL)isValidEmail:(NSString *)email {
+    NSString *emailRegex = @"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}";
+    NSPredicate *emailTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", emailRegex];
+    return [emailTest evaluateWithObject:email];
+}
+
+- (void)showInvalidEmailAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Invalid Email"
+                                                                   message:@"Please enter a valid email address."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:nil];
+    
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - UITableView Delegate
@@ -379,25 +470,6 @@
     [alert addAction:saveAction];
     [alert addAction:cancelAction];
     
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (BOOL)isValidEmail:(NSString *)email {
-    NSString *emailRegex = @"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}";
-    NSPredicate *emailTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", emailRegex];
-    return [emailTest evaluateWithObject:email];
-}
-
-- (void)showInvalidEmailAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Invalid Email"
-                                                                   message:@"Please enter a valid email address."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
-                                                       style:UIAlertActionStyleDefault
-                                                     handler:nil];
-    
-    [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
