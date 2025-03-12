@@ -9,6 +9,7 @@
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 @property (nonatomic, assign) BOOL sendEmailAlertsEnabled;
+@property (nonatomic, assign) BOOL encryptEmailDataEnabled;
 
 @end
 
@@ -38,6 +39,17 @@
         [defaults synchronize];
     }
 
+    // Initialize encryptEmailDataEnabled from NSUserDefaults
+    if ([defaults objectForKey:@"encrypt_email_data_enabled"] != nil) {
+        // Key exists, use the stored value
+        self.encryptEmailDataEnabled = [defaults boolForKey:@"encrypt_email_data_enabled"];
+    } else {
+        // Key does not exist, default to NO
+        self.encryptEmailDataEnabled = NO;
+        [defaults setBool:NO forKey:@"encrypt_email_data_enabled"]; // Save the default value
+        [defaults synchronize];
+    }
+
     // Create table view
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
     self.tableView.delegate = self;
@@ -54,7 +66,7 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        return 4; // Resolution, Detect objects, Email, Send Email Alerts
+        return 5; // Resolution, Detect objects, Email, Send Email Alerts, Encrypt Email Data
     } else if (section == 1) {
         // Presets section: 1 row for "Manage Presets" header, plus rows for each preset, plus "Add New +"
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -109,8 +121,19 @@
             emailAlertsSwitch.on = self.sendEmailAlertsEnabled;
             [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = emailAlertsSwitch;
+        } else if (indexPath.row == 4) {
+            // Encrypt Email Data
+            cell.textLabel.text = @"Encrypt Email Data (Recommended)";
+            cell.accessoryType = UITableViewCellAccessoryNone; // No disclosure indicator for switches
+
+            // Add a UISwitch to the cell
+            UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
+            encryptEmailDataSwitch.on = self.encryptEmailDataEnabled;
+            [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = encryptEmailDataSwitch;
         }
     } else if (indexPath.section == 1) {
+        // Presets section (unchanged)
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row == 0) {
             // "Manage Presets" header row
@@ -134,6 +157,105 @@
     }
 
     return cell;
+}
+
+- (void)encryptEmailDataSwitchToggled:(UISwitch *)sender {
+    if (sender.on) {
+        // Check if a password already exists in the secrets manager
+        NSString *password = [self retrievePasswordFromSecretsManager];
+        if (!password) {
+            // No password exists, prompt the user to set one
+            [self promptForPasswordWithCompletion:^(BOOL success) {
+                if (success) {
+                    // Password set successfully, enable the toggle
+                    self.encryptEmailDataEnabled = YES;
+                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"encrypt_email_data_enabled"];
+                    [[NSUserDefaults standardUserDefaults] synchronize];
+                } else {
+                    // User canceled, turn the toggle off
+                    sender.on = NO;
+                }
+            }];
+        } else {
+            // Password exists, enable the toggle
+            self.encryptEmailDataEnabled = YES;
+            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"encrypt_email_data_enabled"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+        }
+    } else {
+        // Turn off the toggle
+        self.encryptEmailDataEnabled = NO;
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"encrypt_email_data_enabled"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+    }
+}
+
+- (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Password"
+                                                                   message:@"Enter a password to encrypt email data"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Password";
+        textField.secureTextEntry = YES;
+    }];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Confirm Password";
+        textField.secureTextEntry = YES;
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *password = alert.textFields[0].text;
+        NSString *confirmPassword = alert.textFields[1].text;
+        
+        if ([password isEqualToString:confirmPassword] && password.length > 0) {
+            // Save the password to the secrets manager
+            [self savePasswordToSecretsManager:password];
+            completion(YES);
+        } else {
+            // Passwords do not match or are empty
+            [self showInvalidPasswordAlert];
+            completion(NO);
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        completion(NO);
+    }];
+    
+    [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)savePasswordToSecretsManager:(NSString *)password {
+    // Replace this with your actual secrets manager logic
+    [[NSUserDefaults standardUserDefaults] setObject:password forKey:@"email_encryption_password"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (NSString *)retrievePasswordFromSecretsManager {
+    // Replace this with your actual secrets manager logic
+    return [[NSUserDefaults standardUserDefaults] stringForKey:@"email_encryption_password"];
+}
+
+- (void)showInvalidPasswordAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Invalid Password"
+                                                                   message:@"Passwords do not match or are empty."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:nil];
+    
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)emailAlertsSwitchToggled:(UISwitch *)sender {
