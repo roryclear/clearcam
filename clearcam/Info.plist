@@ -6,14 +6,14 @@
     <array>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>PGP File</string>
+            <string>AES File</string>
             <key>LSItemContentTypes</key>
             <array>
-                <string>com.clearcam.pgpfile</string>
+                <string>com.clearcam.aesfile</string>
             </array>
             <key>CFBundleTypeExtensions</key>
             <array>
-                <string>pgp</string>
+                <string>aes</string>
             </array>
             <key>LSHandlerRank</key>
             <string>Owner</string> <!-- Makes app the default handler -->
@@ -24,9 +24,9 @@
     <array>
         <dict>
             <key>UTTypeIdentifier</key>
-            <string>com.clearcam.pgpfile</string>
+            <string>com.clearcam.aesfile</string>
             <key>UTTypeDescription</key>
-            <string>PGP Encrypted File</string>
+            <string>AES Encrypted File</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.data</string>
@@ -35,7 +35,7 @@
             <dict>
                 <key>public.filename-extension</key>
                 <array>
-                    <string>pgp</string>
+                    <string>aes</string>
                 </array>
             </dict>
         </dict>

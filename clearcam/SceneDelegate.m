@@ -1,13 +1,13 @@
 #import "SceneDelegate.h"
 #import "ViewController.h" // Import your main view controller
-#import "PGP.h" // Import your PGP class
 #import <UIKit/UIKit.h>
+#import <CommonCrypto/CommonCryptor.h>
 
 @interface SceneDelegate () <UIDocumentInteractionControllerDelegate>
 
 @property (strong, nonatomic) UIDocumentInteractionController *docController;
 @property (strong, nonatomic) NSURL *pendingURL; // Store the URL if the app is launched from scratch
-@property (strong, nonatomic) PGP *pgp; // Instance of your PGP class
+@property (strong, nonatomic) NSMetadataQuery *iCloudQuery; // For monitoring iCloud downloads
 
 @end
 
@@ -23,100 +23,292 @@
     self.window.rootViewController = navigationController;
     [self.window makeKeyAndVisible];
     
-    // Initialize the PGP instance
-    self.pgp = [[PGP alloc] init];
-    if (!self.pgp) {
-        NSLog(@"Failed to initialize PGP.");
-    }
-    
-    // Check if the app was launched with a URL (e.g., opening a .pgp file)
+    // Handle URL contexts if the app is launched with a file
     if (connectionOptions.URLContexts.count > 0) {
-        NSURL *url = connectionOptions.URLContexts.anyObject.URL;
-        if ([url.pathExtension isEqualToString:@"pgp"]) {
-            // Store the URL for later use
-            self.pendingURL = url;
-            
-            // Handle the pending URL after a slight delay to ensure the window is set up
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [self handlePGPFileAtURL:self.pendingURL];
-                self.pendingURL = nil; // Clear the pending URL
-            });
-        }
+        UIOpenURLContext *context = connectionOptions.URLContexts.anyObject;
+        NSURL *url = context.URL;
+        NSLog(@"App launched with URL: %@", url);
+        [self handleURL:url];
     }
 }
 
 - (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
     // Handle the URL when the app is already running
-    NSURL *url = URLContexts.anyObject.URL;
-    if ([url.pathExtension isEqualToString:@"pgp"]) {
-        [self handlePGPFileAtURL:url];
+    UIOpenURLContext *context = URLContexts.anyObject;
+    NSURL *url = context.URL;
+    NSLog(@"App opened URL: %@", url);
+    [self handleURL:url];
+}
+
+- (void)handleURL:(NSURL *)url {
+    // Handle security-scoped URL
+    BOOL isSecurityScoped = [url startAccessingSecurityScopedResource];
+    if (isSecurityScoped) {
+        NSLog(@"Started accessing security-scoped resource.");
+    }
+
+    // Handle the .aes file
+    [self handleAESFile:url];
+
+    // Stop accessing security-scoped resource
+    if (isSecurityScoped) {
+        [url stopAccessingSecurityScopedResource];
+        NSLog(@"Stopped accessing security-scoped resource.");
     }
 }
 
-- (void)handlePGPFileAtURL:(NSURL *)url {
-    if (!url) {
-        NSLog(@"Error: URL is nil.");
-        return;
+#define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
+#define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
+
+- (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key {
+    // Step 1: Decrypt the entire data first (we need at least the header)
+    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
+    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
+    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+    
+    size_t bufferSize = encryptedData.length + kCCBlockSizeAES128;
+    void *buffer = malloc(bufferSize);
+    
+    size_t numBytesDecrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCDecrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     kCCKeySizeAES256,
+                                     NULL, // IV (NULL for no IV)
+                                     encryptedData.bytes,
+                                     encryptedData.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesDecrypted);
+    
+    if (status != kCCSuccess) {
+        free(buffer);
+        return nil;
     }
-
-    // Start accessing security-scoped resource (for iCloud/Downloads files)
-    BOOL isSecured = [url startAccessingSecurityScopedResource];
-    if (!isSecured) {
-        NSLog(@"Error: Unable to access security-scoped resource.");
-        return;
+    
+    // Step 2: Check if the decrypted data is long enough to contain the header
+    if (numBytesDecrypted < HEADER_SIZE) {
+        free(buffer);
+        return nil; // Data is too short to contain a valid header
     }
+    
+    // Step 3: Extract and verify the magic number from the header
+    uint64_t decryptedMagicNumber;
+    memcpy(&decryptedMagicNumber, buffer, HEADER_SIZE);
+    if (decryptedMagicNumber != MAGIC_NUMBER) {
+        free(buffer);
+        return nil; // Wrong key or corrupted data
+    }
+    
+    // Step 4: Extract the original data (skip the header)
+    size_t originalDataLength = numBytesDecrypted - HEADER_SIZE;
+    void *originalDataBuffer = malloc(originalDataLength);
+    memcpy(originalDataBuffer, buffer + HEADER_SIZE, originalDataLength);
+    
+    // Step 5: Return the original data
+    NSData *result = [NSData dataWithBytesNoCopy:originalDataBuffer length:originalDataLength];
+    free(buffer); // Free the full decrypted buffer
+    return result;
+}
 
-    // Get the path to the app's Documents directory
-    NSURL *documentsDirectoryURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
+- (void)handleAESFile:(NSURL *)aesFileURL {
+    NSError *error = nil; // Declare error as a local variable
+    NSFileManager *fileManager = [NSFileManager defaultManager];
 
-    // Destination path inside the app's Documents directory
-    NSURL *localPGPFileURL = [documentsDirectoryURL URLByAppendingPathComponent:url.lastPathComponent];
+    // Log the file path for debugging
+    NSLog(@"Attempting to access file at path: %@", aesFileURL.path);
 
-    // If the file already exists, remove it before copying
-    if ([[NSFileManager defaultManager] fileExistsAtPath:localPGPFileURL.path]) {
-        NSError *removeError = nil;
-        [[NSFileManager defaultManager] removeItemAtURL:localPGPFileURL error:&removeError];
-        
-        if (removeError) {
-            NSLog(@"Error removing existing file: %@", removeError.localizedDescription);
-            [url stopAccessingSecurityScopedResource]; // Stop access before returning
+    // Check if the file is an iCloud file
+    BOOL isUbiquitous = [fileManager isUbiquitousItemAtURL:aesFileURL];
+    if (isUbiquitous) {
+        NSLog(@"File is an iCloud file.");
+
+        // Check the download status
+        NSString *downloadStatus = nil;
+        NSError *downloadError = nil; // Temporary error variable for getResourceValue
+        [aesFileURL getResourceValue:&downloadStatus forKey:NSURLUbiquitousItemDownloadingStatusKey error:&downloadError];
+        if (downloadError) {
+            NSLog(@"Error checking iCloud download status: %@", downloadError.localizedDescription);
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to check iCloud status: %@", downloadError.localizedDescription]];
+            return;
+        }
+
+        NSLog(@"iCloud download status: %@", downloadStatus);
+
+        if (![downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
+            // File is not downloaded locally, initiate download
+            NSLog(@"File is not downloaded locally. Starting download...");
+            NSError *downloadStartError = nil; // Temporary error variable for startDownloading
+            [fileManager startDownloadingUbiquitousItemAtURL:aesFileURL error:&downloadStartError];
+            if (downloadStartError) {
+                NSLog(@"Failed to start downloading iCloud file: %@", downloadStartError.localizedDescription);
+                [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to start download: %@", downloadStartError.localizedDescription]];
+                return;
+            }
+            NSLog(@"Started downloading iCloud file. Monitoring download progress...");
+            [self monitorICloudDownloadForURL:aesFileURL];
+            [self showDownloadAlert];
+            return;
+        }
+    } else {
+        // Check if the file exists locally (for non-iCloud files)
+        if (![fileManager fileExistsAtPath:aesFileURL.path]) {
+            NSLog(@"File does not exist at path: %@", aesFileURL.path);
+            [self showErrorAlertWithMessage:@"The file does not exist or is not accessible."];
             return;
         }
     }
 
-    // Copy the file to Documents directory
-    NSError *copyError = nil;
-    [[NSFileManager defaultManager] copyItemAtURL:url toURL:localPGPFileURL error:&copyError];
+    // Use NSFileCoordinator to safely read the file
+    NSFileCoordinator *fileCoordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+    NSError *coordinationError = nil; // Temporary error variable for coordination
+    [fileCoordinator coordinateReadingItemAtURL:aesFileURL
+                                       options:0
+                                         error:&coordinationError
+                                    byAccessor:^(NSURL *newURL) {
+        // Read the .aes file data securely
+        NSError *readError = nil; // Temporary error variable for reading
+        NSData *encryptedData = [NSData dataWithContentsOfURL:newURL options:0 error:&readError];
+        if (!encryptedData) {
+            NSLog(@"Failed to read .aes file: %@", readError.localizedDescription);
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription]];
+            return;
+        }
+        NSLog(@"Read .aes file successfully. Size: %lu bytes", (unsigned long)encryptedData.length);
 
-    // Stop accessing the security-scoped resource after copying
-    [url stopAccessingSecurityScopedResource];
+        // Decrypt the data
+        NSString *key = @"opensesame"; // Hardcoded key (insecure, consider using Keychain)
+        NSData *decryptedData = [self decryptData:encryptedData withKey:key];
+        if (!decryptedData) {
+            NSLog(@"Failed to decrypt data.");
+            [self showErrorAlertWithMessage:@"Failed to decrypt the file. The key or file may be incorrect."];
+            return;
+        }
+        NSLog(@"Decrypted data successfully. Size: %lu bytes", (unsigned long)decryptedData.length);
 
-    if (copyError) {
-        NSLog(@"Error copying file: %@", copyError.localizedDescription);
-        return;
+        // Remove only the .aes extension
+        NSString *fileName = [aesFileURL lastPathComponent];
+        if ([fileName hasSuffix:@".aes"]) {
+            fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
+        }
+        //todo, can be any file type
+        NSURL *jpgFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
+
+
+        NSError *writeError = nil; // Temporary error variable for writing
+        [decryptedData writeToURL:jpgFileURL options:NSDataWritingAtomic error:&writeError];
+        if (writeError) {
+            NSLog(@"Failed to save .jpg file: %@", writeError.localizedDescription);
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription]];
+            return;
+        }
+
+        NSLog(@"Decrypted and saved .jpg file: %@", jpgFileURL);
+
+        // Open the .jpg file in the system's photo viewer
+        [self openImageInPhotoViewer:jpgFileURL];
+
+        // Delete the .aes file after successful decryption and saving
+        NSError *deleteError = nil;
+        [fileManager removeItemAtURL:aesFileURL error:&deleteError];
+        if (deleteError) {
+            NSLog(@"Failed to delete .aes file: %@", deleteError.localizedDescription);
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete the original file: %@", deleteError.localizedDescription]];
+        } else {
+            NSLog(@"Successfully deleted .aes file: %@", aesFileURL.path);
+        }
+    }];
+
+    if (coordinationError) {
+        NSLog(@"File coordination failed: %@", coordinationError.localizedDescription);
+        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"File access failed: %@", coordinationError.localizedDescription]];
+    }
+}
+
+- (void)openImageInPhotoViewer:(NSURL *)imageURL {
+    self.docController = [UIDocumentInteractionController interactionControllerWithURL:imageURL];
+    self.docController.delegate = self;
+    [self.docController presentPreviewAnimated:YES];
+}
+
+- (void)monitorICloudDownloadForURL:(NSURL *)aesFileURL {
+    // Stop any existing query
+    if (self.iCloudQuery) {
+        [self.iCloudQuery stopQuery];
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:NSMetadataQueryDidUpdateNotification object:self.iCloudQuery];
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:NSMetadataQueryDidFinishGatheringNotification object:self.iCloudQuery];
     }
 
-    // Decrypt the copied .pgp file using your PGP class
-    NSString *encryptedFilePath = localPGPFileURL.path;
-    [self.pgp decryptImageWithPrivateKey:encryptedFilePath];
+    // Create a new query
+    self.iCloudQuery = [[NSMetadataQuery alloc] init];
+    self.iCloudQuery.searchScopes = @[NSMetadataQueryUbiquitousDocumentsScope];
+    self.iCloudQuery.predicate = [NSPredicate predicateWithFormat:@"%K == %@", NSMetadataItemURLKey, aesFileURL];
 
-    // Get the path to the decrypted .jpg file
-    NSString *decryptedFilePath = [[encryptedFilePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"jpg"];
-    NSURL *decryptedFileURL = [NSURL fileURLWithPath:decryptedFilePath];
+    // Observe query updates
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(queryDidUpdate:)
+                                                 name:NSMetadataQueryDidUpdateNotification
+                                               object:self.iCloudQuery];
 
-    // Check if the decrypted file exists
-    if ([[NSFileManager defaultManager] fileExistsAtPath:decryptedFilePath]) {
-        // Create a UIDocumentInteractionController for the decrypted file
-        self.docController = [UIDocumentInteractionController interactionControllerWithURL:decryptedFileURL];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(queryDidFinish:)
+                                                 name:NSMetadataQueryDidFinishGatheringNotification
+                                               object:self.iCloudQuery];
 
-        // Set the delegate to self
-        self.docController.delegate = self;
+    [self.iCloudQuery startQuery];
+}
 
-        // Present the document interaction controller from the root view controller
-        [self.docController presentPreviewAnimated:YES];
-    } else {
-        NSLog(@"Decrypted file not found at %@", decryptedFilePath);
-    }
+- (void)queryDidUpdate:(NSNotification *)notification {
+    NSMetadataQuery *query = notification.object;
+    [query enumerateResultsUsingBlock:^(NSMetadataItem *result, NSUInteger idx, BOOL *stop) {
+        NSString *downloadStatus = [result valueForAttribute:NSMetadataUbiquitousItemDownloadingStatusKey];
+        NSLog(@"Download status updated: %@", downloadStatus);
+
+        if ([downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
+            // File is downloaded, stop the query and handle the file
+            [query stopQuery];
+            [[NSNotificationCenter defaultCenter] removeObserver:self name:NSMetadataQueryDidUpdateNotification object:query];
+            [[NSNotificationCenter defaultCenter] removeObserver:self name:NSMetadataQueryDidFinishGatheringNotification object:query];
+            self.iCloudQuery = nil;
+            [self handleAESFile:[result valueForAttribute:NSMetadataItemURLKey]];
+        }
+    }];
+}
+
+- (void)queryDidFinish:(NSNotification *)notification {
+    NSMetadataQuery *query = notification.object;
+    [query enumerateResultsUsingBlock:^(NSMetadataItem *result, NSUInteger idx, BOOL *stop) {
+        NSString *downloadStatus = [result valueForAttribute:NSMetadataUbiquitousItemDownloadingStatusKey];
+        NSLog(@"Download status finished: %@", downloadStatus);
+
+        if ([downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
+            // File is downloaded, stop the query and handle the file
+            [query stopQuery];
+            [[NSNotificationCenter defaultCenter] removeObserver:self name:NSMetadataQueryDidUpdateNotification object:query];
+            [[NSNotificationCenter defaultCenter] removeObserver:self name:NSMetadataQueryDidFinishGatheringNotification object:query];
+            self.iCloudQuery = nil;
+            [self handleAESFile:[result valueForAttribute:NSMetadataItemURLKey]];
+        }
+    }];
+}
+
+- (void)showDownloadAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Downloading File"
+                                                                  message:@"The file is being downloaded from iCloud. Please wait a moment and try again."
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
+    [alert addAction:okAction];
+    [self.window.rootViewController presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showErrorAlertWithMessage:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                  message:message
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
+    [alert addAction:okAction];
+    [self.window.rootViewController presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - UIDocumentInteractionControllerDelegate
@@ -128,8 +320,8 @@
 
 - (void)documentInteractionControllerDidEndPreview:(UIDocumentInteractionController *)controller {
     // This method is called when the user is done viewing the image
-    // You can add any cleanup or navigation logic here if needed
     NSLog(@"User is done viewing the image.");
+    self.docController = nil; // Clear the controller
 }
 
 @end
