@@ -11,6 +11,7 @@
 #import "PortScanner.h"
 #import "AppDelegate.h"
 #import <CoreData/CoreData.h>
+#import "SecretManager.h"
 
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
@@ -39,6 +40,7 @@
     }
 
     if ([SettingsManager sharedManager].delete_on_launch) {
+        [[SecretManager sharedManager] deleteAllKeysWithError:&error];
         for (NSString *file in contents) {
             if ([file hasPrefix:@"batch_req"]) continue;
             NSString *filePath = [documentsPath stringByAppendingPathComponent:file];

@@ -2,6 +2,7 @@
 #import "ViewController.h" // Import your main view controller
 #import <UIKit/UIKit.h>
 #import <CommonCrypto/CommonCryptor.h>
+#import "SecretManager.h"
 
 @interface SceneDelegate () <UIDocumentInteractionControllerDelegate>
 
@@ -113,7 +114,7 @@
 }
 
 - (void)handleAESFile:(NSURL *)aesFileURL {
-    NSError *error = nil; // Declare error as a local variable
+    NSError *error = nil;
     NSFileManager *fileManager = [NSFileManager defaultManager];
 
     // Log the file path for debugging
@@ -126,7 +127,7 @@
 
         // Check the download status
         NSString *downloadStatus = nil;
-        NSError *downloadError = nil; // Temporary error variable for getResourceValue
+        NSError *downloadError = nil;
         [aesFileURL getResourceValue:&downloadStatus forKey:NSURLUbiquitousItemDownloadingStatusKey error:&downloadError];
         if (downloadError) {
             NSLog(@"Error checking iCloud download status: %@", downloadError.localizedDescription);
@@ -139,7 +140,7 @@
         if (![downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
             // File is not downloaded locally, initiate download
             NSLog(@"File is not downloaded locally. Starting download...");
-            NSError *downloadStartError = nil; // Temporary error variable for startDownloading
+            NSError *downloadStartError = nil;
             [fileManager startDownloadingUbiquitousItemAtURL:aesFileURL error:&downloadStartError];
             if (downloadStartError) {
                 NSLog(@"Failed to start downloading iCloud file: %@", downloadStartError.localizedDescription);
@@ -162,13 +163,13 @@
 
     // Use NSFileCoordinator to safely read the file
     NSFileCoordinator *fileCoordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
-    NSError *coordinationError = nil; // Temporary error variable for coordination
+    NSError *coordinationError = nil;
     [fileCoordinator coordinateReadingItemAtURL:aesFileURL
                                        options:0
                                          error:&coordinationError
                                     byAccessor:^(NSURL *newURL) {
         // Read the .aes file data securely
-        NSError *readError = nil; // Temporary error variable for reading
+        NSError *readError = nil;
         NSData *encryptedData = [NSData dataWithContentsOfURL:newURL options:0 error:&readError];
         if (!encryptedData) {
             NSLog(@"Failed to read .aes file: %@", readError.localizedDescription);
@@ -177,46 +178,52 @@
         }
         NSLog(@"Read .aes file successfully. Size: %lu bytes", (unsigned long)encryptedData.length);
 
-        // Decrypt the data
-        NSString *key = @"opensesame"; // Hardcoded key (insecure, consider using Keychain)
-        NSData *decryptedData = [self decryptData:encryptedData withKey:key];
+        // Attempt to decrypt the data using stored keys
+        NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllStoredKeys];
+        __block NSData *decryptedData = nil; // Add __block specifier
+        __block NSString *successfulKey = nil; // Add __block specifier
+
+        // Try each stored key
+        for (NSString *key in storedKeys) {
+            decryptedData = [self decryptData:encryptedData withKey:key];
+            if (decryptedData) {
+                successfulKey = key;
+                break;
+            }
+        }
+
+        // If no stored key worked, prompt the user for a key
         if (!decryptedData) {
-            NSLog(@"Failed to decrypt data.");
-            [self showErrorAlertWithMessage:@"Failed to decrypt the file. The key or file may be incorrect."];
-            return;
+            [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+                if (userProvidedKey) {
+                    decryptedData = [self decryptData:encryptedData withKey:userProvidedKey];
+                    if (decryptedData) {
+                        // Save the correct key to the secret manager
+                        NSError *saveError = nil;
+                        if (![[SecretManager sharedManager] saveKey:userProvidedKey error:&saveError]) {
+                            NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
+                        }
+                        successfulKey = userProvidedKey;
+                    } else {
+                        NSLog(@"Failed to decrypt data with user-provided key.");
+                        [self showErrorAlertWithMessage:@"Failed to decrypt the file. The key or file may be incorrect."];
+                        return;
+                    }
+                } else {
+                    NSLog(@"User canceled key entry.");
+                    [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
+                    return;
+                }
+
+                // Proceed with file handling if decryption succeeded
+                [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+            }];
+            return; // Exit the accessor block to wait for user input
         }
-        NSLog(@"Decrypted data successfully. Size: %lu bytes", (unsigned long)decryptedData.length);
 
-        // Remove only the .aes extension
-        NSString *fileName = [aesFileURL lastPathComponent];
-        if ([fileName hasSuffix:@".aes"]) {
-            fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
-        }
-        //todo, can be any file type
-        NSURL *jpgFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
-
-
-        NSError *writeError = nil; // Temporary error variable for writing
-        [decryptedData writeToURL:jpgFileURL options:NSDataWritingAtomic error:&writeError];
-        if (writeError) {
-            NSLog(@"Failed to save .jpg file: %@", writeError.localizedDescription);
-            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription]];
-            return;
-        }
-
-        NSLog(@"Decrypted and saved .jpg file: %@", jpgFileURL);
-
-        // Open the .jpg file in the system's photo viewer
-        [self openImageInPhotoViewer:jpgFileURL];
-
-        // Delete the .aes file after successful decryption and saving
-        NSError *deleteError = nil;
-        [fileManager removeItemAtURL:aesFileURL error:&deleteError];
-        if (deleteError) {
-            NSLog(@"Failed to delete .aes file: %@", deleteError.localizedDescription);
-            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete the original file: %@", deleteError.localizedDescription]];
-        } else {
-            NSLog(@"Successfully deleted .aes file: %@", aesFileURL.path);
+        // If decryption succeeded with a stored key, proceed immediately
+        if (decryptedData) {
+            [self handleDecryptedData:decryptedData fromURL:aesFileURL];
         }
     }];
 
@@ -224,6 +231,78 @@
         NSLog(@"File coordination failed: %@", coordinationError.localizedDescription);
         [self showErrorAlertWithMessage:[NSString stringWithFormat:@"File access failed: %@", coordinationError.localizedDescription]];
     }
+}
+
+// Helper method to handle decrypted data
+- (void)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSLog(@"Decrypted data successfully. Size: %lu bytes", (unsigned long)decryptedData.length);
+
+    // Remove only the .aes extension
+    NSString *fileName = [aesFileURL lastPathComponent];
+    if ([fileName hasSuffix:@".aes"]) {
+        fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
+    }
+    // todo: can be any file type
+    NSURL *jpgFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
+
+    NSError *writeError = nil;
+    [decryptedData writeToURL:jpgFileURL options:NSDataWritingAtomic error:&writeError];
+    if (writeError) {
+        NSLog(@"Failed to save .jpg file: %@", writeError.localizedDescription);
+        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription]];
+        return;
+    }
+
+    NSLog(@"Decrypted and saved .jpg file: %@", jpgFileURL);
+
+    // Open the .jpg file in the system's photo viewer
+    [self openImageInPhotoViewer:jpgFileURL];
+
+    // Delete the .aes file after successful decryption and saving
+    NSError *deleteError = nil;
+    [fileManager removeItemAtURL:aesFileURL error:&deleteError];
+    if (deleteError) {
+        NSLog(@"Failed to delete .aes file: %@", deleteError.localizedDescription);
+        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete the original file: %@", deleteError.localizedDescription]];
+    } else {
+        NSLog(@"Successfully deleted .aes file: %@", aesFileURL.path);
+    }
+}
+
+// Method to prompt the user for a key
+- (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
+                                                                  message:@"Please provide the key to decrypt the file."
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Decryption Key";
+        textField.secureTextEntry = YES; // Hide input for security
+    }];
+
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:^(UIAlertAction * _Nonnull action) {
+        NSString *key = alert.textFields.firstObject.text;
+        completion(key);
+    }];
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        completion(nil); // User canceled
+    }];
+
+    [alert addAction:okAction];
+    [alert addAction:cancelAction];
+
+    // Present the alert (assumes this is called from a view controller)
+    UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+    while (topController.presentedViewController) {
+        topController = topController.presentedViewController;
+    }
+    [topController presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)openImageInPhotoViewer:(NSURL *)imageURL {
@@ -310,6 +389,7 @@
     [alert addAction:okAction];
     [self.window.rootViewController presentViewController:alert animated:YES completion:nil];
 }
+
 
 #pragma mark - UIDocumentInteractionControllerDelegate
 
