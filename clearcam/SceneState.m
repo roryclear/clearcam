@@ -2,12 +2,10 @@
 #import "SettingsManager.h"
 #import "AppDelegate.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
-#import "pgp.h"
 
 @implementation SceneState
 
 - (instancetype)init {
-    self.pgp = [[PGP alloc] init];
     self = [super init];
     if (self) {
         self.lastN = [NSMutableArray array];
@@ -129,7 +127,7 @@
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath encryptImage:(BOOL)encryptImage {
     // Server details
-    NSString *server = @"http://192.168.1.113:8080";
+    NSString *server = @"http://192.168.18.133:8080";
     NSString *endpoint = @"/";
 
     // Email recipient address (hardcoded)
@@ -146,20 +144,7 @@
     // Encrypt the image if enabled
     NSString *filePathToSend = imagePath;
     NSString *fileExtension = @"jpg";
-    if (encryptImage) {
-        // Encrypt the image and get the path to the .pgp file
-        [self.pgp encryptImageWithPublicKey:imagePath];
-        filePathToSend = [[imagePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"pgp"];
-        fileExtension = @"pgp";
-        
-        // Verify the encrypted file exists
-        if (![[NSFileManager defaultManager] fileExistsAtPath:filePathToSend]) {
-            NSLog(@"Failed to encrypt image or create .pgp file.");
-            return;
-        }
-    }
 
-    // Read the file to send (either the original image or the encrypted .pgp file)
     NSData *fileData = [NSData dataWithContentsOfFile:filePathToSend];
     if (!fileData) {
         NSLog(@"Failed to read file data from path: %@", filePathToSend);
@@ -178,7 +163,6 @@
     [bodyData appendData:[toEmail dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // Add file (either image or encrypted .pgp)
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: %@\r\n\r\n", [self mimeTypeForFileAtPath:filePathToSend]] dataUsingEncoding:NSUTF8StringEncoding]];

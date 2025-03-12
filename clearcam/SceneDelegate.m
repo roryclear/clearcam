@@ -1,13 +1,11 @@
 #import "SceneDelegate.h"
 #import "ViewController.h" // Import your main view controller
-#import "PGP.h" // Import your PGP class
 #import <UIKit/UIKit.h>
 
 @interface SceneDelegate () <UIDocumentInteractionControllerDelegate>
 
 @property (strong, nonatomic) UIDocumentInteractionController *docController;
 @property (strong, nonatomic) NSURL *pendingURL; // Store the URL if the app is launched from scratch
-@property (strong, nonatomic) PGP *pgp; // Instance of your PGP class
 
 @end
 
@@ -23,100 +21,14 @@
     self.window.rootViewController = navigationController;
     [self.window makeKeyAndVisible];
     
-    // Initialize the PGP instance
-    self.pgp = [[PGP alloc] init];
-    if (!self.pgp) {
-        NSLog(@"Failed to initialize PGP.");
-    }
-    
-    // Check if the app was launched with a URL (e.g., opening a .pgp file)
     if (connectionOptions.URLContexts.count > 0) {
         NSURL *url = connectionOptions.URLContexts.anyObject.URL;
-        if ([url.pathExtension isEqualToString:@"pgp"]) {
-            // Store the URL for later use
-            self.pendingURL = url;
-            
-            // Handle the pending URL after a slight delay to ensure the window is set up
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [self handlePGPFileAtURL:self.pendingURL];
-                self.pendingURL = nil; // Clear the pending URL
-            });
-        }
     }
 }
 
 - (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
     // Handle the URL when the app is already running
     NSURL *url = URLContexts.anyObject.URL;
-    if ([url.pathExtension isEqualToString:@"pgp"]) {
-        [self handlePGPFileAtURL:url];
-    }
-}
-
-- (void)handlePGPFileAtURL:(NSURL *)url {
-    if (!url) {
-        NSLog(@"Error: URL is nil.");
-        return;
-    }
-
-    // Start accessing security-scoped resource (for iCloud/Downloads files)
-    BOOL isSecured = [url startAccessingSecurityScopedResource];
-    if (!isSecured) {
-        NSLog(@"Error: Unable to access security-scoped resource.");
-        return;
-    }
-
-    // Get the path to the app's Documents directory
-    NSURL *documentsDirectoryURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-
-    // Destination path inside the app's Documents directory
-    NSURL *localPGPFileURL = [documentsDirectoryURL URLByAppendingPathComponent:url.lastPathComponent];
-
-    // If the file already exists, remove it before copying
-    if ([[NSFileManager defaultManager] fileExistsAtPath:localPGPFileURL.path]) {
-        NSError *removeError = nil;
-        [[NSFileManager defaultManager] removeItemAtURL:localPGPFileURL error:&removeError];
-        
-        if (removeError) {
-            NSLog(@"Error removing existing file: %@", removeError.localizedDescription);
-            [url stopAccessingSecurityScopedResource]; // Stop access before returning
-            return;
-        }
-    }
-
-    // Copy the file to Documents directory
-    NSError *copyError = nil;
-    [[NSFileManager defaultManager] copyItemAtURL:url toURL:localPGPFileURL error:&copyError];
-
-    // Stop accessing the security-scoped resource after copying
-    [url stopAccessingSecurityScopedResource];
-
-    if (copyError) {
-        NSLog(@"Error copying file: %@", copyError.localizedDescription);
-        return;
-    }
-
-    // Decrypt the copied .pgp file using your PGP class
-    NSString *encryptedFilePath = localPGPFileURL.path;
-    [self.pgp decryptImageWithPrivateKey:encryptedFilePath];
-
-    // Get the path to the decrypted .jpg file
-    NSString *decryptedFilePath = [[encryptedFilePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"jpg"];
-    NSURL *decryptedFileURL = [NSURL fileURLWithPath:decryptedFilePath];
-
-    // Check if the decrypted file exists
-    if ([[NSFileManager defaultManager] fileExistsAtPath:decryptedFilePath]) {
-        // Create a UIDocumentInteractionController for the decrypted file
-        self.docController = [UIDocumentInteractionController interactionControllerWithURL:decryptedFileURL];
-
-        // Set the delegate to self
-        self.docController.delegate = self;
-
-        // Present the document interaction controller from the root view controller
-        [self.docController presentPreviewAnimated:YES];
-    } else {
-        NSLog(@"Decrypted file not found at %@", decryptedFilePath);
-    }
 }
 
 #pragma mark - UIDocumentInteractionControllerDelegate
