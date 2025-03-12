@@ -184,13 +184,16 @@
         __block NSString *successfulKey = nil; // Add __block specifier
 
         // Try each stored key
+        NSLog(@"rory stored keys: %lu",(unsigned long)storedKeys.count);
         for (NSString *key in storedKeys) {
             decryptedData = [self decryptData:encryptedData withKey:key];
             if (decryptedData) {
+                NSLog(@"rory has key");
                 successfulKey = key;
                 break;
             }
         }
+        NSLog(@"rory key not found");
 
         // If no stored key worked, prompt the user for a key
         if (!decryptedData) {
@@ -203,7 +206,8 @@
                             // Save the correct key to the secret manager
                             NSError *saveError = nil;
                             //todo can two have the same identifier
-                            if(![[SecretManager sharedManager] saveDecryptionKey:@"MyDecryptionKey" withIdentifier:@"decryption_key" error:&saveError]) {
+                            NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", [userProvidedKey substringToIndex:6]];
+                            if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
                                 NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
                             }
                             successfulKey = userProvidedKey;
