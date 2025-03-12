@@ -201,7 +201,6 @@
     
     if (encryptImage) {
         fileData = [self encryptData:imageData withKey:@"opensesame"];
-        fileData = [self decryptData:fileData withKey:@"opensesame"]; //todo, testing
         if (!fileData) {
             NSLog(@"Encryption failed.");
             return;
@@ -218,8 +217,7 @@
 
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
     //todo change jpg to aes?
-    //[bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? @"encrypted_image.aes" : [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? @"encrypted_image.jpg" : [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? [[[filePathToSend lastPathComponent] stringByDeletingPathExtension] stringByAppendingString:@".aes"] : [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: application/octet-stream\r\n\r\n"] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
