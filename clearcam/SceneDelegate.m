@@ -194,30 +194,34 @@
 
         // If no stored key worked, prompt the user for a key
         if (!decryptedData) {
-            [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
-                if (userProvidedKey) {
-                    decryptedData = [self decryptData:encryptedData withKey:userProvidedKey];
-                    if (decryptedData) {
-                        // Save the correct key to the secret manager
-                        NSError *saveError = nil;
-                        if (![[SecretManager sharedManager] saveKey:userProvidedKey error:&saveError]) {
-                            NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
+            // Define a recursive method to keep prompting for a key
+            __block void (^promptForKey)(void) = ^{
+                [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+                    if (userProvidedKey) { // User provided a key
+                        decryptedData = [self decryptData:encryptedData withKey:userProvidedKey];
+                        if (decryptedData) { // Key worked
+                            // Save the correct key to the secret manager
+                            NSError *saveError = nil;
+                            if (![[SecretManager sharedManager] saveKey:userProvidedKey error:&saveError]) {
+                                NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
+                            }
+                            successfulKey = userProvidedKey;
+                            // Proceed with file handling if decryption succeeded
+                            [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+                        } else { // Key didn't work, prompt again
+                            NSLog(@"Failed to decrypt data with user-provided key.");
+                            [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
+                                promptForKey(); // Recursively prompt again
+                            }];
                         }
-                        successfulKey = userProvidedKey;
-                    } else {
-                        NSLog(@"Failed to decrypt data with user-provided key.");
-                        [self showErrorAlertWithMessage:@"Failed to decrypt the file. The key or file may be incorrect."];
+                    } else { // User canceled
+                        NSLog(@"User canceled key entry.");
+                        [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
                         return;
                     }
-                } else {
-                    NSLog(@"User canceled key entry.");
-                    [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
-                    return;
-                }
-
-                // Proceed with file handling if decryption succeeded
-                [self handleDecryptedData:decryptedData fromURL:aesFileURL];
-            }];
+                }];
+            };
+            promptForKey(); // Start the recursive prompting
             return; // Exit the accessor block to wait for user input
         }
 
@@ -305,6 +309,20 @@
     [topController presentViewController:alert animated:YES completion:nil];
 }
 
+// Modified showErrorAlertWithMessage to support a completion handler
+- (void)showErrorAlertWithMessage:(NSString *)message completion:(void (^)(void))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                  message:message
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        if (completion) {
+            completion();
+        }
+    }];
+    [alert addAction:okAction];
+    [self.window.rootViewController presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)openImageInPhotoViewer:(NSURL *)imageURL {
     self.docController = [UIDocumentInteractionController interactionControllerWithURL:imageURL];
     self.docController.delegate = self;
@@ -382,14 +400,8 @@
 }
 
 - (void)showErrorAlertWithMessage:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
-                                                                  message:message
-                                                           preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:okAction];
-    [self.window.rootViewController presentViewController:alert animated:YES completion:nil];
+    [self showErrorAlertWithMessage:message completion:nil];
 }
-
 
 #pragma mark - UIDocumentInteractionControllerDelegate
 
