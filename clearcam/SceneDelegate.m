@@ -178,6 +178,16 @@
 
         // Open the .jpg file in the system's photo viewer
         [self openImageInPhotoViewer:jpgFileURL];
+
+        // Delete the .aes file after successful decryption and saving
+        NSError *deleteError = nil;
+        [fileManager removeItemAtURL:aesFileURL error:&deleteError];
+        if (deleteError) {
+            NSLog(@"Failed to delete .aes file: %@", deleteError.localizedDescription);
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete the original file: %@", deleteError.localizedDescription]];
+        } else {
+            NSLog(@"Successfully deleted .aes file: %@", aesFileURL.path);
+        }
     }];
 
     if (coordinationError) {
