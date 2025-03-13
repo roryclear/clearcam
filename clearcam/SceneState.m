@@ -1,5 +1,6 @@
 #import "SceneState.h"
 #import "SettingsManager.h"
+#import "SecretManager.h"
 #import "AppDelegate.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
 #import <CommonCrypto/CommonCryptor.h>
@@ -95,7 +96,7 @@
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
                         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]) {
-                            [self sendEmailWithImageAtPath:filePath encryptImage:YES];
+                            [self sendEmailWithImageAtPath:filePath];
                             self.last_email_time = [NSDate date]; // Set to now
                         }
                     } else {
@@ -168,7 +169,7 @@
     return nil;
 }
 
-- (void)sendEmailWithImageAtPath:(NSString *)imagePath encryptImage:(BOOL)encryptImage {
+- (void)sendEmailWithImageAtPath:(NSString *)imagePath {
     NSString *server = @"http://192.168.1.100:8080";
     NSString *endpoint = @"/";
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
@@ -183,13 +184,26 @@
     NSData *fileData = imageData;
     NSString *filePathToSend = imagePath;
     
+    // Check if encryption is enabled in SettingsManager
+    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
+    
     if (encryptImage) {
-        fileData = [self encryptData:imageData withKey:@"opensesame"];
+        // Retrieve the user's password from the Keychain
+        NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
+
+        if (!encryptionKey) {
+            NSLog(@"Encryption key not found in Keychain. Encryption aborted.");
+            return;
+        }
+        
+        // Encrypt the image data using the retrieved key
+        fileData = [self encryptData:imageData withKey:encryptionKey];
         if (!fileData) {
             NSLog(@"Encryption failed.");
             return;
         }
     }
+
 
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
     NSMutableData *bodyData = [NSMutableData data];
@@ -200,7 +214,6 @@
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-    //todo change jpg to aes?
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? [[filePathToSend lastPathComponent] stringByAppendingString:@".aes"] : [filePathToSend lastPathComponent]
 ] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: application/octet-stream\r\n\r\n"] dataUsingEncoding:NSUTF8StringEncoding]];
@@ -227,7 +240,6 @@
     }];
     [task resume];
 }
-
 
 // Helper function to get MIME type for a file
 - (NSString *)mimeTypeForFileAtPath:(NSString *)path {
