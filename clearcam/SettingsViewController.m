@@ -11,6 +11,7 @@
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 @property (nonatomic, assign) BOOL sendEmailAlertsEnabled;
 @property (nonatomic, assign) BOOL encryptEmailDataEnabled;
+@property (nonatomic, assign) BOOL isPaid;
 
 @end
 
@@ -22,6 +23,7 @@
     // Basic setup
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
+    self.isPaid = NO;
 
     // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];
@@ -81,7 +83,7 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2; // One for general settings, one for presets
+    return 3; // One for general settings, one for presets
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -91,6 +93,8 @@
         // Presets section: 1 row for "Manage Presets" header, plus rows for each preset, plus "Add New +"
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         return self.isPresetsSectionExpanded ? (presetKeys.count + 2) : 1;
+    } else if (section == 2) {
+        return self.isPaid ? 0 : 1; // Hide the upgrade button if isPaid is YES
     }
     return 0;
 }
@@ -131,6 +135,13 @@
             cell.textLabel.text = @"Email Address";
             NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
             cell.detailTextLabel.text = email ?: @"Not set"; // Show current email or "Not set"
+            
+            // Disable if not paid
+            if (!self.isPaid) {
+                cell.textLabel.textColor = [UIColor grayColor];
+                cell.detailTextLabel.textColor = [UIColor grayColor];
+                cell.userInteractionEnabled = NO;
+            }
         } else if (indexPath.row == 3) {
             // Send Email Alerts
             cell.textLabel.text = @"Send Email Alerts";
@@ -141,6 +152,13 @@
             emailAlertsSwitch.on = self.sendEmailAlertsEnabled;
             [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = emailAlertsSwitch;
+            
+            // Disable if not paid
+            if (!self.isPaid) {
+                emailAlertsSwitch.enabled = NO;
+                cell.textLabel.textColor = [UIColor grayColor];
+                cell.userInteractionEnabled = NO;
+            }
         } else if (indexPath.row == 4) {
             // Encrypt Email Data
             cell.textLabel.text = @"Encrypt Email Data (Recommended)";
@@ -151,6 +169,13 @@
             encryptEmailDataSwitch.on = self.encryptEmailDataEnabled;
             [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = encryptEmailDataSwitch;
+            
+            // Disable if not paid
+            if (!self.isPaid) {
+                encryptEmailDataSwitch.enabled = NO;
+                cell.textLabel.textColor = [UIColor grayColor];
+                cell.userInteractionEnabled = NO;
+            }
         }
     } else if (indexPath.section == 1) {
         // Presets section (unchanged)
@@ -174,6 +199,12 @@
             cell.imageView.tintColor = [UIColor systemGreenColor]; // Set the icon color to green
             cell.accessoryType = UITableViewCellAccessoryNone;
         }
+    } else if (indexPath.section == 2) {
+        // Upgrade to Premium section
+        cell.textLabel.text = @"Upgrade to Premium";
+        cell.textLabel.textColor = [UIColor systemBlueColor];
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+        cell.accessoryType = UITableViewCellAccessoryNone;
     }
 
     return cell;
@@ -422,6 +453,10 @@
             // Add new preset
             [self showAddPresetDialog];
         }
+    } else if (indexPath.section == 2) {
+        // Upgrade to Premium button tapped
+        self.isPaid = YES; // Set isPaid to YES
+        [self.tableView reloadData]; // Reload the table view to enable email-related settings
     }
 
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
