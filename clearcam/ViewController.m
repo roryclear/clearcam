@@ -49,7 +49,6 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    [[StoreManager sharedInstance] fetchAndPurchaseProduct];
     self.recordPressed = NO;
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
