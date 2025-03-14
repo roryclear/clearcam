@@ -102,10 +102,6 @@
     });
 }
 
-- (BOOL)isSubscribed {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-}
-
 #pragma mark - Orientation Control
 
 - (BOOL)shouldAutorotate {
@@ -134,7 +130,7 @@
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         return self.isPresetsSectionExpanded ? (presetKeys.count + 2) : 1;
     } else if (section == 2) {
-        return [self isSubscribed] ? 0 : 1; // Show "Upgrade to Premium" button only if not subscribed
+        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1; // Show "Upgrade to Premium" button only if not subscribed
     }
     return 0;
 }
@@ -177,7 +173,7 @@
             cell.detailTextLabel.text = email ?: @"Not set"; // Show current email or "Not set"
             
             // Disable if not subscribed
-            if (![self isSubscribed]) {
+            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.detailTextLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -198,7 +194,7 @@
             cell.accessoryView = emailAlertsSwitch;
             
             // Disable if not subscribed
-            if (![self isSubscribed]) {
+            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
                 emailAlertsSwitch.enabled = NO;
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -219,7 +215,7 @@
             cell.accessoryView = encryptEmailDataSwitch;
             
             // Disable if not subscribed
-            if (![self isSubscribed]) {
+            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
                 encryptEmailDataSwitch.enabled = NO;
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -270,7 +266,7 @@
             [self showResolutionPicker];
         } else if (indexPath.row == 1) {
             [self showYoloIndexesPicker];
-        } else if (indexPath.row == 2 && [self isSubscribed]) { // Only allow interaction if subscribed
+        } else if (indexPath.row == 2 && [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) { // Only allow interaction if subscribed
             [self showEmailInputDialog];
         }
         // Ignore taps on the "Send Email Alerts" row (indexPath.row == 3) and "Encrypt Email Data" row (indexPath.row == 4)
@@ -676,37 +672,28 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Manage Presets"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-
-    // Add Preset
     UIAlertAction *addAction = [UIAlertAction actionWithTitle:@"Add Preset"
                                                         style:UIAlertActionStyleDefault
                                                       handler:^(UIAlertAction * _Nonnull action) {
         [self showAddPresetDialog];
     }];
     [alert addAction:addAction];
-
-    // Edit Preset
     UIAlertAction *editAction = [UIAlertAction actionWithTitle:@"Edit Preset"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         [self showEditPresetDialog];
     }];
     [alert addAction:editAction];
-
-    // Delete Preset
     UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"Delete Preset"
                                                            style:UIAlertActionStyleDestructive
                                                          handler:^(UIAlertAction * _Nonnull action) {
         [self showDeletePresetDialog];
     }];
     [alert addAction:deleteAction];
-
-    // Cancel
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     [alert addAction:cancelAction];
-
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -733,7 +720,6 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Edit Preset"
                                                                    message:@"Select a preset to edit"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    SettingsManager *settingsManager = [SettingsManager sharedManager];
     NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
     for (NSString *presetKey in presetKeys) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
@@ -762,21 +748,11 @@
         if (!yoloPresets) {
             yoloPresets = [NSMutableDictionary dictionary];
         }
-
-        // Update the dictionary with the new key-value pair
         yoloPresets[presetKey] = selectedIndexes;
-
-        // Save the updated dictionary back to NSUserDefaults
         [defaults setObject:yoloPresets forKey:@"yolo_presets"];
-
-        // Automatically select the new preset
         self.selectedPresetKey = presetKey;
         [defaults setObject:presetKey forKey:@"yolo_preset_idx"];
-
-        // Synchronize to save changes immediately
         [defaults synchronize];
-
-        // Reload the table view to update the UI
         [self.tableView reloadData];
     };
     [self.navigationController pushViewController:numberSelectionVC animated:YES];
@@ -795,24 +771,13 @@
                 NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
                 NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
 
-                if (yoloPresets) {
-                    [yoloPresets removeObjectForKey:presetKey];
-                }
-
-                // Save the updated dictionary back to NSUserDefaults
+                if (yoloPresets) [yoloPresets removeObjectForKey:presetKey];
                 [defaults setObject:yoloPresets forKey:@"yolo_presets"];
-
-                // Check if the deleted preset was the currently selected one
                 if ([self.selectedPresetKey isEqualToString:presetKey]) {
-                    // Switch to the "all" preset
                     self.selectedPresetKey = @"all";
                     [defaults setObject:@"all" forKey:@"yolo_preset_idx"];
                 }
-
-                // Synchronize to save changes immediately
                 [defaults synchronize];
-
-                // Reload both sections to ensure the UI is fully updated
                 [self.tableView reloadSections:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 2)] withRowAnimation:UITableViewRowAnimationAutomatic];
             }];
             [alert addAction:action];
@@ -824,6 +789,4 @@
     [alert addAction:cancelAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
-
 @end
-
