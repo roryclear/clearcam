@@ -24,7 +24,7 @@
     // Basic setup
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
-    self.isPaid = NO; // Default to non-premium state
+    self.isPaid = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
     // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];

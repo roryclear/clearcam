@@ -105,24 +105,26 @@
 
     if (!receiptData) {
         NSLog(@"No receipt found. User may not have purchased any subscriptions.");
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
         completion(NO, nil);
         return;
     }
 
-    // Convert receipt data to a base64-encoded string
     NSString *receiptString = [receiptData base64EncodedStringWithOptions:0];
 
-    NSDictionary *requestDict = @{@"receipt-data": receiptString, @"password": @"<YOUR_SHARED_SECRET>"};
+    NSDictionary *requestDict = @{@"receipt-data": receiptString, @"password": @"password"};
     NSError *error;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestDict options:0 error:&error];
 
     if (error) {
         NSLog(@"JSON serialization error: %@", error.localizedDescription);
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
         completion(NO, nil);
         return;
     }
 
-    // Choose the correct validation URL (sandbox or production)
     NSURL *url = [NSURL URLWithString:@"https://sandbox.itunes.apple.com/verifyReceipt"]; // Use sandbox URL for testing
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
@@ -133,14 +135,18 @@
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Error verifying receipt: %@", error.localizedDescription);
+            [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
             completion(NO, nil);
             return;
         }
 
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-        NSLog(@"rory response = %@",jsonResponse);
+        NSLog(@"rory response = %@", jsonResponse);
         if (!jsonResponse) {
             NSLog(@"Invalid response from Apple.");
+            [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
             completion(NO, nil);
             return;
         }
@@ -148,6 +154,8 @@
         NSArray *latestReceipts = jsonResponse[@"latest_receipt_info"];
         if (!latestReceipts) {
             NSLog(@"No active subscriptions found.");
+            [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
             completion(NO, nil);
             return;
         }
@@ -164,17 +172,23 @@
             }
         }
 
-        if (latestExpirationDate && [latestExpirationDate timeIntervalSinceNow] > 0) {
+        BOOL isSubscribed = (latestExpirationDate && [latestExpirationDate timeIntervalSinceNow] > 0);
+
+        [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+
+        if (isSubscribed) {
             NSLog(@"✅ Subscription is active until %@", latestExpirationDate);
-            completion(YES, latestExpirationDate);
         } else {
             NSLog(@"🚨 Subscription has expired.");
-            completion(NO, latestExpirationDate);
         }
+
+        completion(isSubscribed, latestExpirationDate);
     }];
 
     [task resume];
 }
+
 
 
 @end
