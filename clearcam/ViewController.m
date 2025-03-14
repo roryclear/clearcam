@@ -4,6 +4,7 @@
 #import "Yolo.h"
 #import "FileServer.h"
 #import "SettingsManager.h"
+#import "StoreManager.h"
 #import "SceneState.h"
 #import "SettingsViewController.h"
 
@@ -48,6 +49,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [[StoreManager sharedInstance] fetchAndPurchaseProduct];
     self.recordPressed = NO;
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
