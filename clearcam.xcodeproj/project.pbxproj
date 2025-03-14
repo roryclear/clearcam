@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BE0FD6782D839FFE005C4A06 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE0FD6772D839FFE005C4A06 /* StoreKit.framework */; };
 		BEA6777C2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = BEA6777A2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		BE007DCA2D2BFF36005D40B3 /* clearcam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = clearcam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE0FD6772D839FFE005C4A06 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		BEA6777B2D5CEFE300271B4F /* SegmentsModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = SegmentsModel.xcdatamodel; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -41,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BE0FD6782D839FFE005C4A06 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +55,7 @@
 			children = (
 				BEA6777A2D5CEFE300271B4F /* SegmentsModel.xcdatamodeld */,
 				BE007DCC2D2BFF36005D40B3 /* clearcam */,
+				BE0FD6762D839FFE005C4A06 /* Frameworks */,
 				BE007DCB2D2BFF36005D40B3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +66,14 @@
 				BE007DCA2D2BFF36005D40B3 /* clearcam.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BE0FD6762D839FFE005C4A06 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BE0FD6772D839FFE005C4A06 /* StoreKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
