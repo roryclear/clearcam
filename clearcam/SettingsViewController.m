@@ -12,7 +12,6 @@
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 @property (nonatomic, assign) BOOL sendEmailAlertsEnabled;
 @property (nonatomic, assign) BOOL encryptEmailDataEnabled;
-@property (nonatomic, assign) BOOL isPaid; // Tracks whether the user has "upgraded"
 
 @end
 
@@ -24,7 +23,15 @@
     // Basic setup
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
-    self.isPaid = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+
+    // Check subscription status on view load
+    [self checkSubscriptionStatus];
+
+    // Register for subscription status change notifications
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(subscriptionStatusDidChange:)
+                                                 name:StoreManagerSubscriptionStatusDidChangeNotification
+                                               object:nil];
 
     // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];
@@ -67,6 +74,38 @@
     ]];
 }
 
+- (void)dealloc {
+    // Unregister from notifications to prevent crashes
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - Subscription Status
+
+- (void)checkSubscriptionStatus {
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (isActive) {
+                NSLog(@"Subscription is active. Expiry date: %@", expiryDate);
+            } else {
+                NSLog(@"No active subscription found.");
+            }
+            [self.tableView reloadData]; // Refresh the UI based on the subscription status
+        });
+    }];
+}
+
+- (void)subscriptionStatusDidChange:(NSNotification *)notification {
+    // Called when the subscription status changes (e.g., after a successful purchase)
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSLog(@"Subscription status changed. Refreshing UI.");
+        [self.tableView reloadData]; // Refresh the UI to reflect the new subscription status
+    });
+}
+
+- (BOOL)isSubscribed {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+}
+
 #pragma mark - Orientation Control
 
 - (BOOL)shouldAutorotate {
@@ -95,7 +134,7 @@
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         return self.isPresetsSectionExpanded ? (presetKeys.count + 2) : 1;
     } else if (section == 2) {
-        return self.isPaid ? 0 : 1; // Show "Upgrade to Premium" button only if not premium
+        return [self isSubscribed] ? 0 : 1; // Show "Upgrade to Premium" button only if not subscribed
     }
     return 0;
 }
@@ -137,8 +176,8 @@
             NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
             cell.detailTextLabel.text = email ?: @"Not set"; // Show current email or "Not set"
             
-            // Disable if not premium
-            if (!self.isPaid) {
+            // Disable if not subscribed
+            if (![self isSubscribed]) {
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.detailTextLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -158,8 +197,8 @@
             [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = emailAlertsSwitch;
             
-            // Disable if not premium
-            if (!self.isPaid) {
+            // Disable if not subscribed
+            if (![self isSubscribed]) {
                 emailAlertsSwitch.enabled = NO;
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -179,8 +218,8 @@
             [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = encryptEmailDataSwitch;
             
-            // Disable if not premium
-            if (!self.isPaid) {
+            // Disable if not subscribed
+            if (![self isSubscribed]) {
                 encryptEmailDataSwitch.enabled = NO;
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -231,7 +270,7 @@
             [self showResolutionPicker];
         } else if (indexPath.row == 1) {
             [self showYoloIndexesPicker];
-        } else if (indexPath.row == 2 && self.isPaid) { // Only allow interaction if premium
+        } else if (indexPath.row == 2 && [self isSubscribed]) { // Only allow interaction if subscribed
             [self showEmailInputDialog];
         }
         // Ignore taps on the "Send Email Alerts" row (indexPath.row == 3) and "Encrypt Email Data" row (indexPath.row == 4)
@@ -253,12 +292,12 @@
     } else if (indexPath.section == 2) {
         // Upgrade to Premium button tapped
         [[StoreManager sharedInstance] fetchAndPurchaseProduct];
-        self.isPaid = YES; // Simulate the upgrade (no actual purchase logic for now)
-        [self.tableView reloadData]; // Reload the table view to update UI (hide "Upgrade to Premium" and enable email settings)
+        // No need to manually call checkSubscriptionStatus here; the notification will handle UI updates
     }
 
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
+
 
 - (void)encryptEmailDataSwitchToggled:(UISwitch *)sender {
     if (sender.on) {

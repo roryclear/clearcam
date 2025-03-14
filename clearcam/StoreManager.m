@@ -1,5 +1,8 @@
 #import "StoreManager.h"
 
+// Define the notification name
+NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreManagerSubscriptionStatusDidChangeNotification";
+
 @interface StoreManager ()
 @property (nonatomic, strong) SKProductsRequest *productsRequest;
 @property (nonatomic, strong) SKProduct *premiumProduct;
@@ -57,7 +60,6 @@
     [self purchaseProduct];
 }
 
-
 - (void)request:(SKRequest *)request didFailWithError:(NSError *)error {
     NSLog(@"Failed to fetch products: %@", error.localizedDescription);
 }
@@ -81,6 +83,13 @@
             case SKPaymentTransactionStatePurchased:
                 NSLog(@"Purchase successful!");
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+                // After a successful purchase, verify the subscription status
+                [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                    if (isActive) {
+                        // Post the notification to inform listeners of the status change
+                        [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
+                    }
+                }];
                 break;
                 
             case SKPaymentTransactionStateFailed:
@@ -91,6 +100,13 @@
             case SKPaymentTransactionStateRestored:
                 NSLog(@"Purchase restored.");
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+                // After restoring purchases, verify the subscription status
+                [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                    if (isActive) {
+                        // Post the notification to inform listeners of the status change
+                        [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
+                    }
+                }];
                 break;
                 
             default:
@@ -179,6 +195,8 @@
 
         if (isSubscribed) {
             NSLog(@"✅ Subscription is active until %@", latestExpirationDate);
+            // Post the notification to inform listeners of the status change
+            [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
             NSLog(@"🚨 Subscription has expired.");
         }
@@ -189,7 +207,4 @@
     [task resume];
 }
 
-
-
 @end
-
