@@ -4,6 +4,7 @@
 #import "Yolo.h"
 #import "FileServer.h"
 #import "SettingsManager.h"
+#import "StoreManager.h"
 #import "SceneState.h"
 #import "SettingsViewController.h"
 
