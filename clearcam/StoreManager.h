@@ -13,5 +13,6 @@
 
 + (instancetype)sharedInstance;
 - (void)fetchAndPurchaseProduct;
+- (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion;
 
 @end

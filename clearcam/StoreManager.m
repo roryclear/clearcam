@@ -99,5 +99,83 @@
     }
 }
 
+- (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
+    NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+    NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
+
+    if (!receiptData) {
+        NSLog(@"No receipt found. User may not have purchased any subscriptions.");
+        completion(NO, nil);
+        return;
+    }
+
+    // Convert receipt data to a base64-encoded string
+    NSString *receiptString = [receiptData base64EncodedStringWithOptions:0];
+
+    NSDictionary *requestDict = @{@"receipt-data": receiptString, @"password": @"<YOUR_SHARED_SECRET>"};
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestDict options:0 error:&error];
+
+    if (error) {
+        NSLog(@"JSON serialization error: %@", error.localizedDescription);
+        completion(NO, nil);
+        return;
+    }
+
+    // Choose the correct validation URL (sandbox or production)
+    NSURL *url = [NSURL URLWithString:@"https://buy.itunes.apple.com/verifyReceipt"]; // Use sandbox URL for testing
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    request.HTTPBody = jsonData;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error verifying receipt: %@", error.localizedDescription);
+            completion(NO, nil);
+            return;
+        }
+
+        NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+
+        if (!jsonResponse) {
+            NSLog(@"Invalid response from Apple.");
+            completion(NO, nil);
+            return;
+        }
+
+        NSArray *latestReceipts = jsonResponse[@"latest_receipt_info"];
+        if (!latestReceipts) {
+            NSLog(@"No active subscriptions found.");
+            completion(NO, nil);
+            return;
+        }
+
+        NSDate *latestExpirationDate = nil;
+        for (NSDictionary *receipt in latestReceipts) {
+            if ([receipt[@"product_id"] isEqualToString:@"monthly.premium"]) {
+                NSString *expiresDateString = receipt[@"expires_date_ms"];
+                NSDate *expiresDate = [NSDate dateWithTimeIntervalSince1970:expiresDateString.doubleValue / 1000];
+
+                if (!latestExpirationDate || [expiresDate compare:latestExpirationDate] == NSOrderedDescending) {
+                    latestExpirationDate = expiresDate;
+                }
+            }
+        }
+
+        if (latestExpirationDate && [latestExpirationDate timeIntervalSinceNow] > 0) {
+            NSLog(@"✅ Subscription is active until %@", latestExpirationDate);
+            completion(YES, latestExpirationDate);
+        } else {
+            NSLog(@"🚨 Subscription has expired.");
+            completion(NO, latestExpirationDate);
+        }
+    }];
+
+    [task resume];
+}
+
+
 @end
 

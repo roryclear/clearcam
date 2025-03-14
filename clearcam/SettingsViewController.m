@@ -1,6 +1,7 @@
 #import "SettingsViewController.h"
 #import "SettingsManager.h"
 #import "SecretManager.h"
+#import "StoreManager.h"
 #import "NumberSelectionViewController.h"
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
@@ -251,6 +252,7 @@
         }
     } else if (indexPath.section == 2) {
         // Upgrade to Premium button tapped
+        [[StoreManager sharedInstance] fetchAndPurchaseProduct];
         self.isPaid = YES; // Simulate the upgrade (no actual purchase logic for now)
         [self.tableView reloadData]; // Reload the table view to update UI (hide "Upgrade to Premium" and enable email settings)
     }
