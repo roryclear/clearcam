@@ -123,7 +123,7 @@
     }
 
     // Choose the correct validation URL (sandbox or production)
-    NSURL *url = [NSURL URLWithString:@"https://buy.itunes.apple.com/verifyReceipt"]; // Use sandbox URL for testing
+    NSURL *url = [NSURL URLWithString:@"https://sandbox.itunes.apple.com/verifyReceipt"]; // Use sandbox URL for testing
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
@@ -138,7 +138,7 @@
         }
 
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-
+        NSLog(@"rory response = %@",jsonResponse);
         if (!jsonResponse) {
             NSLog(@"Invalid response from Apple.");
             completion(NO, nil);
