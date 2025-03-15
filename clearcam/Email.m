@@ -1,5 +1,6 @@
 #import "Email.h"
 #import "SecretManager.h"
+#import <UIKit/UIKit.h>
 
 @implementation Email
 
@@ -14,42 +15,61 @@
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
     NSString *server = @"http://192.168.1.105:8080";
-    if([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]){
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
     }
     NSString *endpoint = @"/";
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
     if (!toEmail) return;
 
-    NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
+    NSData *imageData = nil;
+    NSString *filePathToSend = imagePath;
+    
+    if (imagePath.length == 0) { //todo, to test user's endpoint
+        NSLog(@"Image path is empty. Generating blank image.");
+        CGSize imageSize = CGSizeMake(1280, 720);
+        UIGraphicsBeginImageContext(imageSize);
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        CGContextSetFillColorWithColor(context, [UIColor whiteColor].CGColor);
+        CGContextFillRect(context, CGRectMake(0, 0, imageSize.width, imageSize.height));
+        UIImage *blankImage = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        
+        // Convert blank image to JPEG
+        imageData = UIImageJPEGRepresentation(blankImage, 1.0);
+        
+        // Save temporarily
+        NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"test_blank_img.jpg"];
+        [imageData writeToFile:tempPath atomically:YES];
+        filePathToSend = tempPath;
+    } else {
+        imageData = [NSData dataWithContentsOfFile:imagePath];
+    }
+
     if (!imageData) {
-        NSLog(@"Failed to read image data from path: %@", imagePath);
+        NSLog(@"Failed to read image data.");
         return;
     }
 
     NSData *fileData = imageData;
-    NSString *filePathToSend = imagePath;
-    
-    // Check if encryption is enabled in SettingsManager
-    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
-    
-    if (encryptImage) {
-        // Retrieve the user's password from the Keychain
-        NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
 
+    // Check if encryption is enabled
+    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
+    if (encryptImage) {
+        NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
         if (!encryptionKey) {
-            NSLog(@"Encryption key not found in Keychain. Encryption aborted.");
+            NSLog(@"Encryption key not found. Encryption aborted.");
             return;
         }
         
-        // Encrypt the image data using the retrieved key
         fileData = [[SecretManager sharedManager] encryptData:imageData withKey:encryptionKey];
         if (!fileData) {
             NSLog(@"Encryption failed.");
             return;
         }
-    }
 
+        filePathToSend = [filePathToSend stringByAppendingString:@".aes"];
+    }
 
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
     NSMutableData *bodyData = [NSMutableData data];
@@ -60,12 +80,10 @@
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", encryptImage ? [[filePathToSend lastPathComponent] stringByAppendingString:@".aes"] : [filePathToSend lastPathComponent]
-] dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[[NSString stringWithFormat:@"Content-Type: application/octet-stream\r\n\r\n"] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[@"Content-Type: application/octet-stream\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
     NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
@@ -86,5 +104,6 @@
     }];
     [task resume];
 }
+
 
 @end

@@ -3,6 +3,7 @@
 #import "SecretManager.h"
 #import "StoreManager.h"
 #import "NumberSelectionViewController.h"
+#import "Email.h"
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -143,9 +144,9 @@
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
         // Resolution, Detect objects, Email, Send Email Alerts, Encrypt Email Data, Use own email server
-        NSInteger baseRows = 6; // Existing 5 rows + new "Use own email server" toggle
+        NSInteger baseRows = 6; // Existing 6 rows
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            return baseRows + 1; // Add 1 row for the expandable Address field and Test button
+            return baseRows + 2; // Add 2 rows: one for Address field and one for Test button
         }
         return baseRows;
     } else if (section == 1) {
@@ -245,9 +246,15 @@
             cell.textLabel.textColor = [UIColor labelColor];
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 6 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            cell.textLabel.text = @"Server Address";
-            cell.detailTextLabel.text = self.emailServerAddress;
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                    cell.textLabel.text = @"Server Address";
+                    cell.detailTextLabel.text = self.emailServerAddress;
+                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                    cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 7 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
+            cell.textLabel.text = @"Test own server";
+            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.detailTextLabel.text = nil;
+            cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 1) {
@@ -297,8 +304,11 @@
             NSLog(@"Tapped Email Address row");
             [self showEmailInputDialog];
         } else if (indexPath.row == 6 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            NSLog(@"Tapped Server Address row");
-            [self showEmailServerAddressInputDialog];
+                    NSLog(@"Tapped Server Address row");
+                    [self showEmailServerAddressInputDialog];
+        } else if (indexPath.row == 7 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
+            NSLog(@"Tapped Test own server row");
+            [self testEmailServer];
         }
     } else if (indexPath.section == 1) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -365,22 +375,27 @@
         }
     }];
     
-    UIAlertAction *testAction = [UIAlertAction actionWithTitle:@"Test"
-                                                         style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction * _Nonnull action) {
-        // Log a test message
-        NSLog(@"Testing email server at address: %@", self.emailServerAddress);
-    }];
-    
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     
     [alert addAction:saveAction];
-    [alert addAction:testAction];
     [alert addAction:cancelAction];
-    
+
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)testEmailServer {
+    [[Email sharedInstance] sendEmailWithImageAtPath:@""];
+    // You might want to add some feedback here, like an alert showing success/failure
+    UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Test Initiated"
+                                                                        message:@"Test email has been initiated. Check your server logs for results."
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:nil];
+    [resultAlert addAction:okAction];
+    [self presentViewController:resultAlert animated:YES completion:nil];
 }
 
 - (void)encryptEmailDataSwitchToggled:(UISwitch *)sender {
