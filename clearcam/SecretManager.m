@@ -1,5 +1,6 @@
 #import "SecretManager.h"
 #import <Security/Security.h>
+#import <CommonCrypto/CommonCryptor.h>
 
 static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace with your app's unique identifier
 
@@ -255,6 +256,61 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         default:
             return [NSString stringWithFormat:@"Keychain error %d occurred.", (int)status];
     }
+}
+
+#define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
+#define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
+
+- (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key {
+    // Step 1: Decrypt the entire data first (we need at least the header)
+    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
+    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
+    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+    
+    size_t bufferSize = encryptedData.length + kCCBlockSizeAES128;
+    void *buffer = malloc(bufferSize);
+    
+    size_t numBytesDecrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCDecrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     kCCKeySizeAES256,
+                                     NULL, // IV (NULL for no IV)
+                                     encryptedData.bytes,
+                                     encryptedData.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesDecrypted);
+    
+    if (status != kCCSuccess) {
+        free(buffer);
+        return nil;
+    }
+    
+    // Step 2: Check if the decrypted data is long enough to contain the header
+    if (numBytesDecrypted < HEADER_SIZE) {
+        free(buffer);
+        return nil; // Data is too short to contain a valid header
+    }
+    
+    // Step 3: Extract and verify the magic number from the header
+    uint64_t decryptedMagicNumber;
+    memcpy(&decryptedMagicNumber, buffer, HEADER_SIZE);
+    if (decryptedMagicNumber != MAGIC_NUMBER) {
+        free(buffer);
+        return nil; // Wrong key or corrupted data
+    }
+    
+    // Step 4: Extract the original data (skip the header)
+    size_t originalDataLength = numBytesDecrypted - HEADER_SIZE;
+    void *originalDataBuffer = malloc(originalDataLength);
+    memcpy(originalDataBuffer, buffer + HEADER_SIZE, originalDataLength);
+    
+    // Step 5: Return the original data
+    NSData *result = [NSData dataWithBytesNoCopy:originalDataBuffer length:originalDataLength];
+    free(buffer); // Free the full decrypted buffer
+    return result;
 }
 
 @end

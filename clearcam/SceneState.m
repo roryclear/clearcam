@@ -93,7 +93,7 @@
                     NSLog(@"Failed to save image at path: %@", filePath);
                 } else {
                     NSLog(@"Image saved at path: %@", filePath);
-                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 300) { // only once per hour? enforce server side!
+                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 60) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
                         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]) {
                             [self sendEmailWithImageAtPath:filePath];
@@ -170,7 +170,7 @@
 }
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
-    NSString *server = @"http://192.168.1.113:8080";
+    NSString *server = @"http://192.168.1.105:8080";
     NSString *endpoint = @"/send";
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
     if (!toEmail) return;
