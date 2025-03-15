@@ -14,7 +14,10 @@
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
     NSString *server = @"http://192.168.1.105:8080";
-    NSString *endpoint = @"/send";
+    if([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]){
+        server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
+    }
+    NSString *endpoint = @"/";
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
     if (!toEmail) return;
 

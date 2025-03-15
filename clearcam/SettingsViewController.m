@@ -73,7 +73,7 @@
     self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled; // Add this line
     
     // Initialize emailServerAddress from NSUserDefaults
-    self.emailServerAddress = [defaults stringForKey:@"email_server_address"] ?: @"http://192.168.1.1"; // Default value
+    self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1"; // Default value
     
     // Create table view with proper Auto Layout constraints
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
@@ -358,7 +358,7 @@
             self.emailServerAddress = address;
             // Save the address to NSUserDefaults
             NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-            [defaults setObject:address forKey:@"email_server_address"];
+            [defaults setObject:address forKey:@"own_email_server_address"];
             [defaults synchronize];
             // Reload the table view to show the updated address
             [self.tableView reloadData];
