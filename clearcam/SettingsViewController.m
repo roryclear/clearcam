@@ -12,6 +12,9 @@
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 @property (nonatomic, assign) BOOL sendEmailAlertsEnabled;
 @property (nonatomic, assign) BOOL encryptEmailDataEnabled;
+@property (nonatomic, assign) BOOL useOwnEmailServerEnabled; // Track if "Use own email server" is enabled
+@property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
+@property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
 
 @end
 
@@ -19,25 +22,25 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
+    
     // Basic setup
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
-
+    
     // Check subscription status on view load
     [self checkSubscriptionStatus];
-
+    
     // Register for subscription status change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(subscriptionStatusDidChange:)
                                                  name:StoreManagerSubscriptionStatusDidChangeNotification
                                                object:nil];
-
+    
     // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];
     self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
     self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all"; // Default to "all" if no key is saved
-
+    
     // Initialize sendEmailAlertsEnabled from NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     if ([defaults objectForKey:@"send_email_alerts_enabled"] != nil) {
@@ -47,7 +50,7 @@
         [defaults setBool:NO forKey:@"send_email_alerts_enabled"];
         [defaults synchronize];
     }
-
+    
     // Initialize encryptEmailDataEnabled from NSUserDefaults
     if ([defaults objectForKey:@"encrypt_email_data_enabled"] != nil) {
         self.encryptEmailDataEnabled = [defaults boolForKey:@"encrypt_email_data_enabled"];
@@ -56,7 +59,22 @@
         [defaults setBool:NO forKey:@"encrypt_email_data_enabled"];
         [defaults synchronize];
     }
-
+    
+    // Initialize useOwnEmailServerEnabled from NSUserDefaults
+    if ([defaults objectForKey:@"use_own_email_server_enabled"] != nil) {
+        self.useOwnEmailServerEnabled = [defaults boolForKey:@"use_own_email_server_enabled"];
+    } else {
+        self.useOwnEmailServerEnabled = NO;
+        [defaults setBool:NO forKey:@"use_own_email_server_enabled"];
+        [defaults synchronize];
+    }
+    
+    // Initialize isEmailServerSectionExpanded based on useOwnEmailServerEnabled
+    self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled; // Add this line
+    
+    // Initialize emailServerAddress from NSUserDefaults
+    self.emailServerAddress = [defaults stringForKey:@"email_server_address"] ?: @"http://192.168.1.1"; // Default value
+    
     // Create table view with proper Auto Layout constraints
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.delegate = self;
@@ -64,7 +82,7 @@
     self.tableView.backgroundColor = [UIColor systemBackgroundColor]; // Matches dark/light mode
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO; // Enable Auto Layout
     [self.view addSubview:self.tableView];
-
+    
     // Set up constraints to pin the table view to all edges of the view
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
@@ -124,7 +142,12 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        return 5; // Resolution, Detect objects, Email, Send Email Alerts, Encrypt Email Data
+        // Resolution, Detect objects, Email, Send Email Alerts, Encrypt Email Data, Use own email server
+        NSInteger baseRows = 6; // Existing 5 rows + new "Use own email server" toggle
+        if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
+            return baseRows + 1; // Add 1 row for the expandable Address field and Test button
+        }
+        return baseRows;
     } else if (section == 1) {
         // Presets section: 1 row for "Manage Presets" header, plus rows for each preset, plus "Add New +"
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -143,58 +166,50 @@
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
 
-    // Make sure cell adapts to Dark Mode
     cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cell.textLabel.textColor = [UIColor labelColor];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-
-    // Clear cell state to prevent lingering text or images
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
     cell.imageView.image = nil;
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-
-    // Clear accessoryView for all cells initially
     cell.accessoryView = nil;
+
+    BOOL isPremiumOrUsingOwnServer = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled;
 
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
-            // Resolution
             cell.textLabel.text = @"Resolution";
-            cell.detailTextLabel.text = self.selectedResolution; // Show current resolution
+            cell.detailTextLabel.text = self.selectedResolution;
+            cell.userInteractionEnabled = YES;
+            NSLog(@"Resolution cell configured, tappable: YES");
         } else if (indexPath.row == 1) {
-            // Detect objects
             cell.textLabel.text = @"Detect objects";
-            cell.detailTextLabel.text = self.selectedPresetKey; // Show current YOLO preset
+            cell.detailTextLabel.text = self.selectedPresetKey;
+            cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 2) {
-            // Email Address
             cell.textLabel.text = @"Email Address";
             NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
-            cell.detailTextLabel.text = email ?: @"Not set"; // Show current email or "Not set"
-            
-            // Disable if not subscribed
-            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
+            cell.detailTextLabel.text = email ?: @"Not set";
+            if (!isPremiumOrUsingOwnServer) {
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.detailTextLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
+                NSLog(@"Email Address cell configured, tappable: NO (not premium or using own server)");
             } else {
                 cell.textLabel.textColor = [UIColor labelColor];
                 cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
                 cell.userInteractionEnabled = YES;
+                NSLog(@"Email Address cell configured, tappable: YES");
             }
         } else if (indexPath.row == 3) {
-            // Send Email Alerts
             cell.textLabel.text = @"Send Email Alerts";
-            cell.accessoryType = UITableViewCellAccessoryNone; // No disclosure indicator for switches
-
-            // Add a UISwitch to the cell
+            cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *emailAlertsSwitch = [[UISwitch alloc] init];
             emailAlertsSwitch.on = self.sendEmailAlertsEnabled;
             [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = emailAlertsSwitch;
-            
-            // Disable if not subscribed
-            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
+            if (!isPremiumOrUsingOwnServer) {
                 emailAlertsSwitch.enabled = NO;
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -204,18 +219,13 @@
                 cell.userInteractionEnabled = YES;
             }
         } else if (indexPath.row == 4) {
-            // Encrypt Email Data
             cell.textLabel.text = @"Encrypt Email Data (Recommended)";
-            cell.accessoryType = UITableViewCellAccessoryNone; // No disclosure indicator for switches
-
-            // Add a UISwitch to the cell
+            cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
             encryptEmailDataSwitch.on = self.encryptEmailDataEnabled;
             [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = encryptEmailDataSwitch;
-            
-            // Disable if not subscribed
-            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
+            if (!isPremiumOrUsingOwnServer) {
                 encryptEmailDataSwitch.enabled = NO;
                 cell.textLabel.textColor = [UIColor grayColor];
                 cell.userInteractionEnabled = NO;
@@ -224,76 +234,154 @@
                 cell.textLabel.textColor = [UIColor labelColor];
                 cell.userInteractionEnabled = YES;
             }
+        } else if (indexPath.row == 5) {
+            cell.textLabel.text = @"Use own email server";
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
+            useOwnEmailServerSwitch.on = self.useOwnEmailServerEnabled;
+            [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = useOwnEmailServerSwitch;
+            useOwnEmailServerSwitch.enabled = YES;
+            cell.textLabel.textColor = [UIColor labelColor];
+            cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 6 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
+            cell.textLabel.text = @"Server Address";
+            cell.detailTextLabel.text = self.emailServerAddress;
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 1) {
-        // Presets section (unchanged)
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row == 0) {
-            // "Manage Presets" header row
             cell.textLabel.text = @"Manage Presets";
             cell.detailTextLabel.text = nil;
             cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
+            cell.userInteractionEnabled = YES;
+            NSLog(@"Manage Presets cell configured, tappable: YES");
         } else if (indexPath.row <= presetKeys.count) {
-            // Preset rows (including "all")
             NSString *presetKey = presetKeys[indexPath.row - 1];
             cell.textLabel.text = presetKey;
             cell.detailTextLabel.text = nil;
-            cell.imageView.image = nil; // Clear any existing image
+            cell.imageView.image = nil;
+            cell.userInteractionEnabled = YES;
         } else if (indexPath.row == presetKeys.count + 1) {
-            // "Add New +" row (only show if expanded)
-            cell.textLabel.text = nil; // Clear text
-            cell.detailTextLabel.text = nil; // Clear detail text
-            cell.imageView.image = [UIImage systemImageNamed:@"plus.circle.fill"]; // Use the system + icon
-            cell.imageView.tintColor = [UIColor systemGreenColor]; // Set the icon color to green
+            cell.textLabel.text = nil;
+            cell.detailTextLabel.text = nil;
+            cell.imageView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
+            cell.imageView.tintColor = [UIColor systemGreenColor];
             cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 2) {
-        // Upgrade to Premium section
         cell.textLabel.text = @"Upgrade to Premium";
         cell.textLabel.textColor = [UIColor systemBlueColor];
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.accessoryType = UITableViewCellAccessoryNone;
+        cell.userInteractionEnabled = YES;
     }
 
     return cell;
 }
-
 #pragma mark - UITableView Delegate
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSLog(@"Tapped section %ld, row %ld", (long)indexPath.section, (long)indexPath.row);
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
+            NSLog(@"Tapped Resolution row");
             [self showResolutionPicker];
         } else if (indexPath.row == 1) {
+            NSLog(@"Tapped Detect objects row");
             [self showYoloIndexesPicker];
-        } else if (indexPath.row == 2 && [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) { // Only allow interaction if subscribed
+        } else if (indexPath.row == 2 && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled)) {
+            NSLog(@"Tapped Email Address row");
             [self showEmailInputDialog];
+        } else if (indexPath.row == 6 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
+            NSLog(@"Tapped Server Address row");
+            [self showEmailServerAddressInputDialog];
         }
-        // Ignore taps on the "Send Email Alerts" row (indexPath.row == 3) and "Encrypt Email Data" row (indexPath.row == 4)
     } else if (indexPath.section == 1) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row == 0) {
-            // Toggle presets section expansion
+            NSLog(@"Tapped Manage Presets row");
             self.isPresetsSectionExpanded = !self.isPresetsSectionExpanded;
             [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationAutomatic];
         } else if (indexPath.row <= presetKeys.count) {
-            // Edit preset
             NSString *presetKey = presetKeys[indexPath.row - 1];
+            NSLog(@"Tapped preset: %@", presetKey);
             NSArray *selectedIndexes = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][presetKey];
             [self showNumberSelectionForPreset:presetKey selectedIndexes:selectedIndexes];
         } else {
-            // Add new preset
+            NSLog(@"Tapped Add New Preset row");
             [self showAddPresetDialog];
         }
     } else if (indexPath.section == 2) {
-        // Upgrade to Premium button tapped
+        NSLog(@"Tapped Upgrade to Premium row");
         [[StoreManager sharedInstance] fetchAndPurchaseProduct];
-        // No need to manually call checkSubscriptionStatus here; the notification will handle UI updates
     }
-
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
+#pragma mark - Use Own Email Server
+
+- (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
+    self.useOwnEmailServerEnabled = sender.on;
+    self.isEmailServerSectionExpanded = sender.on; // Expand or collapse the section based on toggle state
+    
+    // Save the toggle state to NSUserDefaults
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:self.useOwnEmailServerEnabled forKey:@"use_own_email_server_enabled"];
+    [defaults synchronize];
+    
+    // Reload section 0 to show or hide the expandable fields
+    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
+    
+    // Log the change
+    NSLog(@"Use own email server: %@", self.useOwnEmailServerEnabled ? @"Enabled" : @"Disabled");
+}
+
+- (void)showEmailServerAddressInputDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Server Address"
+                                                                   message:@"Please enter the address of your email server."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Server Address";
+        textField.text = self.emailServerAddress; // Pre-fill with existing address
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *address = alert.textFields.firstObject.text;
+        if (address.length > 0) {
+            self.emailServerAddress = address;
+            // Save the address to NSUserDefaults
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setObject:address forKey:@"email_server_address"];
+            [defaults synchronize];
+            // Reload the table view to show the updated address
+            [self.tableView reloadData];
+        }
+    }];
+    
+    UIAlertAction *testAction = [UIAlertAction actionWithTitle:@"Test"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        // Log a test message
+        NSLog(@"Testing email server at address: %@", self.emailServerAddress);
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:saveAction];
+    [alert addAction:testAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
 
 - (void)encryptEmailDataSwitchToggled:(UISwitch *)sender {
     if (sender.on) {
@@ -560,6 +648,7 @@
 }
 
 - (void)showEmailInputDialog {
+    NSLog(@"Entering showEmailInputDialog");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Email Address"
                                                                    message:@"Please enter a valid email address."
                                                             preferredStyle:UIAlertControllerStyleAlert];
@@ -567,17 +656,21 @@
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.placeholder = @"Email Address";
         textField.keyboardType = UIKeyboardTypeEmailAddress;
-        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"]; // Pre-fill with existing email
+        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
     }];
     
     UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *email = alert.textFields.firstObject.text;
+        NSLog(@"User entered email: %@", email);
         if ([self isValidEmail:email]) {
-            [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"]; // Save email to UserDefaults
+            [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"];
             [[NSUserDefaults standardUserDefaults] synchronize];
-            [self.tableView reloadData]; // Refresh the table view to show the updated email
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.tableView reloadData];
+                NSLog(@"Table view reloaded with new email");
+            });
         } else {
             [self showInvalidEmailAlert];
         }
@@ -585,17 +678,25 @@
     
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
-                                                         handler:nil];
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        NSLog(@"User canceled email input dialog");
+    }];
     
     [alert addAction:saveAction];
     [alert addAction:cancelAction];
-    
-    [self presentViewController:alert animated:YES completion:nil];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSLog(@"Presenting email input dialog");
+        [self presentViewController:alert animated:YES completion:^{
+            NSLog(@"Email input dialog presentation completed");
+        }];
+    });
 }
 
 #pragma mark - Resolution Picker
 
 - (void)showResolutionPicker {
+    NSLog(@"Entering showResolutionPicker");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select Resolution"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
@@ -606,36 +707,37 @@
         UIAlertAction *action = [UIAlertAction actionWithTitle:resolution
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
-            // Update the selected resolution
+            NSLog(@"User selected resolution: %@", resolution);
             self.selectedResolution = resolution;
-            
-            // Log the selected resolution
-            NSLog(@"Selected resolution: %@", self.selectedResolution);
-            
-            // Update SettingsManager with the new resolution
             SettingsManager *settingsManager = [SettingsManager sharedManager];
-            if ([self.selectedResolution isEqualToString:@"720p"]) {
+            if ([resolution isEqualToString:@"720p"]) {
                 [settingsManager updateResolutionWithWidth:@"1280" height:@"720" textSize:@"2" preset:@"AVCaptureSessionPreset1280x720"];
-            } else if ([self.selectedResolution isEqualToString:@"1080p"]) {
+            } else if ([resolution isEqualToString:@"1080p"]) {
                 [settingsManager updateResolutionWithWidth:@"1920" height:@"1080" textSize:@"3" preset:@"AVCaptureSessionPreset1920x1080"];
             }
-            
-            // Log the updated resolution settings from SettingsManager
-            NSLog(@"Updated resolution settings: %@x%@, text size: %@, preset: %@",
+            NSLog(@"Updated SettingsManager: width=%@, height=%@, textSize=%@, preset=%@",
                   settingsManager.width, settingsManager.height, settingsManager.text_size, settingsManager.preset);
-            
-            // Reload the table view to update the UI
-            [self.tableView reloadData];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.tableView reloadData];
+                NSLog(@"Table view reloaded for resolution change");
+            });
         }];
         [alert addAction:action];
     }
 
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
-                                                         handler:nil];
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        NSLog(@"User canceled resolution picker");
+    }];
     [alert addAction:cancelAction];
 
-    [self presentViewController:alert animated:YES completion:nil];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSLog(@"Presenting resolution picker");
+        [self presentViewController:alert animated:YES completion:^{
+            NSLog(@"Resolution picker presentation completed");
+        }];
+    });
 }
 
 #pragma mark - YOLO Indexes Picker
