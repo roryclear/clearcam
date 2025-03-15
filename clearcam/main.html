@@ -75,7 +75,7 @@
                 const response = await fetch('/get-devices');
                 const devices = await response.json();
                 console.log('Devices fetched:', devices);
-                const newUrls = new Set(devices.map(ip => `http://${ip}:8080`));
+                const newUrls = new Set(devices.map(ip => `http://${ip}`));
 
                 // Add new URLs
                 newUrls.forEach(url => {

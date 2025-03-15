@@ -245,7 +245,7 @@
         memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = INADDR_ANY;
-        serverAddr.sin_port = htons(8080);
+        serverAddr.sin_port = htons(80);
         while (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) [NSThread sleepForTimeInterval:0.1];
         while (listen(serverSocket, 5) == -1) [NSThread sleepForTimeInterval:0.1];
 
@@ -354,7 +354,7 @@
             [self sendJson200:self.scanner.cachedOpenPorts toClient:clientSocket];
         }
         
-        [self.scanner updateCachedOpenPortsForPort:8080];
+        [self.scanner updateCachedOpenPortsForPort:80];
         return;
     }
 
