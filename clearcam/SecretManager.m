@@ -261,6 +261,45 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
 #define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
 #define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
 
+- (NSData *)encryptData:(NSData *)data withKey:(NSString *)key {
+    // Step 1: Prepare the header (magic number)
+    uint64_t magicNumber = MAGIC_NUMBER;
+    NSMutableData *headerData = [NSMutableData dataWithBytes:&magicNumber length:HEADER_SIZE];
+    
+    // Step 2: Combine header and original data
+    NSMutableData *dataToEncrypt = [NSMutableData data];
+    [dataToEncrypt appendData:headerData];
+    [dataToEncrypt appendData:data];
+    
+    // Step 3: Encrypt the combined data
+    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
+    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
+    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+    
+    size_t bufferSize = dataToEncrypt.length + kCCBlockSizeAES128;
+    void *buffer = malloc(bufferSize);
+    
+    size_t numBytesEncrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCEncrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     kCCKeySizeAES256,
+                                     NULL, // IV (NULL for no IV)
+                                     dataToEncrypt.bytes,
+                                     dataToEncrypt.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesEncrypted);
+    
+    if (status == kCCSuccess) {
+        return [NSData dataWithBytesNoCopy:buffer length:numBytesEncrypted];
+    }
+    
+    free(buffer);
+    return nil;
+}
+
 - (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key {
     // Step 1: Decrypt the entire data first (we need at least the header)
     char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
