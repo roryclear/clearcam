@@ -21,6 +21,9 @@
 - (BOOL)deleteKeyWithIdentifier:(NSString *)identifier error:(NSError **)error;
 - (BOOL)deleteAllKeysWithError:(NSError **)error;
 
+- (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key;
+- (NSData *)encryptData:(NSData *)data withKey:(NSString *)key;
+
 @end
 
 #endif /* SecretManager_h */
