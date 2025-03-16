@@ -116,20 +116,33 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
-    NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
-    NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
+    // Check if we have a stored receipt
+    NSString *storedReceipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
+    
+    if (storedReceipt) {
+        NSLog(@"📜 Using cached receipt.");
+    } else {
+        NSLog(@"🔄 Fetching new receipt from App Store.");
+        NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+        NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
 
-    if (!receiptData) {
-        NSLog(@"No receipt found. User may not have purchased any subscriptions.");
-        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+        if (!receiptData) {
+            NSLog(@"No receipt found. User may not have purchased any subscriptions.");
+            [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            completion(NO, nil);
+            return;
+        }
+
+        storedReceipt = [receiptData base64EncodedStringWithOptions:0];
+
+        // Save the receipt in NSUserDefaults
+        [[NSUserDefaults standardUserDefaults] setObject:storedReceipt forKey:@"subscriptionReceipt"];
         [[NSUserDefaults standardUserDefaults] synchronize];
-        completion(NO, nil);
-        return;
     }
 
-    NSString *receiptString = [receiptData base64EncodedStringWithOptions:0];
-
-    NSDictionary *requestDict = @{@"receipt-data": receiptString, @"password": @"password"};
+    // Prepare the request
+    NSDictionary *requestDict = @{@"receipt-data": storedReceipt, @"password": @"password"};
     NSError *error;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestDict options:0 error:&error];
 
@@ -141,7 +154,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         return;
     }
 
-    NSURL *url = [NSURL URLWithString:@"https://sandbox.itunes.apple.com/verifyReceipt"]; // Use sandbox URL for testing
+    NSURL *url = [NSURL URLWithString:@"https://sandbox.itunes.apple.com/verifyReceipt"]; // Use sandbox for testing
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
@@ -159,6 +172,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
         NSLog(@"rory response = %@", jsonResponse);
+
         if (!jsonResponse) {
             NSLog(@"Invalid response from Apple.");
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
@@ -195,7 +209,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 
         if (isSubscribed) {
             NSLog(@"✅ Subscription is active until %@", latestExpirationDate);
-            // Post the notification to inform listeners of the status change
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
             NSLog(@"🚨 Subscription has expired.");
