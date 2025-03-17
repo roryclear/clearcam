@@ -84,6 +84,18 @@
     [bodyData appendData:[@"Content-Type: application/octet-stream\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+    // Include receipt only if not using own email server
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
+        NSString *receipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
+        if (receipt) {
+            [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[@"Content-Disposition: form-data; name=\"receipt\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[receipt dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        }
+    }
+
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
     NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
@@ -104,7 +116,5 @@
     }];
     [task resume];
 }
-
-
 
 @end
