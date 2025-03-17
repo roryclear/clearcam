@@ -141,8 +141,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
 
-    // Prepare the request
-    NSDictionary *requestDict = @{@"receipt-data": storedReceipt, @"password": @"password"};
+    // Prepare the request to the new verification endpoint
+    NSDictionary *requestDict = @{@"receipt": storedReceipt};
     NSError *error;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestDict options:0 error:&error];
 
@@ -154,8 +154,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         return;
     }
 
-    NSURL *url = [NSURL URLWithString:@"https://sandbox.itunes.apple.com/verifyReceipt"]; // Use sandbox for testing
-
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/verify_receipt"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
     request.HTTPBody = jsonData;
@@ -171,50 +170,29 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         }
 
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-        NSLog(@"rory response = %@", jsonResponse);
+        NSLog(@"Response from server = %@", jsonResponse);
 
-        if (!jsonResponse) {
-            NSLog(@"Invalid response from Apple.");
+        if (!jsonResponse || ![jsonResponse isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"Invalid response from server.");
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             completion(NO, nil);
             return;
         }
 
-        NSArray *latestReceipts = jsonResponse[@"latest_receipt_info"];
-        if (!latestReceipts) {
-            NSLog(@"No active subscriptions found.");
-            [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            completion(NO, nil);
-            return;
-        }
-
-        NSDate *latestExpirationDate = nil;
-        for (NSDictionary *receipt in latestReceipts) {
-            if ([receipt[@"product_id"] isEqualToString:@"monthly.premium"]) {
-                NSString *expiresDateString = receipt[@"expires_date_ms"];
-                NSDate *expiresDate = [NSDate dateWithTimeIntervalSince1970:expiresDateString.doubleValue / 1000];
-
-                if (!latestExpirationDate || [expiresDate compare:latestExpirationDate] == NSOrderedDescending) {
-                    latestExpirationDate = expiresDate;
-                }
-            }
-        }
-
-        BOOL isSubscribed = (latestExpirationDate && [latestExpirationDate timeIntervalSinceNow] > 0);
+        BOOL isSubscribed = [jsonResponse[@"valid"] boolValue];
 
         [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
 
         if (isSubscribed) {
-            NSLog(@"✅ Subscription is active until %@", latestExpirationDate);
+            NSLog(@"✅ Subscription is active.");
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
             NSLog(@"🚨 Subscription has expired.");
         }
 
-        completion(isSubscribed, latestExpirationDate);
+        completion(isSubscribed, nil); // No expiry date since the server doesn't return it
     }];
 
     [task resume];
