@@ -14,11 +14,18 @@
 }
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
-    NSString *server = @"http://192.168.1.105:8080";
+    // Default to HTTPS
+    NSString *server = @"https://www.rors.ai";
+    
+    // Allow HTTP only if user enables "use_own_email_server_enabled"
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
+        if (![server hasPrefix:@"http"]) {
+            server = [@"http://" stringByAppendingString:server]; // Ensure HTTP if not set
+        }
     }
-    NSString *endpoint = @"/";
+
+    NSString *endpoint = @"/send";
     NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
     if (!toEmail) return;
 
@@ -35,10 +42,7 @@
         UIImage *blankImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
         
-        // Convert blank image to JPEG
         imageData = UIImageJPEGRepresentation(blankImage, 1.0);
-        
-        // Save temporarily
         NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"test_blank_img.jpg"];
         [imageData writeToFile:tempPath atomically:YES];
         filePathToSend = tempPath;
@@ -52,8 +56,6 @@
     }
 
     NSData *fileData = imageData;
-
-    // Check if encryption is enabled
     BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
     if (encryptImage) {
         NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
@@ -61,13 +63,11 @@
             NSLog(@"Encryption key not found. Encryption aborted.");
             return;
         }
-        
         fileData = [[SecretManager sharedManager] encryptData:imageData withKey:encryptionKey];
         if (!fileData) {
             NSLog(@"Encryption failed.");
             return;
         }
-
         filePathToSend = [filePathToSend stringByAppendingString:@".aes"];
     }
 
@@ -84,6 +84,18 @@
     [bodyData appendData:[@"Content-Type: application/octet-stream\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+    // Include receipt only if not using own email server
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
+        NSString *receipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
+        if (receipt) {
+            [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[@"Content-Disposition: form-data; name=\"receipt\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[receipt dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        }
+    }
+
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
     NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
@@ -104,6 +116,5 @@
     }];
     [task resume];
 }
-
 
 @end
