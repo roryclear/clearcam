@@ -16,6 +16,8 @@
 @property (nonatomic, assign) BOOL useOwnEmailServerEnabled; // Track if "Use own email server" is enabled
 @property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
 @property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *emailSchedules; // Array to store multiple schedules
+@property (nonatomic, assign) BOOL isScheduleSectionExpanded; // Track if schedule section is expanded
 
 @end
 
@@ -40,7 +42,7 @@
     // Initialize selectedResolution and selectedPresetKey based on SettingsManager
     SettingsManager *settingsManager = [SettingsManager sharedManager];
     self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
-    self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all"; // Default to "all" if no key is saved
+    self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all";
     
     // Initialize sendEmailAlertsEnabled from NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -71,26 +73,45 @@
     }
     
     // Initialize isEmailServerSectionExpanded based on useOwnEmailServerEnabled
-    self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled; // Add this line
+    self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled;
     
     // Initialize emailServerAddress from NSUserDefaults
-    self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1"; // Default value
+    self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1";
+    
+    // Initialize emailSchedules from NSUserDefaults
+    self.emailSchedules = [[defaults arrayForKey:@"email_schedules"] mutableCopy];
+    if (!self.emailSchedules) {
+        self.emailSchedules = [@[@{
+            @"days": @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"],
+            @"startHour": @0,
+            @"endHour": @24,
+            @"enabled": @YES
+        }] mutableCopy];
+        [defaults setObject:self.emailSchedules forKey:@"email_schedules"];
+        [defaults synchronize];
+    }
+    
+    // Initialize isScheduleSectionExpanded based on sendEmailAlertsEnabled
+    self.isScheduleSectionExpanded = self.sendEmailAlertsEnabled;
     
     // Create table view with proper Auto Layout constraints
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
-    self.tableView.backgroundColor = [UIColor systemBackgroundColor]; // Matches dark/light mode
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO; // Enable Auto Layout
+    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.tableView];
     
-    // Set up constraints to pin the table view to all edges of the view
+    // Set up constraints
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
+    
+    // Reload table view to reflect initial state
+    [self.tableView reloadData];
 }
 
 - (void)dealloc {
@@ -143,30 +164,31 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        // Resolution, Detect objects, Email, Send Email Alerts, Encrypt Email Data, Use own email server
-        NSInteger baseRows = 6; // Existing 6 rows
+        NSInteger baseRows = 6; // Resolution, Detect objects, Email, Send Email Alerts, Encrypt, Use own server
+        if (self.sendEmailAlertsEnabled && self.isScheduleSectionExpanded) {
+            baseRows += self.emailSchedules.count + 1; // Schedules + "Add Schedule" row
+        }
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            return baseRows + 2; // Add 2 rows: one for Address field and one for Test button
+            baseRows += 2; // Server Address and Test own server
         }
         return baseRows;
     } else if (section == 1) {
-        // Presets section: 1 row for "Manage Presets" header, plus rows for each preset, plus "Add New +"
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         return self.isPresetsSectionExpanded ? (presetKeys.count + 2) : 1;
     } else if (section == 2) {
-        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1; // Show "Upgrade to Premium" button only if not subscribed
+        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1;
     }
     return 0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"SettingsCell"];
-    
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"SettingsCell"];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
 
+    // Reset cell properties
     cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cell.textLabel.textColor = [UIColor labelColor];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
@@ -179,11 +201,11 @@
     BOOL isPremiumOrUsingOwnServer = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled;
 
     if (indexPath.section == 0) {
+        // Fixed rows before schedule section
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Resolution";
             cell.detailTextLabel.text = self.selectedResolution;
             cell.userInteractionEnabled = YES;
-            NSLog(@"Resolution cell configured, tappable: YES");
         } else if (indexPath.row == 1) {
             cell.textLabel.text = @"Detect objects";
             cell.detailTextLabel.text = self.selectedPresetKey;
@@ -192,17 +214,9 @@
             cell.textLabel.text = @"Email Address";
             NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
             cell.detailTextLabel.text = email ?: @"Not set";
-            if (!isPremiumOrUsingOwnServer) {
-                cell.textLabel.textColor = [UIColor grayColor];
-                cell.detailTextLabel.textColor = [UIColor grayColor];
-                cell.userInteractionEnabled = NO;
-                NSLog(@"Email Address cell configured, tappable: NO (not premium or using own server)");
-            } else {
-                cell.textLabel.textColor = [UIColor labelColor];
-                cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-                cell.userInteractionEnabled = YES;
-                NSLog(@"Email Address cell configured, tappable: YES");
-            }
+            cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
+            cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
+            cell.detailTextLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor secondaryLabelColor] : [UIColor grayColor];
         } else if (indexPath.row == 3) {
             cell.textLabel.text = @"Send Email Alerts";
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -210,52 +224,61 @@
             emailAlertsSwitch.on = self.sendEmailAlertsEnabled;
             [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = emailAlertsSwitch;
-            if (!isPremiumOrUsingOwnServer) {
-                emailAlertsSwitch.enabled = NO;
-                cell.textLabel.textColor = [UIColor grayColor];
-                cell.userInteractionEnabled = NO;
-            } else {
-                emailAlertsSwitch.enabled = YES;
-                cell.textLabel.textColor = [UIColor labelColor];
+            emailAlertsSwitch.enabled = isPremiumOrUsingOwnServer;
+            cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
+            cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
+        }
+        // Schedule section starts at row 4 if enabled
+        else if (self.sendEmailAlertsEnabled && self.isScheduleSectionExpanded && indexPath.row >= 4 && indexPath.row < 4 + self.emailSchedules.count + 1) {
+            if (indexPath.row < 4 + self.emailSchedules.count) {
+                NSInteger scheduleIndex = indexPath.row - 4;
+                NSDictionary *schedule = self.emailSchedules[scheduleIndex];
+                cell.textLabel.text = [self scheduleDescriptionFor:schedule];
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *scheduleSwitch = [[UISwitch alloc] init];
+                scheduleSwitch.on = [schedule[@"enabled"] boolValue];
+                scheduleSwitch.tag = scheduleIndex;
+                [scheduleSwitch addTarget:self action:@selector(scheduleSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = scheduleSwitch;
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 4 + self.emailSchedules.count) {
+                cell.textLabel.text = @"Add Schedule";
+                cell.textLabel.textColor = [UIColor systemGreenColor];
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                cell.accessoryView = nil;
                 cell.userInteractionEnabled = YES;
             }
-        } else if (indexPath.row == 4) {
-            cell.textLabel.text = @"Encrypt Email Data (Recommended)";
-            cell.accessoryType = UITableViewCellAccessoryNone;
-            UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
-            encryptEmailDataSwitch.on = self.encryptEmailDataEnabled;
-            [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-            cell.accessoryView = encryptEmailDataSwitch;
-            if (!isPremiumOrUsingOwnServer) {
-                encryptEmailDataSwitch.enabled = NO;
-                cell.textLabel.textColor = [UIColor grayColor];
-                cell.userInteractionEnabled = NO;
-            } else {
-                encryptEmailDataSwitch.enabled = YES;
-                cell.textLabel.textColor = [UIColor labelColor];
+        } else {
+            NSInteger offset = self.sendEmailAlertsEnabled && self.isScheduleSectionExpanded ? self.emailSchedules.count + 1 : 0;
+            if (indexPath.row == 4 + offset) {
+                cell.textLabel.text = @"Encrypt Email Data (Recommended)";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
+                encryptEmailDataSwitch.on = self.encryptEmailDataEnabled;
+                [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = encryptEmailDataSwitch;
+                encryptEmailDataSwitch.enabled = isPremiumOrUsingOwnServer;
+                cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
+                cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
+            } else if (indexPath.row == 5 + offset) {
+                cell.textLabel.text = @"Use own email server";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
+                useOwnEmailServerSwitch.on = self.useOwnEmailServerEnabled;
+                [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = useOwnEmailServerSwitch;
+                cell.userInteractionEnabled = YES;
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 6 + offset) {
+                cell.textLabel.text = @"Server Address";
+                cell.detailTextLabel.text = self.emailServerAddress;
+                cell.userInteractionEnabled = YES;
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 7 + offset) {
+                cell.textLabel.text = @"Test own server";
+                cell.textLabel.textColor = [UIColor systemBlueColor];
+                cell.detailTextLabel.text = nil;
+                cell.accessoryType = UITableViewCellAccessoryNone;
                 cell.userInteractionEnabled = YES;
             }
-        } else if (indexPath.row == 5) {
-            cell.textLabel.text = @"Use own email server";
-            cell.accessoryType = UITableViewCellAccessoryNone;
-            UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
-            useOwnEmailServerSwitch.on = self.useOwnEmailServerEnabled;
-            [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-            cell.accessoryView = useOwnEmailServerSwitch;
-            useOwnEmailServerSwitch.enabled = YES;
-            cell.textLabel.textColor = [UIColor labelColor];
-            cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 6 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-                    cell.textLabel.text = @"Server Address";
-                    cell.detailTextLabel.text = self.emailServerAddress;
-                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                    cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 7 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            cell.textLabel.text = @"Test own server";
-            cell.textLabel.textColor = [UIColor systemBlueColor];
-            cell.detailTextLabel.text = nil;
-            cell.accessoryType = UITableViewCellAccessoryNone;
-            cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 1) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -289,26 +312,59 @@
 
     return cell;
 }
-#pragma mark - UITableView Delegate
+
+- (NSString *)scheduleDescriptionFor:(NSDictionary *)schedule {
+    NSArray *days = schedule[@"days"];
+    NSNumber *startHour = schedule[@"startHour"];
+    NSNumber *endHour = schedule[@"endHour"];
+    
+    NSString *daysString = days.count == 7 ? @"Every day" : [days componentsJoinedByString:@", "];
+    NSString *timeString = [NSString stringWithFormat:@"%02ld:00-%02ld:00",
+                           [startHour longValue], [endHour longValue]];
+    return [NSString stringWithFormat:@"%@ %@", daysString, timeString];
+}
+
+- (void)scheduleSwitchToggled:(UISwitch *)sender {
+    NSInteger index = sender.tag;
+    NSMutableDictionary *schedule = [self.emailSchedules[index] mutableCopy];
+    schedule[@"enabled"] = @(sender.on);
+    self.emailSchedules[index] = schedule;
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:self.emailSchedules forKey:@"email_schedules"];
+    [defaults synchronize];
+}
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSLog(@"Tapped section %ld, row %ld", (long)indexPath.section, (long)indexPath.row);
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
-            NSLog(@"Tapped Resolution row");
             [self showResolutionPicker];
         } else if (indexPath.row == 1) {
-            NSLog(@"Tapped Detect objects row");
             [self showYoloIndexesPicker];
         } else if (indexPath.row == 2 && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled)) {
-            NSLog(@"Tapped Email Address row");
             [self showEmailInputDialog];
-        } else if (indexPath.row == 6 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-                    NSLog(@"Tapped Server Address row");
-                    [self showEmailServerAddressInputDialog];
-        } else if (indexPath.row == 7 && self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            NSLog(@"Tapped Test own server row");
-            [self testEmailServer];
+        }
+        // Schedule section
+        else if (self.sendEmailAlertsEnabled && self.isScheduleSectionExpanded && indexPath.row >= 4 && indexPath.row < 4 + self.emailSchedules.count + 1) {
+            if (indexPath.row < 4 + self.emailSchedules.count) {
+                [self showScheduleEditorForIndex:indexPath.row - 4];
+            } else if (indexPath.row == 4 + self.emailSchedules.count) {
+                [self showScheduleEditorForIndex:-1];
+            }
+        }
+        // Remaining rows with offset
+        else {
+            NSInteger offset = self.sendEmailAlertsEnabled && self.isScheduleSectionExpanded ? self.emailSchedules.count + 1 : 0;
+            if (indexPath.row == 4 + offset && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled)) {
+                // Encrypt Email Data row - no action on tap
+            } else if (indexPath.row == 5 + offset) {
+                // Use own email server row - no action on tap (handled by switch)
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 6 + offset) {
+                [self showEmailServerAddressInputDialog];
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 7 + offset) {
+                [self testEmailServer];
+            }
         }
     } else if (indexPath.section == 1) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -333,6 +389,141 @@
 }
 
 #pragma mark - Use Own Email Server
+
+- (void)showScheduleEditorForIndex:(NSInteger)index {
+    NSDictionary *existingSchedule = index >= 0 ? self.emailSchedules[index] : nil;
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:index >= 0 ? @"Edit Schedule" : @"New Schedule"
+                                                                  message:@"Select days and time window"
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    
+    // Days selection
+    [alert addAction:[UIAlertAction actionWithTitle:@"Select Days"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        [self showDaysPickerForIndex:index];
+    }]];
+    
+    // Time selection
+    [alert addAction:[UIAlertAction actionWithTitle:@"Select Time Window"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        [self showTimePickerForIndex:index];
+    }]];
+    
+    if (index >= 0) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Delete"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            [self.emailSchedules removeObjectAtIndex:index];
+            [self saveSchedulesAndReload];
+        }]];
+    }
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showDaysPickerForIndex:(NSInteger)index {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select Days"
+                                                                  message:nil
+                                                           preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    NSArray *allDays = @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"];
+    NSMutableArray *selectedDays = index >= 0 ? [self.emailSchedules[index][@"days"] mutableCopy] : [@[] mutableCopy];
+    
+    for (NSString *day in allDays) {
+        BOOL isSelected = [selectedDays containsObject:day];
+        UIAlertAction *action = [UIAlertAction actionWithTitle:day
+                                                         style:isSelected ? UIAlertActionStyleDestructive : UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+            if (isSelected) {
+                [selectedDays removeObject:day];
+            } else {
+                [selectedDays addObject:day];
+            }
+            [self updateSchedule:index withDays:selectedDays];
+        }];
+        [alert addAction:action];
+    }
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Done"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showTimePickerForIndex:(NSInteger)index {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select Time Window"
+                                                                  message:nil
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Start Hour (0-23)";
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        if (index >= 0) textField.text = [self.emailSchedules[index][@"startHour"] stringValue];
+    }];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"End Hour (1-24)";
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        if (index >= 0) textField.text = [self.emailSchedules[index][@"endHour"] stringValue];
+    }];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Save"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        NSInteger startHour = [alert.textFields[0].text integerValue];
+        NSInteger endHour = [alert.textFields[1].text integerValue];
+        
+        if (startHour >= 0 && endHour <= 24 && startHour < endHour) {
+            NSMutableDictionary *schedule = index >= 0 ? [self.emailSchedules[index] mutableCopy] : [NSMutableDictionary dictionary];
+            schedule[@"startHour"] = @(startHour);
+            schedule[@"endHour"] = @(endHour);
+            if (!schedule[@"days"]) schedule[@"days"] = @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"];
+            if (!schedule[@"enabled"]) schedule[@"enabled"] = @YES;
+            
+            if (index >= 0) {
+                self.emailSchedules[index] = schedule;
+            } else {
+                [self.emailSchedules addObject:schedule];
+            }
+            [self saveSchedulesAndReload];
+        }
+    }]];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)updateSchedule:(NSInteger)index withDays:(NSArray *)days {
+    NSMutableDictionary *schedule = index >= 0 ? [self.emailSchedules[index] mutableCopy] : [NSMutableDictionary dictionary];
+    schedule[@"days"] = days;
+    if (!schedule[@"startHour"]) schedule[@"startHour"] = @0;
+    if (!schedule[@"endHour"]) schedule[@"endHour"] = @24;
+    if (!schedule[@"enabled"]) schedule[@"enabled"] = @YES;
+    
+    if (index >= 0) {
+        self.emailSchedules[index] = schedule;
+    } else {
+        [self.emailSchedules addObject:schedule];
+    }
+    [self saveSchedulesAndReload];
+}
+
+- (void)saveSchedulesAndReload {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:self.emailSchedules forKey:@"email_schedules"];
+    [defaults synchronize];
+    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
+}
 
 - (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
     self.useOwnEmailServerEnabled = sender.on;
@@ -513,38 +704,38 @@
 
 - (void)emailAlertsSwitchToggled:(UISwitch *)sender {
     if (sender.on) {
-        // Check if an email address is already set
         NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
         if (!email || ![self isValidEmail:email]) {
-            // No valid email address is set, prompt the user to enter one
             [self showEmailInputDialogWithCompletion:^(BOOL success) {
                 if (success) {
-                    // Email address was successfully set, keep the toggle on
                     self.sendEmailAlertsEnabled = YES;
+                    self.isScheduleSectionExpanded = YES;
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_email_alerts_enabled"];
                     [[NSUserDefaults standardUserDefaults] synchronize];
+                    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
                 } else {
-                    // User canceled or entered an invalid email, turn the toggle off
                     sender.on = NO;
                     self.sendEmailAlertsEnabled = NO;
+                    self.isScheduleSectionExpanded = NO;
                     [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_email_alerts_enabled"];
                     [[NSUserDefaults standardUserDefaults] synchronize];
+                    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
                 }
             }];
         } else {
-            // Email address is valid, update the property and save the state
             self.sendEmailAlertsEnabled = YES;
+            self.isScheduleSectionExpanded = YES;
             [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_email_alerts_enabled"];
             [[NSUserDefaults standardUserDefaults] synchronize];
+            [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
         }
     } else {
-        // Toggle is turned off, update the property and save the state
         self.sendEmailAlertsEnabled = NO;
+        self.isScheduleSectionExpanded = NO;
         [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_email_alerts_enabled"];
         [[NSUserDefaults standardUserDefaults] synchronize];
+        [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
     }
-
-    // Log the change (optional)
     NSLog(@"Send Email Alerts: %@", self.sendEmailAlertsEnabled ? @"Enabled" : @"Disabled");
 }
 
