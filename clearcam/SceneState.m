@@ -96,9 +96,23 @@
                     NSLog(@"Image saved at path: %@", filePath);
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 60) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
-                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
-                            [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
-                            self.last_email_time = [NSDate date]; // Set to now
+                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
+                            ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                             [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
+                            
+                            // Get the current hour
+                            NSDate *now = [NSDate date];
+                            NSCalendar *calendar = [NSCalendar currentCalendar];
+                            NSDateComponents *components = [calendar components:NSCalendarUnitHour fromDate:now];
+                            NSInteger currentHour = components.hour;
+
+                            // Ensure it's NOT between 1 AM and 7 AM
+                            if (currentHour < 1 || currentHour >= 7) {
+                                [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                                self.last_email_time = now; // Set to now
+                            } else {
+                                NSLog(@"Email suppressed: Quiet hours (1 AM - 7 AM)");
+                            }
                         }
                     } else {
                         NSLog(@"NOT sending an email");
