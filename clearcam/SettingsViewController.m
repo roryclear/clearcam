@@ -96,7 +96,6 @@
         [defaults synchronize];
     }
     
-    // Initialize useOwnEmailServerEnabled from NSUserDefaults
     if ([defaults objectForKey:@"use_own_email_server_enabled"] != nil) {
         self.useOwnEmailServerEnabled = [defaults boolForKey:@"use_own_email_server_enabled"];
     } else {
@@ -229,13 +228,13 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 6; // Stream via Wi-Fi, Resolution, Detect objects, Email, Send Email Alerts, Encrypt
+        NSInteger baseRows = 7; // Stream via Wi-Fi, Resolution, Detect objects, Email, Send Email Alerts, Encrypt, Use own email server
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
             baseRows += 2; // Server Address and Test own server
         }
         return baseRows;
     } else if (section == 1) {
-        return 1; // Just "Manage Schedules"
+        return 1;
     } else if (section == 2) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         return self.isPresetsSectionExpanded ? (presetKeys.count + 2) : 1;
@@ -314,6 +313,7 @@
             cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
         } else if (indexPath.row == 6) {
+            NSLog(@"Configuring 'Use own email server' cell");
             cell.textLabel.text = @"Use own email server";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
@@ -333,14 +333,14 @@
             cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 1) {
-        cell.textLabel.text = @"Manage Schedules";
+        cell.textLabel.text = @"Manage Email Schedules";
         cell.detailTextLabel.text = nil;
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.userInteractionEnabled = YES;
     } else if (indexPath.section == 2) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Manage Presets";
+            cell.textLabel.text = @"Manage Detection Presets";
             cell.detailTextLabel.text = nil;
             cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
             cell.userInteractionEnabled = YES;
@@ -436,15 +436,12 @@
     self.useOwnEmailServerEnabled = sender.on;
     self.isEmailServerSectionExpanded = sender.on; // Expand or collapse the section based on toggle state
     
-    // Save the toggle state to NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnEmailServerEnabled forKey:@"use_own_email_server_enabled"];
     [defaults synchronize];
     
-    // Reload section 0 to show or hide the expandable fields
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
     
-    // Log the change
     NSLog(@"Use own email server: %@", self.useOwnEmailServerEnabled ? @"Enabled" : @"Disabled");
 }
 
@@ -884,7 +881,7 @@
 #pragma mark - Preset Management
 
 - (void)showPresetManagementOptions {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Manage Presets"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Manage Detection Presets"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     UIAlertAction *addAction = [UIAlertAction actionWithTitle:@"Add Preset"
