@@ -148,15 +148,14 @@
                     if (userProvidedKey) { // User provided a key
                         decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
                         if (decryptedData) { // Key worked
-                            // Save the correct key to the secret manager
                             NSError *saveError = nil;
-                            //todo can two have the same identifier
-                            NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", [userProvidedKey substringToIndex:6]];
+                            NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
+                            NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
+                            NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
                             if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
                                 NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
                             }
                             successfulKey = userProvidedKey;
-                            // Proceed with file handling if decryption succeeded
                             [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                         } else { // Key didn't work, prompt again
                             NSLog(@"Failed to decrypt data with user-provided key.");
