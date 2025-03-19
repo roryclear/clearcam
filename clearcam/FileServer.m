@@ -16,16 +16,30 @@
 @interface FileServer ()
 @property (nonatomic, strong) NSString *basePath;
 @property (nonatomic, strong) NSMutableDictionary *durationCache;
+@property (nonatomic, assign) int serverSocket;//todo
+@property (nonatomic, assign) BOOL isServerRunning;
 @end
 
 @implementation FileServer
 
-- (void)start {
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _serverSocket = -1;
+        _isServerRunning = NO;
         
-    // coredata stuff
+        // Add KVO observer for stream_via_wifi_enabled
+        [[NSUserDefaults standardUserDefaults] addObserver:self
+                                               forKeyPath:@"stream_via_wifi_enabled"
+                                                  options:NSKeyValueObservingOptionNew
+                                                  context:nil];
+    }
+    return self;
+}
+
+- (void)start {
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     self.context = appDelegate.persistentContainer.viewContext;
-
 
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
@@ -59,14 +73,112 @@
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
     
+    self.segment_length = 60;
+    self.scanner = [[PortScanner alloc] init];
+    self.last_req_time = [NSDate now];
+    self.basePath = [self getDocumentsDirectory];
+    self.durationCache = [[NSMutableDictionary alloc] init];
+    
+    // Check initial state and start server if enabled
+    BOOL streamViaWiFiEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"stream_via_wifi_enabled"];
+    if (streamViaWiFiEnabled) {
+        [self startServer];
+    }
+}
+
+- (void)dealloc {
+    [self stopServer];
+    [[NSUserDefaults standardUserDefaults] removeObserver:self
+                                              forKeyPath:@"stream_via_wifi_enabled"];
+}
+
+- (void)startServer {
+    if (self.isServerRunning) {
+        return;  // Server already running
+    }
+    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        self.segment_length = 60;
-        self.scanner = [[PortScanner alloc] init];
-        self.last_req_time = [NSDate now];
-        self.basePath = [self getDocumentsDirectory];
-        self.durationCache = [[NSMutableDictionary alloc] init];
-        [self startHTTPServerWithBasePath:self.basePath];
+        @try {
+            signal(SIGPIPE, SIG_IGN);
+            
+            self.serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+            if (self.serverSocket == -1) {
+                NSLog(@"Failed to create socket: %s", strerror(errno));
+                return;
+            }
+            
+            struct sockaddr_in serverAddr;
+            memset(&serverAddr, 0, sizeof(serverAddr));
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_addr.s_addr = INADDR_ANY;
+            serverAddr.sin_port = htons(80);
+            
+            int opt = 1;
+            setsockopt(self.serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+            
+            if (bind(self.serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+                NSLog(@"Failed to bind socket: %s", strerror(errno));
+                close(self.serverSocket);
+                self.serverSocket = -1;
+                return;
+            }
+            
+            if (listen(self.serverSocket, 5) == -1) {
+                NSLog(@"Failed to listen on socket: %s", strerror(errno));
+                close(self.serverSocket);
+                self.serverSocket = -1;
+                return;
+            }
+            
+            self.isServerRunning = YES;
+            NSLog(@"HTTP Server started on port 80");
+            
+            while (self.isServerRunning) {
+                int clientSocket = accept(self.serverSocket, NULL, NULL);
+                if (clientSocket != -1) {
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                        [self handleClientRequest:clientSocket withBasePath:self.basePath];
+                        close(clientSocket);
+                    });
+                }
+            }
+            
+        } @catch (NSException *exception) {
+            NSLog(@"Exception in server: %@", exception);
+            self.isServerRunning = NO;
+            if (self.serverSocket != -1) {
+                close(self.serverSocket);
+                self.serverSocket = -1;
+            }
+        }
     });
+}
+
+- (void)stopServer {
+    if (!self.isServerRunning) {
+        return;  // Server already stopped
+    }
+    
+    self.isServerRunning = NO;
+    if (self.serverSocket != -1) {
+        close(self.serverSocket);
+        self.serverSocket = -1;
+    }
+    NSLog(@"HTTP Server stopped");
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary *)change
+                       context:(void *)context {
+    if ([keyPath isEqualToString:@"stream_via_wifi_enabled"]) {
+        BOOL streamViaWiFiEnabled = [change[NSKeyValueChangeNewKey] boolValue];
+        if (streamViaWiFiEnabled) {
+            [self startServer];
+        } else {
+            [self stopServer];
+        }
+    }
 }
 
 - (NSString *)getDocumentsDirectory {
@@ -228,40 +340,6 @@
           (unsigned long)framesWithURLs.count, (long)start, dateParam);
 
     return framesWithURLs;
-}
-
-- (void)startHTTPServerWithBasePath:(NSString *)basePath {
-    @try {
-        signal(SIGPIPE, SIG_IGN);
-        
-        int serverSocket = -1;
-        struct sockaddr_in serverAddr;
-        
-        while (serverSocket == -1) {
-            serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-            [NSThread sleepForTimeInterval:0.1];
-        }
-        
-        memset(&serverAddr, 0, sizeof(serverAddr));
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_addr.s_addr = INADDR_ANY;
-        serverAddr.sin_port = htons(80);
-        while (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) [NSThread sleepForTimeInterval:0.1];
-        while (listen(serverSocket, 5) == -1) [NSThread sleepForTimeInterval:0.1];
-
-        while (1) {
-            int clientSocket = accept(serverSocket, NULL, NULL);
-            if (clientSocket != -1) {
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    [self handleClientRequest:clientSocket withBasePath:basePath];
-                    close(clientSocket);
-                });
-            }
-        }
-
-    } @catch (NSException *exception) {
-        NSLog(@"Exception: %@", exception);
-    }
 }
 
 - (void)sendJson200:(NSArray *)array toClient:(int)clientSocket {

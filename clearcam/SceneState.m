@@ -99,7 +99,8 @@
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
                         //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
                         //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
-                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]){ //todo add back other stuff
+                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
+                        //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]){ //todo add back other stuff
                             // Get the current hour
                             NSDate *now = [NSDate date];
                             NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];

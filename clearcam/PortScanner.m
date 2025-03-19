@@ -267,9 +267,14 @@
     }
     freeifaddrs(interfaces);
     
+    if (ipAddress) {
+        // Store in NSUserDefaults
+        [[NSUserDefaults standardUserDefaults] setObject:ipAddress forKey:@"DeviceIPAddress"];
+        [[NSUserDefaults standardUserDefaults] synchronize]; // Ensure it's saved immediately
+    }
+    
     return ipAddress ? ipAddress : @"No IP found";
 }
-
 
 @end
 
