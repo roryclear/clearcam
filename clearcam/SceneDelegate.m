@@ -221,7 +221,6 @@
     }];
 }
 
-// Method to prompt the user for a key
 - (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
                                                                   message:@"Please provide the key to decrypt the file."
@@ -248,8 +247,9 @@
     [alert addAction:okAction];
     [alert addAction:cancelAction];
 
-    // Present the alert (assumes this is called from a view controller)
-    UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+    // Present the alert using the window of the current scene
+    UIWindow *window = self.window; // Use the window property of SceneDelegate
+    UIViewController *topController = window.rootViewController;
     while (topController.presentedViewController) {
         topController = topController.presentedViewController;
     }
