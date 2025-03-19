@@ -59,7 +59,6 @@
 }
 
 - (void)handleAESFile:(NSURL *)aesFileURL {
-    NSError *error = nil;
     NSFileManager *fileManager = [NSFileManager defaultManager];
 
     // Log the file path for debugging
@@ -142,35 +141,7 @@
 
         // If no stored key worked, prompt the user for a key
         if (!decryptedData) {
-            // Define a recursive method to keep prompting for a key
-            __block void (^promptForKey)(void) = ^{
-                [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
-                    if (userProvidedKey) { // User provided a key
-                        decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
-                        if (decryptedData) { // Key worked
-                            NSError *saveError = nil;
-                            NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
-                            NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
-                            NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
-                            if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
-                                NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
-                            }
-                            successfulKey = userProvidedKey;
-                            [self handleDecryptedData:decryptedData fromURL:aesFileURL];
-                        } else { // Key didn't work, prompt again
-                            NSLog(@"Failed to decrypt data with user-provided key.");
-                            [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
-                                promptForKey(); // Recursively prompt again
-                            }];
-                        }
-                    } else { // User canceled
-                        NSLog(@"User canceled key entry.");
-                        [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
-                        return;
-                    }
-                }];
-            };
-            promptForKey(); // Start the recursive prompting
+            [self promptUserForKeyWithAESFileURL:aesFileURL encryptedData:encryptedData];
             return; // Exit the accessor block to wait for user input
         }
 
@@ -221,6 +192,33 @@
     } else {
         NSLog(@"Successfully deleted .aes file: %@", aesFileURL.path);
     }
+}
+
+- (void)promptUserForKeyWithAESFileURL:(NSURL *)aesFileURL encryptedData:(NSData *)encryptedData {
+    [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+        if (userProvidedKey) { // User provided a key
+            NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
+            if (decryptedData) { // Key worked
+                NSError *saveError = nil;
+                NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
+                NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
+                NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
+                if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
+                    NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
+                }
+                [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+            } else { // Key didn't work, prompt again
+                NSLog(@"Failed to decrypt data with user-provided key.");
+                [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
+                    // Call the method again instead of the block
+                    [self promptUserForKeyWithAESFileURL:aesFileURL encryptedData:encryptedData];
+                }];
+            }
+        } else { // User canceled
+            NSLog(@"User canceled key entry.");
+            [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
+        }
+    }];
 }
 
 // Method to prompt the user for a key
