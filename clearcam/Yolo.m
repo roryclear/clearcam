@@ -136,7 +136,8 @@ UInt8 *rgbData;
             memcpy(buffer.contents, data.bytes, data.length);
             self.input_buffer = values[@"buffer_num"][0];
         } else if ([values[@"op"] isEqualToString:@"ProgramAlloc"]) {
-            if ([self.pipeline_states objectForKey:@[values[@"name"][0],values[@"datahash"][0]]]) continue;
+            NSString *key = [NSString stringWithFormat:@"%@_%@", values[@"name"][0], values[@"datahash"][0]];
+            if ([self.pipeline_states objectForKey:key]) continue;
             NSString *prg = [[NSString alloc] initWithData:self._h[values[@"datahash"][0]] encoding:NSUTF8StringEncoding];
             NSError *error = nil;
             id<MTLLibrary> library = [self.device newLibraryWithSource:prg
@@ -290,8 +291,8 @@ UInt8 *rgbData;
         }
     } else if (orientation == AVCaptureVideoOrientationPortrait) {
         for (size_t i = 0; i < length; i += 4) {
-            int row = i / (width * 4);
-            int col = (i % (width * 4)) / 4;
+            int row = (int)(i / (width * 4));
+            int col = (int)((i % (width * 4)) / 4);
             self.rgbData[col * (width * 3) + ((height - 1 - row) * 3)] = rawBytes[i];
             self.rgbData[col * (width * 3) + ((height - 1 - row) * 3) + 1] = rawBytes[i + 1];
             self.rgbData[col * (width * 3) + ((height - 1 - row) * 3) + 2] = rawBytes[i + 2];
