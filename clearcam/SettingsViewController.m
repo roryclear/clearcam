@@ -284,19 +284,21 @@
                 cell.textLabel.text = @"Email Address";
                 NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
                 cell.detailTextLabel.text = email ?: @"Not set";
-                cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
-                cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
-                cell.detailTextLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor secondaryLabelColor] : [UIColor grayColor];
+                // Always enabled and not darkened, regardless of premium status
+                cell.textLabel.textColor = [UIColor labelColor];
+                cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+                cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 5 + offset) {
                 cell.textLabel.text = @"Send Email Alerts";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *emailAlertsSwitch = [[UISwitch alloc] init];
-                emailAlertsSwitch.on = self.sendEmailAlertsEnabled;
+                // Set to OFF if not premium or using own server
+                emailAlertsSwitch.on = isPremiumOrUsingOwnServer ? self.sendEmailAlertsEnabled : NO;
                 [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = emailAlertsSwitch;
                 emailAlertsSwitch.enabled = isPremiumOrUsingOwnServer;
                 cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
+                cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 6 + offset) {
                 cell.textLabel.text = @"Encrypt Email Data (Recommended)";
                 cell.accessoryType = UITableViewCellAccessoryNone;
@@ -306,7 +308,7 @@
                 cell.accessoryView = encryptEmailDataSwitch;
                 encryptEmailDataSwitch.enabled = isPremiumOrUsingOwnServer;
                 cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
+                cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 7 + offset) {
                 NSLog(@"Configuring 'Use own email server' cell");
                 cell.textLabel.text = @"Use own email server";
@@ -357,6 +359,8 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSLog(@"Tapped section %ld, row %ld", (long)indexPath.section, (long)indexPath.row);
+    BOOL isPremiumOrUsingOwnServer = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled;
+    
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
             // Stream via Wi-Fi - handled by switch
@@ -378,12 +382,18 @@
             }
         } else {
             NSInteger offset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
-            if (indexPath.row == 4 + offset && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled)) {
-                [self showEmailInputDialog];
+            if (indexPath.row == 4 + offset) {
+                [self showEmailInputDialog]; // Always allow email changes
             } else if (indexPath.row == 5 + offset) {
-                // Send Email Alerts - handled by switch
+                if (!isPremiumOrUsingOwnServer) {
+                    [self showPremiumRequiredAlert];
+                }
+                // Send Email Alerts - handled by switch, no action needed here unless premium
             } else if (indexPath.row == 6 + offset) {
-                // Encrypt Email Data - handled by switch
+                if (!isPremiumOrUsingOwnServer) {
+                    [self showPremiumRequiredAlert];
+                }
+                // Encrypt Email Data - handled by switch, no action needed here unless premium
             } else if (indexPath.row == 7 + offset) {
                 // Use own email server - handled by switch
             } else if (indexPath.row == 8 + offset) {
@@ -408,6 +418,19 @@
         [[StoreManager sharedInstance] fetchAndPurchaseProduct];
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)showPremiumRequiredAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Premium Required"
+                                                                   message:@"This feature requires a premium subscription or use of your own email server."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:nil];
+    
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
