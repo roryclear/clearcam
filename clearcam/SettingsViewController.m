@@ -20,6 +20,7 @@
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *emailSchedules; // Array to store multiple schedules
 @property (nonatomic, assign) BOOL isScheduleSectionExpanded; // Track if schedule section is expanded
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
+@property (nonatomic, strong) id ipAddressObserver;
 
 @end
 
@@ -48,6 +49,12 @@
     
     // Initialize sendEmailAlertsEnabled from NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    
+    [self updateIPAddressDisplay]; // Set initial value
+    [defaults addObserver:self
+               forKeyPath:@"DeviceIPAddress"
+                  options:NSKeyValueObservingOptionNew
+                  context:nil];
     
     if ([defaults objectForKey:@"stream_via_wifi_enabled"] != nil) {
         self.streamViaWiFiEnabled = [defaults boolForKey:@"stream_via_wifi_enabled"];
@@ -141,8 +148,29 @@
 }
 
 - (void)dealloc {
-    // Unregister from notifications to prevent crashes
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [[NSUserDefaults standardUserDefaults] removeObserver:self
+                                              forKeyPath:@"DeviceIPAddress"];
+}
+
+- (void)updateIPAddressDisplay {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *ipAddress = [defaults stringForKey:@"DeviceIPAddress"];
+    if (ipAddress && ipAddress.length > 0) {
+        self.emailServerAddress = [NSString stringWithFormat:@"http://%@", ipAddress];
+    } else {
+        self.emailServerAddress = @"Waiting for IP...";
+    }
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary *)change
+                       context:(void *)context {
+    if ([keyPath isEqualToString:@"DeviceIPAddress"]) {
+        [self updateIPAddressDisplay];
+        [self.tableView reloadData];
+    }
 }
 
 - (void)streamViaWiFiSwitchToggled:(UISwitch *)sender {
@@ -239,11 +267,15 @@
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Stream via Wi-Fi";
-            cell.detailTextLabel.text = @"192.168.1.1";
+            NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
+            cell.detailTextLabel.text = ipAddress && ipAddress.length > 0 ?
+                                       [NSString stringWithFormat:@"http://%@", ipAddress] :
+                                       @"Waiting for IP...";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *wifiSwitch = [[UISwitch alloc] init];
             wifiSwitch.on = self.streamViaWiFiEnabled;
-            [wifiSwitch addTarget:self action:@selector(streamViaWiFiSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            [wifiSwitch addTarget:self action:@selector(streamViaWiFiSwitchToggled:)
+                 forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = wifiSwitch;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 1) {
