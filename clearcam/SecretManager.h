@@ -15,7 +15,6 @@
 // Decryption Key Management (Multiple Keys)
 - (BOOL)saveDecryptionKey:(NSString *)key withIdentifier:(NSString *)identifier error:(NSError **)error;
 - (NSArray<NSString *> *)getAllDecryptionKeys;
-- (BOOL)deleteDecryptionKeyWithIdentifier:(NSString *)identifier error:(NSError **)error;
 
 // Generic Key Management
 - (BOOL)deleteKeyWithIdentifier:(NSString *)identifier error:(NSError **)error;

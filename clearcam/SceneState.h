@@ -11,6 +11,5 @@
 @property (strong, nonatomic) NSManagedObjectContext *backgroundContext;
 @property (strong, nonatomic) NSDate *last_email_time;
 - (void)processOutput:(NSArray *)array withImage:(CIImage *)image;
-- (void)writeToFileWithString:(NSString *)customString;
 
 @end
