@@ -21,6 +21,7 @@
 @property (nonatomic, assign) BOOL isScheduleSectionExpanded; // Track if schedule section is expanded
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
 @property (nonatomic, strong) id ipAddressObserver;
+@property (nonatomic, assign) NSInteger threshold; // New property for threshold
 
 @end
 
@@ -94,6 +95,13 @@
     } else {
         self.useOwnEmailServerEnabled = NO;
         [defaults setBool:NO forKey:@"use_own_email_server_enabled"];
+    }
+    
+    if ([defaults objectForKey:@"threshold"] != nil) {
+        self.threshold = [defaults integerForKey:@"threshold"];
+    } else {
+        self.threshold = 25; // Default value of 25%
+        [defaults setInteger:25 forKey:@"threshold"];
     }
     
     self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled;
@@ -262,6 +270,10 @@
             cell.detailTextLabel.text = nil;
             cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
             cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 4 && !self.isPresetsSectionExpanded) {
+            cell.textLabel.text = @"Detection Certainty Threshold";
+            cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
+            cell.userInteractionEnabled = YES;
         } else if (self.isPresetsSectionExpanded && indexPath.row >= 4 && indexPath.row < 4 + [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
             if (indexPath.row - 4 < presetKeys.count) {
@@ -281,13 +293,17 @@
         } else {
             NSInteger offset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
             if (indexPath.row == 4 + offset) {
+                cell.textLabel.text = @"Detection Certainty Threshold";
+                cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 5 + offset) {
                 cell.textLabel.text = @"Email Address";
                 NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
                 cell.detailTextLabel.text = email ?: @"Not set";
                 cell.textLabel.textColor = [UIColor labelColor];
                 cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 5 + offset) {
+            } else if (indexPath.row == 6 + offset) {
                 cell.textLabel.text = @"Send Email Alerts";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *emailAlertsSwitch = [[UISwitch alloc] init];
@@ -297,7 +313,7 @@
                 emailAlertsSwitch.enabled = isPremiumOrUsingOwnServer;
                 cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 6 + offset) {
+            } else if (indexPath.row == 7 + offset) {
                 cell.textLabel.text = @"Encrypt Email Data (Recommended)";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
@@ -307,13 +323,13 @@
                 encryptEmailDataSwitch.enabled = isPremiumOrUsingOwnServer;
                 cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 7 + offset) {
+            } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 8 + offset) {
+            } else if (indexPath.row == 9 + offset) {
                 NSLog(@"Configuring 'Use own email server' cell");
                 cell.textLabel.text = @"Use own email server";
                 cell.accessoryType = UITableViewCellAccessoryNone;
@@ -322,16 +338,16 @@
                 [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = useOwnEmailServerSwitch;
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 10 + offset) {
                 cell.textLabel.text = @"Manage Email Schedules";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
                 cell.textLabel.text = @"Server Address";
                 cell.detailTextLabel.text = self.emailServerAddress;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 12 + offset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
@@ -348,6 +364,47 @@
     }
 
     return cell;
+}
+
+- (void)showThresholdInputDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Threshold"
+                                                                   message:@"Enter a % value between 1 and 100 (default is 25)."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Threshold (1-100)";
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        textField.text = [NSString stringWithFormat:@"%ld", (long)self.threshold];
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *thresholdText = alert.textFields.firstObject.text;
+        NSInteger newThreshold = [thresholdText integerValue];
+        if (newThreshold >= 1 && newThreshold <= 100) {
+            self.threshold = newThreshold;
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setInteger:self.threshold forKey:@"threshold"];
+            [defaults synchronize];
+            [self.tableView reloadData];
+        } else {
+            UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"Invalid Threshold"
+                                                                               message:@"Please enter a valid value between 1 and 100"
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+            [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:errorAlert animated:YES completion:nil];
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (NSString *)scheduleDescriptionFor:(NSDictionary *)schedule {
@@ -387,18 +444,20 @@
         } else {
             NSInteger offset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
             if (indexPath.row == 4 + offset) {
-                [self showEmailInputDialog];
+                [self showThresholdInputDialog]; // Fixed: Correct method for Threshold
             } else if (indexPath.row == 5 + offset) {
-                if (!isPremiumOrUsingOwnServer) {
-                    [self showPremiumRequiredAlert];
-                }
-                // Send Email Alerts - handled by switch
+                [self showEmailInputDialog];
             } else if (indexPath.row == 6 + offset) {
                 if (!isPremiumOrUsingOwnServer) {
                     [self showPremiumRequiredAlert];
                 }
-                // Encrypt Email Data - handled by switch
+                // Send Email Alerts - handled by switch
             } else if (indexPath.row == 7 + offset) {
+                if (!isPremiumOrUsingOwnServer) {
+                    [self showPremiumRequiredAlert];
+                }
+                // Encrypt Email Data - handled by switch
+            } else if (indexPath.row == 8 + offset) {
                 if (isPremiumOrUsingOwnServer) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                         if (success) {
@@ -408,9 +467,9 @@
                 } else {
                     [self showPremiumRequiredAlert];
                 }
-            } else if (indexPath.row == 8 + offset) {
-                // Use own email server - handled by switch
             } else if (indexPath.row == 9 + offset) {
+                // Use own email server - handled by switch
+            } else if (indexPath.row == 10 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
                 scheduleVC.emailSchedules = [self.emailSchedules mutableCopy];
                 scheduleVC.completionHandler = ^(NSArray<NSDictionary *> *schedules) {
@@ -422,9 +481,9 @@
                 };
                 UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:scheduleVC];
                 [self presentViewController:navController animated:YES completion:nil];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
-                [self showEmailServerAddressInputDialog];
             } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
+                [self showEmailServerAddressInputDialog];
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 12 + offset) {
                 [self testEmailServer];
             }
         }
