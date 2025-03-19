@@ -19,6 +19,7 @@
 @property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *emailSchedules; // Array to store multiple schedules
 @property (nonatomic, assign) BOOL isScheduleSectionExpanded; // Track if schedule section is expanded
+@property (nonatomic, assign) BOOL streamViaWiFiEnabled;
 
 @end
 
@@ -47,6 +48,14 @@
     
     // Initialize sendEmailAlertsEnabled from NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    
+    if ([defaults objectForKey:@"stream_via_wifi_enabled"] != nil) {
+        self.streamViaWiFiEnabled = [defaults boolForKey:@"stream_via_wifi_enabled"];
+    } else {
+        self.streamViaWiFiEnabled = NO;
+        [defaults setBool:NO forKey:@"stream_via_wifi_enabled"];
+        [defaults synchronize];
+    }
     
     self.emailSchedules = [[defaults arrayForKey:@"email_schedules"] mutableCopy];
     if (!self.emailSchedules) {
@@ -136,6 +145,17 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+- (void)streamViaWiFiSwitchToggled:(UISwitch *)sender {
+    self.streamViaWiFiEnabled = sender.on;
+    
+    // Save the toggle state to NSUserDefaults
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:self.streamViaWiFiEnabled forKey:@"stream_via_wifi_enabled"];
+    [defaults synchronize];
+    
+    NSLog(@"Stream via Wi-Fi: %@", self.streamViaWiFiEnabled ? @"Enabled" : @"Disabled");
+}
+
 #pragma mark - Subscription Status
 
 - (void)checkSubscriptionStatus {
@@ -181,7 +201,7 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 5; // Resolution, Detect objects, Email, Send Email Alerts, Encrypt, Use own server
+        NSInteger baseRows = 6; // Stream via Wi-Fi, Resolution, Detect objects, Email, Send Email Alerts, Encrypt
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
             baseRows += 2; // Server Address and Test own server
         }
@@ -200,7 +220,7 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"SettingsCell"];
     if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"SettingsCell"];
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"SettingsCell"];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
 
@@ -218,21 +238,30 @@
 
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
+            cell.textLabel.text = @"Stream via Wi-Fi";
+            cell.detailTextLabel.text = @"192.168.1.1";
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            UISwitch *wifiSwitch = [[UISwitch alloc] init];
+            wifiSwitch.on = self.streamViaWiFiEnabled;
+            [wifiSwitch addTarget:self action:@selector(streamViaWiFiSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = wifiSwitch;
+            cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 1) {
             cell.textLabel.text = @"Resolution";
             cell.detailTextLabel.text = self.selectedResolution;
             cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 1) {
+        } else if (indexPath.row == 2) {
             cell.textLabel.text = @"Detect objects";
             cell.detailTextLabel.text = self.selectedPresetKey;
             cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 2) {
+        } else if (indexPath.row == 3) {
             cell.textLabel.text = @"Email Address";
             NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
             cell.detailTextLabel.text = email ?: @"Not set";
             cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
             cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
             cell.detailTextLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor secondaryLabelColor] : [UIColor grayColor];
-        } else if (indexPath.row == 3) {
+        } else if (indexPath.row == 4) {
             cell.textLabel.text = @"Send Email Alerts";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *emailAlertsSwitch = [[UISwitch alloc] init];
@@ -242,7 +271,7 @@
             emailAlertsSwitch.enabled = isPremiumOrUsingOwnServer;
             cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
-        } else if (indexPath.row == 4) {
+        } else if (indexPath.row == 5) {
             cell.textLabel.text = @"Encrypt Email Data (Recommended)";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
@@ -252,7 +281,7 @@
             encryptEmailDataSwitch.enabled = isPremiumOrUsingOwnServer;
             cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = isPremiumOrUsingOwnServer;
-        } else if (indexPath.row == 5) {
+        } else if (indexPath.row == 6) {
             cell.textLabel.text = @"Use own email server";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
@@ -260,11 +289,11 @@
             [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = useOwnEmailServerSwitch;
             cell.userInteractionEnabled = YES;
-        } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 6) {
+        } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 7) {
             cell.textLabel.text = @"Server Address";
             cell.detailTextLabel.text = self.emailServerAddress;
             cell.userInteractionEnabled = YES;
-        } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 7) {
+        } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 8) {
             cell.textLabel.text = @"Test own server";
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.detailTextLabel.text = nil;
@@ -323,20 +352,22 @@
     NSLog(@"Tapped section %ld, row %ld", (long)indexPath.section, (long)indexPath.row);
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
-            [self showResolutionPicker];
+            // Stream via Wi-Fi - handled by switch
         } else if (indexPath.row == 1) {
+            [self showResolutionPicker];
+        } else if (indexPath.row == 2) {
             [self showYoloIndexesPicker];
-        } else if (indexPath.row == 2 && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled)) {
+        } else if (indexPath.row == 3 && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled)) {
             [self showEmailInputDialog];
-        } else if (indexPath.row == 3) {
-            // Send Email Alerts - handled by switch
         } else if (indexPath.row == 4) {
-            // Encrypt Email Data - handled by switch
+            // Send Email Alerts - handled by switch
         } else if (indexPath.row == 5) {
+            // Encrypt Email Data - handled by switch
+        } else if (indexPath.row == 6) {
             // Use own email server - handled by switch
-        } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 6) {
-            [self showEmailServerAddressInputDialog];
         } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 7) {
+            [self showEmailServerAddressInputDialog];
+        } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 8) {
             [self testEmailServer];
         }
     } else if (indexPath.section == 1) {
