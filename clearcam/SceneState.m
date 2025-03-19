@@ -153,13 +153,4 @@
     }
 }
 
-// Helper function to get MIME type for a file
-- (NSString *)mimeTypeForFileAtPath:(NSString *)path {
-    CFStringRef fileExtension = (__bridge CFStringRef)[path pathExtension];
-    CFStringRef UTI = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, fileExtension, NULL);
-    CFStringRef mimeType = UTTypeCopyPreferredTagWithClass(UTI, kUTTagClassMIMEType);
-    CFRelease(UTI);
-    return (__bridge_transfer NSString *)mimeType ?: @"application/octet-stream";
-}
-
 @end

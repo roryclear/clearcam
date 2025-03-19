@@ -323,7 +323,7 @@ UInt8 *rgbData;
             continue;
         }
 
-        [encoder setComputePipelineState:self.pipeline_states[@[values[@"name"][0], values[@"datahash"][0]]]];
+        [encoder setComputePipelineState:self.pipeline_states[@[values[@"name"][0], values[@"datahash"][0]]]]; //ignore warning
         for (int i = 0; i < [(NSArray *)values[@"bufs"] count]; i++) {
             [encoder setBuffer:self.buffers[values[@"bufs"][i]] offset:0 atIndex:i];
         }
