@@ -210,9 +210,9 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 10; // Added 1 for "Change Encryption Password": Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Email, Send Email Alerts, Encrypt, Change Encryption Password, Use own email server, Manage Email Schedules
+        NSInteger baseRows = 11; // Updated to 11: Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Email, Send Email Alerts, Encrypt, Change Encryption Password, Use own email server, Manage Email Schedules
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            baseRows += 2; // Server Address and Test own server
+            baseRows += 2; // Add Server Address and Test own server
         }
         if (self.isPresetsSectionExpanded) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
@@ -330,7 +330,6 @@
                 cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 9 + offset) {
-                NSLog(@"Configuring 'Use own email server' cell");
                 cell.textLabel.text = @"Use own email server";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
@@ -444,7 +443,7 @@
         } else {
             NSInteger offset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
             if (indexPath.row == 4 + offset) {
-                [self showThresholdInputDialog]; // Fixed: Correct method for Threshold
+                [self showThresholdInputDialog];
             } else if (indexPath.row == 5 + offset) {
                 [self showEmailInputDialog];
             } else if (indexPath.row == 6 + offset) {
