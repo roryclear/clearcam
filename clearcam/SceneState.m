@@ -96,9 +96,62 @@
                     NSLog(@"Image saved at path: %@", filePath);
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 60) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
-                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] && ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
-                            [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
-                            self.last_email_time = [NSDate date]; // Set to now
+                        //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
+                        //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                        //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
+                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]){ //todo add back other stuff
+                            // Get the current hour
+                            NSDate *now = [NSDate date];
+                            NSCalendar *calendar = [NSCalendar currentCalendar];
+                            NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
+                            NSInteger currentHour = components.hour;
+                            NSInteger currentMinute = components.minute;
+                            NSInteger currentWeekday = components.weekday; // Sunday = 1, Monday = 2, ..., Saturday = 7
+
+                            // Map weekday number to day string
+                            NSArray *weekdayStrings = @[@"Sun", @"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat"];
+                            NSString *currentDay = weekdayStrings[currentWeekday - 1];
+
+                            // Retrieve schedules from NSUserDefaults
+                            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                            NSArray *emailSchedules = [defaults arrayForKey:@"email_schedules"];
+                            BOOL shouldSendEmail = NO;
+
+                            if (emailSchedules.count > 0) {
+                                for (NSDictionary *schedule in emailSchedules) {
+                                    BOOL isEnabled = [schedule[@"enabled"] boolValue];
+                                    if (!isEnabled) continue; // Skip disabled schedules
+
+                                    NSArray *days = schedule[@"days"];
+                                    NSNumber *startHour = schedule[@"startHour"];
+                                    NSNumber *startMinute = schedule[@"startMinute"];
+                                    NSNumber *endHour = schedule[@"endHour"];
+                                    NSNumber *endMinute = schedule[@"endMinute"];
+
+                                    // Check if current day is in the schedule's days
+                                    if ([days containsObject:currentDay]) {
+                                        // Convert current time and schedule times to minutes since midnight for easier comparison
+                                        NSInteger currentTimeInMinutes = (currentHour * 60) + currentMinute;
+                                        NSInteger startTimeInMinutes = ([startHour integerValue] * 60) + [startMinute integerValue];
+                                        NSInteger endTimeInMinutes = ([endHour integerValue] * 60) + [endMinute integerValue];
+
+                                        // Check if current time is within the time window
+                                        if (currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes < endTimeInMinutes) {
+                                            shouldSendEmail = YES;
+                                            break; // No need to check further schedules
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Send email if allowed by schedule
+                            if (shouldSendEmail) {
+                                [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                                self.last_email_time = now;
+                                NSLog(@"Email sent: Within scheduled time");
+                            } else {
+                                NSLog(@"Email suppressed: Outside scheduled time or no matching schedule");
+                            }
                         }
                     } else {
                         NSLog(@"NOT sending an email");
