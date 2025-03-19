@@ -142,6 +142,13 @@
     return section == 0 ? @"Repeat" : @"Time Window";
 }
 
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.section == 1) {
+        return 100; // Increased height to accommodate the UIDatePicker
+    }
+    return UITableViewAutomaticDimension; // Default height for days
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"EditorCell" forIndexPath:indexPath];
     
@@ -151,24 +158,33 @@
     cell.accessoryView = nil;
     
     if (indexPath.section == 0) {
+        // Days section
         NSArray *allDays = @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"];
         NSString *day = allDays[indexPath.row];
         cell.textLabel.text = day;
         cell.accessoryType = [self.schedule[@"days"] containsObject:day] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     } else if (indexPath.section == 1) {
+        // Time Window section with embedded UIDatePicker
+        UIDatePicker *picker = [[UIDatePicker alloc] init];
+        picker.datePickerMode = UIDatePickerModeTime;
+        picker.tag = indexPath.row; // 0 for Start Time, 1 for End Time
+        
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Start Time";
-            NSInteger startHour = [self.schedule[@"startHour"] integerValue];
-            NSInteger startMinute = [self.schedule[@"startMinute"] integerValue];
-            cell.detailTextLabel.text = [NSString stringWithFormat:@"%02ld:%02ld", (long)startHour, (long)startMinute];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            NSDateComponents *startComponents = [[NSDateComponents alloc] init];
+            startComponents.hour = [self.schedule[@"startHour"] integerValue];
+            startComponents.minute = [self.schedule[@"startMinute"] integerValue];
+            picker.date = [[NSCalendar currentCalendar] dateFromComponents:startComponents];
         } else if (indexPath.row == 1) {
             cell.textLabel.text = @"End Time";
-            NSInteger endHour = [self.schedule[@"endHour"] integerValue];
-            NSInteger endMinute = [self.schedule[@"endMinute"] integerValue];
-            cell.detailTextLabel.text = [NSString stringWithFormat:@"%02ld:%02ld", (long)endHour, (long)endMinute];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            NSDateComponents *endComponents = [[NSDateComponents alloc] init];
+            endComponents.hour = [self.schedule[@"endHour"] integerValue];
+            endComponents.minute = [self.schedule[@"endMinute"] integerValue];
+            picker.date = [[NSCalendar currentCalendar] dateFromComponents:endComponents];
         }
+        
+        [picker addTarget:self action:@selector(timePickerChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = picker; // Embed the picker directly in the cell
     }
     
     return cell;
@@ -176,6 +192,7 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
+        // Days section
         NSArray *allDays = @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"];
         NSString *day = allDays[indexPath.row];
         NSMutableArray *days = [self.schedule[@"days"] mutableCopy];
@@ -186,51 +203,9 @@
         }
         self.schedule[@"days"] = days;
         [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
-    } else if (indexPath.section == 1) {
-        [self showTimePickerForRow:indexPath.row];
     }
+    // No action needed for section 1; picker is already interactive
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-}
-
-- (void)showTimePickerForRow:(NSInteger)row {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleActionSheet];
-    
-    UIDatePicker *picker = [[UIDatePicker alloc] init];
-    picker.datePickerMode = UIDatePickerModeTime;
-    picker.translatesAutoresizingMaskIntoConstraints = NO;
-    picker.tag = row; // Use tag to track which row (0 = start, 1 = end)
-    
-    if (row == 0) {
-        NSDateComponents *startComponents = [[NSDateComponents alloc] init];
-        startComponents.hour = [self.schedule[@"startHour"] integerValue];
-        startComponents.minute = [self.schedule[@"startMinute"] integerValue];
-        picker.date = [[NSCalendar currentCalendar] dateFromComponents:startComponents];
-    } else {
-        NSDateComponents *endComponents = [[NSDateComponents alloc] init];
-        endComponents.hour = [self.schedule[@"endHour"] integerValue];
-        endComponents.minute = [self.schedule[@"endMinute"] integerValue];
-        picker.date = [[NSCalendar currentCalendar] dateFromComponents:endComponents];
-    }
-    
-    [picker addTarget:self action:@selector(timePickerChanged:) forControlEvents:UIControlEventValueChanged];
-    
-    [alert.view addSubview:picker];
-    [NSLayoutConstraint activateConstraints:@[
-        [picker.topAnchor constraintEqualToAnchor:alert.view.topAnchor constant:10],
-        [picker.leadingAnchor constraintEqualToAnchor:alert.view.leadingAnchor constant:10],
-        [picker.trailingAnchor constraintEqualToAnchor:alert.view.trailingAnchor constant:-10],
-        [picker.heightAnchor constraintEqualToConstant:162]
-    ]];
-    
-    [alert.view.heightAnchor constraintGreaterThanOrEqualToConstant:200].active = YES;
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
-    
-    [self presentViewController:alert animated:YES completion:^{
-        [self timePickerChanged:picker]; // Apply initial value
-    }];
 }
 
 - (void)timePickerChanged:(UIDatePicker *)picker {
@@ -243,7 +218,7 @@
         self.schedule[@"endHour"] = @(components.hour);
         self.schedule[@"endMinute"] = @(components.minute);
     }
-    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone];
+    // No need to reload the table view since the picker itself shows the updated time
 }
 
 - (void)doneTapped:(id)sender {
