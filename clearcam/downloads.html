@@ -126,55 +126,62 @@
             background-color: #f4f4f4;
         }
 
+        #eventsContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px; /* Space between cards in single column */
+        }
+
         .event-card {
             background: white;
             padding: 15px;
-            margin: 15px auto;
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 600px; /* Increased max-width for bigger boxes */
+            width: 100%;
+            max-width: 600px; /* Fixed max-width for consistency */
+            box-sizing: border-box; /* Include padding in width */
         }
 
         .event-content {
             display: flex;
-            justify-content: space-between; /* Distributes space better */
+            justify-content: space-between;
             align-items: center;
         }
 
         .event-image {
-            width: 92%; /* Increased image width */
+            width: 92%; /* Fixed image width */
             height: auto;
             cursor: pointer;
             border-radius: 5px;
-            object-fit: cover; /* Ensures image maintains aspect ratio */
+            object-fit: cover; /* Maintain aspect ratio */
         }
 
         .button-group {
             display: flex;
             flex-direction: column;
-            gap: 0; /* Reset gap since we're using the spacer */
+            gap: 0; /* No gap, using spacer */
             margin-left: 10px;
-            flex-shrink: 0; /* Prevents the button group from shrinking */
-            height: 100%; /* Make it full height */
-            justify-content: space-between; /* Push buttons to the ends */
+            flex-shrink: 0; /* No shrinking */
+            height: 100%; /* Full height */
+            justify-content: space-between; /* Buttons at ends */
         }
 
-        /* Spacer to push buttons apart */
         .spacer {
-            height: 50px; /* Significant height to create space */
+            height: 50px; /* Space between buttons */
         }
 
         .action-btn {
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 18px; /* Slightly larger icons */
+            font-size: 18px;
             color: #555;
             padding: 5px;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 30px; /* Fixed width for buttons */
+            width: 30px; /* Fixed button width */
         }
 
         .action-btn:hover {
@@ -189,6 +196,7 @@
             color: blue;
         }
 
+        /* Mobile adjustments */
         @media (max-width: 600px) {
             .event-card {
                 max-width: 95%;
@@ -196,7 +204,7 @@
             }
 
             .event-image {
-                width: 88%; /* Adjusted for smaller screens */
+                width: 88%;
             }
 
             .button-group {
@@ -204,12 +212,29 @@
             }
 
             .spacer {
-                height: 40px; /* Still significant but slightly smaller on mobile */
+                height: 40px;
             }
 
             .action-btn {
                 font-size: 16px;
                 width: 25px;
+            }
+        }
+
+        /* Grid layout for wider screens */
+        @media (min-width: 1240px) { /* Adjusted breakpoint to fit 2 cards */
+            #eventsContainer {
+                display: grid;
+                grid-template-columns: repeat(2, 600px); /* Fixed width columns, no shrinking */
+                gap: 20px; /* Space between grid items */
+                justify-content: center; /* Center the grid */
+                max-width: 1240px; /* 2x600px + 20px gap + some padding */
+                margin: 0 auto; /* Center the container */
+            }
+
+            .event-card {
+                max-width: 600px; /* Same as single column, no shrinking */
+                margin: 0; /* Remove auto margin in grid */
             }
         }
 
