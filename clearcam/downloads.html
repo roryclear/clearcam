@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event List</title>
+    <title>Events</title>
     <!-- Add Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
@@ -46,11 +46,12 @@
                     <div class="event-content">
                         <img src="${imageURL}" alt="Event Image" class="event-image" onclick="playEvent('${date}', ${startSeconds})">
                         <div class="button-group">
-                            <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
-                                <i class="fas fa-trash"></i>
-                            </button>
                             <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
                                 <i class="fas fa-download"></i>
+                            </button>
+                            <div class="spacer"></div>
+                            <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
+                                <i class="fas fa-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -151,9 +152,16 @@
         .button-group {
             display: flex;
             flex-direction: column;
-            gap: 12px; /* Slightly increased gap between buttons */
+            gap: 0; /* Reset gap since we're using the spacer */
             margin-left: 10px;
             flex-shrink: 0; /* Prevents the button group from shrinking */
+            height: 100%; /* Make it full height */
+            justify-content: space-between; /* Push buttons to the ends */
+        }
+
+        /* Spacer to push buttons apart */
+        .spacer {
+            height: 50px; /* Significant height to create space */
         }
 
         .action-btn {
@@ -195,6 +203,10 @@
                 margin-left: 5px;
             }
 
+            .spacer {
+                height: 40px; /* Still significant but slightly smaller on mobile */
+            }
+
             .action-btn {
                 font-size: 16px;
                 width: 25px;
@@ -216,7 +228,7 @@
     </style>
 </head>
 <body>
-    <h1>Event List</h1>
+    <h1>Events</h1>
     <div id="eventsContainer"></div>
 
     <div id="timePickerModal" class="modal">
