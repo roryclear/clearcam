@@ -646,7 +646,9 @@
         // ✅ Send HTTP Headers
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: video/mp4\r\n");
-        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"merged_video.mp4\"\r\n");
+        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s-%s.mp4\"\r\n",
+            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:startDate] UTF8String],
+            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:endDate] UTF8String]);
         dprintf(clientSocket, "Content-Length: %lu\r\n", (unsigned long)fileSize);
         dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
         dprintf(clientSocket, "\r\n");
