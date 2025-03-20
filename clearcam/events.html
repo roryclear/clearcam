@@ -3,18 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event List</title>
+    <title>Events</title>
+    <!-- Add Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
         let currentTimestamp = null;
-        let defaultOffset = 30;
-
-        function loadSettings() {
-            const savedOffset = localStorage.getItem("defaultOffset");
-            if (savedOffset !== null) {
-                defaultOffset = parseInt(savedOffset, 10);
-                document.getElementById("offsetInput").value = defaultOffset;
-            }
-        }
+        const defaultOffset = 30; // Default offset set to 30 seconds
 
         async function fetchEvents() {
             try {
@@ -49,14 +43,47 @@
                 const card = document.createElement('div');
                 card.className = 'event-card';
                 card.innerHTML = `
-                    <img src="${imageURL}" alt="Event Image" class="event-image" onclick="playEvent('${date}', ${startSeconds})">
-                    <div class="button-group">
-                        <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">Delete</button>
-                        <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">Download</button>
+                    <div class="event-content">
+                        <img 
+                            src="${imageURL}" 
+                            alt="Event Image" 
+                            class="event-image" 
+                            onclick="playEvent('${date}', ${startSeconds})" 
+                            data-retry="0" 
+                            onerror="retryImageLoad(this, '${imageURL}', 3)"
+                        >
+                        <div class="button-group">
+                            <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <div class="spacer"></div>
+                            <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                 `;
                 container.appendChild(card);
             });
+        }
+
+        // New function to handle image retry logic
+        function retryImageLoad(imgElement, imageURL, maxRetries) {
+            const retryCount = parseInt(imgElement.getAttribute('data-retry'));
+            if (retryCount < maxRetries) {
+                // Increment retry count and try loading again after a short delay
+                imgElement.setAttribute('data-retry', retryCount + 1);
+                setTimeout(() => {
+                    imgElement.src = ''; // Clear the src to force reload
+                    imgElement.src = imageURL; // Set it back to trigger reload
+                }, 1000); // Wait 1 second before retrying
+            } else {
+                // Max retries reached, show a fallback
+                imgElement.src = 'path/to/placeholder-image.jpg'; // Replace with your placeholder image
+                imgElement.alt = 'Image failed to load';
+                imgElement.style.opacity = '0.5'; // Optional: dim the placeholder
+                imgElement.onclick = null; // Disable click if image fails
+            }
         }
 
         async function deleteEvent(timeStamp) {
@@ -112,28 +139,8 @@
             document.getElementById("timePickerModal").style.display = "none";
         }
 
-        function openSettings() {
-            document.getElementById("settingsModal").style.display = "block";
-        }
-
-        function closeSettings() {
-            document.getElementById("settingsModal").style.display = "none";
-        }
-
-        function saveSettings() {
-            const newOffset = parseInt(document.getElementById("offsetInput").value, 10);
-            if (isNaN(newOffset) || newOffset < 1) {
-                alert("Please enter a valid number greater than 0.");
-                return;
-            }
-            defaultOffset = newOffset;
-            localStorage.setItem("defaultOffset", newOffset);
-            closeSettings();
-        }
-
         window.onload = function() {
             fetchEvents();
-            loadSettings();
         };
     </script>
     <style>
@@ -145,55 +152,131 @@
             background-color: #f4f4f4;
         }
 
+        #eventsContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px; /* Space between cards in single column */
+        }
+
         .event-card {
             background: white;
             padding: 15px;
-            margin: 10px auto;
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 800px;
+            width: 100%;
+            max-width: 600px; /* Fixed max-width for consistency */
+            box-sizing: border-box; /* Include padding in width */
+        }
+
+        .event-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .event-image {
-            width: 100%;
+            width: 92%; /* Fixed image width */
             height: auto;
             cursor: pointer;
-            border-radius: 0px;
+            border-radius: 5px;
+            object-fit: cover; /* Maintain aspect ratio */
         }
 
         .button-group {
-            margin-top: 10px;
             display: flex;
-            justify-content: space-around;
+            flex-direction: column;
+            gap: 0; /* No gap, using spacer */
+            margin-left: 10px;
+            flex-shrink: 0; /* No shrinking */
+            height: 100%; /* Full height */
+            justify-content: space-between; /* Buttons at ends */
+        }
+
+        .spacer {
+            height: 50px; /* Space between buttons */
         }
 
         .action-btn {
-            padding: 10px 15px;
+            background: none;
             border: none;
-            border-radius: 5px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px;
+            color: #555;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
         }
 
-        .delete-btn {
-            background-color: red;
-            color: white;
+        .action-btn:hover {
+            color: #000;
         }
 
-        .download-btn {
-            background-color: blue;
-            color: white;
+        .delete-btn:hover {
+            color: red;
         }
 
+        .download-btn:hover {
+            color: blue;
+        }
+
+        /* Touch device adjustments */
+        @media (hover: none) {
+            .delete-btn:hover {
+                color: #555;
+            }
+            .delete-btn:active {
+                color: red;
+            }
+            .download-btn:hover {
+                color: #555;
+            }
+            .download-btn:active {
+                color: blue;
+            }
+        }
+
+        /* Mobile adjustments */
         @media (max-width: 600px) {
             .event-card {
-                max-width: 90%;
+                max-width: 95%;
+                padding: 12px;
+            }
+
+            .event-image {
+                width: 88%;
+            }
+
+            .button-group {
+                margin-left: 5px;
+            }
+
+            .spacer {
+                height: 40px;
             }
 
             .action-btn {
-                width: 45%;
-                font-size: 14px;
+                font-size: 16px;
+                width: 25px;
+            }
+        }
+
+        /* Grid layout for wider screens */
+        @media (min-width: 1240px) { /* Adjusted breakpoint to fit 2 cards */
+            #eventsContainer {
+                display: grid;
+                grid-template-columns: repeat(2, 600px); /* Fixed width columns, no shrinking */
+                gap: 20px; /* Space between grid items */
+                justify-content: center; /* Center the grid */
+                max-width: 1240px; /* 2x600px + 20px gap + some padding */
+                margin: 0 auto; /* Center the container */
+            }
+
+            .event-card {
+                max-width: 600px; /* Same as single column, no shrinking */
+                margin: 0; /* Remove auto margin in grid */
             }
         }
 
@@ -212,8 +295,7 @@
     </style>
 </head>
 <body>
-    <h1>Event List</h1>
-    <button onclick="openSettings()">⚙ Settings</button>
+    <h1>Events</h1>
     <div id="eventsContainer"></div>
 
     <div id="timePickerModal" class="modal">
@@ -227,15 +309,5 @@
         <button onclick="confirmDownload()">Download</button>
         <button onclick="closeModal()">Cancel</button>
     </div>
-
-    <div id="settingsModal" class="modal">
-        <h3>Settings</h3>
-        <label for="offsetInput">Default time offset (seconds):</label>
-        <input type="number" id="offsetInput" min="1" value="30">
-        <br><br>
-        <button onclick="saveSettings()">Save</button>
-        <button onclick="closeSettings()">Cancel</button>
-    </div>
 </body>
 </html>
-

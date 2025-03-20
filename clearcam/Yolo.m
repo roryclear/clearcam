@@ -182,7 +182,7 @@ UInt8 *rgbData;
         }
 
         //if (prob < 0.25) continue;
-        if (prob < (double)[[NSUserDefaults standardUserDefaults] integerForKey:@"threshold"] / 100.0) continue; // Use the dynamic threshold
+        if (prob < ([[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ? [[NSUserDefaults standardUserDefaults] integerForKey:@"threshold"] / 100.0 : 0.25)) continue;
 
         float xc = output[index];
         float yc = output[numPredictions + index];

@@ -312,7 +312,13 @@
 
                 <!-- New top controls bar, to find less shit icon -->
                 <div id="topControls">
-                    <a href="/downloads.html" id="downloadIcon">
+                    <a href="/multicamera.html" id="multiWindowIcon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                            <path d="M4 4h7v7H4zm9 0h7v7h-7zm-9 9h7v7H4zm9 0h7v7h-7z"/>
+                        </svg>
+                    </a>
+                    <!-- Existing download icon -->
+                    <a href="/events.html" id="downloadIcon">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
                             <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.48-4.23C15.91 6.01 13.43 3.5 10.5 3.5S5.09 6.01 5.09 9.5 7.57 15.5 10.5 15.5c1.61 0 3.09-.59 4.23-1.48l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-5 0C8.01 14 6 11.99 6 9.5S8.01 5 10.5 5 15 7.01 15 9.5 12.99 14 10.5 14z"/>
                         </svg>
@@ -577,7 +583,15 @@
             updateGaps();
         }
 
-
+        function hideMultiWindowIconInIframe() {
+            const multiWindowIcon = document.getElementById('multiWindowIcon');
+            if (window.self !== window.top) { // Page is in an iframe
+                multiWindowIcon.style.display = 'none';
+            } else { // Page is standalone
+                multiWindowIcon.style.display = 'inline-block';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', hideMultiWindowIconInIframe);
             
         
                 function updateGaps() {
@@ -1248,6 +1262,3 @@
     </script>
 </body>
 </html>
-
-
-

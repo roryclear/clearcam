@@ -437,8 +437,8 @@
     }
 
     
-    if ([filePath hasPrefix:@"main"] || [filePath hasPrefix:@"downloads"]) {
-        NSString *fileName = [filePath hasPrefix:@"main"] ? @"main.html" : @"downloads.html";
+    if ([filePath hasPrefix:@"multicamera"] || [filePath hasPrefix:@"events"]) {
+        NSString *fileName = [filePath hasPrefix:@"multicamera"] ? @"multicamera.html" : @"events.html";
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:[fileName stringByDeletingPathExtension] ofType:@"html"];
         
         if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
@@ -646,7 +646,9 @@
         // ✅ Send HTTP Headers
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: video/mp4\r\n");
-        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"merged_video.mp4\"\r\n");
+        dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s-%s.mp4\"\r\n",
+            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:startDate] UTF8String],
+            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:endDate] UTF8String]);
         dprintf(clientSocket, "Content-Length: %lu\r\n", (unsigned long)fileSize);
         dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
         dprintf(clientSocket, "\r\n");
@@ -727,12 +729,11 @@
 
             // File path for the image (with .jpg extension)
             NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
-
+            NSString *imageFilePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_small.jpg", eventTimeStamp]];
             NSError *error = nil;
-
             // Check if the image file exists and delete it
             if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
-                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error]) {
+                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
                     NSLog(@"Failed to delete image: %@", error.localizedDescription);
                 } else {
                     NSLog(@"Image deleted at path: %@", imageFilePath);
@@ -1034,7 +1035,7 @@
             @"timeStamp": readableDate,
             @"classType": [event valueForKey:@"classType"] ?: @"unknown",
             @"quantity": [event valueForKey:@"quantity"] ?: @(0),
-            @"imageURL": [NSString stringWithFormat:@"images/%lld.jpg", roundedTimestamp]
+            @"imageURL": [NSString stringWithFormat:@"images/%lld_small.jpg", roundedTimestamp]
         };
         [eventDataArray addObject:eventDict];
     }

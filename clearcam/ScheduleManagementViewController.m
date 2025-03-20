@@ -14,8 +14,21 @@
     self.tableView.allowsMultipleSelection = NO;
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ScheduleCell"];
     
+    // Add "Add" button
     UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addScheduleTapped:)];
     self.navigationItem.rightBarButtonItem = addButton;
+    
+    // Add "Done" button
+    UIBarButtonItem *doneButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(doneTapped:)];
+    self.navigationItem.leftBarButtonItem = doneButton;
+}
+
+- (void)doneTapped:(id)sender {
+    // Save changes and pop back
+    if (self.completionHandler) {
+        self.completionHandler(self.emailSchedules);
+    }
+    [self.navigationController popViewControllerAnimated:YES];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -104,13 +117,6 @@
         [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:newIndex inSection:0]] withRowAnimation:UITableViewRowAnimationNone];
     };
     [self.navigationController pushViewController:editorVC animated:YES];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    if (self.completionHandler) {
-        self.completionHandler(self.emailSchedules);
-    }
 }
 
 @end

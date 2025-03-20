@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resizable & Draggable Rectangles</title>
+    <title>Multi-camera view</title>
     <style>
         body {
             margin: 0;
@@ -17,8 +17,8 @@
         }
         .container {
             position: absolute;
-            width: 300px;
-            height: calc(300px * 9 / 16);
+            width: 360px; /* Initial width */
+            height: calc(360px * 9 / 16); /* Initial height */
             border: 2px solid black;
             touch-action: none;
         }
@@ -26,12 +26,12 @@
             position: absolute;
             width: 20px;
             height: 20px;
-            background: transparent; /* Invisible handle */
+            background: transparent;
             bottom: -10px;
             right: -10px;
             cursor: nwse-resize;
-            border: none; /* No border */
-            outline: none; /* No outline */
+            border: none;
+            outline: none;
         }
         .drag-bottom, .drag-left, .drag-right {
             position: absolute;
@@ -45,14 +45,12 @@
             height: 80%;
             width: 5%;
         }
-
         .drag-right {
             top: 0;
             right: 0;
-            height: 70%; /* Excluding the bottom-right corner */
+            height: 70%;
             width: 1%;
         }
-        
         iframe {
             width: 100%;
             height: 100%;
@@ -68,6 +66,7 @@
         
         const existingUrls = new Set();
         const rectangles = new Map();
+        const MIN_DIMENSION = 360; // Minimum dimension (width for landscape, height for portrait)
 
         async function fetchDevices() {
             try {
@@ -77,23 +76,21 @@
                 console.log('Devices fetched:', devices);
                 const newUrls = new Set(devices.map(ip => `http://${ip}`));
 
-                // Add new URLs
                 newUrls.forEach(url => {
                     if (!existingUrls.has(url)) {
                         existingUrls.add(url);
                         const rect = createRectangle(url);
                         rectangles.set(url, rect);
-                        updateURL(); // Update the URL after adding a new rectangle
+                        updateURL();
                     }
                 });
 
-                // Remove rectangles for URLs no longer present
                 [...existingUrls].forEach(url => {
                     if (!newUrls.has(url)) {
                         removeRectangle(url);
                         existingUrls.delete(url);
                         rectangles.delete(url);
-                        updateURL(); // Update the URL after removing a rectangle
+                        updateURL();
                     }
                 });
             } catch (error) {
@@ -104,19 +101,15 @@
         function removeRectangle(url) {
             const rect = rectangles.get(url);
             if (rect) {
-                // Get the height of the rectangle being removed
                 const rectHeight = rect.offsetHeight;
-
-                // Remove the rectangle from the DOM
                 rect.remove();
 
-                // Update the `currentTopPosition` and adjust the `top` style of rectangles below
                 if (window.innerWidth <= 600) {
                     const allRectangles = Array.from(document.querySelectorAll('.container'));
                     let currentTop = 0;
                     allRectangles.forEach(rectangle => {
                         rectangle.style.top = `${currentTop}px`;
-                        currentTop += rectangle.offsetHeight + 2; // 2px margin between rectangles
+                        currentTop += rectangle.offsetHeight + 2;
                     });
                     currentTopPosition = currentTop;
                 }
@@ -128,7 +121,7 @@
         }
 
         function startPolling() {
-            const pollingInterval = 5000; // Poll every 5 seconds (adjust as needed)
+            const pollingInterval = 5000;
             setInterval(fetchDevices, pollingInterval);
         }
         
@@ -148,17 +141,17 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            loadFromURL(); // Load configuration from URL
-            fetchDevices(); // Initial load
-            startPolling(); // Start periodic polling
+            loadFromURL();
+            fetchDevices();
+            startPolling();
         });
+
         let currentTopPosition = 0;
         function createRectangle(url) {
-              const rectangle = document.createElement('div');
-              rectangle.className = 'container';
+            const rectangle = document.createElement('div');
+            rectangle.className = 'container';
 
-              // On mobile, arrange in column with 100% width
-              if (window.innerWidth <= 600) {
+            if (window.innerWidth <= 600) {
                 rectangle.style.left = '0';
                 rectangle.style.width = '100%';
                 const screenWidth = window.innerWidth;
@@ -166,31 +159,33 @@
                 rectangle.style.height = `${rectangleHeight}px`;
                 rectangle.style.top = `${currentTopPosition}px`;
                 currentTopPosition += rectangleHeight + 2;
-              } else {
-                rectangle.style.left = `${Math.random() * (window.innerWidth - 300)}px`;
-                rectangle.style.top = `${Math.random() * (window.innerHeight - 200)}px`;
-              }
-
-              const iframe = document.createElement('iframe');
-              iframe.src = url;
-              const handle = document.createElement('div');
-              handle.className = 'handle';
-              const dragLeft = document.createElement('div');
-              dragLeft.className = 'drag-left';
-              const dragRight = document.createElement('div');
-              dragRight.className = 'drag-right';
-              
-              rectangle.append(iframe, handle);
-              if(window.innerWidth > 600){
-                  rectangle.append(dragLeft, dragRight);
-                  addDragListeners(dragLeft, rectangle);
-                  addDragListeners(dragRight, rectangle);
-              }
-              
-              document.body.appendChild(rectangle);
-              addResizeListeners(handle, rectangle);
-              return rectangle;
+            } else {
+                rectangle.style.left = `${Math.random() * (window.innerWidth - MIN_DIMENSION)}px`;
+                rectangle.style.top = `${Math.random() * (window.innerHeight - (MIN_DIMENSION * 9 / 16))}px`;
+                rectangle.style.width = `${MIN_DIMENSION}px`;
+                rectangle.style.height = `calc(${MIN_DIMENSION}px * 9 / 16)`;
             }
+
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            const handle = document.createElement('div');
+            handle.className = 'handle';
+            const dragLeft = document.createElement('div');
+            dragLeft.className = 'drag-left';
+            const dragRight = document.createElement('div');
+            dragRight.className = 'drag-right';
+            
+            rectangle.append(iframe, handle);
+            if (window.innerWidth > 600) {
+                rectangle.append(dragLeft, dragRight);
+                addDragListeners(dragLeft, rectangle);
+                addDragListeners(dragRight, rectangle);
+            }
+            
+            document.body.appendChild(rectangle);
+            addResizeListeners(handle, rectangle);
+            return rectangle;
+        }
 
         function addResizeListeners(handle, rectangle) {
             handle.addEventListener('mousedown', (e) => startResize(e, rectangle));
@@ -220,7 +215,7 @@
                 document.removeEventListener('touchmove', drag);
                 document.removeEventListener('touchend', stopDrag);
                 rectangle.querySelector('iframe').style.pointerEvents = "auto";
-                updateURL(); // Update the URL after dragging
+                updateURL();
             }
 
             rectangle.querySelector('iframe').style.pointerEvents = "none";
@@ -240,9 +235,21 @@
             function resize(e) {
                 let clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 let newWidth = startWidth + (clientX - startX);
-                let newHeight = isPortrait ? newWidth * (16 / 9) : newWidth * (9 / 16);
-                rectangle.style.width = `${newWidth}px`;
-                rectangle.style.height = `${newHeight}px`;
+                let newHeight;
+
+                if (isPortrait) {
+                    newHeight = Math.max(MIN_DIMENSION, newWidth * (16 / 9));
+                    newWidth = newHeight * (9 / 16);
+                } else {
+                    newWidth = Math.max(MIN_DIMENSION, newWidth);
+                    newHeight = newWidth * (9 / 16);
+                }
+
+                if (Math.abs(parseFloat(rectangle.style.width) - newWidth) > 1 ||
+                    Math.abs(parseFloat(rectangle.style.height) - newHeight) > 1) {
+                    rectangle.style.width = `${newWidth}px`;
+                    rectangle.style.height = `${newHeight}px`;
+                }
             }
 
             function stopResize() {
@@ -251,7 +258,7 @@
                 document.removeEventListener('touchmove', resize);
                 document.removeEventListener('touchend', stopResize);
                 rectangle.querySelector('iframe').style.pointerEvents = "auto";
-                updateURL(); // Update the URL after resizing
+                updateURL();
             }
 
             rectangle.querySelector('iframe').style.pointerEvents = "none";
@@ -261,7 +268,6 @@
             document.addEventListener('touchend', stopResize);
         }
         
-        
         function addEventListeners(handle, downEvent, moveEvent, upEvent) {
             handle.addEventListener(downEvent, (e) => {
                 e.preventDefault();
@@ -270,14 +276,13 @@
                 startY = e.touches ? e.touches[0].clientY : e.clientY;
                 startWidth = handle.parentElement.offsetWidth;
                 startHeight = handle.parentElement.offsetHeight;
-                handle.parentElement.querySelector('iframe').style.pointerEvents = "none"; // Disable pointer-events during resizing
+                handle.parentElement.querySelector('iframe').style.pointerEvents = "none";
                 document.addEventListener(moveEvent, resize);
                 document.addEventListener(upEvent, stopResize);
                 document.body.style.cursor = "nwse-resize";
             });
         }
 
-        // Listen for messages from the embedded page
         window.addEventListener('message', (event) => {
             const message = event.data;
 
@@ -287,7 +292,6 @@
                 const iframes = document.querySelectorAll('.container iframe');
                 let targetIframe = null;
 
-                // Find the iframe that sent the message
                 for (let iframe of iframes) {
                     if (iframe.contentWindow === event.source) {
                         targetIframe = iframe;
@@ -299,50 +303,52 @@
                 const rectangle = targetIframe.closest('.container');
                 if (!rectangle) return;
 
-                // Store the new orientation in a dataset attribute
+                const currentIsPortrait = rectangle.dataset.portrait === "true";
+                if (currentIsPortrait === portrait) return;
+
                 rectangle.dataset.portrait = portrait ? "true" : "false";
 
                 if (window.innerWidth <= 600) {
-                    // On mobile, keep the width fixed and adjust the height
                     const currentWidth = rectangle.clientWidth;
                     const newHeight = portrait
-                        ? Math.floor(currentWidth * (16 / 9)) // Portrait: height is taller
-                        : Math.floor(currentWidth * (9 / 16)); // Landscape: height is shorter
-
-                    // Update the rectangle's height
+                        ? Math.max(MIN_DIMENSION, currentWidth * (16 / 9))
+                        : Math.floor(currentWidth * (9 / 16));
                     rectangle.style.height = `${newHeight}px`;
 
-                    // Adjust the `style.top` of all rectangles below this one
                     const allRectangles = Array.from(document.querySelectorAll('.container'));
-                    const index = allRectangles.indexOf(rectangle);
-
-                    // Start from the top of the first rectangle
                     let currentTop = 0;
 
                     for (let i = 0; i < allRectangles.length; i++) {
                         const rect = allRectangles[i];
                         rect.style.top = `${currentTop}px`;
-
-                        // Update currentTop for the next rectangle
-                        currentTop += rect.clientHeight + 2; // 2px margin between rectangles
+                        currentTop += rect.clientHeight + 2;
                     }
 
-                    // Ensure the body is scrollable if rectangles are pushed below the viewport
                     const lastRectangle = allRectangles[allRectangles.length - 1];
                     const lastRectangleBottom = parseInt(lastRectangle.style.top, 10) + lastRectangle.clientHeight;
-
-                    // Make the body scrollable
-                    document.body.style.overflowY = 'scroll'; // Ensure the body can scroll
-                    document.body.style.minHeight = `${lastRectangleBottom}px`; // Expand the body height
+                    document.body.style.overflowY = 'scroll';
+                    document.body.style.minHeight = `${lastRectangleBottom}px`;
                 } else {
-                    // On desktop, adjust the width based on the height (original behavior)
-                    const currentHeight = rectangle.clientHeight;
-                    const newWidth = portrait
-                        ? Math.floor(currentHeight * (9 / 16))
-                        : Math.floor(currentHeight * (16 / 9));
+                    const currentWidth = rectangle.offsetWidth;
+                    const currentHeight = rectangle.offsetHeight;
 
-                    rectangle.style.width = `${newWidth}px`;
+                    if (portrait) {
+                        // Switching to portrait: base on current height or min dimension
+                        const baseHeight = Math.max(MIN_DIMENSION, currentHeight);
+                        const newWidth = baseHeight * (9 / 16);
+                        const newHeight = baseHeight;
+                        rectangle.style.width = `${newWidth}px`;
+                        rectangle.style.height = `${newHeight}px`;
+                    } else {
+                        // Switching to landscape: base on current width or min dimension
+                        const baseWidth = Math.max(MIN_DIMENSION, currentWidth);
+                        const newHeight = baseWidth * (9 / 16);
+                        const newWidth = baseWidth;
+                        rectangle.style.width = `${newWidth}px`;
+                        rectangle.style.height = `${newHeight}px`;
+                    }
                 }
+                updateURL();
             }
         });
         
@@ -360,7 +366,6 @@
             });
             window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
         }
-
     </script>
 </body>
 </html>
