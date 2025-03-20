@@ -478,8 +478,8 @@
                     [defaults synchronize];
                     [self.tableView reloadData];
                 };
-                UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:scheduleVC];
-                [self presentViewController:navController animated:YES completion:nil];
+                // Push instead of present
+                [self.navigationController pushViewController:scheduleVC animated:YES];
             } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
                 [self showEmailServerAddressInputDialog];
             } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 12 + offset) {
