@@ -4,17 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Event List</title>
+    <!-- Add Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
         let currentTimestamp = null;
-        let defaultOffset = 30;
-
-        function loadSettings() {
-            const savedOffset = localStorage.getItem("defaultOffset");
-            if (savedOffset !== null) {
-                defaultOffset = parseInt(savedOffset, 10);
-                document.getElementById("offsetInput").value = defaultOffset;
-            }
-        }
+        const defaultOffset = 30; // Default offset set to 30 seconds
 
         async function fetchEvents() {
             try {
@@ -49,10 +43,16 @@
                 const card = document.createElement('div');
                 card.className = 'event-card';
                 card.innerHTML = `
-                    <img src="${imageURL}" alt="Event Image" class="event-image" onclick="playEvent('${date}', ${startSeconds})">
-                    <div class="button-group">
-                        <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">Delete</button>
-                        <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">Download</button>
+                    <div class="event-content">
+                        <img src="${imageURL}" alt="Event Image" class="event-image" onclick="playEvent('${date}', ${startSeconds})">
+                        <div class="button-group">
+                            <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
                     </div>
                 `;
                 container.appendChild(card);
@@ -112,28 +112,8 @@
             document.getElementById("timePickerModal").style.display = "none";
         }
 
-        function openSettings() {
-            document.getElementById("settingsModal").style.display = "block";
-        }
-
-        function closeSettings() {
-            document.getElementById("settingsModal").style.display = "none";
-        }
-
-        function saveSettings() {
-            const newOffset = parseInt(document.getElementById("offsetInput").value, 10);
-            if (isNaN(newOffset) || newOffset < 1) {
-                alert("Please enter a valid number greater than 0.");
-                return;
-            }
-            defaultOffset = newOffset;
-            localStorage.setItem("defaultOffset", newOffset);
-            closeSettings();
-        }
-
         window.onload = function() {
             fetchEvents();
-            loadSettings();
         };
     </script>
     <style>
@@ -148,52 +128,76 @@
         .event-card {
             background: white;
             padding: 15px;
-            margin: 10px auto;
+            margin: 15px auto;
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 800px;
+            max-width: 600px; /* Increased max-width for bigger boxes */
+        }
+
+        .event-content {
+            display: flex;
+            justify-content: space-between; /* Distributes space better */
+            align-items: center;
         }
 
         .event-image {
-            width: 100%;
+            width: 92%; /* Increased image width */
             height: auto;
             cursor: pointer;
-            border-radius: 0px;
+            border-radius: 5px;
+            object-fit: cover; /* Ensures image maintains aspect ratio */
         }
 
         .button-group {
-            margin-top: 10px;
             display: flex;
-            justify-content: space-around;
+            flex-direction: column;
+            gap: 12px; /* Slightly increased gap between buttons */
+            margin-left: 10px;
+            flex-shrink: 0; /* Prevents the button group from shrinking */
         }
 
         .action-btn {
-            padding: 10px 15px;
+            background: none;
             border: none;
-            border-radius: 5px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px; /* Slightly larger icons */
+            color: #555;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px; /* Fixed width for buttons */
         }
 
-        .delete-btn {
-            background-color: red;
-            color: white;
+        .action-btn:hover {
+            color: #000;
         }
 
-        .download-btn {
-            background-color: blue;
-            color: white;
+        .delete-btn:hover {
+            color: red;
+        }
+
+        .download-btn:hover {
+            color: blue;
         }
 
         @media (max-width: 600px) {
             .event-card {
-                max-width: 90%;
+                max-width: 95%;
+                padding: 12px;
+            }
+
+            .event-image {
+                width: 88%; /* Adjusted for smaller screens */
+            }
+
+            .button-group {
+                margin-left: 5px;
             }
 
             .action-btn {
-                width: 45%;
-                font-size: 14px;
+                font-size: 16px;
+                width: 25px;
             }
         }
 
@@ -213,7 +217,6 @@
 </head>
 <body>
     <h1>Event List</h1>
-    <button onclick="openSettings()">⚙ Settings</button>
     <div id="eventsContainer"></div>
 
     <div id="timePickerModal" class="modal">
@@ -227,15 +230,5 @@
         <button onclick="confirmDownload()">Download</button>
         <button onclick="closeModal()">Cancel</button>
     </div>
-
-    <div id="settingsModal" class="modal">
-        <h3>Settings</h3>
-        <label for="offsetInput">Default time offset (seconds):</label>
-        <input type="number" id="offsetInput" min="1" value="30">
-        <br><br>
-        <button onclick="saveSettings()">Save</button>
-        <button onclick="closeSettings()">Cancel</button>
-    </div>
 </body>
 </html>
-
