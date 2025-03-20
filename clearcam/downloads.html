@@ -44,7 +44,14 @@
                 card.className = 'event-card';
                 card.innerHTML = `
                     <div class="event-content">
-                        <img src="${imageURL}" alt="Event Image" class="event-image" onclick="playEvent('${date}', ${startSeconds})">
+                        <img 
+                            src="${imageURL}" 
+                            alt="Event Image" 
+                            class="event-image" 
+                            onclick="playEvent('${date}', ${startSeconds})" 
+                            data-retry="0" 
+                            onerror="retryImageLoad(this, '${imageURL}', 3)"
+                        >
                         <div class="button-group">
                             <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
                                 <i class="fas fa-download"></i>
@@ -58,6 +65,25 @@
                 `;
                 container.appendChild(card);
             });
+        }
+
+        // New function to handle image retry logic
+        function retryImageLoad(imgElement, imageURL, maxRetries) {
+            const retryCount = parseInt(imgElement.getAttribute('data-retry'));
+            if (retryCount < maxRetries) {
+                // Increment retry count and try loading again after a short delay
+                imgElement.setAttribute('data-retry', retryCount + 1);
+                setTimeout(() => {
+                    imgElement.src = ''; // Clear the src to force reload
+                    imgElement.src = imageURL; // Set it back to trigger reload
+                }, 1000); // Wait 1 second before retrying
+            } else {
+                // Max retries reached, show a fallback
+                imgElement.src = 'path/to/placeholder-image.jpg'; // Replace with your placeholder image
+                imgElement.alt = 'Image failed to load';
+                imgElement.style.opacity = '0.5'; // Optional: dim the placeholder
+                imgElement.onclick = null; // Disable click if image fails
+            }
         }
 
         async function deleteEvent(timeStamp) {
