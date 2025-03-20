@@ -181,7 +181,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 30px; /* Fixed button width */
+            width: 30px;
         }
 
         .action-btn:hover {
@@ -194,6 +194,22 @@
 
         .download-btn:hover {
             color: blue;
+        }
+
+        /* Touch device adjustments */
+        @media (hover: none) {
+            .delete-btn:hover {
+                color: #555;
+            }
+            .delete-btn:active {
+                color: red;
+            }
+            .download-btn:hover {
+                color: #555;
+            }
+            .download-btn:active {
+                color: blue;
+            }
         }
 
         /* Mobile adjustments */
