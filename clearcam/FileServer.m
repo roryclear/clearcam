@@ -727,12 +727,11 @@
 
             // File path for the image (with .jpg extension)
             NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
-
+            NSString *imageFilePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_small.jpg", eventTimeStamp]];
             NSError *error = nil;
-
             // Check if the image file exists and delete it
             if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
-                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error]) {
+                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
                     NSLog(@"Failed to delete image: %@", error.localizedDescription);
                 } else {
                     NSLog(@"Image deleted at path: %@", imageFilePath);
@@ -1034,7 +1033,7 @@
             @"timeStamp": readableDate,
             @"classType": [event valueForKey:@"classType"] ?: @"unknown",
             @"quantity": [event valueForKey:@"quantity"] ?: @(0),
-            @"imageURL": [NSString stringWithFormat:@"images/%lld.jpg", roundedTimestamp]
+            @"imageURL": [NSString stringWithFormat:@"images/%lld_small.jpg", roundedTimestamp]
         };
         [eventDataArray addObject:eventDict];
     }

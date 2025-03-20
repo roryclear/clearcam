@@ -84,16 +84,22 @@
                 }
 
                 // File path for the image
-                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%lld.jpg", roundedUnixTimestamp]];  // Changed file extension to .jpg
-
-                // Convert UIImage to JPEG data
+                NSString *filePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%lld.jpg", roundedUnixTimestamp]];
                 NSData *imageData = UIImageJPEGRepresentation(uiImage, 1.0); // 1.0 for maximum quality
-
+                NSString *filePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%lld_small.jpg", roundedUnixTimestamp]];
                 // Write the image data to file
                 if (![imageData writeToFile:filePath atomically:YES]) {
                     NSLog(@"Failed to save image at path: %@", filePath);
                 } else {
                     NSLog(@"Image saved at path: %@", filePath);
+                    //thumbnail
+                    UIGraphicsBeginImageContextWithOptions(CGSizeMake(uiImage.size.width / 2, uiImage.size.height / 2), YES, 1.0);
+                    [uiImage drawInRect:CGRectMake(0, 0, uiImage.size.width / 2, uiImage.size.height / 2)];
+                    UIImage *resizedImage = UIGraphicsGetImageFromCurrentImageContext();
+                    UIGraphicsEndImageContext();
+                    NSData *lowResImageData = UIImageJPEGRepresentation(resizedImage, 0.7);
+                    [lowResImageData writeToFile:filePathSmall atomically:YES];
+                    
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 60) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
