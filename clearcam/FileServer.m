@@ -437,8 +437,8 @@
     }
 
     
-    if ([filePath hasPrefix:@"main"] || [filePath hasPrefix:@"downloads"]) {
-        NSString *fileName = [filePath hasPrefix:@"main"] ? @"main.html" : @"downloads.html";
+    if ([filePath hasPrefix:@"multicamera"] || [filePath hasPrefix:@"downloads"]) {
+        NSString *fileName = [filePath hasPrefix:@"multicamera"] ? @"multicamera.html" : @"downloads.html";
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:[fileName stringByDeletingPathExtension] ofType:@"html"];
         
         if (playerFilePath && [[NSFileManager defaultManager] fileExistsAtPath:playerFilePath]) {
