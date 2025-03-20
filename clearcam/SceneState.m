@@ -120,7 +120,7 @@
                                 NSInteger startTime = [schedule[@"startHour"] integerValue] * 60 + [schedule[@"startMinute"] integerValue];
                                 NSInteger endTime = [schedule[@"endHour"] integerValue] * 60 + [schedule[@"endMinute"] integerValue];
 
-                                if (currentTime >= startTime && currentTime < endTime) {
+                                if (currentTime >= startTime && currentTime <= endTime) {
                                     [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
                                     self.last_email_time = now;
                                     NSLog(@"Email sent: Within scheduled time");
