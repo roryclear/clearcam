@@ -526,7 +526,6 @@ NSMutableDictionary *classColorMap;
         CMTime time = asset.duration;
 
         NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
-
         [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:nil];
 
         NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
@@ -535,7 +534,7 @@ NSMutableDictionary *classColorMap;
         NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
         NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
 
-        // Create a local copy of current_segment_squares to avoid mutation issues
+        // Create a local copy of current_segment_squares
         __block NSArray *segmentSquaresCopy;
         dispatch_sync(self.segmentQueue, ^{
             segmentSquaresCopy = [self.current_segment_squares copy];
@@ -543,17 +542,28 @@ NSMutableDictionary *classColorMap;
         });
 
         [self.backgroundContext performBlockAndWait:^{
+            // Fetch or create DayEntity efficiently
             NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
             fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
+            fetchRequest.fetchLimit = 1; // Only one DayEntity per date
 
             NSError *error = nil;
             NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
-            NSManagedObject *dayEntity = fetchedDays.firstObject ?: [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
+            NSManagedObject *dayEntity;
 
-            if (!fetchedDays.count) {
+            if (error) {
+                NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
+                return;
+            }
+
+            if (fetchedDays.count > 0) {
+                dayEntity = fetchedDays.firstObject;
+            } else {
+                dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
                 [dayEntity setValue:self.dayFolderName forKey:@"date"];
             }
 
+            // Insert new SegmentEntity
             NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
             [newSegment setValuesForKeysWithDictionary:@{
                 @"url": segmentURL,
@@ -561,19 +571,21 @@ NSMutableDictionary *classColorMap;
                 @"duration": @(CMTimeGetSeconds(time))
             }];
 
+            // Pre-allocate frames array
             NSMutableArray<NSManagedObject *> *segmentFrames = [NSMutableArray arrayWithCapacity:segmentSquaresCopy.count];
 
             for (NSDictionary *frameData in segmentSquaresCopy) {
                 NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.backgroundContext];
                 [newFrame setValuesForKeysWithDictionary:@{
-                    @"frame_timeStamp": frameData[@"frame_timeStamp"],
-                    @"aspect_ratio": frameData[@"aspect_ratio"],
-                    @"res": frameData[@"res"]
+                    @"frame_timeStamp": frameData[@"frame_timeStamp"] ?: @0,
+                    @"aspect_ratio": frameData[@"aspect_ratio"] ?: @0,
+                    @"res": frameData[@"res"] ?: @0
                 }];
 
-                NSMutableArray<NSManagedObject *> *frameSquares = [NSMutableArray arrayWithCapacity:[frameData[@"squares"] count]];
+                NSArray *squaresData = frameData[@"squares"];
+                NSMutableArray<NSManagedObject *> *frameSquares = [NSMutableArray arrayWithCapacity:squaresData.count];
 
-                for (NSDictionary *squareData in frameData[@"squares"]) {
+                for (NSDictionary *squareData in squaresData) {
                     NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.backgroundContext];
                     [newSquare setValuesForKeysWithDictionary:squareData];
                     [frameSquares addObject:newSquare];
@@ -586,17 +598,22 @@ NSMutableDictionary *classColorMap;
             [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
             [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
 
+            // Save background context
             if ([self.backgroundContext save:&error]) {
                 NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
+                // Save parent context only if necessary
                 [self.fileServer.context performBlockAndWait:^{
-                    [self.fileServer.context save:nil];
+                    NSError *parentError = nil;
+                    if (![self.fileServer.context save:&parentError]) {
+                        NSLog(@"Failed to save parent context: %@", parentError.localizedDescription);
+                    }
                 }];
             } else {
                 NSLog(@"Failed to save segment: %@", error.localizedDescription);
             }
         }];
 
-        // Start new recording after the block completes
+        // Start new recording
         dispatch_async(dispatch_get_main_queue(), ^{
             [self startNewRecording];
         });
