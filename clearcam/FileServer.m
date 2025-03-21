@@ -194,62 +194,46 @@
         return @[];
     }
 
-    __block NSArray *copiedSegments = @[];
+    __block NSArray *processedSegments = @[];
 
     [context performBlockAndWait:^{
         NSError *error = nil;
 
-        // Fetch the DayEntity for the given date
+        // Fetch the DayEntity to get its ID
         NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
         dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+        dayFetchRequest.fetchLimit = 1; // We only need one DayEntity
 
         NSArray *fetchedDays = [context executeFetchRequest:dayFetchRequest error:&error];
-
-        if (error) {
-            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
-            return;
-        }
-
-        if (fetchedDays.count == 0) {
-            NSLog(@"No DayEntity found for date %@", dateParam);
+        if (error || fetchedDays.count == 0) {
+            NSLog(@"Failed to fetch DayEntity: %@ or no day found for %@", error.localizedDescription, dateParam);
             return;
         }
 
         NSManagedObject *dayEntity = fetchedDays.firstObject;
-        NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
-        // Slice the segments based on the 'start' parameter to avoid fetching everything
-        if (start >= segments.count) {
-            NSLog(@"Start index out of range (%ld/%lu)", (long)start, (unsigned long)segments.count);
+        // Fetch segments directly with an offset, no limit
+        NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+        segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"day == %@", dayEntity];
+        segmentFetchRequest.fetchOffset = start; // Skip the first 'start' items
+        segmentFetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"timeStamp" ascending:YES]]; // Consistent ordering
+        segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration"];
+        segmentFetchRequest.resultType = NSDictionaryResultType; // Return dictionaries directly
+
+        NSArray *fetchedSegments = [context executeFetchRequest:segmentFetchRequest error:&error];
+        if (error) {
+            NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
             return;
         }
 
-        copiedSegments = [[segments array] subarrayWithRange:NSMakeRange(start, segments.count - start)];
+        processedSegments = fetchedSegments;
     }];
-
-    // Process outside of performBlockAndWait to avoid blocking Core Data
-    NSMutableArray *processedSegments = [NSMutableArray array];
-
-    for (NSManagedObject *segment in copiedSegments) {
-        NSString *url = [segment valueForKey:@"url"];
-        double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
-        double duration = [[segment valueForKey:@"duration"] doubleValue];
-
-        NSDictionary *segmentDict = @{
-            @"url": url,
-            @"timeStamp": @(timeStamp),
-            @"duration": @(duration)
-        };
-
-        [processedSegments addObject:segmentDict];
-    }
 
     NSLog(@"Fetched and processed %lu segments (start=%ld) for date %@",
           (unsigned long)processedSegments.count, (long)start, dateParam);
 
     return processedSegments;
 }
-
 - (NSArray *)fetchFramesWithURLsFromCoreDataForDateParam:(NSString *)dateParam
                                                    start:(NSInteger)start
                                                  context:(NSManagedObjectContext *)context {
