@@ -539,6 +539,7 @@ NSMutableDictionary *classColorMap;
         __block NSArray *segmentSquaresCopy;
         dispatch_sync(self.segmentQueue, ^{
             segmentSquaresCopy = [self.current_segment_squares copy];
+            [self.current_segment_squares removeAllObjects];
         });
 
         [self.backgroundContext performBlockAndWait:^{
@@ -593,11 +594,6 @@ NSMutableDictionary *classColorMap;
             } else {
                 NSLog(@"Failed to save segment: %@", error.localizedDescription);
             }
-
-            // Clean up memory after saving, still within the same thread
-            dispatch_async(self.segmentQueue, ^{
-                [self.current_segment_squares removeAllObjects];
-            });
         }];
 
         // Start new recording after the block completes
