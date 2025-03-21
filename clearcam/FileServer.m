@@ -879,77 +879,68 @@
         return @[];
     }
 
-    __block NSArray *segmentObjectIDs = @[];
+    __block NSArray *framesForURL = @[];
 
     [context performBlockAndWait:^{
         NSError *error = nil;
+
+        // Fetch the single segment with frames and squares pre-fetched
         NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
         segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", url];
+        segmentFetchRequest.fetchLimit = 1; // Only one segment exists per URL
+        segmentFetchRequest.relationshipKeyPathsForPrefetching = @[@"frames", @"frames.squares"];
+        segmentFetchRequest.returnsObjectsAsFaults = NO;
 
         NSArray *segments = [context executeFetchRequest:segmentFetchRequest error:&error];
-
         if (error) {
-            NSLog(@"Failed to fetch segments for URL %@: %@", url, error.localizedDescription);
+            NSLog(@"Failed to fetch segment for URL %@: %@", url, error.localizedDescription);
             return;
         }
 
         if (segments.count == 0) {
-            NSLog(@"No segments found for URL %@", url);
+            NSLog(@"No segment found for URL %@", url);
             return;
         }
 
-        // Store object IDs instead of NSManagedObject references
-        segmentObjectIDs = [segments valueForKey:@"objectID"];
-    }];
+        NSManagedObject *segment = segments.firstObject;
+        NSArray *frames = [[segment valueForKey:@"frames"] array];
+        NSMutableArray *tempFrames = [NSMutableArray arrayWithCapacity:frames.count];
 
-    NSMutableArray *framesForURL = [NSMutableArray array];
+        // Process frames and squares
+        for (NSManagedObject *frame in frames) {
+            double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+            double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+            int res = [[frame valueForKey:@"res"] intValue];
 
-    // Use a new context tied to the current queue
-    NSManagedObjectContext *bgContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
-    bgContext.parentContext = context;
+            NSArray *squares = [[frame valueForKey:@"squares"] array];
+            NSMutableArray *squareDicts = [NSMutableArray arrayWithCapacity:squares.count];
 
-    [bgContext performBlockAndWait:^{
-        for (NSManagedObjectID *segmentID in segmentObjectIDs) {
-            NSManagedObject *segment = [bgContext objectWithID:segmentID];
-            NSArray *frames = [[segment valueForKey:@"frames"] array];
+            for (NSManagedObject *square in squares) {
+                NSNumber *originXNum = [square valueForKey:@"originX"];
+                NSNumber *originYNum = [square valueForKey:@"originY"];
+                NSNumber *bottomRightXNum = [square valueForKey:@"bottomRightX"];
+                NSNumber *bottomRightYNum = [square valueForKey:@"bottomRightY"];
+                NSNumber *classIndexNum = [square valueForKey:@"classIndex"];
 
-            for (NSManagedObject *frame in frames) {
-                double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-                double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-                int res = [[frame valueForKey:@"res"] intValue];
-
-                NSMutableArray *squareDicts = [NSMutableArray array];
-                NSArray *squares = [[frame valueForKey:@"squares"] array];
-
-                for (NSManagedObject *square in squares) {
-                    double originX = [[square valueForKey:@"originX"] doubleValue];
-                    double originY = [[square valueForKey:@"originY"] doubleValue];
-                    double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                    double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                    int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                    NSDictionary *squareDict = @{
-                        @"originX": @(originX),
-                        @"originY": @(originY),
-                        @"bottomRightX": @(bottomRightX),
-                        @"bottomRightY": @(bottomRightY),
-                        @"classIndex": @(classIndex)
-                    };
-
-                    [squareDicts addObject:squareDict];
-                }
-
-                NSDictionary *frameDict = @{
-                    @"url": url,
-                    @"frame_timeStamp": @(frameTimeStamp),
-                    @"aspect_ratio": @(aspectRatio),
-                    @"res": @(res),
-                    @"squares": squareDicts
-                };
-
-                [framesForURL addObject:frameDict];
+                [squareDicts addObject:@{
+                    @"originX": @(originXNum ? [originXNum doubleValue] : 0.0),
+                    @"originY": @(originYNum ? [originYNum doubleValue] : 0.0),
+                    @"bottomRightX": @(bottomRightXNum ? [bottomRightXNum doubleValue] : 0.0),
+                    @"bottomRightY": @(bottomRightYNum ? [bottomRightYNum doubleValue] : 0.0),
+                    @"classIndex": @(classIndexNum ? [classIndexNum intValue] : 0)
+                }];
             }
+
+            [tempFrames addObject:@{
+                @"url": url,
+                @"frame_timeStamp": @(frameTimeStamp),
+                @"aspect_ratio": @(aspectRatio),
+                @"res": @(res),
+                @"squares": squareDicts
+            }];
         }
+
+        framesForURL = [tempFrames copy];
     }];
 
     NSLog(@"Fetched and processed %lu frames for URL %@", (unsigned long)framesForURL.count, url);
