@@ -73,7 +73,7 @@
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
     
-    self.segment_length = 60;
+    self.segment_length = 1;
     self.scanner = [[PortScanner alloc] init];
     self.last_req_time = [NSDate now];
     self.basePath = [self getDocumentsDirectory];
@@ -335,10 +335,6 @@
 }
 
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
-    if(self.segment_length == 60){ //todo, only for live req
-        self.segment_length = 1;
-        sleep(2); //todo, this is bad
-    }
     self.last_req_time = [NSDate now];
     char requestBuffer[1024];
     ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
@@ -444,6 +440,9 @@
         return;
     }
     if ([filePath hasPrefix:@"get-segments"]) {
+        if(self.segment_length == 60){ //todo, only for live req
+            self.segment_length = 1;
+        }
         NSString *startParam = nil;
         NSString *dateParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
