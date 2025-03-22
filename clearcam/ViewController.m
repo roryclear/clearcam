@@ -257,8 +257,6 @@ NSMutableDictionary *classColorMap;
             AVVideoHeightKey: @(videoHeight),
             AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
         };
-    } else {
-        NSLog(@"Device doesn't support H265");
     }
         
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -450,7 +448,6 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)openSettings {
-    NSLog(@"Settings button tapped");
     if(self.recordPressed) [self toggleRecording];
     [self.captureSession stopRunning];
     SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
@@ -508,10 +505,6 @@ NSMutableDictionary *classColorMap;
     
     self.isRecording = NO;
     [self.videoWriterInput markAsFinished];
-    
-    [self.assetWriter finishWritingWithCompletionHandler:^{
-        NSLog(@"Recording stopped.");
-    }];
 }
 
 
@@ -521,9 +514,13 @@ NSMutableDictionary *classColorMap;
         return;
     }
     
+    NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
+    [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    
     dispatch_async(self.finishRecordingQueue, ^{
         while (self.isProcessingCoreData) {
-            [NSThread sleepForTimeInterval:0.01];
+            [NSThread sleepForTimeInterval:0.001];
         }
         self.isProcessingCoreData = YES;
         self.isRecording = NO;
@@ -534,13 +531,7 @@ NSMutableDictionary *classColorMap;
             
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
-            
-            NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
-            [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:nil];
-            
             NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
-            
-            NSCalendar *calendar = [NSCalendar currentCalendar];
             NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
                         
@@ -548,7 +539,6 @@ NSMutableDictionary *classColorMap;
                 // Save background context
                 NSError *error = nil;
                 if ([self.backgroundContext save:&error]) {
-                    NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
                     // Save parent context only if necessary
                     NSError *parentError = nil;
                     if (![self.fileServer.context save:&parentError]) {
@@ -716,7 +706,6 @@ NSMutableDictionary *classColorMap;
             
             for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
                 NSManagedObject *dayEntity = dayEntities[dayIndex];
-                NSLog(@"Checking DayEntity: %@", [dayEntity valueForKey:@"date"]);
                 
                 NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
                 
@@ -738,19 +727,13 @@ NSMutableDictionary *classColorMap;
                     }
 
                     double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
-                    NSLog(@"Checking segment: %@ (Seconds since midnight: %.2f)", segmentURL, segmentSecondsSinceMidnight);
-
                     // Check if the segment is within ±60 seconds of any event timestamp
                     BOOL shouldSkipDeletion = NO;
                     for (NSNumber *eventTimestamp in eventTimestamps) {
                         double eventSecondsSinceMidnight = eventTimestamp.doubleValue;
                         double timeDifference = fabs(segmentSecondsSinceMidnight - eventSecondsSinceMidnight);
-
-                        NSLog(@"Comparing with event time: %.2f sec (Difference: %.2f sec)", eventSecondsSinceMidnight, timeDifference);
-
                         if (timeDifference <= 60) { // Within one minute
                             shouldSkipDeletion = YES;
-                            NSLog(@"Skipping deletion for segment at %.2f sec because it is close to an event time!", segmentSecondsSinceMidnight);
                             break;
                         }
                     }
@@ -759,15 +742,12 @@ NSMutableDictionary *classColorMap;
                         continue;
                     }
 
-                    NSLog(@"\tChecking Segment: %@", segmentURL);
-
                     @try {
                         NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
                         NSError *deleteError = nil;
                         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                             if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
-                                NSLog(@"\tDeleted %@", segmentURL);
                                 // Keep the segmentEntity but clear all but URL (blank)
                                 [segmentEntity setValue:@"" forKey:@"url"];
                                 [segmentEntity setValue:nil forKey:@"frames"];
@@ -778,8 +758,6 @@ NSMutableDictionary *classColorMap;
                                 NSError *saveError = nil;
                                 if (![context save:&saveError]) {
                                     NSLog(@"Failed to update segment entity: %@", saveError.localizedDescription);
-                                } else {
-                                    NSLog(@"Successfully cleared segment entity data.");
                                 }
 
                                 deletedFile = YES;
@@ -816,8 +794,7 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
         return YES;
     }
-
-    NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
+    //NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
     return YES;
 }
 

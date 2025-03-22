@@ -63,8 +63,6 @@
 
             if (!success) {
                 NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
-            } else {
-                NSLog(@"Deleted: %@", file);
             }
         }
         [self deleteAllDayEntitiesAndEventsInContext:self.context];
@@ -229,9 +227,6 @@
         processedSegments = fetchedSegments;
     }];
 
-    NSLog(@"Fetched and processed %lu segments (start=%ld) for date %@",
-          (unsigned long)processedSegments.count, (long)start, dateParam);
-
     return processedSegments;
 }
 - (NSArray *)fetchFramesWithURLsFromCoreDataForDateParam:(NSString *)dateParam
@@ -267,10 +262,7 @@
         NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
         // Slice the segments based on the 'start' parameter to avoid fetching everything
-        if (start >= segments.count) {
-            NSLog(@"Start index out of range (%ld/%lu)", (long)start, (unsigned long)segments.count);
-            return;
-        }
+        if (start >= segments.count) return;
 
         copiedSegments = [[segments array] subarrayWithRange:NSMakeRange(start, segments.count - start)];
     }];
@@ -319,10 +311,6 @@
             [framesWithURLs addObject:frameDict];
         }
     }
-
-    NSLog(@"Fetched and processed %lu frames with URLs (start=%ld) for date %@",
-          (unsigned long)framesWithURLs.count, (long)start, dateParam);
-
     return framesWithURLs;
 }
 
@@ -405,8 +393,6 @@
     }
     
     if ([filePath hasPrefix:@"get-devices"]) {
-        NSLog(@"get-devices??");
-        
         // Respond immediately with cached list
         @synchronized (self.scanner.cachedOpenPorts) {
             [self sendJson200:self.scanner.cachedOpenPorts toClient:clientSocket];
@@ -648,7 +634,6 @@
         }
 
         fclose(mergedFile);
-        NSLog(@"✅ Merged video sent successfully.");
     }
 
     
@@ -718,8 +703,6 @@
             if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
                 if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
                     NSLog(@"Failed to delete image: %@", error.localizedDescription);
-                } else {
-                    NSLog(@"Image deleted at path: %@", imageFilePath);
                 }
             }
 
@@ -941,9 +924,6 @@
 
         framesForURL = [tempFrames copy];
     }];
-
-    NSLog(@"Fetched and processed %lu frames for URL %@", (unsigned long)framesForURL.count, url);
-
     return framesForURL;
 }
 
@@ -988,11 +968,8 @@
 
     [exportSession exportAsynchronouslyWithCompletionHandler:^{
         if (exportSession.status == AVAssetExportSessionStatusCompleted) {
-            NSLog(@"✅ Export successful: %@", outputPath);
             if (![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
                 NSLog(@"❌ File not found in Documents: %@", outputPath);
-            } else {
-                NSLog(@"✅ File successfully saved at: %@", outputPath);
             }
 
             completion(outputPath, nil);
