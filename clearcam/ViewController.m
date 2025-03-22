@@ -543,21 +543,33 @@ NSMutableDictionary *classColorMap;
             NSCalendar *calendar = [NSCalendar currentCalendar];
             NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
-            
-            // Create a local copy of current_segment_squares
-            __block NSArray *segmentSquaresCopy;
-            dispatch_sync(self.segmentQueue, ^{
-                segmentSquaresCopy = [self.current_segment_squares copy];
-                [self.current_segment_squares removeAllObjects];
-            });
-            
+                        
             [self.backgroundContext performBlock:^{
+                // Save background context
+                NSError *error = nil;
+                if ([self.backgroundContext save:&error]) {
+                    NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
+                    // Save parent context only if necessary
+                    NSError *parentError = nil;
+                    if (![self.fileServer.context save:&parentError]) {
+                        NSLog(@"Failed to save parent context: %@", parentError.localizedDescription);
+                    }
+                } else {
+                    NSLog(@"Failed to save segment: %@", error.localizedDescription);
+                }
+                
+                // Create a local copy of current_segment_squares, moved to after file save
+                __block NSArray *segmentSquaresCopy;
+                dispatch_sync(self.segmentQueue, ^{
+                    segmentSquaresCopy = [self.current_segment_squares copy];
+                    [self.current_segment_squares removeAllObjects];
+                });
+                
                 // Fetch or create DayEntity efficiently
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
                 fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
                 fetchRequest.fetchLimit = 1; // Only one DayEntity per date
                 
-                NSError *error = nil;
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
                 NSManagedObject *dayEntity;
                 
@@ -607,20 +619,6 @@ NSMutableDictionary *classColorMap;
                 
                 [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
                 [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
-                
-                // Save background context
-                if ([self.backgroundContext save:&error]) {
-                    NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
-                    // Save parent context only if necessary
-                    [self.fileServer.context performBlockAndWait:^{
-                        NSError *parentError = nil;
-                        if (![self.fileServer.context save:&parentError]) {
-                            NSLog(@"Failed to save parent context: %@", parentError.localizedDescription);
-                        }
-                    }];
-                } else {
-                    NSLog(@"Failed to save segment: %@", error.localizedDescription);
-                }
             }];
             
             // Start new recording
