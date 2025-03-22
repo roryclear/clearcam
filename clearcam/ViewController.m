@@ -646,7 +646,6 @@ NSMutableDictionary *classColorMap;
 
 - (BOOL)ensureFreeDiskSpace {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-
     NSInteger lastDeletedDayIndex = [defaults integerForKey:@"LastDeletedDayIndex"];
     NSInteger lastDeletedSegmentIndex = [defaults integerForKey:@"LastDeletedSegmentIndex"];
 
@@ -654,29 +653,29 @@ NSMutableDictionary *classColorMap;
         if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
             NSLog(@"deleting stuff");
             NSLog(@"NOT ENOUGH SPACE!");
-            
+
             // Fetch all DayEntities, sorted by date
             NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
             fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];
-            
+
             NSError *fetchError = nil;
             NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
-            
+
             if (fetchError) {
                 NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
                 return YES;
             }
-            
+
             if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
                 NSLog(@"No more DayEntities available. Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
+                [defaults synchronize];
                 return YES;
             }
-            
+
             // Fetch event timestamps from Core Data
             NSArray *eventDataArray = [self.fileServer fetchEventDataFromCoreData:self.fileServer.context];
-
             if (!eventDataArray || eventDataArray.count == 0) {
                 NSLog(@"No event timestamps found.");
             }
@@ -686,40 +685,35 @@ NSMutableDictionary *classColorMap;
             [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-
             for (NSDictionary *eventData in eventDataArray) {
                 NSString *timestampString = eventData[@"timeStamp"];
                 NSDate *eventDate = [dateFormatter dateFromString:timestampString];
 
                 if (eventDate) {
                     NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventDate];
-
-                    // Convert to seconds since midnight
                     double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
                     [eventTimestamps addObject:@(eventSecondsSinceMidnight)];
                 }
             }
 
-
-
             BOOL deletedFile = NO;
-            
+            NSManagedObjectContext *context = self.fileServer.context;
+
             for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
                 NSManagedObject *dayEntity = dayEntities[dayIndex];
-                
                 NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
-                
+
                 if (lastDeletedSegmentIndex >= segments.count) {
                     lastDeletedSegmentIndex = 0; // Reset segment index if we move to the next day
                 }
-                
+
+                // Collect segments to delete in a separate array to avoid modifying the collection during iteration
+                NSMutableArray<NSManagedObject *> *segmentsToDelete = [NSMutableArray array];
+
+                // Inside the dayIndex loop
                 for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
                     NSManagedObject *segmentEntity = segments[segmentIndex];
                     NSString *segmentURL = [segmentEntity valueForKey:@"url"];
-
-                    if (!segmentURL || [segmentURL isEqualToString:@""]) {
-                        continue;
-                    }
 
                     NSNumber *segmentTimeStampNumber = [segmentEntity valueForKey:@"timeStamp"];
                     if (!segmentTimeStampNumber) {
@@ -742,46 +736,59 @@ NSMutableDictionary *classColorMap;
                         continue;
                     }
 
+                    // Mark this segment for deletion
+                    [segmentsToDelete addObject:segmentEntity];
+                }
+
+                // Delete the collected segments and their files
+                for (NSManagedObject *segmentEntity in segmentsToDelete) {
+                    NSString *segmentURL = [segmentEntity valueForKey:@"url"]; // Declare segmentURL here
                     @try {
                         NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
                         NSError *deleteError = nil;
                         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                             if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
-                                // Keep the segmentEntity but clear all but URL (blank)
-                                [segmentEntity setValue:@"" forKey:@"url"];
-                                [segmentEntity setValue:nil forKey:@"frames"];
-                                [segmentEntity setValue:nil forKey:@"duration"];
-
-                                // Save the changes to Core Data
-                                NSManagedObjectContext *context = self.fileServer.context;
-                                NSError *saveError = nil;
-                                if (![context save:&saveError]) {
-                                    NSLog(@"Failed to update segment entity: %@", saveError.localizedDescription);
-                                }
+                                // Delete the segmentEntity from Core Data
+                                [context deleteObject:segmentEntity];
 
                                 deletedFile = YES;
-                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return YES;
-
-                                // Save indexes
-                                [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
-                                [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
-                                [defaults synchronize];
+                                if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) {
+                                    // Save the context before returning
+                                    NSError *saveError = nil;
+                                    if ([context save:&saveError]) {
+                                        [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
+                                        [defaults setInteger:lastDeletedSegmentIndex forKey:@"LastDeletedSegmentIndex"];
+                                        [defaults synchronize];
+                                        return YES;
+                                    } else {
+                                        NSLog(@"Failed to save context after deletion: %@", saveError.localizedDescription);
+                                    }
+                                }
                             } else {
                                 NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
                             }
                         }
-
                     } @catch (NSException *exception) {
-                        NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason);
+                        NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason); // segmentURL is now in scope
                     }
                 }
-                
-                // If we finish all segments in a day, move to the next one
+
+                // Save the context after processing each day
+                NSError *saveError = nil;
+                if ([context save:&saveError]) {
+                    [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
+                    [defaults setInteger:lastDeletedSegmentIndex forKey:@"LastDeletedSegmentIndex"];
+                    [defaults synchronize];
+                } else {
+                    NSLog(@"Failed to save context: %@", saveError.localizedDescription);
+                }
+
+                // Reset segment index for the next day
                 lastDeletedSegmentIndex = 0;
             }
-            
-            // If nothing was deleted, reset the indexes to avoid getting stuck
+
+            // If nothing was deleted, reset the indexes
             if (!deletedFile) {
                 NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
@@ -794,7 +801,7 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
         return YES;
     }
-    //NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
+    NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
     return YES;
 }
 
