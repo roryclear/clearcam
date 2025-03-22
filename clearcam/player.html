@@ -695,7 +695,11 @@
                     isFetchingSegments = true;
 
                     try {
-                        const response = await fetch(`/get-segments?date=${currentDate}&start=${n_segments}`);
+                        let start = -1;
+                        if(n_segments > 0){
+                            start = segments[n_segments - 1].timeStamp + segments[n_segments - 1].duration;
+                        }
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${start}`);
                         if (response.ok) {
                             const newSegments = await response.json();
                             if (Array.isArray(newSegments)) {
@@ -1039,7 +1043,11 @@
                     isFetchingSegments = true;
 
                     try {
-                        const response = await fetch(`/get-segments?date=${currentDate}&start=${n_segments}`);
+                        let start = -1;
+                        if(n_segments > 0){
+                            start = segments[n_segments - 1].timeStamp + segments[n_segments - 1].duration;
+                        }
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${start}`);
                         if (response.ok) {
                             const newSegments = await response.json();
                             if (Array.isArray(newSegments)) {

@@ -185,7 +185,7 @@
 }
 
 - (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam
-                                                      start:(NSInteger)start
+                                                      start:(double)startTime
                                                     context:(NSManagedObjectContext *)context {
     if (!context) {
         NSLog(@"Context is nil, skipping fetch.");
@@ -210,10 +210,9 @@
 
         NSManagedObject *dayEntity = fetchedDays.firstObject;
 
-        // Fetch segments directly with an offset, no limit
+        // Fetch segments with a filter based on timeStamp
         NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
-        segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"day == %@", dayEntity];
-        segmentFetchRequest.fetchOffset = start; // Skip the first 'start' items
+        segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"day == %@ AND timeStamp >= %f", dayEntity, startTime];
         segmentFetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"timeStamp" ascending:YES]]; // Consistent ordering
         segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration"];
         segmentFetchRequest.resultType = NSDictionaryResultType; // Return dictionaries directly
@@ -426,9 +425,10 @@
         return;
     }
     if ([filePath hasPrefix:@"get-segments"]) {
-        if(self.segment_length == 60){ //todo, only for live req
+        if (self.segment_length == 60) { // todo, only for live req
             self.segment_length = 1;
         }
+        
         NSString *startParam = nil;
         NSString *dateParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
@@ -446,7 +446,7 @@
                 }
             }
         }
-
+        
         if (!dateParam) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
@@ -454,11 +454,12 @@
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-
-        NSInteger start = startParam ? [startParam integerValue] : 0;
+        
+        double startTime = startParam ? [startParam doubleValue] : 0;
         NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam
-                                                                                   start:start
-                                                                                 context:self.context];
+                                                                                  start:startTime
+                                                                                context:self.context];
+        
         [self sendJson200:segmentsForDate toClient:clientSocket];
     }
 
