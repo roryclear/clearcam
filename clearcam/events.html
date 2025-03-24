@@ -79,7 +79,7 @@
                 }, 1000); // Wait 1 second before retrying
             } else {
                 // Max retries reached, show a fallback
-                imgElement.src = 'path/to/placeholder-image.jpg'; // Replace with your placeholder image
+                imgElement.removeAttribute('src');
                 imgElement.alt = 'Image failed to load';
                 imgElement.style.opacity = '0.5'; // Optional: dim the placeholder
                 imgElement.onclick = null; // Disable click if image fails

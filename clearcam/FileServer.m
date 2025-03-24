@@ -806,33 +806,48 @@
 
 - (BOOL)deleteEventWithTimeStamp:(NSTimeInterval)timeStamp {
     __block BOOL success = NO;
-    [self.context performBlockAndWait:^{
-        NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-        double epsilon = 1;
-        fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
-        NSError *error = nil;
-        NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
-        if (error) {
-            NSLog(@"Fetch error: %@", error.localizedDescription);
-            success = NO;
-            return;
+    const int maxRetries = 3;
+    int attempt = 0;
+    
+    while (attempt < maxRetries) {
+        attempt++;
+        [self.context performBlockAndWait:^{
+            NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+            double epsilon = 1;
+            fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
+            
+            NSError *error = nil;
+            NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
+            if (error) {
+                NSLog(@"Fetch error (attempt %d): %@", attempt, error.localizedDescription);
+                success = NO;
+                return;
+            }
+            if (events.count == 0) {
+                success = YES;
+                return;
+            }
+            for (NSManagedObject *event in events) {
+                [self.context deleteObject:event];
+            }
+            if ([self.context save:&error]) {
+                success = YES;
+            } else {
+                NSLog(@"Save error (attempt %d): %@", attempt, error.localizedDescription);
+                success = NO;
+            }
+        }];
+        
+        if (success) {
+            break;
         }
-        if (events.count == 0) {
-            success = YES;
-            return;
-        }
-        for (NSManagedObject *event in events) {
-            [self.context deleteObject:event];
-        }
-        if ([self.context save:&error]) {
-            success = YES;
-        } else {
-            NSLog(@"Save error: %@", error.localizedDescription);
-            success = NO;
-        }
-    }];
+        
+        NSLog(@"Retrying delete (attempt %d/%d)...", attempt, maxRetries);
+    }
+    
     return success;
 }
+
 
 - (NSArray *)fetchFramesForURL:(NSString *)url context:(NSManagedObjectContext *)context {
     if (!context) {
@@ -956,6 +971,10 @@
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+    NSSortDescriptor *sortDescriptor = [[NSSortDescriptor alloc] initWithKey:@"timeStamp"
+                                                                 ascending:YES];
+    [fetchRequest setSortDescriptors:@[sortDescriptor]];
+    
     NSError *error = nil;
     NSArray *fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
 
@@ -981,7 +1000,6 @@
         };
         [eventDataArray addObject:eventDict];
     }
-
     return eventDataArray;
 }
 
