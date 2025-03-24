@@ -804,7 +804,7 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
         return YES;
     }
-    NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
+    //NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
     return YES;
 }
 

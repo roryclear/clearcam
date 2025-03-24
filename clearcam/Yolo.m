@@ -79,19 +79,17 @@ UInt8 *rgbData;
     uname(&systemInfo);
     NSString *deviceModel = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 
-    NSString *urlPath = @"https://raw.githubusercontent.com/roryclear/yolov8-tinygrad-ios/main/batch_req_%dx%d";
-    if ([deviceModel isEqualToString:@"iPhone8,4"] || [deviceModel isEqualToString:@"iPhone12,8"]) { //IPHONE SE1 and SE2, TODO finish
-        path = @"batch_req_se1_%dx%d";
-        urlPath = @"https://raw.githubusercontent.com/roryclear/yolov8-tinygrad-ios/main/batch_req_se1_%dx%d";
-    }
-    NSString *filePath = [documentsPath stringByAppendingPathComponent:[NSString stringWithFormat:path, self.yolo_res, self.yolo_res]];
-    if (![[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:urlPath, self.yolo_res, self.yolo_res]];
-        NSData *data = [NSData dataWithContentsOfURL:url];
-        [data writeToFile:filePath atomically:YES];
+    NSString *fileName;
+    if ([deviceModel isEqualToString:@"iPhone8,4"] || [deviceModel isEqualToString:@"iPhone12,8"]) {
+        fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
+    } else {
+        fileName = [NSString stringWithFormat:@"batch_req_%dx%d", self.yolo_res, self.yolo_res];
     }
 
-    NSData *ns_data = [NSData dataWithContentsOfFile:filePath];
+    NSString *filePath = [[NSBundle mainBundle] pathForResource:fileName ofType:nil];
+    NSData *ns_data = nil;
+    if (filePath) ns_data = [NSData dataWithContentsOfFile:filePath];
+    
     self.data = CFDataCreate(NULL, [ns_data bytes], [ns_data length]);
     
     const UInt8 *bytes = CFDataGetBytePtr(self.data);
