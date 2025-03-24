@@ -80,7 +80,8 @@ UInt8 *rgbData;
     NSString *deviceModel = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 
     NSString *fileName;
-    if ([deviceModel isEqualToString:@"iPhone8,4"] || [deviceModel isEqualToString:@"iPhone12,8"]) {
+    if (([deviceModel hasPrefix:@"iPhone"] && [deviceModel compare:@"iPhone13,1"] < NSOrderedSame) ||
+        ([deviceModel hasPrefix:@"iPad"] && [deviceModel compare:@"iPad13,1"] < NSOrderedSame)) {
         fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
     } else {
         fileName = [NSString stringWithFormat:@"batch_req_%dx%d", self.yolo_res, self.yolo_res];
