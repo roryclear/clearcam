@@ -534,6 +534,9 @@ NSMutableDictionary *classColorMap;
             NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
             NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
             NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            [formatter setDateFormat:@"yyyy-MM-dd"];
+            NSString *thisDayFoler = [formatter stringFromDate:self.current_file_timestamp];
                         
             [self.backgroundContext performBlock:^{
                 // Save background context
@@ -557,7 +560,7 @@ NSMutableDictionary *classColorMap;
                 
                 // Fetch or create DayEntity efficiently
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
+                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", thisDayFoler];
                 fetchRequest.fetchLimit = 1; // Only one DayEntity per date
                 
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
