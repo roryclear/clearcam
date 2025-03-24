@@ -404,16 +404,20 @@ NSMutableDictionary *classColorMap;
     [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.recordButton];
 
-    // Create the settings button
+    // Create the settings button with a transparent background
     self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.settingsButton setTitle:@"⚙️" forState:UIControlStateNormal]; // Gear icon
-    self.settingsButton.backgroundColor = [UIColor grayColor];
-    self.settingsButton.tintColor = [UIColor whiteColor];
-    self.settingsButton.titleLabel.font = [UIFont boldSystemFontOfSize:20];
+    UIImage *gearIcon = [UIImage systemImageNamed:@"gear"]; // Apple’s SF Symbol gear
+    [self.settingsButton setImage:gearIcon forState:UIControlStateNormal];
 
-    self.settingsButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
-    self.settingsButton.layer.cornerRadius = buttonSize / 2;
+    CGFloat gearButtonSize = 50;
+    self.settingsButton.frame = CGRectMake(0, 0, gearButtonSize, gearButtonSize);
+    
+    // Add a semi-transparent circular background
+    self.settingsButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3]; // 30% opacity
+    self.settingsButton.layer.cornerRadius = gearButtonSize / 2;
     self.settingsButton.clipsToBounds = YES;
+    
+    self.settingsButton.tintColor = [UIColor whiteColor]; // Ensure the gear icon is visible
 
     [self.settingsButton addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.settingsButton];
@@ -421,21 +425,18 @@ NSMutableDictionary *classColorMap;
     [self updateButtonFrames]; // Set initial positions
 }
 
-// Position the buttons correctly based on orientation
 - (void)updateButtonFrames {
     CGFloat screenWidth = self.view.bounds.size.width;
     CGFloat screenHeight = self.view.bounds.size.height;
     CGFloat buttonSize = 60;
     CGFloat margin = 20;
-    CGFloat spacing = 10; // Space between buttons
-
+    CGFloat spacing = 60;
     self.recordButton.layer.cornerRadius = buttonSize / 2;
     self.settingsButton.layer.cornerRadius = buttonSize / 2;
-
-    if (screenWidth > screenHeight) { // Landscape: Right side
+    if (screenWidth > screenHeight) {
         self.recordButton.frame = CGRectMake(screenWidth - buttonSize - margin, screenHeight / 2 - buttonSize / 2, buttonSize, buttonSize);
         self.settingsButton.frame = CGRectMake(self.recordButton.frame.origin.x, self.recordButton.frame.origin.y - buttonSize - spacing, buttonSize, buttonSize);
-    } else { // Portrait: Bottom center, settings to the right
+    } else {
         CGFloat recordX = (screenWidth - buttonSize) / 2;
         self.recordButton.frame = CGRectMake(recordX, screenHeight - buttonSize - margin, buttonSize, buttonSize);
         self.settingsButton.frame = CGRectMake(recordX + buttonSize + spacing, self.recordButton.frame.origin.y, buttonSize, buttonSize);
