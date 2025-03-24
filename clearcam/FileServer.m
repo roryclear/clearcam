@@ -63,8 +63,6 @@
 
             if (!success) {
                 NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
-            } else {
-                NSLog(@"Deleted: %@", file);
             }
         }
         [self deleteAllDayEntitiesAndEventsInContext:self.context];
@@ -73,7 +71,7 @@
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
     
-    self.segment_length = 60;
+    self.segment_length = 1;
     self.scanner = [[PortScanner alloc] init];
     self.last_req_time = [NSDate now];
     self.basePath = [self getDocumentsDirectory];
@@ -187,69 +185,49 @@
 }
 
 - (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam
-                                                      start:(NSInteger)start
+                                                      start:(double)startTime
                                                     context:(NSManagedObjectContext *)context {
     if (!context) {
         NSLog(@"Context is nil, skipping fetch.");
         return @[];
     }
 
-    __block NSArray *copiedSegments = @[];
+    __block NSArray *processedSegments = @[];
 
     [context performBlockAndWait:^{
         NSError *error = nil;
 
-        // Fetch the DayEntity for the given date
+        // Fetch the DayEntity to get its ID
         NSFetchRequest *dayFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"DayEntity"];
         dayFetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", dateParam];
+        dayFetchRequest.fetchLimit = 1; // We only need one DayEntity
 
         NSArray *fetchedDays = [context executeFetchRequest:dayFetchRequest error:&error];
-
-        if (error) {
-            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
-            return;
-        }
-
-        if (fetchedDays.count == 0) {
-            NSLog(@"No DayEntity found for date %@", dateParam);
+        if (error || fetchedDays.count == 0) {
+            NSLog(@"Failed to fetch DayEntity: %@ or no day found for %@", error.localizedDescription, dateParam);
             return;
         }
 
         NSManagedObject *dayEntity = fetchedDays.firstObject;
-        NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
-        // Slice the segments based on the 'start' parameter to avoid fetching everything
-        if (start >= segments.count) {
-            NSLog(@"Start index out of range (%ld/%lu)", (long)start, (unsigned long)segments.count);
+        // Fetch segments with a filter based on timeStamp
+        NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
+        segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"day == %@ AND timeStamp >= %f", dayEntity, startTime];
+        segmentFetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"timeStamp" ascending:YES]]; // Consistent ordering
+        segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration"];
+        segmentFetchRequest.resultType = NSDictionaryResultType; // Return dictionaries directly
+
+        NSArray *fetchedSegments = [context executeFetchRequest:segmentFetchRequest error:&error];
+        if (error) {
+            NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
             return;
         }
 
-        copiedSegments = [[segments array] subarrayWithRange:NSMakeRange(start, segments.count - start)];
+        processedSegments = fetchedSegments;
     }];
-
-    // Process outside of performBlockAndWait to avoid blocking Core Data
-    NSMutableArray *processedSegments = [NSMutableArray array];
-
-    for (NSManagedObject *segment in copiedSegments) {
-        NSString *url = [segment valueForKey:@"url"];
-        double timeStamp = [[segment valueForKey:@"timeStamp"] doubleValue];
-        double duration = [[segment valueForKey:@"duration"] doubleValue];
-
-        NSDictionary *segmentDict = @{
-            @"url": url,
-            @"timeStamp": @(timeStamp),
-            @"duration": @(duration)
-        };
-
-        [processedSegments addObject:segmentDict];
-    }
-
-    NSLog(@"Fetched and processed %lu segments (start=%ld) for date %@",
-          (unsigned long)processedSegments.count, (long)start, dateParam);
 
     return processedSegments;
 }
-
 - (NSArray *)fetchFramesWithURLsFromCoreDataForDateParam:(NSString *)dateParam
                                                    start:(NSInteger)start
                                                  context:(NSManagedObjectContext *)context {
@@ -283,10 +261,7 @@
         NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
 
         // Slice the segments based on the 'start' parameter to avoid fetching everything
-        if (start >= segments.count) {
-            NSLog(@"Start index out of range (%ld/%lu)", (long)start, (unsigned long)segments.count);
-            return;
-        }
+        if (start >= segments.count) return;
 
         copiedSegments = [[segments array] subarrayWithRange:NSMakeRange(start, segments.count - start)];
     }];
@@ -335,10 +310,6 @@
             [framesWithURLs addObject:frameDict];
         }
     }
-
-    NSLog(@"Fetched and processed %lu frames with URLs (start=%ld) for date %@",
-          (unsigned long)framesWithURLs.count, (long)start, dateParam);
-
     return framesWithURLs;
 }
 
@@ -351,10 +322,6 @@
 }
 
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
-    if(self.segment_length == 60){ //todo, only for live req
-        self.segment_length = 1;
-        sleep(2); //todo, this is bad
-    }
     self.last_req_time = [NSDate now];
     char requestBuffer[1024];
     ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
@@ -425,8 +392,6 @@
     }
     
     if ([filePath hasPrefix:@"get-devices"]) {
-        NSLog(@"get-devices??");
-        
         // Respond immediately with cached list
         @synchronized (self.scanner.cachedOpenPorts) {
             [self sendJson200:self.scanner.cachedOpenPorts toClient:clientSocket];
@@ -460,6 +425,10 @@
         return;
     }
     if ([filePath hasPrefix:@"get-segments"]) {
+        if (self.segment_length == 60) { // todo, only for live req
+            self.segment_length = 1;
+        }
+        
         NSString *startParam = nil;
         NSString *dateParam = nil;
         NSRange queryRange = [filePath rangeOfString:@"?"];
@@ -477,7 +446,7 @@
                 }
             }
         }
-
+        
         if (!dateParam) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
@@ -485,11 +454,12 @@
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-
-        NSInteger start = startParam ? [startParam integerValue] : 0;
+        
+        double startTime = startParam ? [startParam doubleValue] : 0;
         NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam
-                                                                                   start:start
-                                                                                 context:self.context];
+                                                                                  start:startTime
+                                                                                context:self.context];
+        
         [self sendJson200:segmentsForDate toClient:clientSocket];
     }
 
@@ -665,7 +635,6 @@
         }
 
         fclose(mergedFile);
-        NSLog(@"✅ Merged video sent successfully.");
     }
 
     
@@ -735,8 +704,6 @@
             if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
                 if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
                     NSLog(@"Failed to delete image: %@", error.localizedDescription);
-                } else {
-                    NSLog(@"Image deleted at path: %@", imageFilePath);
                 }
             }
 
@@ -895,81 +862,69 @@
         return @[];
     }
 
-    __block NSArray *segmentObjectIDs = @[];
+    __block NSArray *framesForURL = @[];
 
     [context performBlockAndWait:^{
         NSError *error = nil;
+
+        // Fetch the single segment with frames and squares pre-fetched
         NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
         segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"url == %@", url];
+        segmentFetchRequest.fetchLimit = 1; // Only one segment exists per URL
+        segmentFetchRequest.relationshipKeyPathsForPrefetching = @[@"frames", @"frames.squares"];
+        segmentFetchRequest.returnsObjectsAsFaults = NO;
 
         NSArray *segments = [context executeFetchRequest:segmentFetchRequest error:&error];
-
         if (error) {
-            NSLog(@"Failed to fetch segments for URL %@: %@", url, error.localizedDescription);
+            NSLog(@"Failed to fetch segment for URL %@: %@", url, error.localizedDescription);
             return;
         }
 
         if (segments.count == 0) {
-            NSLog(@"No segments found for URL %@", url);
+            NSLog(@"No segment found for URL %@", url);
             return;
         }
 
-        // Store object IDs instead of NSManagedObject references
-        segmentObjectIDs = [segments valueForKey:@"objectID"];
-    }];
+        NSManagedObject *segment = segments.firstObject;
+        NSArray *frames = [[segment valueForKey:@"frames"] array];
+        NSMutableArray *tempFrames = [NSMutableArray arrayWithCapacity:frames.count];
 
-    NSMutableArray *framesForURL = [NSMutableArray array];
+        // Process frames and squares
+        for (NSManagedObject *frame in frames) {
+            double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
+            double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
+            int res = [[frame valueForKey:@"res"] intValue];
 
-    // Use a new context tied to the current queue
-    NSManagedObjectContext *bgContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
-    bgContext.parentContext = context;
+            NSArray *squares = [[frame valueForKey:@"squares"] array];
+            NSMutableArray *squareDicts = [NSMutableArray arrayWithCapacity:squares.count];
 
-    [bgContext performBlockAndWait:^{
-        for (NSManagedObjectID *segmentID in segmentObjectIDs) {
-            NSManagedObject *segment = [bgContext objectWithID:segmentID];
-            NSArray *frames = [[segment valueForKey:@"frames"] array];
+            for (NSManagedObject *square in squares) {
+                NSNumber *originXNum = [square valueForKey:@"originX"];
+                NSNumber *originYNum = [square valueForKey:@"originY"];
+                NSNumber *bottomRightXNum = [square valueForKey:@"bottomRightX"];
+                NSNumber *bottomRightYNum = [square valueForKey:@"bottomRightY"];
+                NSNumber *classIndexNum = [square valueForKey:@"classIndex"];
 
-            for (NSManagedObject *frame in frames) {
-                double frameTimeStamp = [[frame valueForKey:@"frame_timeStamp"] doubleValue];
-                double aspectRatio = [[frame valueForKey:@"aspect_ratio"] doubleValue];
-                int res = [[frame valueForKey:@"res"] intValue];
-
-                NSMutableArray *squareDicts = [NSMutableArray array];
-                NSArray *squares = [[frame valueForKey:@"squares"] array];
-
-                for (NSManagedObject *square in squares) {
-                    double originX = [[square valueForKey:@"originX"] doubleValue];
-                    double originY = [[square valueForKey:@"originY"] doubleValue];
-                    double bottomRightX = [[square valueForKey:@"bottomRightX"] doubleValue];
-                    double bottomRightY = [[square valueForKey:@"bottomRightY"] doubleValue];
-                    int classIndex = [[square valueForKey:@"classIndex"] intValue];
-
-                    NSDictionary *squareDict = @{
-                        @"originX": @(originX),
-                        @"originY": @(originY),
-                        @"bottomRightX": @(bottomRightX),
-                        @"bottomRightY": @(bottomRightY),
-                        @"classIndex": @(classIndex)
-                    };
-
-                    [squareDicts addObject:squareDict];
-                }
-
-                NSDictionary *frameDict = @{
-                    @"url": url,
-                    @"frame_timeStamp": @(frameTimeStamp),
-                    @"aspect_ratio": @(aspectRatio),
-                    @"res": @(res),
-                    @"squares": squareDicts
-                };
-
-                [framesForURL addObject:frameDict];
+                [squareDicts addObject:@{
+                    @"originX": @(originXNum ? [originXNum doubleValue] : 0.0),
+                    @"originY": @(originYNum ? [originYNum doubleValue] : 0.0),
+                    @"bottomRightX": @(bottomRightXNum ? [bottomRightXNum doubleValue] : 0.0),
+                    @"bottomRightY": @(bottomRightYNum ? [bottomRightYNum doubleValue] : 0.0),
+                    @"classIndex": @(classIndexNum ? [classIndexNum intValue] : 0)
+                }];
             }
+
+            [tempFrames addObject:@{
+                @"url": url,
+                @"frame_timeStamp": @(frameTimeStamp),
+                @"aspect_ratio": @(aspectRatio),
+                @"res": @(res),
+                @"squares": squareDicts
+            }];
         }
+
+        framesForURL = [tempFrames copy];
     }];
-
-    NSLog(@"Fetched and processed %lu frames for URL %@", (unsigned long)framesForURL.count, url);
-
     return framesForURL;
 }
 
@@ -1014,11 +969,8 @@
 
     [exportSession exportAsynchronouslyWithCompletionHandler:^{
         if (exportSession.status == AVAssetExportSessionStatusCompleted) {
-            NSLog(@"✅ Export successful: %@", outputPath);
             if (![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
                 NSLog(@"❌ File not found in Documents: %@", outputPath);
-            } else {
-                NSLog(@"✅ File successfully saved at: %@", outputPath);
             }
 
             completion(outputPath, nil);

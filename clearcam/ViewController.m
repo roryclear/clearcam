@@ -21,6 +21,7 @@
 @property (nonatomic, strong) CIContext *ciContext;
 
 @property (atomic, assign) BOOL isProcessing;
+@property (nonatomic, assign) BOOL isProcessingCoreData;
 @property (nonatomic, assign) BOOL recordPressed;
 @property (nonatomic, assign) BOOL isRecording;
 @property (nonatomic, assign) CMTime startTime;
@@ -37,6 +38,7 @@
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
 @property (nonatomic, strong) dispatch_queue_t segmentQueue;
+@property (nonatomic, strong) dispatch_queue_t finishRecordingQueue;
 @property (nonatomic, strong) SceneState *scene;
 
 #define MIN_FREE_SPACE_MB 500  //threshold to start deleting
@@ -52,6 +54,9 @@ NSMutableDictionary *classColorMap;
     self.recordPressed = NO;
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
+    
+    self.finishRecordingQueue = dispatch_queue_create("com.example.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
+    
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
     self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
@@ -252,8 +257,6 @@ NSMutableDictionary *classColorMap;
             AVVideoHeightKey: @(videoHeight),
             AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
         };
-    } else {
-        NSLog(@"Device doesn't support H265");
     }
         
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -445,7 +448,6 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)openSettings {
-    NSLog(@"Settings button tapped");
     if(self.recordPressed) [self toggleRecording];
     [self.captureSession stopRunning];
     SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
@@ -503,10 +505,6 @@ NSMutableDictionary *classColorMap;
     
     self.isRecording = NO;
     [self.videoWriterInput markAsFinished];
-    
-    [self.assetWriter finishWritingWithCompletionHandler:^{
-        NSLog(@"Recording stopped.");
-    }];
 }
 
 
@@ -515,96 +513,114 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
         return;
     }
-
-    self.isRecording = NO;
-    [self.videoWriterInput markAsFinished];
-
-    [self.assetWriter finishWritingWithCompletionHandler:^{
-        if (!self.assetWriter.outputURL) return;
-
-        AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
-        CMTime time = asset.duration;
-
-        NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
-
-        [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:nil];
-
-        NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
-
-        NSCalendar *calendar = [NSCalendar currentCalendar];
-        NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
-        NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
-
-        // Create a local copy of current_segment_squares to avoid mutation issues
-        __block NSArray *segmentSquaresCopy;
-        dispatch_sync(self.segmentQueue, ^{
-            segmentSquaresCopy = [self.current_segment_squares copy];
-        });
-
-        [self.backgroundContext performBlockAndWait:^{
-            NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
-            fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", self.dayFolderName];
-
-            NSError *error = nil;
-            NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
-            NSManagedObject *dayEntity = fetchedDays.firstObject ?: [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
-
-            if (!fetchedDays.count) {
-                [dayEntity setValue:self.dayFolderName forKey:@"date"];
-            }
-
-            NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
-            [newSegment setValuesForKeysWithDictionary:@{
-                @"url": segmentURL,
-                @"timeStamp": @(timeStamp),
-                @"duration": @(CMTimeGetSeconds(time))
-            }];
-
-            NSMutableArray<NSManagedObject *> *segmentFrames = [NSMutableArray arrayWithCapacity:segmentSquaresCopy.count];
-
-            for (NSDictionary *frameData in segmentSquaresCopy) {
-                NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.backgroundContext];
-                [newFrame setValuesForKeysWithDictionary:@{
-                    @"frame_timeStamp": frameData[@"frame_timeStamp"],
-                    @"aspect_ratio": frameData[@"aspect_ratio"],
-                    @"res": frameData[@"res"]
-                }];
-
-                NSMutableArray<NSManagedObject *> *frameSquares = [NSMutableArray arrayWithCapacity:[frameData[@"squares"] count]];
-
-                for (NSDictionary *squareData in frameData[@"squares"]) {
-                    NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.backgroundContext];
-                    [newSquare setValuesForKeysWithDictionary:squareData];
-                    [frameSquares addObject:newSquare];
+    
+    NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
+    [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    
+    dispatch_async(self.finishRecordingQueue, ^{
+        while (self.isProcessingCoreData) {
+            [NSThread sleepForTimeInterval:0.001];
+        }
+        self.isProcessingCoreData = YES;
+        self.isRecording = NO;
+        [self.videoWriterInput markAsFinished];
+        
+        [self.assetWriter finishWritingWithCompletionHandler:^{
+            if (!self.assetWriter.outputURL) return;
+            
+            AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
+            CMTime time = asset.duration;
+            NSString *segmentURL = [NSString stringWithFormat:@"%@/%@", [[self.assetWriter.outputURL URLByDeletingLastPathComponent] lastPathComponent], self.assetWriter.outputURL.lastPathComponent];
+            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:self.current_file_timestamp];
+            NSTimeInterval timeStamp = [self.current_file_timestamp timeIntervalSinceDate:[calendar dateFromComponents:components]];
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            [formatter setDateFormat:@"yyyy-MM-dd"];
+            NSString *thisDayFoler = [formatter stringFromDate:self.current_file_timestamp];
+                        
+            [self.backgroundContext performBlock:^{
+                // Save background context
+                NSError *error = nil;
+                if ([self.backgroundContext save:&error]) {
+                    // Save parent context only if necessary
+                    NSError *parentError = nil;
+                    if (![self.fileServer.context save:&parentError]) {
+                        NSLog(@"Failed to save parent context: %@", parentError.localizedDescription);
+                    }
+                } else {
+                    NSLog(@"Failed to save segment: %@", error.localizedDescription);
                 }
-
-                [newFrame setValue:[NSOrderedSet orderedSetWithArray:frameSquares] forKey:@"squares"];
-                [segmentFrames addObject:newFrame];
-            }
-
-            [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
-            [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
-
-            if ([self.backgroundContext save:&error]) {
-                NSLog(@"Segment saved successfully under DayEntity with date %@", self.dayFolderName);
-                [self.fileServer.context performBlockAndWait:^{
-                    [self.fileServer.context save:nil];
+                
+                // Create a local copy of current_segment_squares, moved to after file save
+                __block NSArray *segmentSquaresCopy;
+                dispatch_sync(self.segmentQueue, ^{
+                    segmentSquaresCopy = [self.current_segment_squares copy];
+                    [self.current_segment_squares removeAllObjects];
+                });
+                
+                // Fetch or create DayEntity efficiently
+                NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
+                fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", thisDayFoler];
+                fetchRequest.fetchLimit = 1; // Only one DayEntity per date
+                
+                NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
+                NSManagedObject *dayEntity;
+                
+                if (error) {
+                    NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
+                    return;
+                }
+                
+                if (fetchedDays.count > 0) {
+                    dayEntity = fetchedDays.firstObject;
+                } else {
+                    dayEntity = [NSEntityDescription insertNewObjectForEntityForName:@"DayEntity" inManagedObjectContext:self.backgroundContext];
+                    [dayEntity setValue:self.dayFolderName forKey:@"date"];
+                }
+                
+                // Insert new SegmentEntity
+                NSManagedObject *newSegment = [NSEntityDescription insertNewObjectForEntityForName:@"SegmentEntity" inManagedObjectContext:self.backgroundContext];
+                [newSegment setValuesForKeysWithDictionary:@{
+                    @"url": segmentURL,
+                    @"timeStamp": @(timeStamp),
+                    @"duration": @(CMTimeGetSeconds(time))
                 }];
-            } else {
-                NSLog(@"Failed to save segment: %@", error.localizedDescription);
-            }
-
-            // Clean up memory after saving, still within the same thread
-            dispatch_async(self.segmentQueue, ^{
-                [self.current_segment_squares removeAllObjects];
+                
+                // Pre-allocate frames array
+                NSMutableArray<NSManagedObject *> *segmentFrames = [NSMutableArray arrayWithCapacity:segmentSquaresCopy.count];
+                
+                for (NSDictionary *frameData in segmentSquaresCopy) {
+                    NSManagedObject *newFrame = [NSEntityDescription insertNewObjectForEntityForName:@"FrameEntity" inManagedObjectContext:self.backgroundContext];
+                    [newFrame setValuesForKeysWithDictionary:@{
+                        @"frame_timeStamp": frameData[@"frame_timeStamp"] ?: @0,
+                        @"aspect_ratio": frameData[@"aspect_ratio"] ?: @0,
+                        @"res": frameData[@"res"] ?: @0
+                    }];
+                    
+                    NSArray *squaresData = frameData[@"squares"];
+                    NSMutableArray<NSManagedObject *> *frameSquares = [NSMutableArray arrayWithCapacity:squaresData.count];
+                    
+                    for (NSDictionary *squareData in squaresData) {
+                        NSManagedObject *newSquare = [NSEntityDescription insertNewObjectForEntityForName:@"SquareEntity" inManagedObjectContext:self.backgroundContext];
+                        [newSquare setValuesForKeysWithDictionary:squareData];
+                        [frameSquares addObject:newSquare];
+                    }
+                    
+                    [newFrame setValue:[NSOrderedSet orderedSetWithArray:frameSquares] forKey:@"squares"];
+                    [segmentFrames addObject:newFrame];
+                }
+                
+                [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
+                [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
+            }];
+            
+            // Start new recording
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.isProcessingCoreData = NO;
+                [self startNewRecording];
             });
         }];
-
-        // Start new recording after the block completes
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self startNewRecording];
-        });
-    }];
+    });
 }
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
@@ -633,7 +649,6 @@ NSMutableDictionary *classColorMap;
 
 - (BOOL)ensureFreeDiskSpace {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-
     NSInteger lastDeletedDayIndex = [defaults integerForKey:@"LastDeletedDayIndex"];
     NSInteger lastDeletedSegmentIndex = [defaults integerForKey:@"LastDeletedSegmentIndex"];
 
@@ -641,29 +656,29 @@ NSMutableDictionary *classColorMap;
         if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
             NSLog(@"deleting stuff");
             NSLog(@"NOT ENOUGH SPACE!");
-            
+
             // Fetch all DayEntities, sorted by date
             NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
             fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];
-            
+
             NSError *fetchError = nil;
             NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
-            
+
             if (fetchError) {
                 NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
                 return YES;
             }
-            
+
             if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
                 NSLog(@"No more DayEntities available. Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
+                [defaults synchronize];
                 return YES;
             }
-            
+
             // Fetch event timestamps from Core Data
             NSArray *eventDataArray = [self.fileServer fetchEventDataFromCoreData:self.fileServer.context];
-
             if (!eventDataArray || eventDataArray.count == 0) {
                 NSLog(@"No event timestamps found.");
             }
@@ -673,41 +688,35 @@ NSMutableDictionary *classColorMap;
             [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
 
             NSCalendar *calendar = [NSCalendar currentCalendar];
-
             for (NSDictionary *eventData in eventDataArray) {
                 NSString *timestampString = eventData[@"timeStamp"];
                 NSDate *eventDate = [dateFormatter dateFromString:timestampString];
 
                 if (eventDate) {
                     NSDateComponents *components = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:eventDate];
-
-                    // Convert to seconds since midnight
                     double eventSecondsSinceMidnight = (components.hour * 3600) + (components.minute * 60) + components.second;
                     [eventTimestamps addObject:@(eventSecondsSinceMidnight)];
                 }
             }
 
-
-
             BOOL deletedFile = NO;
-            
+            NSManagedObjectContext *context = self.fileServer.context;
+
             for (NSInteger dayIndex = lastDeletedDayIndex; dayIndex < dayEntities.count; dayIndex++) {
                 NSManagedObject *dayEntity = dayEntities[dayIndex];
-                NSLog(@"Checking DayEntity: %@", [dayEntity valueForKey:@"date"]);
-                
                 NSArray *segments = [[dayEntity valueForKey:@"segments"] allObjects];
-                
+
                 if (lastDeletedSegmentIndex >= segments.count) {
                     lastDeletedSegmentIndex = 0; // Reset segment index if we move to the next day
                 }
-                
+
+                // Collect segments to delete in a separate array to avoid modifying the collection during iteration
+                NSMutableArray<NSManagedObject *> *segmentsToDelete = [NSMutableArray array];
+
+                // Inside the dayIndex loop
                 for (NSInteger segmentIndex = lastDeletedSegmentIndex; segmentIndex < segments.count; segmentIndex++) {
                     NSManagedObject *segmentEntity = segments[segmentIndex];
                     NSString *segmentURL = [segmentEntity valueForKey:@"url"];
-
-                    if (!segmentURL || [segmentURL isEqualToString:@""]) {
-                        continue;
-                    }
 
                     NSNumber *segmentTimeStampNumber = [segmentEntity valueForKey:@"timeStamp"];
                     if (!segmentTimeStampNumber) {
@@ -715,19 +724,13 @@ NSMutableDictionary *classColorMap;
                     }
 
                     double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
-                    NSLog(@"Checking segment: %@ (Seconds since midnight: %.2f)", segmentURL, segmentSecondsSinceMidnight);
-
                     // Check if the segment is within ±60 seconds of any event timestamp
                     BOOL shouldSkipDeletion = NO;
                     for (NSNumber *eventTimestamp in eventTimestamps) {
                         double eventSecondsSinceMidnight = eventTimestamp.doubleValue;
                         double timeDifference = fabs(segmentSecondsSinceMidnight - eventSecondsSinceMidnight);
-
-                        NSLog(@"Comparing with event time: %.2f sec (Difference: %.2f sec)", eventSecondsSinceMidnight, timeDifference);
-
                         if (timeDifference <= 60) { // Within one minute
                             shouldSkipDeletion = YES;
-                            NSLog(@"Skipping deletion for segment at %.2f sec because it is close to an event time!", segmentSecondsSinceMidnight);
                             break;
                         }
                     }
@@ -736,51 +739,59 @@ NSMutableDictionary *classColorMap;
                         continue;
                     }
 
-                    NSLog(@"\tChecking Segment: %@", segmentURL);
+                    // Mark this segment for deletion
+                    [segmentsToDelete addObject:segmentEntity];
+                }
 
+                // Delete the collected segments and their files
+                for (NSManagedObject *segmentEntity in segmentsToDelete) {
+                    NSString *segmentURL = [segmentEntity valueForKey:@"url"]; // Declare segmentURL here
                     @try {
                         NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
 
                         NSError *deleteError = nil;
                         if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
                             if ([[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError]) {
-                                NSLog(@"\tDeleted %@", segmentURL);
-                                // Keep the segmentEntity but clear all but URL (blank)
-                                [segmentEntity setValue:@"" forKey:@"url"];
-                                [segmentEntity setValue:nil forKey:@"frames"];
-                                [segmentEntity setValue:nil forKey:@"duration"];
-
-                                // Save the changes to Core Data
-                                NSManagedObjectContext *context = self.fileServer.context;
-                                NSError *saveError = nil;
-                                if (![context save:&saveError]) {
-                                    NSLog(@"Failed to update segment entity: %@", saveError.localizedDescription);
-                                } else {
-                                    NSLog(@"Successfully cleared segment entity data.");
-                                }
+                                // Delete the segmentEntity from Core Data
+                                [context deleteObject:segmentEntity];
 
                                 deletedFile = YES;
-                                if((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) return YES;
-
-                                // Save indexes
-                                [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
-                                [defaults setInteger:segmentIndex forKey:@"LastDeletedSegmentIndex"];
-                                [defaults synchronize];
+                                if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) >= MIN_FREE_SPACE_MB + 500) {
+                                    // Save the context before returning
+                                    NSError *saveError = nil;
+                                    if ([context save:&saveError]) {
+                                        [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
+                                        [defaults setInteger:lastDeletedSegmentIndex forKey:@"LastDeletedSegmentIndex"];
+                                        [defaults synchronize];
+                                        return YES;
+                                    } else {
+                                        NSLog(@"Failed to save context after deletion: %@", saveError.localizedDescription);
+                                    }
+                                }
                             } else {
                                 NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
                             }
                         }
-
                     } @catch (NSException *exception) {
-                        NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason);
+                        NSLog(@"Exception while deleting file: %@, reason: %@", segmentURL, exception.reason); // segmentURL is now in scope
                     }
                 }
-                
-                // If we finish all segments in a day, move to the next one
+
+                // Save the context after processing each day
+                NSError *saveError = nil;
+                if ([context save:&saveError]) {
+                    [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
+                    [defaults setInteger:lastDeletedSegmentIndex forKey:@"LastDeletedSegmentIndex"];
+                    [defaults synchronize];
+                } else {
+                    NSLog(@"Failed to save context: %@", saveError.localizedDescription);
+                }
+
+                // Reset segment index for the next day
                 lastDeletedSegmentIndex = 0;
             }
-            
-            // If nothing was deleted, reset the indexes to avoid getting stuck
+
+            // If nothing was deleted, reset the indexes
             if (!deletedFile) {
                 NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
@@ -793,7 +804,6 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
         return YES;
     }
-
     NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
     return YES;
 }
@@ -827,9 +837,10 @@ NSMutableDictionary *classColorMap;
             }
 
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
-                self.fileServer.segment_length = 60;
-            }
+            //todo add back
+            //if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
+            //    self.fileServer.segment_length = 60;
+            //}
             if (elapsedTime >= self.fileServer.segment_length) {
                 [self finishRecording];
             }
@@ -1072,6 +1083,7 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
 
 
 

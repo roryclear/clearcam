@@ -111,7 +111,6 @@
             NSLog(@"Error: %@", error.localizedDescription);
         } else {
             NSString *responseString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-            NSLog(@"Server Response: %@", responseString);
         }
     }];
     [task resume];
