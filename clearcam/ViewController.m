@@ -390,34 +390,41 @@ NSMutableDictionary *classColorMap;
     [self.view addSubview:self.fpsLabel];
 
     // Create the record button
-    self.recordButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
-    self.recordButton.backgroundColor = [UIColor redColor];
-    self.recordButton.tintColor = [UIColor whiteColor];
-    self.recordButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-
-    CGFloat buttonSize = 60;
+    self.recordButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    CGFloat buttonSize = 80; // Record button size
     self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
-    self.recordButton.layer.cornerRadius = buttonSize / 2;
+    self.recordButton.backgroundColor = [UIColor clearColor];
     self.recordButton.clipsToBounds = YES;
+    CAShapeLayer *whiteRing = [CAShapeLayer layer];
+    whiteRing.path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(5, 5, buttonSize - 10, buttonSize - 10)].CGPath; // 70x70
+    whiteRing.fillColor = [UIColor clearColor].CGColor;
+    whiteRing.strokeColor = [UIColor whiteColor].CGColor;
+    whiteRing.lineWidth = 4.0;
+    [self.recordButton.layer addSublayer:whiteRing];
+
+    CAShapeLayer *redShape = [CAShapeLayer layer];
+    redShape.path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(10, 10, buttonSize - 20, buttonSize - 20)].CGPath; // 60x60
+    redShape.fillColor = [UIColor redColor].CGColor;
+    redShape.name = @"redShape";
+    [self.recordButton.layer addSublayer:redShape];
+
+    [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
+    self.recordButton.titleLabel.alpha = 0; // Hide text
 
     [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.recordButton];
 
-    // Create the settings button with a transparent background
+    // Create the settings button with a transparent background (UNCHANGED)
     self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImage *gearIcon = [UIImage systemImageNamed:@"gear"]; // Apple’s SF Symbol gear
+    UIImage *gearIcon = [UIImage systemImageNamed:@"gear"];
     [self.settingsButton setImage:gearIcon forState:UIControlStateNormal];
 
     CGFloat gearButtonSize = 50;
     self.settingsButton.frame = CGRectMake(0, 0, gearButtonSize, gearButtonSize);
-    
-    // Add a semi-transparent circular background
-    self.settingsButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3]; // 30% opacity
+    self.settingsButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3];
     self.settingsButton.layer.cornerRadius = gearButtonSize / 2;
     self.settingsButton.clipsToBounds = YES;
-    
-    self.settingsButton.tintColor = [UIColor whiteColor]; // Ensure the gear icon is visible
+    self.settingsButton.tintColor = [UIColor whiteColor];
 
     [self.settingsButton addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.settingsButton];
@@ -428,18 +435,57 @@ NSMutableDictionary *classColorMap;
 - (void)updateButtonFrames {
     CGFloat screenWidth = self.view.bounds.size.width;
     CGFloat screenHeight = self.view.bounds.size.height;
-    CGFloat buttonSize = 60;
+    CGFloat recordButtonSize = 80; // Record button size
+    CGFloat settingsButtonSize = 50; // Settings button size
     CGFloat margin = 20;
     CGFloat spacing = 60;
-    self.recordButton.layer.cornerRadius = buttonSize / 2;
-    self.settingsButton.layer.cornerRadius = buttonSize / 2;
+    self.recordButton.layer.cornerRadius = recordButtonSize / 2;
+    self.settingsButton.layer.cornerRadius = settingsButtonSize / 2;
     if (screenWidth > screenHeight) {
-        self.recordButton.frame = CGRectMake(screenWidth - buttonSize - margin, screenHeight / 2 - buttonSize / 2, buttonSize, buttonSize);
-        self.settingsButton.frame = CGRectMake(self.recordButton.frame.origin.x, self.recordButton.frame.origin.y - buttonSize - spacing, buttonSize, buttonSize);
+        // Landscape: Record button on right, settings above, centers aligned horizontally
+        self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - margin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
+        CGFloat settingsX = (screenWidth - recordButtonSize - margin) + (recordButtonSize / 2) - (settingsButtonSize / 2); // Align centers horizontally
+        CGFloat settingsY = screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing; // Above record button
+        self.settingsButton.frame = CGRectMake(settingsX, settingsY, settingsButtonSize, settingsButtonSize);
     } else {
-        CGFloat recordX = (screenWidth - buttonSize) / 2;
-        self.recordButton.frame = CGRectMake(recordX, screenHeight - buttonSize - margin, buttonSize, buttonSize);
-        self.settingsButton.frame = CGRectMake(recordX + buttonSize + spacing, self.recordButton.frame.origin.y, buttonSize, buttonSize);
+        // Portrait: Record button centered, settings to the right, centers aligned vertically
+        CGFloat recordX = (screenWidth - recordButtonSize) / 2;
+        self.recordButton.frame = CGRectMake(recordX, screenHeight - recordButtonSize - margin, recordButtonSize, recordButtonSize);
+        CGFloat settingsX = recordX + recordButtonSize + spacing;
+        CGFloat settingsY = (screenHeight - recordButtonSize - margin) + (recordButtonSize / 2) - (settingsButtonSize / 2); // Align centers vertically
+        self.settingsButton.frame = CGRectMake(settingsX, settingsY, settingsButtonSize, settingsButtonSize);
+    }
+}
+
+- (void)toggleRecording {
+    CAShapeLayer *redShape = nil;
+    for (CALayer *layer in self.recordButton.layer.sublayers) {
+        if ([layer.name isEqualToString:@"redShape"]) {
+            redShape = (CAShapeLayer *)layer;
+            break;
+        }
+    }
+
+    if ([[self.recordButton titleForState:UIControlStateNormal] isEqualToString:@"Record"]) {
+        self.recordPressed = YES;
+        [self.recordButton setTitle:@"Stop" forState:UIControlStateNormal];
+        // Change to red square
+        if (redShape) {
+            [CATransaction begin];
+            [CATransaction setAnimationDuration:0.2];
+            redShape.path = [UIBezierPath bezierPathWithRect:CGRectMake(25, 25, 30, 30)].CGPath;
+            [CATransaction commit];
+        }
+    } else {
+        self.recordPressed = NO;
+        [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
+        // Change back to red circle
+        if (redShape) {
+            [CATransaction begin];
+            [CATransaction setAnimationDuration:0.2];
+            redShape.path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(10, 10, 60, 60)].CGPath;
+            [CATransaction commit];
+        }
     }
 }
 
@@ -453,19 +499,6 @@ NSMutableDictionary *classColorMap;
     [self.captureSession stopRunning];
     SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
     [self.navigationController pushViewController:settingsVC animated:YES];
-}
-
-// Toggle recording state
-- (void)toggleRecording {
-    if ([[self.recordButton titleForState:UIControlStateNormal] isEqualToString:@"Record"]) {
-        self.recordPressed = YES;
-        [self.recordButton setTitle:@"Stop" forState:UIControlStateNormal];
-        self.recordButton.backgroundColor = [UIColor darkGrayColor]; // Change color to indicate recording
-    } else {
-        self.recordPressed = NO;
-        [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
-        self.recordButton.backgroundColor = [UIColor redColor]; // Reset to red when stopped
-    }
 }
 
 - (void)viewWillLayoutSubviews {
