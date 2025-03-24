@@ -91,7 +91,6 @@
                 if (![imageData writeToFile:filePath atomically:YES]) {
                     NSLog(@"Failed to save image at path: %@", filePath);
                 } else {
-                    NSLog(@"Image saved at path: %@", filePath);
                     //thumbnail
                     UIGraphicsBeginImageContextWithOptions(CGSizeMake(uiImage.size.width / 2, uiImage.size.height / 2), YES, 1.0);
                     [uiImage drawInRect:CGRectMake(0, 0, uiImage.size.width / 2, uiImage.size.height / 2)];
@@ -133,10 +132,7 @@
                         NSLog(@"NOT sending an email");
                     }
                 }
-            } else {
-                NSLog(@"Failed to create CGImage from CIImage");
             }
-            
             [self.backgroundContext performBlockAndWait:^{
                 NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
                                                                           inManagedObjectContext:self.backgroundContext];

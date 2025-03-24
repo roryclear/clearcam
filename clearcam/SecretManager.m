@@ -88,8 +88,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         }
         return NO;
     }
-
-    NSLog(@"Successfully saved encryption key.");
     return YES;
 }
 
@@ -157,8 +155,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         }
         return NO;
     }
-
-    NSLog(@"Successfully saved decryption key with identifier: %@", identifier);
     return YES;
 }
 
@@ -216,8 +212,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         }
         return NO;
     }
-    
-    NSLog(@"Successfully deleted key from Keychain with identifier: %@", identifier);
     return YES;
 }
 
@@ -238,8 +232,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         }
         return NO;
     }
-    
-    NSLog(@"Successfully deleted all keys from Keychain.");
     return YES;
 }
 

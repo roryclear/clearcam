@@ -156,13 +156,9 @@
 
 - (void)streamViaWiFiSwitchToggled:(UISwitch *)sender {
     self.streamViaWiFiEnabled = sender.on;
-    
-    // Save the toggle state to NSUserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.streamViaWiFiEnabled forKey:@"stream_via_wifi_enabled"];
     [defaults synchronize];
-    
-    NSLog(@"Stream via Wi-Fi: %@", self.streamViaWiFiEnabled ? @"Enabled" : @"Disabled");
 }
 
 #pragma mark - Subscription Status
@@ -170,11 +166,6 @@
 - (void)checkSubscriptionStatus {
     [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (isActive) {
-                NSLog(@"Subscription is active. Expiry date: %@", expiryDate);
-            } else {
-                NSLog(@"No active subscription found.");
-            }
             [self.tableView reloadData]; // Refresh the UI based on the subscription status
         });
     }];
@@ -183,7 +174,6 @@
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
     // Called when the subscription status changes (e.g., after a successful purchase)
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"Subscription status changed. Refreshing UI.");
         [self.tableView reloadData]; // Refresh the UI to reflect the new subscription status
     });
 }
@@ -418,7 +408,6 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSLog(@"Tapped section %ld, row %ld", (long)indexPath.section, (long)indexPath.row);
     BOOL isPremiumOrUsingOwnServer = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled;
     
     if (indexPath.section == 0) {
@@ -514,8 +503,6 @@
     [defaults synchronize];
     
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
-    
-    NSLog(@"Use own email server: %@", self.useOwnEmailServerEnabled ? @"Enabled" : @"Disabled");
 }
 
 - (void)showEmailServerAddressInputDialog {
@@ -642,19 +629,12 @@
 }
 
 - (void)savePasswordToSecretsManager:(NSString *)password {
-    if (!password) {
-        NSLog(@"Error: Password cannot be nil.");
-        return;
-    }
+    if (!password) return;
     
     NSError *error = nil;
     BOOL success = [[SecretManager sharedManager] saveEncryptionKey:password error:&error];
     
-    if (!success) {
-        NSLog(@"Failed to save password to Keychain: %@", error.localizedDescription);
-    } else {
-        NSLog(@"Password successfully saved to Keychain.");
-    }
+    if (!success) NSLog(@"Failed to save password to Keychain: %@", error.localizedDescription);
 }
 
 - (NSString *)retrievePasswordFromSecretsManager {
@@ -713,7 +693,6 @@
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
     }
-    NSLog(@"Send Email Alerts: %@", self.sendEmailAlertsEnabled ? @"Enabled" : @"Disabled");
 }
 
 - (void)showEmailInputDialogWithCompletion:(void (^)(BOOL success))completion {
@@ -836,7 +815,6 @@
 }
 
 - (void)showEmailInputDialog {
-    NSLog(@"Entering showEmailInputDialog");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Email Address"
                                                                    message:@"Please enter a valid email address."
                                                             preferredStyle:UIAlertControllerStyleAlert];
@@ -851,13 +829,11 @@
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *email = alert.textFields.firstObject.text;
-        NSLog(@"User entered email: %@", email);
         if ([self isValidEmail:email]) {
             [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.tableView reloadData];
-                NSLog(@"Table view reloaded with new email");
             });
         } else {
             [self showInvalidEmailAlert];
@@ -867,14 +843,12 @@
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
                                                          handler:^(UIAlertAction * _Nonnull action) {
-        NSLog(@"User canceled email input dialog");
     }];
     
     [alert addAction:saveAction];
     [alert addAction:cancelAction];
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"Presenting email input dialog");
         [self presentViewController:alert animated:YES completion:^{
             NSLog(@"Email input dialog presentation completed");
         }];
@@ -884,7 +858,6 @@
 #pragma mark - Resolution Picker
 
 - (void)showResolutionPicker {
-    NSLog(@"Entering showResolutionPicker");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select Resolution"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
@@ -895,7 +868,6 @@
         UIAlertAction *action = [UIAlertAction actionWithTitle:resolution
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
-            NSLog(@"User selected resolution: %@", resolution);
             self.selectedResolution = resolution;
             SettingsManager *settingsManager = [SettingsManager sharedManager];
             if ([resolution isEqualToString:@"720p"]) {
@@ -903,11 +875,8 @@
             } else if ([resolution isEqualToString:@"1080p"]) {
                 [settingsManager updateResolutionWithWidth:@"1920" height:@"1080" textSize:@"3" preset:@"AVCaptureSessionPreset1920x1080"];
             }
-            NSLog(@"Updated SettingsManager: width=%@, height=%@, textSize=%@, preset=%@",
-                  settingsManager.width, settingsManager.height, settingsManager.text_size, settingsManager.preset);
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.tableView reloadData];
-                NSLog(@"Table view reloaded for resolution change");
             });
         }];
         [alert addAction:action];
@@ -916,12 +885,10 @@
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
                                                          handler:^(UIAlertAction * _Nonnull action) {
-        NSLog(@"User canceled resolution picker");
     }];
     [alert addAction:cancelAction];
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"Presenting resolution picker");
         [self presentViewController:alert animated:YES completion:^{
             NSLog(@"Resolution picker presentation completed");
         }];
@@ -942,7 +909,6 @@
                                                        handler:^(UIAlertAction * _Nonnull action) {
             self.selectedPresetKey = presetKey;
             [settingsManager updateYoloIndexesKey:presetKey];
-            NSLog(@"Selected YOLO indexes key: %@", self.selectedPresetKey);
             [self.tableView reloadData];
         }];
         [alert addAction:action];

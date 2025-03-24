@@ -116,44 +116,6 @@
     return NO; // Port is closed
 }
 
-
-- (void)scanNetworkForPort:(int)port completion:(void (^)(NSArray<NSString *> *openPorts))completion {
-    NSDictionary *ipInfo = [self getLocalIPInfo];
-    if (!ipInfo) {
-        NSLog(@"Failed to get local IP info.");
-        if (completion) completion(@[]);
-        return;
-    }
-
-    NSString *deviceIP = [self getDeviceIPAddress];
-    NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
-    
-    if (deviceIP) {
-        [foundIPs addObject:deviceIP];
-    }
-
-    NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
-    
-    dispatch_group_t scanGroup = dispatch_group_create();
-    
-    for (NSString *ip in ipList) {
-        dispatch_group_enter(scanGroup);
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-            if ([self isPortOpen:ip port:port]) {
-                @synchronized(self) {
-                    [foundIPs addObject:ip];
-                }
-            }
-            dispatch_group_leave(scanGroup);
-        });
-    }
-    
-    dispatch_group_wait(scanGroup, DISPATCH_TIME_FOREVER);
-    if (completion) {
-        completion([foundIPs copy]);
-    }
-}
-
 - (void)throttledScanNetworkForPort:(int)port withBatchSize:(int)batchSize completion:(void (^)(NSArray<NSString *> *openPorts))completion {
     NSDictionary *ipInfo = [self getLocalIPInfo];
     if (!ipInfo) {
@@ -171,8 +133,6 @@
     }
 
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
-    NSLog(@"Scanning %lu IPs for app instances on port %d...", (unsigned long)ipList.count, port);
-    
     dispatch_group_t scanGroup = dispatch_group_create();
     dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
     

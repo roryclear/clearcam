@@ -688,9 +688,6 @@ NSMutableDictionary *classColorMap;
 
     @try {
         if ((double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0) < MIN_FREE_SPACE_MB) {
-            NSLog(@"deleting stuff");
-            NSLog(@"NOT ENOUGH SPACE!");
-
             // Fetch all DayEntities, sorted by date
             NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
             fetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:YES]];

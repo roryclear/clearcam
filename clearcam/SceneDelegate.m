@@ -28,7 +28,6 @@
     if (connectionOptions.URLContexts.count > 0) {
         UIOpenURLContext *context = connectionOptions.URLContexts.anyObject;
         NSURL *url = context.URL;
-        NSLog(@"App launched with URL: %@", url);
         [self handleURL:url];
     }
 }
@@ -37,38 +36,23 @@
     // Handle the URL when the app is already running
     UIOpenURLContext *context = URLContexts.anyObject;
     NSURL *url = context.URL;
-    NSLog(@"App opened URL: %@", url);
     [self handleURL:url];
 }
 
 - (void)handleURL:(NSURL *)url {
     // Handle security-scoped URL
     BOOL isSecurityScoped = [url startAccessingSecurityScopedResource];
-    if (isSecurityScoped) {
-        NSLog(@"Started accessing security-scoped resource.");
-    }
-
     // Handle the .aes file
     [self handleAESFile:url];
 
     // Stop accessing security-scoped resource
-    if (isSecurityScoped) {
-        [url stopAccessingSecurityScopedResource];
-        NSLog(@"Stopped accessing security-scoped resource.");
-    }
+    if (isSecurityScoped) [url stopAccessingSecurityScopedResource];
 }
 
 - (void)handleAESFile:(NSURL *)aesFileURL {
     NSFileManager *fileManager = [NSFileManager defaultManager];
-
-    // Log the file path for debugging
-    NSLog(@"Attempting to access file at path: %@", aesFileURL.path);
-
-    // Check if the file is an iCloud file
     BOOL isUbiquitous = [fileManager isUbiquitousItemAtURL:aesFileURL];
     if (isUbiquitous) {
-        NSLog(@"File is an iCloud file.");
-
         // Check the download status
         NSString *downloadStatus = nil;
         NSError *downloadError = nil;
@@ -82,8 +66,6 @@
         NSLog(@"iCloud download status: %@", downloadStatus);
 
         if (![downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
-            // File is not downloaded locally, initiate download
-            NSLog(@"File is not downloaded locally. Starting download...");
             NSError *downloadStartError = nil;
             [fileManager startDownloadingUbiquitousItemAtURL:aesFileURL error:&downloadStartError];
             if (downloadStartError) {
@@ -91,7 +73,6 @@
                 [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to start download: %@", downloadStartError.localizedDescription]];
                 return;
             }
-            NSLog(@"Started downloading iCloud file. Monitoring download progress...");
             [self monitorICloudDownloadForURL:aesFileURL];
             [self showDownloadAlert];
             return;
@@ -120,24 +101,17 @@
             [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription]];
             return;
         }
-        NSLog(@"Read .aes file successfully. Size: %lu bytes", (unsigned long)encryptedData.length);
-
-        // Attempt to decrypt the data using stored keys
         NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
         __block NSData *decryptedData = nil; // Add __block specifier
         __block NSString *successfulKey = nil; // Add __block specifier
 
-        // Try each stored key
-        NSLog(@"rory stored keys: %lu",(unsigned long)storedKeys.count);
         for (NSString *key in storedKeys) {
             decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
             if (decryptedData) {
-                NSLog(@"rory has key");
                 successfulKey = key;
                 break;
             }
         }
-        NSLog(@"rory key not found");
 
         // If no stored key worked, prompt the user for a key
         if (!decryptedData) {
@@ -160,7 +134,6 @@
 // Helper method to handle decrypted data
 - (void)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
     NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSLog(@"Decrypted data successfully. Size: %lu bytes", (unsigned long)decryptedData.length);
 
     // Remove only the .aes extension
     NSString *fileName = [aesFileURL lastPathComponent];
@@ -177,20 +150,12 @@
         [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription]];
         return;
     }
-
-    NSLog(@"Decrypted and saved .jpg file: %@", jpgFileURL);
-
-    // Open the .jpg file in the system's photo viewer
     [self openImageInPhotoViewer:jpgFileURL];
-
-    // Delete the .aes file after successful decryption and saving
     NSError *deleteError = nil;
     [fileManager removeItemAtURL:aesFileURL error:&deleteError];
     if (deleteError) {
         NSLog(@"Failed to delete .aes file: %@", deleteError.localizedDescription);
         [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete the original file: %@", deleteError.localizedDescription]];
-    } else {
-        NSLog(@"Successfully deleted .aes file: %@", aesFileURL.path);
     }
 }
 
@@ -324,8 +289,6 @@
     NSMetadataQuery *query = notification.object;
     [query enumerateResultsUsingBlock:^(NSMetadataItem *result, NSUInteger idx, BOOL *stop) {
         NSString *downloadStatus = [result valueForAttribute:NSMetadataUbiquitousItemDownloadingStatusKey];
-        NSLog(@"Download status finished: %@", downloadStatus);
-
         if ([downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
             // File is downloaded, stop the query and handle the file
             [query stopQuery];
@@ -358,8 +321,6 @@
 }
 
 - (void)documentInteractionControllerDidEndPreview:(UIDocumentInteractionController *)controller {
-    // This method is called when the user is done viewing the image
-    NSLog(@"User is done viewing the image.");
     self.docController = nil; // Clear the controller
 }
 
