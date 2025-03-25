@@ -647,13 +647,18 @@
     if ([filePath hasPrefix:@"delete-event"]) {
         NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
         NSString *eventTimeStamp = nil;
+        NSString *eventTimeStamp_end = nil;
         
         for (NSURLQueryItem *item in components.queryItems) {
             if ([item.name isEqualToString:@"timeStamp"]) {
                 eventTimeStamp = item.value;
-                break;
+            }
+            if ([item.name isEqualToString:@"end"]) {
+                eventTimeStamp_end = item.value;
             }
         }
+        
+        if(!eventTimeStamp_end) eventTimeStamp_end = eventTimeStamp;
         
         if (!eventTimeStamp) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
@@ -662,11 +667,9 @@
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-
-        // Convert the timeStamp to a number
-        NSTimeInterval timeStamp = [eventTimeStamp doubleValue];
         
-        BOOL success = [self deleteEventsBetweenStartTimeStamp:timeStamp andEndTimeStamp:timeStamp];
+        
+        BOOL success = [self deleteEventsBetweenStartTimeStamp:[eventTimeStamp doubleValue] andEndTimeStamp:[eventTimeStamp_end doubleValue] ];
         
         if (success) {
             // Get the app's Documents directory
@@ -684,69 +687,6 @@
                     NSLog(@"Failed to delete image: %@", error.localizedDescription);
                 }
             }
-
-            // Optional cleanup: remove cached preferences for the last deleted event
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-
-            // Respond with success
-            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
-            NSString *successMessage = @"{\"success\": \"Event and associated image deleted\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [successMessage UTF8String], successMessage.length, 0);
-        } else {
-            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"Event not found\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-        }
-    }
-    
-    if ([filePath hasPrefix:@"delete-batch"]) {
-        NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
-        NSString *eventTimeStamp_start = nil;
-        NSString *eventTimeStamp_end = nil;
-        
-        for (NSURLQueryItem *item in components.queryItems) {
-            if ([item.name isEqualToString:@"start"]) {
-                eventTimeStamp_start = item.value;
-            }
-            if ([item.name isEqualToString:@"end"]) {
-                eventTimeStamp_end = item.value;
-                break;
-            }
-        }
-        
-        if (!eventTimeStamp_start || !eventTimeStamp_end) {
-            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
-            NSString *errorMessage = @"{\"error\": \"Missing timeStamp parameter\"}";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
-            return;
-        }
-        
-        BOOL success = [self deleteEventsBetweenStartTimeStamp:[eventTimeStamp_start doubleValue] andEndTimeStamp:[eventTimeStamp_end doubleValue]];
-        
-        if (success) {
-            // Get the app's Documents directory
-            //todo
-            /*
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths firstObject];
-            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
-
-            // File path for the image (with .jpg extension)
-            NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
-            NSString *imageFilePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_small.jpg", eventTimeStamp]];
-            NSError *error = nil;
-            // Check if the image file exists and delete it
-            if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
-                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
-                    NSLog(@"Failed to delete image: %@", error.localizedDescription);
-                }
-            }
-             */
 
             // Optional cleanup: remove cached preferences for the last deleted event
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];

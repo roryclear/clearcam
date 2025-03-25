@@ -137,7 +137,7 @@
             }
 
             try {
-                const response = await fetch(`/delete-batch?start=${startTime}&end=${endTime}`, { method: 'GET' });
+                const response = await fetch(`/delete-event?timeStamp=${startTime}&end=${endTime}`, { method: 'GET' });
                 if (!response.ok) throw new Error('Failed to delete events');
                 closeDeleteAllModal();
                 fetchEvents(); // Refresh the event list
