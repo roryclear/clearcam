@@ -647,13 +647,18 @@
     if ([filePath hasPrefix:@"delete-event"]) {
         NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
         NSString *eventTimeStamp = nil;
+        NSString *eventTimeStamp_end = nil;
         
         for (NSURLQueryItem *item in components.queryItems) {
             if ([item.name isEqualToString:@"timeStamp"]) {
                 eventTimeStamp = item.value;
-                break;
+            }
+            if ([item.name isEqualToString:@"end"]) {
+                eventTimeStamp_end = item.value;
             }
         }
+        
+        if(!eventTimeStamp_end) eventTimeStamp_end = eventTimeStamp;
         
         if (!eventTimeStamp) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
@@ -662,35 +667,11 @@
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
         }
-
-        // Convert the timeStamp to a number
-        NSTimeInterval timeStamp = [eventTimeStamp doubleValue];
         
-        BOOL success = [self deleteEventWithTimeStamp:timeStamp];
+        
+        BOOL success = [self deleteEventsBetweenStartTimeStamp:[eventTimeStamp doubleValue] andEndTimeStamp:[eventTimeStamp_end doubleValue] ];
         
         if (success) {
-            // Get the app's Documents directory
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths firstObject];
-            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
-
-            // File path for the image (with .jpg extension)
-            NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
-            NSString *imageFilePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_small.jpg", eventTimeStamp]];
-            NSError *error = nil;
-            // Check if the image file exists and delete it
-            if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
-                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
-                    NSLog(@"Failed to delete image: %@", error.localizedDescription);
-                }
-            }
-
-            // Optional cleanup: remove cached preferences for the last deleted event
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-
-            // Respond with success
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
             NSString *successMessage = @"{\"success\": \"Event and associated image deleted\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
@@ -702,7 +683,6 @@
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
         }
     }
-    
     
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     NSRange queryRange = [fullPath rangeOfString:@"?"];
@@ -804,50 +784,162 @@
     fclose(file);
 }
 
-- (BOOL)deleteEventWithTimeStamp:(NSTimeInterval)timeStamp {
+- (BOOL)deleteEventsBetweenStartTimeStamp:(NSTimeInterval)startTimeStamp andEndTimeStamp:(NSTimeInterval)endTimeStamp {
     __block BOOL success = NO;
     const int maxRetries = 3;
     int attempt = 0;
     
-    while (attempt < maxRetries) {
+    // Validate context
+    if (!self.context) {
+        NSLog(@"Error: Managed object context is nil");
+        return NO;
+    }
+    
+    // Verify entity exists in model
+    NSEntityDescription *entity = [NSEntityDescription entityForName:@"EventEntity"
+                                             inManagedObjectContext:self.context];
+    if (!entity) {
+        NSLog(@"Error: Entity 'EventEntity' not found in model");
+        return NO;
+    }
+    
+    // Validate timestamp range
+    if (startTimeStamp > endTimeStamp) {
+        NSLog(@"Error: startTimeStamp (%lf) must be less than or equal to endTimeStamp (%lf)", startTimeStamp, endTimeStamp);
+        return NO;
+    }
+    
+    // Get the app's Documents directory and images folder
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths firstObject];
+    NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+    
+    while (attempt < maxRetries && !success) {
         attempt++;
+        NSLog(@"Attempt %d to delete events between %lf and %lf", attempt, startTimeStamp, endTimeStamp);
+        
         [self.context performBlockAndWait:^{
-            NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-            double epsilon = 1;
-            fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
+            NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
+            if (!fetchRequest) {
+                NSLog(@"Failed to create fetch request (attempt %d)", attempt);
+                success = NO;
+                return;
+            }
             
-            NSError *error = nil;
-            NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
-            if (error) {
-                NSLog(@"Fetch error (attempt %d): %@", attempt, error.localizedDescription);
+            [fetchRequest setEntity:entity];
+            double epsilon = 1.0; // 1-second buffer on both ends
+            NSPredicate *predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)",
+                                    startTimeStamp - epsilon, endTimeStamp + epsilon];
+            [fetchRequest setPredicate:predicate];
+            
+            // Execute fetch with error handling
+            NSError *fetchError = nil;
+            NSArray *events = nil;
+            @try {
+                events = [self.context executeFetchRequest:fetchRequest error:&fetchError];
+                NSLog(@"Fetched %lu events for deletion (attempt %d)", (unsigned long)events.count, attempt);
+            }
+            @catch (NSException *exception) {
+                NSLog(@"Fetch exception (attempt %d): %@", attempt, exception.reason);
                 success = NO;
                 return;
             }
+            
+            if (fetchError) {
+                NSLog(@"Fetch error (attempt %d): %@", attempt, fetchError.localizedDescription);
+                success = NO;
+                return;
+            }
+            
+            if (!events) {
+                NSLog(@"Fetch returned nil array (attempt %d)", attempt);
+                success = YES; // Treat as success if no objects to delete
+                return;
+            }
+            
             if (events.count == 0) {
-                success = YES;
+                NSLog(@"No events found in range (attempt %d)", attempt);
+                success = YES; // No events in range, still a success
                 return;
             }
+            
+            // Delete events and their associated images
+            NSFileManager *fileManager = [NSFileManager defaultManager];
             for (NSManagedObject *event in events) {
+                NSNumber *timeStampNumber = [event valueForKey:@"timeStamp"];
+                if (!timeStampNumber) {
+                    NSLog(@"Warning: Event missing timestamp, skipping image deletion but deleting event");
+                    [self.context deleteObject:event];
+                    continue;
+                }
+                
+                NSTimeInterval timeStamp = [timeStampNumber doubleValue];
+                long long roundedTimestamp = (long long)floor(timeStamp); // Floor to integer
+                NSString *imageFileName = [NSString stringWithFormat:@"%lld", roundedTimestamp];
+                NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@".jpg"]];
+                NSString *smallImageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@"_small.jpg"]];
+                
+                // Delete regular image if it exists
+                NSError *fileError = nil;
+                if ([fileManager fileExistsAtPath:imageFilePath]) {
+                    if ([fileManager removeItemAtPath:imageFilePath error:&fileError]) {
+                        NSLog(@"Deleted image at %@", imageFilePath);
+                    } else {
+                        NSLog(@"Failed to delete image at %@: %@", imageFilePath, fileError.localizedDescription);
+                    }
+                }
+                
+                // Delete small image if it exists
+                fileError = nil;
+                if ([fileManager fileExistsAtPath:smallImageFilePath]) {
+                    if ([fileManager removeItemAtPath:smallImageFilePath error:&fileError]) {
+                        NSLog(@"Deleted small image at %@", smallImageFilePath);
+                    } else {
+                        NSLog(@"Failed to delete small image at %@: %@", smallImageFilePath, fileError.localizedDescription);
+                    }
+                }
+                
+                // Delete the event from Core Data
                 [self.context deleteObject:event];
+                NSLog(@"Marked event with timestamp %lf for deletion", timeStamp);
             }
-            if ([self.context save:&error]) {
-                success = YES;
+            
+            // Save changes
+            if ([self.context hasChanges]) {
+                NSLog(@"Context has %lu deleted objects to save (attempt %d)", (unsigned long)[self.context.deletedObjects count], attempt);
+                NSError *saveError = nil;
+                @try {
+                    success = [self.context save:&saveError];
+                    if (success) {
+                        NSLog(@"Successfully saved deletions (attempt %d)", attempt);
+                    } else {
+                        NSLog(@"Save failed (attempt %d): %@", attempt, saveError.localizedDescription);
+                    }
+                }
+                @catch (NSException *exception) {
+                    NSLog(@"Save exception (attempt %d): %@", attempt, exception.reason);
+                    success = NO;
+                }
             } else {
-                NSLog(@"Save error (attempt %d): %@", attempt, error.localizedDescription);
-                success = NO;
+                NSLog(@"No changes detected in context (attempt %d)", attempt);
+                success = YES; // No changes to save, but this shouldn't happen if events were deleted
             }
         }];
         
-        if (success) {
-            break;
+        if (!success) {
+            NSLog(@"Retrying batch delete (attempt %d/%d)...", attempt, maxRetries);
+            [NSThread sleepForTimeInterval:0.1];
         }
-        
-        NSLog(@"Retrying delete (attempt %d/%d)...", attempt, maxRetries);
+    }
+    
+    if (!success) {
+        NSLog(@"Failed to delete events between %lf and %lf after %d attempts", startTimeStamp, endTimeStamp, maxRetries);
+    } else {
+        NSLog(@"Successfully deleted events between %lf and %lf", startTimeStamp, endTimeStamp);
     }
     
     return success;
 }
-
 
 - (NSArray *)fetchFramesForURL:(NSString *)url context:(NSManagedObjectContext *)context {
     if (!context) {
@@ -970,37 +1062,74 @@
 }
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-    NSSortDescriptor *sortDescriptor = [[NSSortDescriptor alloc] initWithKey:@"timeStamp"
-                                                                 ascending:YES];
-    [fetchRequest setSortDescriptors:@[sortDescriptor]];
-    
-    NSError *error = nil;
-    NSArray *fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
-
-    if (error) {
-        NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
+    // Validate context
+    if (!context) {
+        NSLog(@"Error: Managed object context is nil");
         return @[];
     }
-
-    NSMutableArray *eventDataArray = [NSMutableArray arrayWithCapacity:fetchedEvents.count];
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-
-    for (NSManagedObject *event in fetchedEvents) {
-        NSTimeInterval timestamp = [[event valueForKey:@"timeStamp"] doubleValue];
-        long long roundedTimestamp = (long long)timestamp;
-        NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
+    
+    __block NSArray *eventDataArray = nil;
+    
+    // Perform fetch synchronously on the context's queue
+    [context performBlockAndWait:^{
+        NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+        NSSortDescriptor *sortDescriptor = [[NSSortDescriptor alloc] initWithKey:@"timeStamp"
+                                                                     ascending:YES];
+        [fetchRequest setSortDescriptors:@[sortDescriptor]];
         
-        NSDictionary *eventDict = @{
-            @"timeStamp": readableDate,
-            @"classType": [event valueForKey:@"classType"] ?: @"unknown",
-            @"quantity": [event valueForKey:@"quantity"] ?: @(0),
-            @"imageURL": [NSString stringWithFormat:@"images/%lld_small.jpg", roundedTimestamp]
-        };
-        [eventDataArray addObject:eventDict];
-    }
-    return eventDataArray;
+        NSError *error = nil;
+        NSArray *fetchedEvents = nil;
+        
+        @try {
+            fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
+        }
+        @catch (NSException *exception) {
+            NSLog(@"Fetch exception: %@", exception.reason);
+            eventDataArray = @[];
+            return;
+        }
+        
+        if (error) {
+            NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
+            eventDataArray = @[];
+            return;
+        }
+        
+        if (!fetchedEvents) {
+            NSLog(@"Fetch returned nil array");
+            eventDataArray = @[];
+            return;
+        }
+        
+        NSMutableArray *tempArray = [NSMutableArray arrayWithCapacity:fetchedEvents.count];
+        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+        [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+        
+        for (NSManagedObject *event in fetchedEvents) {
+            // Safely access attributes with nil checks
+            NSNumber *timeStampNumber = [event valueForKey:@"timeStamp"];
+            if (!timeStampNumber) {
+                NSLog(@"Warning: Event missing timestamp, skipping");
+                continue;
+            }
+            
+            NSTimeInterval timestamp = [timeStampNumber doubleValue];
+            long long roundedTimestamp = (long long)timestamp;
+            NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
+            
+            NSDictionary *eventDict = @{
+                @"timeStamp": readableDate ?: @"",
+                @"classType": [event valueForKey:@"classType"] ?: @"unknown",
+                @"quantity": [event valueForKey:@"quantity"] ?: @(0),
+                @"imageURL": [NSString stringWithFormat:@"images/%lld_small.jpg", roundedTimestamp]
+            };
+            [tempArray addObject:eventDict];
+        }
+        
+        eventDataArray = [tempArray copy];
+    }];
+    
+    return eventDataArray ?: @[];
 }
 
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {
