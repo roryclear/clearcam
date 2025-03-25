@@ -672,28 +672,6 @@
         BOOL success = [self deleteEventsBetweenStartTimeStamp:[eventTimeStamp doubleValue] andEndTimeStamp:[eventTimeStamp_end doubleValue] ];
         
         if (success) {
-            // Get the app's Documents directory
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-            NSString *documentsDirectory = [paths firstObject];
-            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
-
-            // File path for the image (with .jpg extension)
-            NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
-            NSString *imageFilePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_small.jpg", eventTimeStamp]];
-            NSError *error = nil;
-            // Check if the image file exists and delete it
-            if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
-                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
-                    NSLog(@"Failed to delete image: %@", error.localizedDescription);
-                }
-            }
-
-            // Optional cleanup: remove cached preferences for the last deleted event
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-
-            // Respond with success
             NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
             NSString *successMessage = @"{\"success\": \"Event and associated image deleted\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
@@ -831,8 +809,14 @@
         return NO;
     }
     
+    // Get the app's Documents directory and images folder
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths firstObject];
+    NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+    
     while (attempt < maxRetries && !success) {
         attempt++;
+        NSLog(@"Attempt %d to delete events between %lf and %lf", attempt, startTimeStamp, endTimeStamp);
         
         [self.context performBlockAndWait:^{
             NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
@@ -853,6 +837,7 @@
             NSArray *events = nil;
             @try {
                 events = [self.context executeFetchRequest:fetchRequest error:&fetchError];
+                NSLog(@"Fetched %lu events for deletion (attempt %d)", (unsigned long)events.count, attempt);
             }
             @catch (NSException *exception) {
                 NSLog(@"Fetch exception (attempt %d): %@", attempt, exception.reason);
@@ -873,22 +858,62 @@
             }
             
             if (events.count == 0) {
+                NSLog(@"No events found in range (attempt %d)", attempt);
                 success = YES; // No events in range, still a success
                 return;
             }
             
-            // Delete events
+            // Delete events and their associated images
+            NSFileManager *fileManager = [NSFileManager defaultManager];
             for (NSManagedObject *event in events) {
+                NSNumber *timeStampNumber = [event valueForKey:@"timeStamp"];
+                if (!timeStampNumber) {
+                    NSLog(@"Warning: Event missing timestamp, skipping image deletion but deleting event");
+                    [self.context deleteObject:event];
+                    continue;
+                }
+                
+                NSTimeInterval timeStamp = [timeStampNumber doubleValue];
+                long long roundedTimestamp = (long long)floor(timeStamp); // Floor to integer
+                NSString *imageFileName = [NSString stringWithFormat:@"%lld", roundedTimestamp];
+                NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@".jpg"]];
+                NSString *smallImageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@"_small.jpg"]];
+                
+                // Delete regular image if it exists
+                NSError *fileError = nil;
+                if ([fileManager fileExistsAtPath:imageFilePath]) {
+                    if ([fileManager removeItemAtPath:imageFilePath error:&fileError]) {
+                        NSLog(@"Deleted image at %@", imageFilePath);
+                    } else {
+                        NSLog(@"Failed to delete image at %@: %@", imageFilePath, fileError.localizedDescription);
+                    }
+                }
+                
+                // Delete small image if it exists
+                fileError = nil;
+                if ([fileManager fileExistsAtPath:smallImageFilePath]) {
+                    if ([fileManager removeItemAtPath:smallImageFilePath error:&fileError]) {
+                        NSLog(@"Deleted small image at %@", smallImageFilePath);
+                    } else {
+                        NSLog(@"Failed to delete small image at %@: %@", smallImageFilePath, fileError.localizedDescription);
+                    }
+                }
+                
+                // Delete the event from Core Data
                 [self.context deleteObject:event];
+                NSLog(@"Marked event with timestamp %lf for deletion", timeStamp);
             }
             
             // Save changes
             if ([self.context hasChanges]) {
+                NSLog(@"Context has %lu deleted objects to save (attempt %d)", (unsigned long)[self.context.deletedObjects count], attempt);
                 NSError *saveError = nil;
                 @try {
                     success = [self.context save:&saveError];
-                    if (!success) {
-                        NSLog(@"Save error (attempt %d): %@", attempt, saveError.localizedDescription);
+                    if (success) {
+                        NSLog(@"Successfully saved deletions (attempt %d)", attempt);
+                    } else {
+                        NSLog(@"Save failed (attempt %d): %@", attempt, saveError.localizedDescription);
                     }
                 }
                 @catch (NSException *exception) {
@@ -896,7 +921,8 @@
                     success = NO;
                 }
             } else {
-                success = YES; // No changes to save
+                NSLog(@"No changes detected in context (attempt %d)", attempt);
+                success = YES; // No changes to save, but this shouldn't happen if events were deleted
             }
         }];
         
@@ -908,11 +934,12 @@
     
     if (!success) {
         NSLog(@"Failed to delete events between %lf and %lf after %d attempts", startTimeStamp, endTimeStamp, maxRetries);
+    } else {
+        NSLog(@"Successfully deleted events between %lf and %lf", startTimeStamp, endTimeStamp);
     }
     
     return success;
 }
-
 
 - (NSArray *)fetchFramesForURL:(NSString *)url context:(NSManagedObjectContext *)context {
     if (!context) {
