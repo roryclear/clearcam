@@ -319,7 +319,6 @@
 }
 
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
-    self.last_req_time = [NSDate now];
     char requestBuffer[1024];
     ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
     if (bytesRead < 0) {
@@ -336,24 +335,25 @@
     NSString *filePath = [[request substringFromIndex:NSMaxRange(range)] componentsSeparatedByString:@" "][0];
     filePath = [filePath stringByRemovingPercentEncoding];
     if ([filePath isEqualToString:@"/"]) filePath = @"";
-    if ([filePath hasPrefix:@"change-classes"]) {
-        NSString *indexesParam = nil;
-        NSRange queryRange = [filePath rangeOfString:@"?"];
+    
+    NSMutableDictionary<NSString *, NSString *> *queryParams = [NSMutableDictionary dictionary];
+    NSRange queryRange = [filePath rangeOfString:@"?"];
+    if (queryRange.location != NSNotFound) {
+        NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
+        NSArray<NSString *> *queryItems = [queryString componentsSeparatedByString:@"&"];
         
-        if (queryRange.location != NSNotFound) {
-            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
-            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
-            for (NSString *item in queryItems) {
-                NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"indexes"]) {
-                    indexesParam = keyValue[1];
-                    break;
-                }
+        for (NSString *item in queryItems) {
+            NSArray<NSString *> *keyValue = [item componentsSeparatedByString:@"="];
+            if (keyValue.count == 2) {
+                queryParams[keyValue[0]] = keyValue[1];
             }
         }
-        if (indexesParam) {
-            if ([[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] objectForKey:indexesParam]) {
-                [[SettingsManager sharedManager] updateYoloIndexesKey:indexesParam];
+    }
+    
+    if ([filePath hasPrefix:@"change-classes"]) {
+        if (queryParams[@"indexes"]) {
+            if ([[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] objectForKey:queryParams[@"indexes"]]) {
+                [[SettingsManager sharedManager] updateYoloIndexesKey:queryParams[@"indexes"]];
             } else {
                 [[SettingsManager sharedManager] updateYoloIndexesKey:@"all"];
             }
@@ -422,29 +422,13 @@
         return;
     }
     if ([filePath hasPrefix:@"get-segments"]) {
-        if (self.segment_length == 60) { // todo, only for live req
+        self.last_req_time = [NSDate now];
+        if (self.segment_length == 60) {
             self.segment_length = 1;
+            sleep(3);//todo hack, not good because clips wait too
         }
-        
-        NSString *startParam = nil;
-        NSString *dateParam = nil;
-        NSRange queryRange = [filePath rangeOfString:@"?"];
-        if (queryRange.location != NSNotFound) {
-            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
-            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
-            for (NSString *item in queryItems) {
-                NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2) {
-                    if ([keyValue[0] isEqualToString:@"start"]) {
-                        startParam = keyValue[1];
-                    } else if ([keyValue[0] isEqualToString:@"date"]) {
-                        dateParam = keyValue[1];
-                    }
-                }
-            }
-        }
-        
-        if (!dateParam) {
+                
+        if (!queryParams[@"date"]) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid date parameter\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
@@ -452,8 +436,8 @@
             return;
         }
         
-        double startTime = startParam ? [startParam doubleValue] : 0;
-        NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:dateParam
+        double startTime = queryParams[@"start"] ? [queryParams[@"start"] doubleValue] : 0;
+        NSArray *segmentsForDate = [self fetchAndProcessSegmentsFromCoreDataForDateParam:queryParams[@"date"]
                                                                                   start:startTime
                                                                                 context:self.context];
         
@@ -461,33 +445,14 @@
     }
 
     if ([filePath hasPrefix:@"download"]) {
-        NSString *startParam = nil;
-        NSString *endParam = nil;
-        
-        NSRange queryRange = [filePath rangeOfString:@"?"];
-        if (queryRange.location != NSNotFound) {
-            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
-            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
-
-            for (NSString *item in queryItems) {
-                NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2) {
-                    if ([keyValue[0] isEqualToString:@"start"]) {
-                        startParam = keyValue[1];
-                    } else if ([keyValue[0] isEqualToString:@"end"]) {
-                        endParam = keyValue[1];
-                    }
-                }
-            }
-        }
-        if (!startParam || !endParam) {
+        if (!queryParams[@"start"] || !queryParams[@"end"]) {
             NSString *errorResponse = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Missing or invalid start/end parameter\"}]";
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
-        NSTimeInterval startTimeStamp = [startParam doubleValue];
-        NSTimeInterval endTimeStamp = [endParam doubleValue];
+        NSTimeInterval startTimeStamp = [queryParams[@"start"] doubleValue];
+        NSTimeInterval endTimeStamp = [queryParams[@"end"] doubleValue];
         NSDate *startDate = [NSDate dateWithTimeIntervalSince1970:startTimeStamp];
         NSDate *endDate = [NSDate dateWithTimeIntervalSince1970:endTimeStamp];
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
@@ -617,29 +582,14 @@
 
     
     if ([filePath hasPrefix:@"get-frames"]) {
-        NSString *urlParam = nil;
-        NSRange queryRange = [filePath rangeOfString:@"?"];
-        if (queryRange.location != NSNotFound) {
-            NSString *queryString = [filePath substringFromIndex:queryRange.location + 1];
-            NSArray *queryItems = [queryString componentsSeparatedByString:@"&"];
-            for (NSString *item in queryItems) {
-                NSArray *keyValue = [item componentsSeparatedByString:@"="];
-                if (keyValue.count == 2 && [keyValue[0] isEqualToString:@"url"]) {
-                    urlParam = keyValue[1];
-                    break;
-                }
-            }
-        }
-
-        if (!urlParam) {
+        if (!queryParams[@"url"]) {
             NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
             NSString *errorMessage = @"{\"error\": \"Missing or invalid url parameter\"}";
             send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
             send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
             return;
-        }
-        
-        [self sendJson200:[self fetchFramesForURL:urlParam context:self.context] toClient:clientSocket];
+        }        
+        [self sendJson200:[self fetchFramesForURL:queryParams[@"url"] context:self.context] toClient:clientSocket];
     }
     
     if ([filePath hasPrefix:@"get-events"]) [self sendJson200: [self fetchEventDataFromCoreData:self.context] toClient:clientSocket];
@@ -685,7 +635,7 @@
     }
     
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
-    NSRange queryRange = [fullPath rangeOfString:@"?"];
+    queryRange = [fullPath rangeOfString:@"?"];
     if (queryRange.location != NSNotFound) {
         fullPath = [fullPath substringToIndex:queryRange.location];
     }

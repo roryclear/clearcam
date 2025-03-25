@@ -869,9 +869,9 @@ NSMutableDictionary *classColorMap;
 
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
             //todo add back
-            //if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
-            //    self.fileServer.segment_length = 60;
-            //}
+            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
+                self.fileServer.segment_length = 60;
+            }
             if (elapsedTime >= self.fileServer.segment_length) {
                 [self finishRecording];
             }
