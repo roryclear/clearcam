@@ -666,7 +666,7 @@
         // Convert the timeStamp to a number
         NSTimeInterval timeStamp = [eventTimeStamp doubleValue];
         
-        BOOL success = [self deleteEventWithTimeStamp:timeStamp];
+        BOOL success = [self deleteEventsBetweenStartTimeStamp:timeStamp andEndTimeStamp:timeStamp];
         
         if (success) {
             // Get the app's Documents directory
@@ -703,6 +703,68 @@
         }
     }
     
+    if ([filePath hasPrefix:@"delete-batch"]) {
+        NSURLComponents *components = [NSURLComponents componentsWithString:[NSString stringWithFormat:@"http://localhost/%@", filePath]];
+        NSString *eventTimeStamp_start = nil;
+        NSString *eventTimeStamp_end = nil;
+        
+        for (NSURLQueryItem *item in components.queryItems) {
+            if ([item.name isEqualToString:@"start"]) {
+                eventTimeStamp_start = item.value;
+            }
+            if ([item.name isEqualToString:@"end"]) {
+                eventTimeStamp_end = item.value;
+                break;
+            }
+        }
+        
+        if (!eventTimeStamp_start || !eventTimeStamp_end) {
+            NSString *httpHeader = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Missing timeStamp parameter\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+            return;
+        }
+        
+        BOOL success = [self deleteEventsBetweenStartTimeStamp:[eventTimeStamp_start doubleValue] andEndTimeStamp:[eventTimeStamp_end doubleValue]];
+        
+        if (success) {
+            // Get the app's Documents directory
+            //todo
+            /*
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+            NSString *documentsDirectory = [paths firstObject];
+            NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
+
+            // File path for the image (with .jpg extension)
+            NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", eventTimeStamp]];
+            NSString *imageFilePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_small.jpg", eventTimeStamp]];
+            NSError *error = nil;
+            // Check if the image file exists and delete it
+            if ([[NSFileManager defaultManager] fileExistsAtPath:imageFilePath]) {
+                if (![[NSFileManager defaultManager] removeItemAtPath:imageFilePath error:&error] || [[NSFileManager defaultManager] removeItemAtPath:imageFilePathSmall error:&error]) {
+                    NSLog(@"Failed to delete image: %@", error.localizedDescription);
+                }
+            }
+             */
+
+            // Optional cleanup: remove cached preferences for the last deleted event
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+
+            // Respond with success
+            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n";
+            NSString *successMessage = @"{\"success\": \"Event and associated image deleted\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [successMessage UTF8String], successMessage.length, 0);
+        } else {
+            NSString *httpHeader = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n";
+            NSString *errorMessage = @"{\"error\": \"Event not found\"}";
+            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
+            send(clientSocket, [errorMessage UTF8String], errorMessage.length, 0);
+        }
+    }
     
     NSString *fullPath = [basePath stringByAppendingPathComponent:filePath];
     NSRange queryRange = [fullPath rangeOfString:@"?"];
@@ -804,45 +866,108 @@
     fclose(file);
 }
 
-- (BOOL)deleteEventWithTimeStamp:(NSTimeInterval)timeStamp {
+- (BOOL)deleteEventsBetweenStartTimeStamp:(NSTimeInterval)startTimeStamp andEndTimeStamp:(NSTimeInterval)endTimeStamp {
     __block BOOL success = NO;
     const int maxRetries = 3;
     int attempt = 0;
     
-    while (attempt < maxRetries) {
+    // Validate context
+    if (!self.context) {
+        NSLog(@"Error: Managed object context is nil");
+        return NO;
+    }
+    
+    // Verify entity exists in model
+    NSEntityDescription *entity = [NSEntityDescription entityForName:@"EventEntity"
+                                             inManagedObjectContext:self.context];
+    if (!entity) {
+        NSLog(@"Error: Entity 'EventEntity' not found in model");
+        return NO;
+    }
+    
+    // Validate timestamp range
+    if (startTimeStamp > endTimeStamp) {
+        NSLog(@"Error: startTimeStamp (%lf) must be less than or equal to endTimeStamp (%lf)", startTimeStamp, endTimeStamp);
+        return NO;
+    }
+    
+    while (attempt < maxRetries && !success) {
         attempt++;
+        
         [self.context performBlockAndWait:^{
-            NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-            double epsilon = 1;
-            fetchRequest.predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)", timeStamp - epsilon, timeStamp + epsilon];
-            
-            NSError *error = nil;
-            NSArray *events = [self.context executeFetchRequest:fetchRequest error:&error];
-            if (error) {
-                NSLog(@"Fetch error (attempt %d): %@", attempt, error.localizedDescription);
+            NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
+            if (!fetchRequest) {
+                NSLog(@"Failed to create fetch request (attempt %d)", attempt);
                 success = NO;
                 return;
             }
-            if (events.count == 0) {
-                success = YES;
+            
+            [fetchRequest setEntity:entity];
+            double epsilon = 1.0; // 1-second buffer on both ends
+            NSPredicate *predicate = [NSPredicate predicateWithFormat:@"(timeStamp >= %lf) AND (timeStamp <= %lf)",
+                                    startTimeStamp - epsilon, endTimeStamp + epsilon];
+            [fetchRequest setPredicate:predicate];
+            
+            // Execute fetch with error handling
+            NSError *fetchError = nil;
+            NSArray *events = nil;
+            @try {
+                events = [self.context executeFetchRequest:fetchRequest error:&fetchError];
+            }
+            @catch (NSException *exception) {
+                NSLog(@"Fetch exception (attempt %d): %@", attempt, exception.reason);
+                success = NO;
                 return;
             }
+            
+            if (fetchError) {
+                NSLog(@"Fetch error (attempt %d): %@", attempt, fetchError.localizedDescription);
+                success = NO;
+                return;
+            }
+            
+            if (!events) {
+                NSLog(@"Fetch returned nil array (attempt %d)", attempt);
+                success = YES; // Treat as success if no objects to delete
+                return;
+            }
+            
+            if (events.count == 0) {
+                success = YES; // No events in range, still a success
+                return;
+            }
+            
+            // Delete events
             for (NSManagedObject *event in events) {
                 [self.context deleteObject:event];
             }
-            if ([self.context save:&error]) {
-                success = YES;
+            
+            // Save changes
+            if ([self.context hasChanges]) {
+                NSError *saveError = nil;
+                @try {
+                    success = [self.context save:&saveError];
+                    if (!success) {
+                        NSLog(@"Save error (attempt %d): %@", attempt, saveError.localizedDescription);
+                    }
+                }
+                @catch (NSException *exception) {
+                    NSLog(@"Save exception (attempt %d): %@", attempt, exception.reason);
+                    success = NO;
+                }
             } else {
-                NSLog(@"Save error (attempt %d): %@", attempt, error.localizedDescription);
-                success = NO;
+                success = YES; // No changes to save
             }
         }];
         
-        if (success) {
-            break;
+        if (!success) {
+            NSLog(@"Retrying batch delete (attempt %d/%d)...", attempt, maxRetries);
+            [NSThread sleepForTimeInterval:0.1];
         }
-        
-        NSLog(@"Retrying delete (attempt %d/%d)...", attempt, maxRetries);
+    }
+    
+    if (!success) {
+        NSLog(@"Failed to delete events between %lf and %lf after %d attempts", startTimeStamp, endTimeStamp, maxRetries);
     }
     
     return success;
@@ -970,37 +1095,74 @@
 }
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
-    NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
-    NSSortDescriptor *sortDescriptor = [[NSSortDescriptor alloc] initWithKey:@"timeStamp"
-                                                                 ascending:YES];
-    [fetchRequest setSortDescriptors:@[sortDescriptor]];
-    
-    NSError *error = nil;
-    NSArray *fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
-
-    if (error) {
-        NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
+    // Validate context
+    if (!context) {
+        NSLog(@"Error: Managed object context is nil");
         return @[];
     }
-
-    NSMutableArray *eventDataArray = [NSMutableArray arrayWithCapacity:fetchedEvents.count];
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-    [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-
-    for (NSManagedObject *event in fetchedEvents) {
-        NSTimeInterval timestamp = [[event valueForKey:@"timeStamp"] doubleValue];
-        long long roundedTimestamp = (long long)timestamp;
-        NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
+    
+    __block NSArray *eventDataArray = nil;
+    
+    // Perform fetch synchronously on the context's queue
+    [context performBlockAndWait:^{
+        NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
+        NSSortDescriptor *sortDescriptor = [[NSSortDescriptor alloc] initWithKey:@"timeStamp"
+                                                                     ascending:YES];
+        [fetchRequest setSortDescriptors:@[sortDescriptor]];
         
-        NSDictionary *eventDict = @{
-            @"timeStamp": readableDate,
-            @"classType": [event valueForKey:@"classType"] ?: @"unknown",
-            @"quantity": [event valueForKey:@"quantity"] ?: @(0),
-            @"imageURL": [NSString stringWithFormat:@"images/%lld_small.jpg", roundedTimestamp]
-        };
-        [eventDataArray addObject:eventDict];
-    }
-    return eventDataArray;
+        NSError *error = nil;
+        NSArray *fetchedEvents = nil;
+        
+        @try {
+            fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
+        }
+        @catch (NSException *exception) {
+            NSLog(@"Fetch exception: %@", exception.reason);
+            eventDataArray = @[];
+            return;
+        }
+        
+        if (error) {
+            NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
+            eventDataArray = @[];
+            return;
+        }
+        
+        if (!fetchedEvents) {
+            NSLog(@"Fetch returned nil array");
+            eventDataArray = @[];
+            return;
+        }
+        
+        NSMutableArray *tempArray = [NSMutableArray arrayWithCapacity:fetchedEvents.count];
+        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+        [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
+        
+        for (NSManagedObject *event in fetchedEvents) {
+            // Safely access attributes with nil checks
+            NSNumber *timeStampNumber = [event valueForKey:@"timeStamp"];
+            if (!timeStampNumber) {
+                NSLog(@"Warning: Event missing timestamp, skipping");
+                continue;
+            }
+            
+            NSTimeInterval timestamp = [timeStampNumber doubleValue];
+            long long roundedTimestamp = (long long)timestamp;
+            NSString *readableDate = [dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timestamp]];
+            
+            NSDictionary *eventDict = @{
+                @"timeStamp": readableDate ?: @"",
+                @"classType": [event valueForKey:@"classType"] ?: @"unknown",
+                @"quantity": [event valueForKey:@"quantity"] ?: @(0),
+                @"imageURL": [NSString stringWithFormat:@"images/%lld_small.jpg", roundedTimestamp]
+            };
+            [tempArray addObject:eventDict];
+        }
+        
+        eventDataArray = [tempArray copy];
+    }];
+    
+    return eventDataArray ?: @[];
 }
 
 - (void)sendFileData:(FILE *)file toSocket:(int)socket withContentLength:(NSUInteger)contentLength {

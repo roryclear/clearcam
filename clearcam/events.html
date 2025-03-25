@@ -9,12 +9,14 @@
     <script>
         let currentTimestamp = null;
         const defaultOffset = 30; // Default offset set to 30 seconds
+        let allEvents = []; // Store events globally for delete all functionality
 
         async function fetchEvents() {
             try {
                 const response = await fetch('/get-events');
                 if (!response.ok) throw new Error('Failed to fetch events');
                 const events = await response.json();
+                allEvents = events; // Store events for later use
                 renderEvents(events);
             } catch (error) {
                 console.error('Error fetching events:', error);
@@ -67,22 +69,19 @@
             });
         }
 
-        // New function to handle image retry logic
         function retryImageLoad(imgElement, imageURL, maxRetries) {
             const retryCount = parseInt(imgElement.getAttribute('data-retry'));
             if (retryCount < maxRetries) {
-                // Increment retry count and try loading again after a short delay
                 imgElement.setAttribute('data-retry', retryCount + 1);
                 setTimeout(() => {
-                    imgElement.src = ''; // Clear the src to force reload
-                    imgElement.src = imageURL; // Set it back to trigger reload
-                }, 1000); // Wait 1 second before retrying
+                    imgElement.src = '';
+                    imgElement.src = imageURL;
+                }, 1000);
             } else {
-                // Max retries reached, show a fallback
                 imgElement.removeAttribute('src');
                 imgElement.alt = 'Image failed to load';
-                imgElement.style.opacity = '0.5'; // Optional: dim the placeholder
-                imgElement.onclick = null; // Disable click if image fails
+                imgElement.style.opacity = '0.5';
+                imgElement.onclick = null;
             }
         }
 
@@ -111,6 +110,45 @@
             document.getElementById("startTime").value = formatDateTimeLocal(startTime);
             document.getElementById("endTime").value = formatDateTimeLocal(endTime);
             document.getElementById("timePickerModal").style.display = "block";
+        }
+
+        function showDeleteAllModal() {
+            if (allEvents.length === 0) {
+                alert("No events to delete.");
+                return;
+            }
+
+            // Sort events by timestamp to find earliest and latest
+            const sortedEvents = [...allEvents].sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
+            const earliestTime = new Date(sortedEvents[0].timeStamp);
+            const latestTime = new Date(sortedEvents[sortedEvents.length - 1].timeStamp);
+
+            document.getElementById("deleteStartTime").value = formatDateTimeLocal(earliestTime);
+            document.getElementById("deleteEndTime").value = formatDateTimeLocal(latestTime);
+            document.getElementById("deleteAllModal").style.display = "block";
+        }
+
+        async function confirmDeleteAll() {
+            const startTime = new Date(document.getElementById("deleteStartTime").value).getTime() / 1000;
+            const endTime = new Date(document.getElementById("deleteEndTime").value).getTime() / 1000;
+            if (!startTime || !endTime) {
+                alert("Please select both start and end times.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete-batch?start=${startTime}&end=${endTime}`, { method: 'GET' });
+                if (!response.ok) throw new Error('Failed to delete events');
+                closeDeleteAllModal();
+                fetchEvents(); // Refresh the event list
+            } catch (error) {
+                console.error('Error deleting batch of events:', error);
+                alert('Failed to delete events.');
+            }
+        }
+
+        function closeDeleteAllModal() {
+            document.getElementById("deleteAllModal").style.display = "none";
         }
 
         function formatDateTimeLocal(date) {
@@ -152,11 +190,19 @@
             background-color: #f4f4f4;
         }
 
+        #header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
         #eventsContainer {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 15px; /* Space between cards in single column */
+            gap: 15px;
         }
 
         .event-card {
@@ -165,8 +211,8 @@
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 600px; /* Fixed max-width for consistency */
-            box-sizing: border-box; /* Include padding in width */
+            max-width: 600px;
+            box-sizing: border-box;
         }
 
         .event-content {
@@ -176,25 +222,25 @@
         }
 
         .event-image {
-            width: 92%; /* Fixed image width */
+            width: 92%;
             height: auto;
             cursor: pointer;
             border-radius: 5px;
-            object-fit: cover; /* Maintain aspect ratio */
+            object-fit: cover;
         }
 
         .button-group {
             display: flex;
             flex-direction: column;
-            gap: 0; /* No gap, using spacer */
+            gap: 0;
             margin-left: 10px;
-            flex-shrink: 0; /* No shrinking */
-            height: 100%; /* Full height */
-            justify-content: space-between; /* Buttons at ends */
+            flex-shrink: 0;
+            height: 100%;
+            justify-content: space-between;
         }
 
         .spacer {
-            height: 50px; /* Space between buttons */
+            height: 50px;
         }
 
         .action-btn {
@@ -214,7 +260,8 @@
             color: #000;
         }
 
-        .delete-btn:hover {
+        .delete-btn:hover,
+        .delete-all-btn:hover {
             color: red;
         }
 
@@ -222,12 +269,13 @@
             color: blue;
         }
 
-        /* Touch device adjustments */
         @media (hover: none) {
-            .delete-btn:hover {
+            .delete-btn:hover,
+            .delete-all-btn:hover {
                 color: #555;
             }
-            .delete-btn:active {
+            .delete-btn:active,
+            .delete-all-btn:active {
                 color: red;
             }
             .download-btn:hover {
@@ -238,7 +286,6 @@
             }
         }
 
-        /* Mobile adjustments */
         @media (max-width: 600px) {
             .event-card {
                 max-width: 95%;
@@ -263,20 +310,19 @@
             }
         }
 
-        /* Grid layout for wider screens */
-        @media (min-width: 1240px) { /* Adjusted breakpoint to fit 2 cards */
+        @media (min-width: 1240px) {
             #eventsContainer {
                 display: grid;
-                grid-template-columns: repeat(2, 600px); /* Fixed width columns, no shrinking */
-                gap: 20px; /* Space between grid items */
-                justify-content: center; /* Center the grid */
-                max-width: 1240px; /* 2x600px + 20px gap + some padding */
-                margin: 0 auto; /* Center the container */
+                grid-template-columns: repeat(2, 600px);
+                gap: 20px;
+                justify-content: center;
+                max-width: 1240px;
+                margin: 0 auto;
             }
 
             .event-card {
-                max-width: 600px; /* Same as single column, no shrinking */
-                margin: 0; /* Remove auto margin in grid */
+                max-width: 600px;
+                margin: 0;
             }
         }
 
@@ -291,11 +337,17 @@
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
-    <h1>Events</h1>
+    <div id="header">
+        <h1>Events</h1>
+        <button class="action-btn delete-all-btn" onclick="showDeleteAllModal()">
+            <i class="fas fa-trash-alt"></i>
+        </button>
+    </div>
     <div id="eventsContainer"></div>
 
     <div id="timePickerModal" class="modal">
@@ -308,6 +360,18 @@
         <br><br>
         <button onclick="confirmDownload()">Download</button>
         <button onclick="closeModal()">Cancel</button>
+    </div>
+
+    <div id="deleteAllModal" class="modal">
+        <h3>Delete Events</h3>
+        <label for="deleteStartTime">Delete events from:</label>
+        <input type="datetime-local" id="deleteStartTime">
+        <br>
+        <label for="deleteEndTime">Up to:</label>
+        <input type="datetime-local" id="deleteEndTime">
+        <br><br>
+        <button onclick="confirmDeleteAll()">Delete</button>
+        <button onclick="closeDeleteAllModal()">Cancel</button>
     </div>
 </body>
 </html>
