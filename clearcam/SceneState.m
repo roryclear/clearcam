@@ -2,6 +2,7 @@
 #import "SettingsManager.h"
 #import "SecretManager.h"
 #import "AppDelegate.h"
+#import "FileServer.h"
 #import "Email.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
 #import <CommonCrypto/CommonCryptor.h>
@@ -99,7 +100,7 @@
                     NSData *lowResImageData = UIImageJPEGRepresentation(resizedImage, 0.7);
                     [lowResImageData writeToFile:filePathSmall atomically:YES];
                     
-                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 60) { // only once per hour? enforce server side!
+                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 120) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
                         //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
@@ -122,6 +123,14 @@
                                 if (currentTime >= startTime && currentTime <= endTime) {
                                     [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
                                     self.last_email_time = now;
+                                    if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
+                                    NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
+                                    NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
+                                    id context = [FileServer sharedInstance].context;
+                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                                        NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
+                                        [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                                    });
                                     NSLog(@"Email sent: Within scheduled time");
                                     break;
                                 }

@@ -1212,7 +1212,26 @@
         return nil;
     }
 
-    return outputPath;
+    // Rename the output file using timestamps
+    NSDateFormatter *renameFormatter = [[NSDateFormatter alloc] init];
+    [renameFormatter setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
+    NSString *startTimeStr = [renameFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:startTimeStamp]];
+    NSString *endTimeStr = [renameFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:endTimeStamp]];
+    NSString *newFileName = [NSString stringWithFormat:@"%s-%s.mp4", startTimeStr.UTF8String, endTimeStr.UTF8String];
+
+    // Get the directory of the original outputPath and construct the new path
+    NSString *directory = [outputPath stringByDeletingLastPathComponent];
+    NSString *newOutputPath = [directory stringByAppendingPathComponent:newFileName];
+
+    // Rename the file
+    NSError *renameError = nil;
+    [[NSFileManager defaultManager] moveItemAtPath:outputPath toPath:newOutputPath error:&renameError];
+    if (renameError) {
+        NSLog(@"Failed to rename file: %@", renameError);
+        return outputPath; // Return original path if renaming fails
+    }
+
+    return newOutputPath;
 }
 
 @end

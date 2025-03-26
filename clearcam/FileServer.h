@@ -8,6 +8,10 @@
 
 - (void)start;
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context;
+- (NSString *)processVideoDownloadWithLowRes:(BOOL)low_res
+                                  startTime:(NSTimeInterval)startTimeStamp
+                                    endTime:(NSTimeInterval)endTimeStamp
+                                     context:(NSManagedObjectContext *)context;
 @property (nonatomic, assign) NSInteger segment_length;
 @property (nonatomic, strong) NSDate *last_req_time;
 @property (nonatomic, strong) PortScanner *scanner;
