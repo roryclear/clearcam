@@ -537,15 +537,15 @@
                 AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
                 AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
                 if (videoTrack) {
-                    videoComposition.renderSize = CGSizeMake(960, 540); // 720p
+                    videoComposition.renderSize = CGSizeMake(1280, 720); // 540p
                     videoComposition.frameDuration = CMTimeMake(1, 24); // 24 fps
 
                     AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
-                    instruction.timeRange = timeRange; // Match export time range
+                    instruction.timeRange = timeRange;
 
                     AVMutableVideoCompositionLayerInstruction *layerInstruction = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
                     CGSize naturalSize = videoTrack.naturalSize;
-                    CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
+                    CGFloat scale = MIN(1280.0 / naturalSize.width, 720.0 / naturalSize.height);
                     CGAffineTransform transform = CGAffineTransformMakeScale(scale, scale);
                     [layerInstruction setTransform:transform atTime:kCMTimeZero];
 
@@ -554,6 +554,8 @@
                 }
                 exportSession.videoComposition = videoComposition;
                 exportSession.shouldOptimizeForNetworkUse = YES;
+                
+                exportSession.fileLengthLimit = 20 * 1024 * 1024 * (trimmedDuration / 60.0); // ~1 MB per minute
             }
 
             trimCount++;
