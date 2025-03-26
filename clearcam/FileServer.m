@@ -480,42 +480,74 @@
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
-        NSInteger startIndex = -1;
-        for (NSInteger i = segments.count - 1; i >= 0; i--) {
-            NSTimeInterval segmentTimeStamp = [segments[i][@"timeStamp"] doubleValue];
 
-            if (segmentTimeStamp < relativeStart) {
-                startIndex = i;
-                break;
-            }
-        }
-        if (startIndex == -1) startIndex = 0;
-        NSInteger endIndex = -1;
-        for (NSInteger i = startIndex; i < segments.count; i++) {
+        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray array];
+        NSString *tempDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"temp"];
+        [[NSFileManager defaultManager] createDirectoryAtPath:tempDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
+        __block NSInteger trimCount = 0;
+
+        for (NSInteger i = 0; i < segments.count; i++) {
             NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
             NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
             NSTimeInterval segmentEnd = segmentStart + segmentDuration;
 
-            if (segmentEnd > relativeEnd) {
-                endIndex = i;
-                break;
-            }
-        }
-
-        if (endIndex == -1) endIndex = segments.count - 1; // If none found, include everything
-
-        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray array];
-
-        for (NSInteger i = startIndex; i <= endIndex; i++) {
-            NSString *segmentURL = segments[i][@"url"];
-            NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
-
-            if (![[NSFileManager defaultManager] fileExistsAtPath:fullFilePath]) {
-                NSLog(@"Segment file not found: %@", segmentURL);
+            // Skip segments outside the target range
+            if (segmentEnd < relativeStart || segmentStart > relativeEnd) {
                 continue;
             }
 
-            [segmentFilePaths addObject:fullFilePath];
+            NSString *originalFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segments[i][@"url"]];
+            if (![[NSFileManager defaultManager] fileExistsAtPath:originalFilePath]) {
+                NSLog(@"Segment file not found: %@", originalFilePath);
+                continue;
+            }
+
+            // Calculate trim points
+            NSTimeInterval trimStart = MAX(0, relativeStart - segmentStart); // Offset from segment start
+            NSTimeInterval trimEnd = MIN(segmentDuration, relativeEnd - segmentStart); // Offset from segment start
+            NSString *trimmedFilePath = originalFilePath;
+
+            if (trimStart > 0 || trimEnd < segmentDuration) {
+                // Trim the segment using AVFoundation
+                trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
+                AVURLAsset *asset = [AVURLAsset assetWithURL:[NSURL fileURLWithPath:originalFilePath]];
+                AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
+                exportSession.outputURL = [NSURL fileURLWithPath:trimmedFilePath];
+                exportSession.outputFileType = AVFileTypeMPEG4;
+                exportSession.timeRange = CMTimeRangeMake(CMTimeMakeWithSeconds(trimStart, 600), CMTimeMakeWithSeconds(trimEnd - trimStart, 600));
+
+                trimCount++;
+                [exportSession exportAsynchronouslyWithCompletionHandler:^{
+                    switch (exportSession.status) {
+                        case AVAssetExportSessionStatusCompleted:
+                            NSLog(@"Trimmed segment %ld successfully", (long)i);
+                            break;
+                        case AVAssetExportSessionStatusFailed:
+                            NSLog(@"Failed to trim segment %ld: %@", (long)i, exportSession.error);
+                            break;
+                        default:
+                            break;
+                    }
+                    dispatch_semaphore_signal(trimSema);
+                }];
+            } else {
+                [segmentFilePaths addObject:trimmedFilePath];
+            }
+        }
+
+        // Wait for all trimming operations to complete
+        for (NSInteger i = 0; i < trimCount; i++) {
+            dispatch_semaphore_wait(trimSema, DISPATCH_TIME_FOREVER);
+        }
+
+        // Add trimmed files to the list after ensuring they're ready
+        for (NSInteger i = 0; i < segments.count; i++) {
+            NSString *trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:trimmedFilePath]) {
+                [segmentFilePaths addObject:trimmedFilePath];
+            }
         }
 
         if (segmentFilePaths.count == 0) {
@@ -525,7 +557,6 @@
         }
 
         dispatch_semaphore_t sema = dispatch_semaphore_create(0);
-        
         __block NSString *outputPath = nil;
         __block NSError *mergeError = nil;
 
@@ -536,6 +567,13 @@
         }];
 
         dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+
+        // Clean up temporary trimmed files
+        for (NSString *tempFile in segmentFilePaths) {
+            if ([tempFile containsString:@"trimmed"]) {
+                [[NSFileManager defaultManager] removeItemAtPath:tempFile error:nil];
+            }
+        }
 
         if (mergeError || !outputPath || ![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
             NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Failed to merge video\"}]";
@@ -562,11 +600,12 @@
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: video/mp4\r\n");
         dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s-%s.mp4\"\r\n",
-            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:startDate] UTF8String],
-            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:endDate] UTF8String]);
+                [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:startDate] UTF8String],
+                [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:endDate] UTF8String]);
         dprintf(clientSocket, "Content-Length: %lu\r\n", (unsigned long)fileSize);
         dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
         dprintf(clientSocket, "\r\n");
+
         char buffer[64 * 1024];
         size_t bytesRead;
         while ((bytesRead = fread(buffer, 1, sizeof(buffer), mergedFile)) > 0) {
