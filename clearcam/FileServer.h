@@ -4,6 +4,8 @@
 
 @interface FileServer : NSObject
 
++ (instancetype)sharedInstance;
+
 - (void)start;
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context;
 @property (nonatomic, assign) NSInteger segment_length;
