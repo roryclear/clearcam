@@ -489,7 +489,7 @@
         dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
         __block NSInteger trimCount = 0;
 
-        BOOL low_res = NO;
+        BOOL low_res = YES;
 
         NSLog(@"Requested range: %.2f to %.2f (duration: %.2f seconds)", relativeStart, relativeEnd, requestedDuration);
 
@@ -537,7 +537,7 @@
                 AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
                 AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
                 if (videoTrack) {
-                    videoComposition.renderSize = CGSizeMake(1280, 720); // 540p
+                    videoComposition.renderSize = CGSizeMake(960, 540); // 540p
                     videoComposition.frameDuration = CMTimeMake(1, 24); // 24 fps
 
                     AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
@@ -545,7 +545,7 @@
 
                     AVMutableVideoCompositionLayerInstruction *layerInstruction = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
                     CGSize naturalSize = videoTrack.naturalSize;
-                    CGFloat scale = MIN(1280.0 / naturalSize.width, 720.0 / naturalSize.height);
+                    CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
                     CGAffineTransform transform = CGAffineTransformMakeScale(scale, scale);
                     [layerInstruction setTransform:transform atTime:kCMTimeZero];
 
