@@ -472,6 +472,7 @@
 
         NSTimeInterval relativeStart = [startDate timeIntervalSinceDate:midnight];
         NSTimeInterval relativeEnd = [endDate timeIntervalSinceDate:midnight];
+        NSTimeInterval requestedDuration = relativeEnd - relativeStart;
 
         NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedStartDate start:0 context:self.context];
 
@@ -488,13 +489,16 @@
         dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
         __block NSInteger trimCount = 0;
 
+        BOOL low_res = NO; // Toggle this to enable/disable quality adjustments
+
+        NSLog(@"Requested range: %.2f to %.2f (duration: %.2f seconds)", relativeStart, relativeEnd, requestedDuration);
+
         for (NSInteger i = 0; i < segments.count; i++) {
             NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
             NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
             NSTimeInterval segmentEnd = segmentStart + segmentDuration;
 
-            // Skip segments outside the target range
-            if (segmentEnd < relativeStart || segmentStart > relativeEnd) {
+            if (segmentEnd <= relativeStart || segmentStart >= relativeEnd) {
                 continue;
             }
 
@@ -505,44 +509,75 @@
             }
 
             // Calculate trim points
-            NSTimeInterval trimStart = MAX(0, relativeStart - segmentStart); // Offset from segment start
-            NSTimeInterval trimEnd = MIN(segmentDuration, relativeEnd - segmentStart); // Offset from segment start
-            NSString *trimmedFilePath = originalFilePath;
+            NSTimeInterval trimStart = MAX(0, relativeStart - segmentStart);
+            NSTimeInterval trimEnd = MIN(segmentDuration, relativeEnd - segmentStart);
+            NSTimeInterval trimmedDuration = trimEnd - trimStart;
 
-            if (trimStart > 0 || trimEnd < segmentDuration) {
-                // Trim the segment using AVFoundation
-                trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
-                AVURLAsset *asset = [AVURLAsset assetWithURL:[NSURL fileURLWithPath:originalFilePath]];
-                AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
-                exportSession.outputURL = [NSURL fileURLWithPath:trimmedFilePath];
-                exportSession.outputFileType = AVFileTypeMPEG4;
-                exportSession.timeRange = CMTimeRangeMake(CMTimeMakeWithSeconds(trimStart, 600), CMTimeMakeWithSeconds(trimEnd - trimStart, 600));
+            NSLog(@"Segment %ld: %.2f to %.2f (duration: %.2f), trimming to %.2f-%.2f (%.2f seconds)", (long)i, segmentStart, segmentEnd, segmentDuration, trimStart, trimEnd, trimmedDuration);
 
-                trimCount++;
-                [exportSession exportAsynchronouslyWithCompletionHandler:^{
-                    switch (exportSession.status) {
-                        case AVAssetExportSessionStatusCompleted:
-                            NSLog(@"Trimmed segment %ld successfully", (long)i);
-                            break;
-                        case AVAssetExportSessionStatusFailed:
-                            NSLog(@"Failed to trim segment %ld: %@", (long)i, exportSession.error);
-                            break;
-                        default:
-                            break;
-                    }
-                    dispatch_semaphore_signal(trimSema);
-                }];
-            } else {
-                [segmentFilePaths addObject:trimmedFilePath];
+            NSString *trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
+            AVURLAsset *asset = [AVURLAsset assetWithURL:[NSURL fileURLWithPath:originalFilePath]];
+            AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
+            exportSession.outputFileType = AVFileTypeMPEG4;
+            exportSession.outputURL = [NSURL fileURLWithPath:trimmedFilePath];
+
+            // Ensure time range is valid
+            CMTime startTime = CMTimeMakeWithSeconds(trimStart, 600);
+            CMTime durationTime = CMTimeMakeWithSeconds(trimmedDuration, 600);
+            CMTimeRange timeRange = CMTimeRangeMake(startTime, durationTime);
+            if (CMTimeCompare(CMTimeAdd(startTime, durationTime), CMTimeMakeWithSeconds(segmentDuration, 600)) > 0) {
+                durationTime = CMTimeSubtract(CMTimeMakeWithSeconds(segmentDuration, 600), startTime);
+                timeRange = CMTimeRangeMake(startTime, durationTime);
+                NSLog(@"Adjusted duration for segment %ld to fit asset: %.2f seconds", (long)i, CMTimeGetSeconds(durationTime));
             }
+            exportSession.timeRange = timeRange;
+
+            // Quality adjustment block
+            if (low_res) {
+                AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
+                AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+                if (videoTrack) {
+                    videoComposition.renderSize = CGSizeMake(960, 540); // 720p
+                    videoComposition.frameDuration = CMTimeMake(1, 24); // 24 fps
+
+                    AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+                    instruction.timeRange = timeRange; // Match export time range
+
+                    AVMutableVideoCompositionLayerInstruction *layerInstruction = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
+                    CGSize naturalSize = videoTrack.naturalSize;
+                    CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
+                    CGAffineTransform transform = CGAffineTransformMakeScale(scale, scale);
+                    [layerInstruction setTransform:transform atTime:kCMTimeZero];
+
+                    instruction.layerInstructions = @[layerInstruction];
+                    videoComposition.instructions = @[instruction];
+                }
+                exportSession.videoComposition = videoComposition;
+                exportSession.shouldOptimizeForNetworkUse = YES;
+            }
+
+            trimCount++;
+            [exportSession exportAsynchronouslyWithCompletionHandler:^{
+                switch (exportSession.status) {
+                    case AVAssetExportSessionStatusCompleted:
+                        NSLog(@"Processed segment %ld successfully%@, duration: %.2f seconds", (long)i, low_res ? @" at 1280x720" : @"", CMTimeGetSeconds(timeRange.duration));
+                        break;
+                    case AVAssetExportSessionStatusFailed:
+                        NSLog(@"Failed to process segment %ld: %@", (long)i, exportSession.error);
+                        break;
+                    default:
+                        break;
+                }
+                dispatch_semaphore_signal(trimSema);
+            }];
         }
 
-        // Wait for all trimming operations to complete
+        // Wait for all processing to complete
         for (NSInteger i = 0; i < trimCount; i++) {
             dispatch_semaphore_wait(trimSema, DISPATCH_TIME_FOREVER);
         }
 
-        // Add trimmed files to the list after ensuring they're ready
+        // Add processed files to the list
         for (NSInteger i = 0; i < segments.count; i++) {
             NSString *trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
             if ([[NSFileManager defaultManager] fileExistsAtPath:trimmedFilePath]) {
@@ -568,7 +603,7 @@
 
         dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
 
-        // Clean up temporary trimmed files
+        // Clean up temporary files
         for (NSString *tempFile in segmentFilePaths) {
             if ([tempFile containsString:@"trimmed"]) {
                 [[NSFileManager defaultManager] removeItemAtPath:tempFile error:nil];
@@ -618,7 +653,6 @@
 
         fclose(mergedFile);
     }
-
     
     if ([filePath hasPrefix:@"get-frames"]) {
         if (!queryParams[@"url"]) {
