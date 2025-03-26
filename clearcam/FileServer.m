@@ -463,7 +463,7 @@
         NSTimeInterval startTimeStamp = [queryParams[@"start"] doubleValue];
         NSTimeInterval endTimeStamp = [queryParams[@"end"] doubleValue];
         
-        NSString *outputPath = [self processVideoDownloadWithLowRes:YES
+        NSString *outputPath = [self processVideoDownloadWithLowRes:NO
                                                         startTime:startTimeStamp
                                                           endTime:endTimeStamp
                                                          context:self.context];
