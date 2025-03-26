@@ -76,7 +76,7 @@ NSMutableDictionary *classColorMap;
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
     self.seg_number = 0;
-    self.fileServer = [[FileServer alloc] init];
+    self.fileServer = [FileServer sharedInstance];
     [self.fileServer start];
     self.backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
     self.backgroundContext.mergePolicy = NSMergeByPropertyStoreTrumpMergePolicy; //prevents crash??

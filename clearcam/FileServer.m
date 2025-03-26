@@ -22,6 +22,15 @@
 
 @implementation FileServer
 
++ (instancetype)sharedInstance {
+    static FileServer *sharedInstance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedInstance = [[self alloc] init];
+    });
+    return sharedInstance;
+}
+
 - (instancetype)init {
     self = [super init];
     if (self) {
@@ -453,105 +462,23 @@
 
         NSTimeInterval startTimeStamp = [queryParams[@"start"] doubleValue];
         NSTimeInterval endTimeStamp = [queryParams[@"end"] doubleValue];
-        NSDate *startDate = [NSDate dateWithTimeIntervalSince1970:startTimeStamp];
-        NSDate *endDate = [NSDate dateWithTimeIntervalSince1970:endTimeStamp];
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setDateFormat:@"yyyy-MM-dd"];
-
-        NSString *formattedStartDate = [formatter stringFromDate:startDate];
-        NSString *formattedEndDate = [formatter stringFromDate:endDate];
-
-        if (![formattedStartDate isEqualToString:formattedEndDate]) {
-            NSString *errorResponse = @"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Start and end must be on the same day\"}]";
-            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
-            return;
-        }
-
-        NSCalendar *calendar = [NSCalendar currentCalendar];
-        NSDate *midnight = [calendar startOfDayForDate:startDate];
-
-        NSTimeInterval relativeStart = [startDate timeIntervalSinceDate:midnight];
-        NSTimeInterval relativeEnd = [endDate timeIntervalSinceDate:midnight];
-
-        NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedStartDate start:0 context:self.context];
-
-        if (segments.count == 0) {
-            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No segments found for this date\"}]";
-            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
-            return;
-        }
-        NSInteger startIndex = -1;
-        for (NSInteger i = segments.count - 1; i >= 0; i--) {
-            NSTimeInterval segmentTimeStamp = [segments[i][@"timeStamp"] doubleValue];
-
-            if (segmentTimeStamp < relativeStart) {
-                startIndex = i;
-                break;
-            }
-        }
-        if (startIndex == -1) startIndex = 0;
-        NSInteger endIndex = -1;
-        for (NSInteger i = startIndex; i < segments.count; i++) {
-            NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
-            NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
-            NSTimeInterval segmentEnd = segmentStart + segmentDuration;
-
-            if (segmentEnd > relativeEnd) {
-                endIndex = i;
-                break;
-            }
-        }
-
-        if (endIndex == -1) endIndex = segments.count - 1; // If none found, include everything
-
-        NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray array];
-
-        for (NSInteger i = startIndex; i <= endIndex; i++) {
-            NSString *segmentURL = segments[i][@"url"];
-            NSString *fullFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segmentURL];
-
-            if (![[NSFileManager defaultManager] fileExistsAtPath:fullFilePath]) {
-                NSLog(@"Segment file not found: %@", segmentURL);
-                continue;
-            }
-
-            [segmentFilePaths addObject:fullFilePath];
-        }
-
-        if (segmentFilePaths.count == 0) {
-            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No valid segments to merge\"}]";
-            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
-            return;
-        }
-
-        dispatch_semaphore_t sema = dispatch_semaphore_create(0);
         
-        __block NSString *outputPath = nil;
-        __block NSError *mergeError = nil;
-
-        [self concatenateMP4Files:segmentFilePaths completion:^(NSString *resultPath, NSError *error) {
-            outputPath = resultPath;
-            mergeError = error;
-            dispatch_semaphore_signal(sema);
-        }];
-
-        dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
-
-        if (mergeError || !outputPath || ![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
-            NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Failed to merge video\"}]";
+        NSString *outputPath = [self processVideoDownloadWithLowRes:YES
+                                                        startTime:startTimeStamp
+                                                          endTime:endTimeStamp
+                                                         context:self.context];
+        
+        if (!outputPath) {
+            NSString *errorResponse = @"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"No video found for the specified time range\"}]";
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
-
+        
+        // Send the file
         FILE *mergedFile = fopen([outputPath UTF8String], "rb");
         if (!mergedFile) {
-            NSLog(@"Failed to open merged video file for sending: %s", strerror(errno));
-            return;
-        }
-
-        if (clientSocket < 0) {
-            NSLog(@"Invalid socket: %d", clientSocket);
-            fclose(mergedFile);
+            NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n[{\"error\": \"Failed to open video file\"}]";
+            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
         }
 
@@ -562,11 +489,12 @@
         dprintf(clientSocket, "HTTP/1.1 200 OK\r\n");
         dprintf(clientSocket, "Content-Type: video/mp4\r\n");
         dprintf(clientSocket, "Content-Disposition: attachment; filename=\"%s-%s.mp4\"\r\n",
-            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:startDate] UTF8String],
-            [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:endDate] UTF8String]);
+                [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:[NSDate dateWithTimeIntervalSince1970:startTimeStamp]] UTF8String],
+                [[^{ NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyy-MM-dd_HH-mm-ss"; return f; }() stringFromDate:[NSDate dateWithTimeIntervalSince1970:endTimeStamp]] UTF8String]);
         dprintf(clientSocket, "Content-Length: %lu\r\n", (unsigned long)fileSize);
         dprintf(clientSocket, "Accept-Ranges: bytes\r\n");
         dprintf(clientSocket, "\r\n");
+        
         char buffer[64 * 1024];
         size_t bytesRead;
         while ((bytesRead = fread(buffer, 1, sizeof(buffer), mergedFile)) > 0) {
@@ -576,10 +504,11 @@
                 break;
             }
         }
-
         fclose(mergedFile);
+        
+        // Clean up
+        [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
     }
-
     
     if ([filePath hasPrefix:@"get-frames"]) {
         if (!queryParams[@"url"]) {
@@ -1130,5 +1059,179 @@
     NSError *saveError = nil;
     if (![context save:&saveError]) NSLog(@"Failed to delete DayEntity and EventEntity objects: %@", saveError.localizedDescription);
 }
-    
+
+
+- (NSString *)processVideoDownloadWithLowRes:(BOOL)low_res
+                                  startTime:(NSTimeInterval)startTimeStamp
+                                    endTime:(NSTimeInterval)endTimeStamp
+                                   context:(NSManagedObjectContext *)context {
+    NSDate *startDate = [NSDate dateWithTimeIntervalSince1970:startTimeStamp];
+    NSDate *endDate = [NSDate dateWithTimeIntervalSince1970:endTimeStamp];
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"yyyy-MM-dd"];
+
+    NSString *formattedStartDate = [formatter stringFromDate:startDate];
+    NSString *formattedEndDate = [formatter stringFromDate:endDate];
+
+    if (![formattedStartDate isEqualToString:formattedEndDate]) {
+        return nil;
+    }
+
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    NSDate *midnight = [calendar startOfDayForDate:startDate];
+
+    NSTimeInterval relativeStart = [startDate timeIntervalSinceDate:midnight];
+    NSTimeInterval relativeEnd = [endDate timeIntervalSinceDate:midnight];
+    NSTimeInterval requestedDuration = relativeEnd - relativeStart;
+
+    NSArray *segments = [self fetchAndProcessSegmentsFromCoreDataForDateParam:formattedStartDate start:0 context:context];
+
+    if (segments.count == 0) {
+        return nil;
+    }
+
+    NSMutableArray<NSString *> *segmentFilePaths = [NSMutableArray array];
+    NSString *tempDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"temp"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:tempDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+    dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
+    __block NSInteger trimCount = 0;
+
+    NSLog(@"Requested range: %.2f to %.2f (duration: %.2f seconds)", relativeStart, relativeEnd, requestedDuration);
+    for (NSInteger i = 0; i < segments.count; i++) {
+        NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
+        NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
+        NSTimeInterval segmentEnd = segmentStart + segmentDuration;
+
+        if (segmentEnd <= relativeStart || segmentStart >= relativeEnd) {
+            continue;
+        }
+
+        NSString *originalFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segments[i][@"url"]];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:originalFilePath]) {
+            NSLog(@"Segment file not found: %@", originalFilePath);
+            continue;
+        }
+
+        NSTimeInterval trimStart = MAX(0, relativeStart - segmentStart);
+        NSTimeInterval trimEnd = MIN(segmentDuration, relativeEnd - segmentStart);
+        NSTimeInterval trimmedDuration = trimEnd - trimStart;
+
+        NSLog(@"Segment %ld: %.2f to %.2f (duration: %.2f), trimming to %.2f-%.2f (%.2f seconds)", (long)i, segmentStart, segmentEnd, segmentDuration, trimStart, trimEnd, trimmedDuration);
+
+        NSString *trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
+        AVURLAsset *asset = [AVURLAsset assetWithURL:[NSURL fileURLWithPath:originalFilePath]];
+        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
+        exportSession.outputFileType = AVFileTypeMPEG4;
+        exportSession.outputURL = [NSURL fileURLWithPath:trimmedFilePath];
+
+        CMTime startTime = CMTimeMakeWithSeconds(trimStart, 600);
+        CMTime durationTime = CMTimeMakeWithSeconds(trimmedDuration, 600);
+        CMTimeRange timeRange = CMTimeRangeMake(startTime, durationTime);
+        if (CMTimeCompare(CMTimeAdd(startTime, durationTime), CMTimeMakeWithSeconds(segmentDuration, 600)) > 0) {
+            durationTime = CMTimeSubtract(CMTimeMakeWithSeconds(segmentDuration, 600), startTime);
+            timeRange = CMTimeRangeMake(startTime, durationTime);
+            NSLog(@"Adjusted duration for segment %ld to fit asset: %.2f seconds", (long)i, CMTimeGetSeconds(durationTime));
+        }
+        exportSession.timeRange = timeRange;
+
+        if (low_res) {
+            AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
+            AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+            if (videoTrack) {
+                videoComposition.renderSize = CGSizeMake(960, 540); // 540p
+                videoComposition.frameDuration = CMTimeMake(1, 24); // 24 fps
+
+                AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+                instruction.timeRange = timeRange;
+
+                AVMutableVideoCompositionLayerInstruction *layerInstruction = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
+                CGSize naturalSize = videoTrack.naturalSize;
+                CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
+                CGAffineTransform transform = CGAffineTransformMakeScale(scale, scale);
+                [layerInstruction setTransform:transform atTime:kCMTimeZero];
+
+                instruction.layerInstructions = @[layerInstruction];
+                videoComposition.instructions = @[instruction];
+            }
+            exportSession.videoComposition = videoComposition;
+            exportSession.shouldOptimizeForNetworkUse = YES;
+            exportSession.fileLengthLimit = 5 * 1024 * 1024 * (trimmedDuration / 60.0); // ~5 MB per minute
+        }
+
+        trimCount++;
+        [exportSession exportAsynchronouslyWithCompletionHandler:^{
+            switch (exportSession.status) {
+                case AVAssetExportSessionStatusCompleted:
+                    NSLog(@"Processed segment %ld successfully%@, duration: %.2f seconds", (long)i, low_res ? @" at 960x540" : @"", CMTimeGetSeconds(timeRange.duration));
+                    break;
+                case AVAssetExportSessionStatusFailed:
+                    NSLog(@"Failed to process segment %ld: %@", (long)i, exportSession.error);
+                    break;
+                default:
+                    break;
+            }
+            dispatch_semaphore_signal(trimSema);
+        }];
+    }
+
+    for (NSInteger i = 0; i < trimCount; i++) {
+        dispatch_semaphore_wait(trimSema, DISPATCH_TIME_FOREVER);
+    }
+
+    for (NSInteger i = 0; i < segments.count; i++) {
+        NSString *trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:trimmedFilePath]) {
+            [segmentFilePaths addObject:trimmedFilePath];
+        }
+    }
+
+    if (segmentFilePaths.count == 0) {
+        return nil;
+    }
+
+    dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+    __block NSString *outputPath = nil;
+    __block NSError *mergeError = nil;
+
+    [self concatenateMP4Files:segmentFilePaths completion:^(NSString *resultPath, NSError *error) {
+        outputPath = resultPath;
+        mergeError = error;
+        dispatch_semaphore_signal(sema);
+    }];
+
+    dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+
+    for (NSString *tempFile in segmentFilePaths) {
+        if ([tempFile containsString:@"trimmed"]) {
+            [[NSFileManager defaultManager] removeItemAtPath:tempFile error:nil];
+        }
+    }
+
+    if (mergeError || !outputPath || ![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
+        return nil;
+    }
+
+    // Rename the output file using timestamps
+    NSDateFormatter *renameFormatter = [[NSDateFormatter alloc] init];
+    [renameFormatter setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
+    NSString *startTimeStr = [renameFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:startTimeStamp]];
+    NSString *endTimeStr = [renameFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:endTimeStamp]];
+    NSString *newFileName = [NSString stringWithFormat:@"%s-%s.mp4", startTimeStr.UTF8String, endTimeStr.UTF8String];
+
+    // Get the directory of the original outputPath and construct the new path
+    NSString *directory = [outputPath stringByDeletingLastPathComponent];
+    NSString *newOutputPath = [directory stringByAppendingPathComponent:newFileName];
+
+    // Rename the file
+    NSError *renameError = nil;
+    [[NSFileManager defaultManager] moveItemAtPath:outputPath toPath:newOutputPath error:&renameError];
+    if (renameError) {
+        NSLog(@"Failed to rename file: %@", renameError);
+        return outputPath; // Return original path if renaming fails
+    }
+
+    return newOutputPath;
+}
+
 @end
