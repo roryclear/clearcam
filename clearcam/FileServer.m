@@ -454,11 +454,9 @@
         NSTimeInterval startTimeStamp = [queryParams[@"start"] doubleValue];
         NSTimeInterval endTimeStamp = [queryParams[@"end"] doubleValue];
         
-        NSString *outputPath = [self processVideoDownloadWithLowRes:NO
+        NSString *outputPath = [self processVideoDownloadWithLowRes:YES
                                                         startTime:startTimeStamp
                                                           endTime:endTimeStamp
-                                                      queryParams:queryParams
-                                                    clientSocket:clientSocket
                                                          context:self.context];
         
         if (!outputPath) {
@@ -1057,8 +1055,6 @@
 - (NSString *)processVideoDownloadWithLowRes:(BOOL)low_res
                                   startTime:(NSTimeInterval)startTimeStamp
                                     endTime:(NSTimeInterval)endTimeStamp
-                                queryParams:(NSDictionary *)queryParams
-                                clientSocket:(int)clientSocket
                                    context:(NSManagedObjectContext *)context {
     NSDate *startDate = [NSDate dateWithTimeIntervalSince1970:startTimeStamp];
     NSDate *endDate = [NSDate dateWithTimeIntervalSince1970:endTimeStamp];
