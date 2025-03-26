@@ -489,7 +489,7 @@
         dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
         __block NSInteger trimCount = 0;
 
-        BOOL low_res = NO; // Toggle this to enable/disable quality adjustments
+        BOOL low_res = NO;
 
         NSLog(@"Requested range: %.2f to %.2f (duration: %.2f seconds)", relativeStart, relativeEnd, requestedDuration);
 
@@ -555,7 +555,7 @@
                 exportSession.videoComposition = videoComposition;
                 exportSession.shouldOptimizeForNetworkUse = YES;
                 
-                exportSession.fileLengthLimit = 20 * 1024 * 1024 * (trimmedDuration / 60.0); // ~1 MB per minute
+                exportSession.fileLengthLimit = 5 * 1024 * 1024 * (trimmedDuration / 60.0); // ~1 MB per minute
             }
 
             trimCount++;
