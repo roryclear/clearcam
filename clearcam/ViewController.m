@@ -7,6 +7,7 @@
 #import "StoreManager.h"
 #import "SceneState.h"
 #import "SettingsViewController.h"
+#import "GalleryViewController.h"
 
 @interface ViewController ()
 
@@ -483,9 +484,9 @@ NSMutableDictionary *classColorMap;
     }
 }
 
-// New action method for gallery button
 - (void)galleryButtonPressed {
-    NSLog(@"Gallery button was pressed!");
+    GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
+    [self.navigationController pushViewController:galleryVC animated:YES];
 }
 
 - (void)toggleRecording {
