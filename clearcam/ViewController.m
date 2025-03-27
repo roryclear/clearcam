@@ -15,6 +15,7 @@
 @property (nonatomic, strong) UILabel *fpsLabel;
 @property (nonatomic, strong) UIButton *recordButton;
 @property (nonatomic, strong) UIButton *settingsButton;
+@property (nonatomic, strong) UIButton *galleryButton;
 @property (nonatomic, assign) CFTimeInterval lastFrameTime;
 @property (nonatomic, assign) NSUInteger frameCount;
 @property (nonatomic, strong) Yolo *yolo;
@@ -414,7 +415,7 @@ NSMutableDictionary *classColorMap;
     [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.recordButton];
 
-    // Create the settings button with a transparent background (UNCHANGED)
+    // Create the settings button (UNCHANGED)
     self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImage *gearIcon = [UIImage systemImageNamed:@"gear"];
     [self.settingsButton setImage:gearIcon forState:UIControlStateNormal];
@@ -429,6 +430,20 @@ NSMutableDictionary *classColorMap;
     [self.settingsButton addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.settingsButton];
 
+    self.galleryButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImage *galleryIcon = [UIImage systemImageNamed:@"photo.on.rectangle"];
+    [self.galleryButton setImage:galleryIcon forState:UIControlStateNormal];
+
+    CGFloat galleryButtonSize = 50; // Same size as settings button
+    self.galleryButton.frame = CGRectMake(0, 0, galleryButtonSize, galleryButtonSize);
+    self.galleryButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3];
+    self.galleryButton.layer.cornerRadius = galleryButtonSize / 2; // Fixed: actual calculation, not a string
+    self.galleryButton.clipsToBounds = YES;
+    self.galleryButton.tintColor = [UIColor whiteColor];
+
+    [self.galleryButton addTarget:self action:@selector(galleryButtonPressed) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.galleryButton];
+
     [self updateButtonFrames]; // Set initial positions
 }
 
@@ -437,24 +452,40 @@ NSMutableDictionary *classColorMap;
     CGFloat screenHeight = self.view.bounds.size.height;
     CGFloat recordButtonSize = 80; // Record button size
     CGFloat settingsButtonSize = 50; // Settings button size
+    CGFloat galleryButtonSize = 50; // Gallery button size (NEW)
     CGFloat margin = 20;
     CGFloat spacing = 60;
     self.recordButton.layer.cornerRadius = recordButtonSize / 2;
     self.settingsButton.layer.cornerRadius = settingsButtonSize / 2;
+    self.galleryButton.layer.cornerRadius = galleryButtonSize / 2; // (NEW)
+
     if (screenWidth > screenHeight) {
-        // Landscape: Record button on right, settings above, centers aligned horizontally
+        // Landscape: Record button on right, settings above, gallery below, centers aligned horizontally
         self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - margin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
         CGFloat settingsX = (screenWidth - recordButtonSize - margin) + (recordButtonSize / 2) - (settingsButtonSize / 2); // Align centers horizontally
         CGFloat settingsY = screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing; // Above record button
         self.settingsButton.frame = CGRectMake(settingsX, settingsY, settingsButtonSize, settingsButtonSize);
+
+        CGFloat galleryX = (screenWidth - recordButtonSize - margin) + (recordButtonSize / 2) - (galleryButtonSize / 2); // Align centers horizontally with record button
+        CGFloat galleryY = screenHeight / 2 + recordButtonSize / 2 + spacing; // Below record button
+        self.galleryButton.frame = CGRectMake(galleryX, galleryY, galleryButtonSize, galleryButtonSize);
     } else {
-        // Portrait: Record button centered, settings to the right, centers aligned vertically
+        // Portrait: Record button centered, settings to the right, gallery to the left, centers aligned vertically
         CGFloat recordX = (screenWidth - recordButtonSize) / 2;
         self.recordButton.frame = CGRectMake(recordX, screenHeight - recordButtonSize - margin, recordButtonSize, recordButtonSize);
         CGFloat settingsX = recordX + recordButtonSize + spacing;
         CGFloat settingsY = (screenHeight - recordButtonSize - margin) + (recordButtonSize / 2) - (settingsButtonSize / 2); // Align centers vertically
         self.settingsButton.frame = CGRectMake(settingsX, settingsY, settingsButtonSize, settingsButtonSize);
+
+        CGFloat galleryX = recordX - galleryButtonSize - spacing; // Left of record button
+        CGFloat galleryY = (screenHeight - recordButtonSize - margin) + (recordButtonSize / 2) - (galleryButtonSize / 2); // Align centers vertically
+        self.galleryButton.frame = CGRectMake(galleryX, galleryY, galleryButtonSize, galleryButtonSize);
     }
+}
+
+// New action method for gallery button
+- (void)galleryButtonPressed {
+    NSLog(@"Gallery button was pressed!");
 }
 
 - (void)toggleRecording {
