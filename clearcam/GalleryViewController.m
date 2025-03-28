@@ -1,5 +1,6 @@
 // GalleryViewController.m
 #import "GalleryViewController.h"
+#import "StoreManager.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 
@@ -118,30 +119,45 @@
         
         NSURL *url = [NSURL URLWithString:@"https://rors.ai/video"];
         NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
-        
+
         NSMutableData *bodyData = [NSMutableData data];
-        [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"Content-Disposition: form-data; name=\"receipt\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[receipt dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+        // Retrieve session token from Keychain
         
+        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+        if (!sessionToken) {
+            NSLog(@"No session token found in Keychain.");
+            dispatch_group_leave(downloadGroup); // Ensure group is left on failure
+            return;
+        }
+
+        // Add session_token field
+        [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+        [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
+        [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+
+        // Add name field
         [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
         [bodyData appendData:[@"Content-Disposition: form-data; name=\"name\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
         [bodyData appendData:[fileName dataUsingEncoding:NSUTF8StringEncoding]];
         [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        
+
         [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-        
+
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
         [request setHTTPMethod:@"POST"];
         [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
         [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
         [request setHTTPBody:bodyData];
-        
+
         [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
             if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
                 NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:fileName];
                 [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:destPath] error:nil];
+                NSLog(@"File downloaded to: %@", destPath);
+            } else {
+                NSLog(@"Download failed with error: %@, status code: %ld", error.localizedDescription, (long)[(NSHTTPURLResponse *)response statusCode]);
             }
             dispatch_group_leave(downloadGroup);
         }] resume];
