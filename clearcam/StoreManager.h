@@ -11,6 +11,7 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 
 - (void)fetchAndPurchaseProduct;
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate * _Nullable expiryDate))completion;
+- (NSString *)retrieveSessionTokenFromKeychain;
 
 @end
 

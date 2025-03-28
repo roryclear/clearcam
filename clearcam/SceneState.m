@@ -102,10 +102,10 @@
                     
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 120) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
-                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
-                            ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
-                             [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
-                        //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
+                        //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
+                        //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                        //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
+                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]){ //todo add back other stuff
                             // Get the current hour
                             NSDate *now = [NSDate date];
@@ -129,6 +129,7 @@
                                     id context = [FileServer sharedInstance].context;
                                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                                         NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
+                                        [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
                                         [[Email sharedInstance] saveWithImageAtPath:filePath];
                                     });
                                     NSLog(@"Email sent: Within scheduled time");
