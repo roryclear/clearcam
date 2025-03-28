@@ -107,13 +107,10 @@
     for (NSString *fileName in fileNames) {
         dispatch_group_enter(downloadGroup);
         
-        NSURL *url = [NSURL URLWithString:@"https://rors.ai/video"];
-        NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
-
-        NSMutableData *bodyData = [NSMutableData data];
-
-        // Retrieve session token from Keychain
+        // Build URL with query parameters
+        NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
         
+        // Retrieve session token from Keychain
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (!sessionToken) {
             NSLog(@"No session token found in Keychain.");
@@ -121,26 +118,15 @@
             return;
         }
 
-        // Add session_token field
-        [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-
-        // Add name field
-        [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"Content-Disposition: form-data; name=\"name\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[fileName dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-
-        [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-
+        // Add query parameters
+        NSURLQueryItem *sessionTokenItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
+        NSURLQueryItem *nameItem = [NSURLQueryItem queryItemWithName:@"name" value:fileName];
+        components.queryItems = @[sessionTokenItem, nameItem];
+        
+        NSURL *url = components.URL;
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-        [request setHTTPMethod:@"POST"];
-        [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-        [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
-        [request setHTTPBody:bodyData];
-
+        [request setHTTPMethod:@"GET"];
+        
         [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
             if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
                 NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:fileName];
@@ -152,7 +138,6 @@
             dispatch_group_leave(downloadGroup);
         }] resume];
     }
-    
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
         [self loadExistingVideos];
     });
