@@ -68,26 +68,29 @@
 - (void)sendPostRequest {
     NSURL *url = [NSURL URLWithString:@"https://rors.ai/events"];
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
-    
+
     // Build multipart form data
     NSMutableData *bodyData = [NSMutableData data];
-    NSString *receipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
-    
-    if (receipt) {
+
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (sessionToken) {
         [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"Content-Disposition: form-data; name=\"receipt\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[receipt dataUsingEncoding:NSUTF8StringEncoding]];
+        [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
         [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    } else {
+        NSLog(@"No session token found in Keychain. Proceeding without it.");
     }
-    
+
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-    
+
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"POST"];
     [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
     [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
     [request setHTTPBody:bodyData];
-    
+
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Request failed: %@", error);
@@ -103,17 +106,17 @@
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self downloadFiles:json[@"files"]];
                 });
+            } else {
+                NSLog(@"JSON parsing error: %@ or no 'files' key in response.", jsonError);
             }
+        } else {
+            NSLog(@"Request failed with status code: %ld", (long)httpResponse.statusCode);
         }
     }] resume];
 }
 
 - (void)downloadFiles:(NSArray<NSString *> *)fileNames {
-    NSString *receipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
-    if (!receipt) return;
-    
     dispatch_group_t downloadGroup = dispatch_group_create();
-    
     for (NSString *fileName in fileNames) {
         dispatch_group_enter(downloadGroup);
         
