@@ -34,8 +34,8 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
     
-    // Check subscription status on view load
-    [self checkSubscriptionStatus];
+    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) [self checkSubscriptionStatus];
+    NSLog(@"%d %@",[[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"],[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
     
     // Register for subscription status change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self

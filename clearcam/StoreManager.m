@@ -188,6 +188,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             if (sessionToken && [sessionToken isKindOfClass:[NSString class]]) {
                 // Store session token in Keychain
                 [self storeSessionTokenInKeychain:sessionToken];
+                [[NSUserDefaults standardUserDefaults] setObject:[NSDate dateWithTimeIntervalSinceNow:45 * 60] forKey:@"expiry"];
                 NSLog(@"Stored session token: %@", sessionToken);
             } else {
                 NSLog(@"Warning: No valid session_token in response.");
