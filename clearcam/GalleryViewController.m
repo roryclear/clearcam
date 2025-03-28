@@ -66,31 +66,18 @@
 }
 
 - (void)sendPostRequest {
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/events"];
-    NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
-
-    // Build multipart form data
-    NSMutableData *bodyData = [NSMutableData data];
-
-    // Retrieve session token from Keychain
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     if (sessionToken) {
-        [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
-        [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        NSURLQueryItem *queryItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
+        components.queryItems = @[queryItem];
     } else {
         NSLog(@"No session token found in Keychain. Proceeding without it.");
     }
 
-    [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-
+    NSURL *url = components.URL;
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    [request setHTTPMethod:@"POST"];
-    [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
-    [request setHTTPBody:bodyData];
-
+    [request setHTTPMethod:@"GET"];
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Request failed: %@", error);
