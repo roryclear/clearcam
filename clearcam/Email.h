@@ -4,6 +4,5 @@
 
 + (instancetype)sharedInstance;
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath;
-- (void)saveWithImageAtPath:(NSString *)imagePath;
 
 @end

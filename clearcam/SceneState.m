@@ -130,7 +130,6 @@
                                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                                         NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
                                         [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
-                                        [[Email sharedInstance] saveWithImageAtPath:filePath];
                                     });
                                     NSLog(@"Email sent: Within scheduled time");
                                     break;
