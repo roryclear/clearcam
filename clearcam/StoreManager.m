@@ -182,20 +182,82 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 
         BOOL isSubscribed = [jsonResponse[@"valid"] boolValue];
 
-        [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-
         if (isSubscribed) {
+            // Extract session token from response
+            NSString *sessionToken = jsonResponse[@"session_token"];
+            if (sessionToken && [sessionToken isKindOfClass:[NSString class]]) {
+                // Store session token in Keychain
+                [self storeSessionTokenInKeychain:sessionToken];
+                NSLog(@"Stored session token: %@", sessionToken);
+            } else {
+                NSLog(@"Warning: No valid session_token in response.");
+            }
+
             NSLog(@"✅ Subscription is active.");
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
+            // Clear session token if subscription is invalid
+            [self clearSessionTokenFromKeychain];
             NSLog(@"🚨 Subscription has expired.");
         }
+
+        [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
 
         completion(isSubscribed, nil); // No expiry date since the server doesn't return it
     }];
 
     [task resume];
+}
+
+- (void)storeSessionTokenInKeychain:(NSString *)sessionToken {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: @"com.clearcam.session",
+        (__bridge id)kSecAttrAccount: @"sessionToken",
+        (__bridge id)kSecValueData: [sessionToken dataUsingEncoding:NSUTF8StringEncoding]
+    };
+
+    // Delete any existing token first
+    SecItemDelete((__bridge CFDictionaryRef)query);
+
+    // Add the new token
+    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
+    if (status != errSecSuccess) {
+        NSLog(@"Failed to store session token in Keychain: %d", (int)status);
+    }
+}
+
+- (void)clearSessionTokenFromKeychain {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: @"com.clearcam.session",
+        (__bridge id)kSecAttrAccount: @"sessionToken"
+    };
+
+    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
+    if (status != errSecSuccess && status != errSecItemNotFound) {
+        NSLog(@"Failed to clear session token from Keychain: %d", (int)status);
+    }
+}
+
+// Optional: Retrieve the session token if needed later
+- (NSString *)retrieveSessionTokenFromKeychain {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: @"com.clearcam.session",
+        (__bridge id)kSecAttrAccount: @"sessionToken",
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne
+    };
+
+    CFTypeRef dataRef = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &dataRef);
+    if (status == errSecSuccess) {
+        NSData *data = (__bridge_transfer NSData *)dataRef;
+        return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    }
+    return nil;
 }
 
 @end
