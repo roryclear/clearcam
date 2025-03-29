@@ -70,7 +70,7 @@
     
     [self setupDownloadDirectory];
     [self setupTableView];
-    [self sendPostRequest];
+    [self getEvents];
 }
 
 // Override viewWillLayoutSubviews to update table view frame
@@ -118,7 +118,7 @@
     ]];
 }
 
-- (void)sendPostRequest {
+- (void)getEvents {
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     if (sessionToken) {
