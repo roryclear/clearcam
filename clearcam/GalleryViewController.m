@@ -3,7 +3,6 @@
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 
-// Custom cell implementation
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -32,21 +31,21 @@
     self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     
+    // Improved constraints with safe area support
     [NSLayoutConstraint activateConstraints:@[
-        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
+        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.leadingAnchor constant:15],
         [self.thumbnailView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
         [self.thumbnailView.widthAnchor constraintEqualToConstant:100],
         [self.thumbnailView.heightAnchor constraintEqualToConstant:60],
         
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:10],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.trailingAnchor constant:-15],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor]
     ]];
 }
 
 @end
 
-// Main view controller implementation
 @interface GalleryViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSMutableArray<NSString *> *videoFiles;
@@ -72,6 +71,12 @@
     [self setupDownloadDirectory];
     [self setupTableView];
     [self sendPostRequest];
+}
+
+// Override viewWillLayoutSubviews to update table view frame
+- (void)viewWillLayoutSubviews {
+    [super viewWillLayoutSubviews];
+    self.tableView.frame = self.view.bounds;
 }
 
 - (void)setupDownloadDirectory {
@@ -101,7 +106,16 @@
     self.tableView.dataSource = self;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     [self.tableView registerClass:[VideoTableViewCell class] forCellReuseIdentifier:@"VideoCell"];
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO; // Add this
     [self.view addSubview:self.tableView];
+    
+    // Add constraints to keep table view filling the view
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
 }
 
 - (void)sendPostRequest {
