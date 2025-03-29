@@ -263,10 +263,28 @@
     NSError *error;
     NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
     
+    // Create an array to hold file paths with their creation dates
+    NSMutableArray *filesWithDates = [NSMutableArray array];
+    
     for (NSString *file in contents) {
         if ([file.pathExtension isEqualToString:@"mp4"]) {
-            [self.videoFiles addObject:[self.downloadDirectory stringByAppendingPathComponent:file]];
+            NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
+            NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
+            NSDate *creationDate = [attributes fileCreationDate];
+            
+            [filesWithDates addObject:@{@"path": filePath,
+                                      @"date": creationDate ?: [NSDate distantPast]}];
         }
+    }
+    
+    // Sort by creation date (newest first)
+    [filesWithDates sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+        return [obj2[@"date"] compare:obj1[@"date"]];
+    }];
+    
+    // Extract just the sorted paths
+    for (NSDictionary *fileInfo in filesWithDates) {
+        [self.videoFiles addObject:fileInfo[@"path"]];
     }
     
     [self.tableView reloadData];
