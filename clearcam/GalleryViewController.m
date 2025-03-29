@@ -1,9 +1,52 @@
-// GalleryViewController.m
 #import "GalleryViewController.h"
 #import "StoreManager.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 
+// Custom cell implementation
+@interface VideoTableViewCell : UITableViewCell
+@property (nonatomic, strong) UIImageView *thumbnailView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@end
+
+@implementation VideoTableViewCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        [self setupUI];
+    }
+    return self;
+}
+
+- (void)setupUI {
+    self.thumbnailView = [[UIImageView alloc] init];
+    self.thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
+    self.thumbnailView.clipsToBounds = YES;
+    [self.contentView addSubview:self.thumbnailView];
+    
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.numberOfLines = 2;
+    [self.contentView addSubview:self.titleLabel];
+    
+    self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:15],
+        [self.thumbnailView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [self.thumbnailView.widthAnchor constraintEqualToConstant:100],
+        [self.thumbnailView.heightAnchor constraintEqualToConstant:60],
+        
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:10],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-15],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor]
+    ]];
+}
+
+@end
+
+// Main view controller implementation
 @interface GalleryViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSMutableArray<NSString *> *videoFiles;
@@ -19,10 +62,8 @@
     self.title = @"Events";
     self.navigationController.navigationBarHidden = NO;
     
-    // Initialize with empty array
     self.videoFiles = [NSMutableArray array];
     
-    // Configure a session with higher timeout
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 60.0;
     config.timeoutIntervalForResource = 600.0;
@@ -37,7 +78,6 @@
     NSString *documentsDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     self.downloadDirectory = [documentsDir stringByAppendingPathComponent:@"downloaded-events"];
     
-    // Clear existing directory
     NSError *error;
     if ([[NSFileManager defaultManager] fileExistsAtPath:self.downloadDirectory]) {
         [[NSFileManager defaultManager] removeItemAtPath:self.downloadDirectory error:&error];
@@ -46,7 +86,6 @@
         }
     }
     
-    // Recreate directory
     [[NSFileManager defaultManager] createDirectoryAtPath:self.downloadDirectory
                           withIntermediateDirectories:YES
                                            attributes:nil
@@ -61,7 +100,7 @@
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
-    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"VideoCell"];
+    [self.tableView registerClass:[VideoTableViewCell class] forCellReuseIdentifier:@"VideoCell"];
     [self.view addSubview:self.tableView];
 }
 
@@ -107,18 +146,14 @@
     for (NSString *fileName in fileNames) {
         dispatch_group_enter(downloadGroup);
         
-        // Build URL with query parameters
         NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
-        
-        // Retrieve session token from Keychain
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (!sessionToken) {
             NSLog(@"No session token found in Keychain.");
-            dispatch_group_leave(downloadGroup); // Ensure group is left on failure
+            dispatch_group_leave(downloadGroup);
             return;
         }
 
-        // Add query parameters
         NSURLQueryItem *sessionTokenItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
         NSURLQueryItem *nameItem = [NSURLQueryItem queryItemWithName:@"name" value:fileName];
         components.queryItems = @[sessionTokenItem, nameItem];
@@ -158,14 +193,51 @@
     [self.tableView reloadData];
 }
 
-// UITableView methods remain the same as in your original code
+- (UIImage *)generateThumbnailForVideoAtPath:(NSString *)videoPath {
+    NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
+    AVAsset *asset = [AVAsset assetWithURL:videoURL];
+    AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+    generator.appliesPreferredTrackTransform = YES;
+    
+    CMTime time = CMTimeMakeWithSeconds(0.0, 600);
+    NSError *error = nil;
+    CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
+    
+    if (!imageRef) {
+        NSLog(@"Thumbnail generation failed: %@", error.localizedDescription);
+        return nil;
+    }
+    
+    UIImage *thumbnail = [UIImage imageWithCGImage:imageRef];
+    CGImageRelease(imageRef);
+    return thumbnail;
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return self.videoFiles.count;
 }
 
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return 80;
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VideoCell" forIndexPath:indexPath];
-    cell.textLabel.text = [self.videoFiles[indexPath.row] lastPathComponent];
+    VideoTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VideoCell" forIndexPath:indexPath];
+    
+    NSString *videoPath = self.videoFiles[indexPath.row];
+    cell.titleLabel.text = [videoPath lastPathComponent];
+    cell.thumbnailView.image = nil;
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            VideoTableViewCell *updateCell = [tableView cellForRowAtIndexPath:indexPath];
+            if (updateCell) {
+                updateCell.thumbnailView.image = thumbnail;
+            }
+        });
+    });
+    
     return cell;
 }
 
