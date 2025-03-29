@@ -67,7 +67,7 @@
     config.timeoutIntervalForRequest = 60.0;
     config.timeoutIntervalForResource = 600.0;
     self.downloadSession = [NSURLSession sessionWithConfiguration:config];
-    
+    //[self deleteDownloadDirectory]; //todo remove, for testing
     [self setupDownloadDirectory];
     [self setupTableView];
     [self getEvents];
@@ -79,7 +79,7 @@
     self.tableView.frame = self.view.bounds;
 }
 
-- (void)setupDownloadDirectory {
+- (void)deleteDownloadDirectory {
     NSString *documentsDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     self.downloadDirectory = [documentsDir stringByAppendingPathComponent:@"downloaded-events"];
     
@@ -100,6 +100,23 @@
     }
 }
 
+- (void)setupDownloadDirectory {
+    NSString *documentsDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    self.downloadDirectory = [documentsDir stringByAppendingPathComponent:@"downloaded-events"];
+    
+    if (![[NSFileManager defaultManager] fileExistsAtPath:self.downloadDirectory]) {
+        NSError *error;
+        [[NSFileManager defaultManager] createDirectoryAtPath:self.downloadDirectory
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:&error];
+        if (error) {
+            NSLog(@"Failed to create directory: %@", error.localizedDescription);
+        }
+    }
+}
+
+
 - (void)setupTableView {
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
     self.tableView.delegate = self;
@@ -118,19 +135,47 @@
     ]];
 }
 
+- (NSDate *)latestDownloadedFileDate {
+    NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:nil];
+    NSDate *latestDate = nil;
+
+    for (NSString *file in files) {
+        NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
+        NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
+
+        NSDate *creationDate = attributes[NSFileCreationDate];
+        if (creationDate && (!latestDate || [creationDate compare:latestDate] == NSOrderedDescending)) {
+            latestDate = creationDate;
+        }
+    }
+    return latestDate;
+}
+
 - (void)getEvents {
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    
+    NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
+    
     if (sessionToken) {
-        NSURLQueryItem *queryItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
-        components.queryItems = @[queryItem];
+        [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
     } else {
         NSLog(@"No session token found in Keychain. Proceeding without it.");
     }
+    
+    NSDate *latestDate = [self latestDownloadedFileDate];
+    if (latestDate) {
+        NSTimeInterval timestamp = [latestDate timeIntervalSince1970];
+        NSString *timestampString = [NSString stringWithFormat:@"%.0f", timestamp];
+        [queryItems addObject:[NSURLQueryItem queryItemWithName:@"newest_creation_time" value:timestampString]];
+    }
 
+    components.queryItems = queryItems;
     NSURL *url = components.URL;
+    
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"GET"];
+    
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Request failed: %@", error);
@@ -179,8 +224,28 @@
         [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
             if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
                 NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:fileName];
-                [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:destPath] error:nil];
-                NSLog(@"File downloaded to: %@", destPath);
+                NSError *moveError;
+                NSURL *destURL = [NSURL fileURLWithPath:destPath];
+                
+                [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
+                if (!moveError) {
+                    NSLog(@"File downloaded to: %@", destPath);
+                    
+                    // Get file attributes to retrieve creation date
+                    NSDictionary *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:destPath error:nil];
+                    if (fileAttributes) {
+                        NSDate *creationDate = fileAttributes[NSFileCreationDate];
+                        if (creationDate) {
+                            NSLog(@"File %@ creation date: %@", fileName, creationDate);
+                        } else {
+                            NSLog(@"File %@ has no creation date available", fileName);
+                        }
+                    } else {
+                        NSLog(@"Could not retrieve attributes for file: %@", fileName);
+                    }
+                } else {
+                    NSLog(@"File move failed with error: %@", moveError.localizedDescription);
+                }
             } else {
                 NSLog(@"Download failed with error: %@, status code: %ld", error.localizedDescription, (long)[(NSHTTPURLResponse *)response statusCode]);
             }

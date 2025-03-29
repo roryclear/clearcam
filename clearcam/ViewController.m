@@ -485,6 +485,7 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)galleryButtonPressed {
+    [self.captureSession stopRunning];
     GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
     [self.navigationController pushViewController:galleryVC animated:YES];
 }
