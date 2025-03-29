@@ -1,5 +1,6 @@
 #import "Email.h"
 #import "SecretManager.h"
+#import "StoreManager.h"
 #import <UIKit/UIKit.h>
 
 @implementation Email
@@ -31,7 +32,7 @@
 
     NSData *imageData = nil;
     NSString *filePathToSend = imagePath;
-    
+
     if (imagePath.length == 0) { //todo, to test user's endpoint
         NSLog(@"Image path is empty. Generating blank image.");
         CGSize imageSize = CGSizeMake(1280, 720);
@@ -74,25 +75,29 @@
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
     NSMutableData *bodyData = [NSMutableData data];
 
+    // Add "to" field (email)
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[@"Content-Disposition: form-data; name=\"to\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[toEmail dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
+    // Add "file" field (image)
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", [filePathToSend lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:[@"Content-Type: application/octet-stream\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // Include receipt only if not using own email server
+    // Include session_token only if not using own email server
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
-        NSString *receipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
-        if (receipt) {
+        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+        if (sessionToken) {
             [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-            [bodyData appendData:[@"Content-Disposition: form-data; name=\"receipt\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-            [bodyData appendData:[receipt dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+            [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
             [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        } else {
+            NSLog(@"Warning: No session token found in Keychain.");
         }
     }
 
@@ -107,7 +112,11 @@
 
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) NSLog(@"Error: %@", error.localizedDescription);
+        if (error) {
+            NSLog(@"Error: %@", error.localizedDescription);
+        } else {
+            NSLog(@"Send request completed successfully.");
+        }
     }];
     [task resume];
 }
