@@ -415,6 +415,7 @@
     
     NSString *sectionTitle = self.sectionTitles[section];
     NSString *videoPath = self.groupedVideos[sectionTitle][row];
+    NSString *filename = [videoPath lastPathComponent];
     
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil
                                                                        message:nil
@@ -432,24 +433,56 @@
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
                                                    style:UIAlertActionStyleDestructive
                                                  handler:^(UIAlertAction * _Nonnull action) {
-        NSError *error;
-        [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&error];
-        if (error) {
-            NSLog(@"Failed to delete video: %@", error.localizedDescription);
-        } else {
-            [self.videoFiles removeObject:videoPath];
-            [self.groupedVideos[sectionTitle] removeObjectAtIndex:row];
-            
-            if ([self.groupedVideos[sectionTitle] count] == 0) {
-                [self.groupedVideos removeObjectForKey:sectionTitle];
-                [self.sectionTitles removeObjectAtIndex:section];
-                [self.tableView deleteSections:[NSIndexSet indexSetWithIndex:section]
-                              withRowAnimation:UITableViewRowAnimationAutomatic];
-            } else {
-                [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:section]]
-                                      withRowAnimation:UITableViewRowAnimationAutomatic];
-            }
+        // Retrieve session token
+        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+        if (!sessionToken) {
+            NSLog(@"No session token found in Keychain. Cannot send delete request to backend.");
+            // Optionally proceed with local deletion or show an error
+            return;
         }
+        
+        // Prepare DELETE request to backend
+        NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
+        components.queryItems = @[
+            [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken],
+            [NSURLQueryItem queryItemWithName:@"name" value:filename]
+        ];
+        
+        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL];
+        [request setHTTPMethod:@"DELETE"];
+        
+        // Send DELETE request to backend
+        [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            if (!error && httpResponse.statusCode == 200) {
+                NSLog(@"Successfully deleted %@ from backend", filename);
+            } else {
+                NSLog(@"Failed to delete from backend: %@, status code: %ld", error.localizedDescription, (long)httpResponse.statusCode);
+                // Optionally show an alert here if backend deletion fails
+            }
+            
+            // Proceed with local deletion regardless of backend success (or adjust logic as needed)
+            NSError *localError;
+            [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&localError];
+            if (localError) {
+                NSLog(@"Failed to delete local video: %@", localError.localizedDescription);
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self.videoFiles removeObject:videoPath];
+                    [self.groupedVideos[sectionTitle] removeObjectAtIndex:row];
+                    
+                    if ([self.groupedVideos[sectionTitle] count] == 0) {
+                        [self.groupedVideos removeObjectForKey:sectionTitle];
+                        [self.sectionTitles removeObjectAtIndex:section];
+                        [self.tableView deleteSections:[NSIndexSet indexSetWithIndex:section]
+                                      withRowAnimation:UITableViewRowAnimationAutomatic];
+                    } else {
+                        [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:section]]
+                                              withRowAnimation:UITableViewRowAnimationAutomatic];
+                    }
+                });
+            }
+        }] resume];
     }]];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
@@ -463,16 +496,6 @@
     }
     
     [self presentViewController:actionSheet animated:YES completion:nil];
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSString *sectionTitle = self.sectionTitles[indexPath.section];
-    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
-    
-    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
-    playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:videoPath]];
-    [self presentViewController:playerVC animated:YES completion:^{ [playerVC.player play]; }];
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 @end
