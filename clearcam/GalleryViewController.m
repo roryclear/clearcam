@@ -336,6 +336,18 @@
     return self.sectionTitles.count;
 }
 
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSString *sectionTitle = self.sectionTitles[indexPath.section];
+    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
+    
+    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
+    playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:videoPath]];
+    [self presentViewController:playerVC animated:YES completion:^{
+        [playerVC.player play];
+    }];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     NSString *sectionTitle = self.sectionTitles[section];
     return self.groupedVideos[sectionTitle].count;
