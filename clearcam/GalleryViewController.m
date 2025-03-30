@@ -6,6 +6,7 @@
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIButton *menuButton; // Three-dot menu button
 @end
 
 @implementation VideoTableViewCell
@@ -28,19 +29,29 @@
     self.titleLabel.numberOfLines = 2;
     [self.contentView addSubview:self.titleLabel];
     
+    self.menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.menuButton setImage:[UIImage systemImageNamed:@"ellipsis"] forState:UIControlStateNormal]; // SF Symbol for three dots
+    self.menuButton.tintColor = [UIColor systemGrayColor];
+    [self.contentView addSubview:self.menuButton];
+    
     self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.menuButton.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // Improved constraints with safe area support
     [NSLayoutConstraint activateConstraints:@[
         [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.leadingAnchor constant:15],
         [self.thumbnailView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [self.thumbnailView.widthAnchor constraintEqualToConstant:100],
-        [self.thumbnailView.heightAnchor constraintEqualToConstant:60],
+        [self.thumbnailView.widthAnchor constraintEqualToConstant:150], // Bigger thumbnail
+        [self.thumbnailView.heightAnchor constraintEqualToConstant:90],
         
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:10],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.trailingAnchor constant:-15],
-        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor]
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.menuButton.leadingAnchor constant:-10],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        
+        [self.menuButton.trailingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.trailingAnchor constant:-15],
+        [self.menuButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [self.menuButton.widthAnchor constraintEqualToConstant:30],
+        [self.menuButton.heightAnchor constraintEqualToConstant:30]
     ]];
 }
 
@@ -71,14 +82,10 @@
     [self setupDownloadDirectory];
     [self setupTableView];
     
-    // Load offline videos first, no matter what
     [self loadExistingVideos];
-    
-    // Then try to fetch new stuff from the server
     [self getEvents];
 }
 
-// Override viewWillLayoutSubviews to update table view frame
 - (void)viewWillLayoutSubviews {
     [super viewWillLayoutSubviews];
     self.tableView.frame = self.view.bounds;
@@ -121,17 +128,15 @@
     }
 }
 
-
 - (void)setupTableView {
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     [self.tableView registerClass:[VideoTableViewCell class] forCellReuseIdentifier:@"VideoCell"];
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO; // Add this
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.tableView];
     
-    // Add constraints to keep table view filling the view
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -184,7 +189,6 @@
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Request failed: %@", error.localizedDescription);
-            // No big deal, offline videos are already loaded
             return;
         }
         
@@ -237,7 +241,6 @@
                 if (!moveError) {
                     NSLog(@"File downloaded to: %@", destPath);
                     
-                    // Get file attributes to retrieve creation date
                     NSDictionary *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:destPath error:nil];
                     if (fileAttributes) {
                         NSDate *creationDate = fileAttributes[NSFileCreationDate];
@@ -269,7 +272,6 @@
     NSError *error;
     NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
     
-    // Create an array to hold file paths with their creation dates
     NSMutableArray *filesWithDates = [NSMutableArray array];
     
     for (NSString *file in contents) {
@@ -283,12 +285,10 @@
         }
     }
     
-    // Sort by creation date (newest first)
     [filesWithDates sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
         return [obj2[@"date"] compare:obj1[@"date"]];
     }];
     
-    // Extract just the sorted paths
     for (NSDictionary *fileInfo in filesWithDates) {
         [self.videoFiles addObject:fileInfo[@"path"]];
     }
@@ -321,7 +321,7 @@
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 80;
+    return 110; // Adjusted for bigger thumbnail
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -330,6 +330,9 @@
     NSString *videoPath = self.videoFiles[indexPath.row];
     cell.titleLabel.text = [videoPath lastPathComponent];
     cell.thumbnailView.image = nil;
+    
+    [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
+    cell.menuButton.tag = indexPath.row;
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
@@ -349,6 +352,44 @@
     playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:self.videoFiles[indexPath.row]]];
     [self presentViewController:playerVC animated:YES completion:^{ [playerVC.player play]; }];
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)menuTapped:(UIButton *)sender forEvent:(UIEvent *)event {
+    NSInteger row = sender.tag;
+    NSString *videoPath = self.videoFiles[row];
+    
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil
+                                                                         message:nil
+                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Share"
+                                                    style:UIAlertActionStyleDefault
+                                                  handler:^(UIAlertAction * _Nonnull action) {
+        NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
+        UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[videoURL]
+                                                                                applicationActivities:nil];
+        [self presentViewController:activityVC animated:YES completion:nil];
+    }]];
+    
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
+                                                    style:UIAlertActionStyleDestructive
+                                                  handler:^(UIAlertAction * _Nonnull action) {
+        NSError *error;
+        [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&error];
+        if (error) {
+            NSLog(@"Failed to delete video: %@", error.localizedDescription);
+        } else {
+            [self.videoFiles removeObjectAtIndex:row];
+            [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:0]]
+                                  withRowAnimation:UITableViewRowAnimationAutomatic];
+        }
+    }]];
+    
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
+                                                    style:UIAlertActionStyleCancel
+                                                  handler:nil]];
+    
+    [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
 @end
