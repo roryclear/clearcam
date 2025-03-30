@@ -411,7 +411,7 @@
     cell.thumbnailView.image = nil;
     
     [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
-    cell.menuButton.tag = indexPath.section * 1000 + indexPath.row;
+    // Removed: cell.menuButton.tag = indexPath.section * 1000 + indexPath.row;
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
@@ -427,87 +427,111 @@
 }
 
 - (void)menuTapped:(UIButton *)sender forEvent:(UIEvent *)event {
-    NSInteger combinedTag = sender.tag;
-    NSInteger section = combinedTag / 1000;
-    NSInteger row = combinedTag % 1000;
+    // Get the indexPath from the button's position in the table view
+    CGPoint touchPoint = [sender convertPoint:CGPointZero toView:self.tableView];
+    NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:touchPoint];
+    
+    if (!indexPath) {
+        NSLog(@"Failed to get indexPath for menu button tap");
+        return;
+    }
+    
+    NSInteger section = indexPath.section;
+    NSInteger row = indexPath.row;
+    
+    // Validate section
+    if (section >= self.sectionTitles.count) {
+        NSLog(@"Invalid section: %ld, total sections: %lu", (long)section, (unsigned long)self.sectionTitles.count);
+        return;
+    }
     
     NSString *sectionTitle = self.sectionTitles[section];
+    
+    // Validate row
+    if (row >= self.groupedVideos[sectionTitle].count) {
+        NSLog(@"Invalid row: %ld for section '%@', total rows: %lu", (long)row, sectionTitle, (unsigned long)self.groupedVideos[sectionTitle].count);
+        return;
+    }
+    
     NSString *videoPath = self.groupedVideos[sectionTitle][row];
     NSString *filename = [videoPath lastPathComponent];
     
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil
-                                                                       message:nil
-                                                                preferredStyle:UIAlertControllerStyleActionSheet];
+                                                                         message:nil
+                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Share"
-                                                   style:UIAlertActionStyleDefault
-                                                 handler:^(UIAlertAction * _Nonnull action) {
+                                                    style:UIAlertActionStyleDefault
+                                                  handler:^(UIAlertAction * _Nonnull action) {
         NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
         UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[videoURL]
-                                                                            applicationActivities:nil];
+                                                                             applicationActivities:nil];
         [self presentViewController:activityVC animated:YES completion:nil];
     }]];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
-                                                   style:UIAlertActionStyleDestructive
-                                                 handler:^(UIAlertAction * _Nonnull action) {
+                                                    style:UIAlertActionStyleDestructive
+                                                  handler:^(UIAlertAction * _Nonnull action) {
         // Retrieve session token
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (!sessionToken) {
-            NSLog(@"No session token found in Keychain. Cannot send delete request to backend.");
-            // Optionally proceed with local deletion or show an error
-            return;
+            NSLog(@"No session token found in Keychain. Proceeding with local deletion only.");
         }
         
-        // Prepare DELETE request to backend
-        NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
-        components.queryItems = @[
-            [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken],
-            [NSURLQueryItem queryItemWithName:@"name" value:filename]
-        ];
-        
-        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL];
-        [request setHTTPMethod:@"DELETE"];
-        
-        // Send DELETE request to backend
-        [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-            if (!error && httpResponse.statusCode == 200) {
-                NSLog(@"Successfully deleted %@ from backend", filename);
-            } else {
-                NSLog(@"Failed to delete from backend: %@, status code: %ld", error.localizedDescription, (long)httpResponse.statusCode);
-                // Optionally show an alert here if backend deletion fails
-            }
-            
-            // Proceed with local deletion regardless of backend success (or adjust logic as needed)
-            NSError *localError;
+        // Perform local deletion immediately
+        NSError *localError;
+        if ([[NSFileManager defaultManager] fileExistsAtPath:videoPath]) {
             [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&localError];
             if (localError) {
                 NSLog(@"Failed to delete local video: %@", localError.localizedDescription);
-            } else {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self.videoFiles removeObject:videoPath];
-                    [self.groupedVideos[sectionTitle] removeObjectAtIndex:row];
-                    
-                    if ([self.groupedVideos[sectionTitle] count] == 0) {
-                        [self.groupedVideos removeObjectForKey:sectionTitle];
-                        [self.sectionTitles removeObjectAtIndex:section];
-                        [self.tableView deleteSections:[NSIndexSet indexSetWithIndex:section]
-                                      withRowAnimation:UITableViewRowAnimationAutomatic];
-                    } else {
-                        [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:section]]
-                                              withRowAnimation:UITableViewRowAnimationAutomatic];
-                    }
-                });
+                return;
             }
-        }] resume];
+        } else {
+            NSLog(@"File not found at path: %@", videoPath);
+        }
+        
+        // Update data source and table view
+        [self.videoFiles removeObject:videoPath];
+        [self.groupedVideos[sectionTitle] removeObjectAtIndex:row];
+        
+        [self.tableView beginUpdates];
+        if ([self.groupedVideos[sectionTitle] count] == 0) {
+            [self.groupedVideos removeObjectForKey:sectionTitle];
+            [self.sectionTitles removeObjectAtIndex:section];
+            [self.tableView deleteSections:[NSIndexSet indexSetWithIndex:section]
+                          withRowAnimation:UITableViewRowAnimationAutomatic];
+        } else {
+            [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:section]]
+                                  withRowAnimation:UITableViewRowAnimationAutomatic];
+        }
+        [self.tableView endUpdates];
+        
+        // Send DELETE request to backend (async, non-blocking)
+        if (sessionToken) {
+            NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
+            components.queryItems = @[
+                [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken],
+                [NSURLQueryItem queryItemWithName:@"name" value:filename]
+            ];
+            
+            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL];
+            [request setHTTPMethod:@"DELETE"];
+            
+            [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+                if (!error && httpResponse.statusCode == 200) {
+                    NSLog(@"Successfully deleted %@ from backend", filename);
+                } else {
+                    NSLog(@"Failed to delete from backend: %@, status code: %ld", error.localizedDescription, (long)httpResponse.statusCode);
+                }
+            }] resume];
+        }
     }]];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                                   style:UIAlertActionStyleCancel
-                                                 handler:nil]];
+                                                    style:UIAlertActionStyleCancel
+                                                  handler:nil]];
     
-    // For iPad
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         actionSheet.popoverPresentationController.sourceView = sender;
         actionSheet.popoverPresentationController.sourceRect = sender.bounds;
