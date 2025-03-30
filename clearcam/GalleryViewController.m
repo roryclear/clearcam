@@ -6,7 +6,7 @@
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) UIButton *menuButton; // Three-dot menu button
+@property (nonatomic, strong) UIButton *menuButton; // Three-dot menu button (vertical)
 @end
 
 @implementation VideoTableViewCell
@@ -30,8 +30,13 @@
     [self.contentView addSubview:self.titleLabel];
     
     self.menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.menuButton setImage:[UIImage systemImageNamed:@"ellipsis"] forState:UIControlStateNormal]; // SF Symbol for three dots
+    // Create a vertical ellipsis (three dots) using SF Symbols
+    UIImage *ellipsisImage = [UIImage systemImageNamed:@"ellipsis"];
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithScale:UIImageSymbolScaleLarge];
+    UIImage *verticalEllipsis = [ellipsisImage imageByApplyingSymbolConfiguration:config];
+    [self.menuButton setImage:verticalEllipsis forState:UIControlStateNormal];
     self.menuButton.tintColor = [UIColor systemGrayColor];
+    self.menuButton.transform = CGAffineTransformMakeRotation(M_PI_2); // Rotate 90 degrees to make it vertical
     [self.contentView addSubview:self.menuButton];
     
     self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
