@@ -67,9 +67,14 @@
     config.timeoutIntervalForRequest = 60.0;
     config.timeoutIntervalForResource = 600.0;
     self.downloadSession = [NSURLSession sessionWithConfiguration:config];
-    //[self deleteDownloadDirectory]; //todo remove, for testing
+    
     [self setupDownloadDirectory];
     [self setupTableView];
+    
+    // Load offline videos first, no matter what
+    [self loadExistingVideos];
+    
+    // Then try to fetch new stuff from the server
     [self getEvents];
 }
 
@@ -178,7 +183,8 @@
     
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
-            NSLog(@"Request failed: %@", error);
+            NSLog(@"Request failed: %@", error.localizedDescription);
+            // No big deal, offline videos are already loaded
             return;
         }
         
@@ -192,7 +198,7 @@
                     [self downloadFiles:json[@"files"]];
                 });
             } else {
-                NSLog(@"JSON parsing error: %@ or no 'files' key in response.", jsonError);
+                NSLog(@"JSON parsing error: %@ or no 'files' key in response.", jsonError.localizedDescription);
             }
         } else {
             NSLog(@"Request failed with status code: %ld", (long)httpResponse.statusCode);
