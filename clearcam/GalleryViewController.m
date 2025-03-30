@@ -6,7 +6,7 @@
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) UIButton *menuButton; // Three-dot menu button (vertical)
+@property (nonatomic, strong) UIButton *menuButton;
 @end
 
 @implementation VideoTableViewCell
@@ -23,20 +23,21 @@
     self.thumbnailView = [[UIImageView alloc] init];
     self.thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
     self.thumbnailView.clipsToBounds = YES;
+    self.thumbnailView.layer.cornerRadius = 4;
     [self.contentView addSubview:self.thumbnailView];
     
     self.titleLabel = [[UILabel alloc] init];
-    self.titleLabel.numberOfLines = 2;
+    self.titleLabel.numberOfLines = 1;
+    self.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     [self.contentView addSubview:self.titleLabel];
     
     self.menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    // Create a vertical ellipsis (three dots) using SF Symbols
     UIImage *ellipsisImage = [UIImage systemImageNamed:@"ellipsis"];
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithScale:UIImageSymbolScaleLarge];
     UIImage *verticalEllipsis = [ellipsisImage imageByApplyingSymbolConfiguration:config];
     [self.menuButton setImage:verticalEllipsis forState:UIControlStateNormal];
     self.menuButton.tintColor = [UIColor systemGrayColor];
-    self.menuButton.transform = CGAffineTransformMakeRotation(M_PI_2); // Rotate 90 degrees to make it vertical
+    self.menuButton.transform = CGAffineTransformMakeRotation(M_PI_2);
     [self.contentView addSubview:self.menuButton];
     
     self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -44,19 +45,19 @@
     self.menuButton.translatesAutoresizingMaskIntoConstraints = NO;
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.leadingAnchor constant:15],
+        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
         [self.thumbnailView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [self.thumbnailView.widthAnchor constraintEqualToConstant:150], // Bigger thumbnail
-        [self.thumbnailView.heightAnchor constraintEqualToConstant:90],
+        [self.thumbnailView.widthAnchor constraintEqualToConstant:120],
+        [self.thumbnailView.heightAnchor constraintEqualToConstant:80],
         
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:10],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.menuButton.leadingAnchor constant:-10],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:12],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.menuButton.leadingAnchor constant:-12],
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
         
-        [self.menuButton.trailingAnchor constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.trailingAnchor constant:-15],
+        [self.menuButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
         [self.menuButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [self.menuButton.widthAnchor constraintEqualToConstant:30],
-        [self.menuButton.heightAnchor constraintEqualToConstant:30]
+        [self.menuButton.widthAnchor constraintEqualToConstant:44],
+        [self.menuButton.heightAnchor constraintEqualToConstant:44]
     ]];
 }
 
@@ -67,6 +68,8 @@
 @property (nonatomic, strong) NSMutableArray<NSString *> *videoFiles;
 @property (nonatomic, strong) NSString *downloadDirectory;
 @property (nonatomic, strong) NSURLSession *downloadSession;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<NSString *> *> *groupedVideos;
+@property (nonatomic, strong) NSMutableArray<NSString *> *sectionTitles;
 @end
 
 @implementation GalleryViewController
@@ -78,6 +81,8 @@
     self.navigationController.navigationBarHidden = NO;
     
     self.videoFiles = [NSMutableArray array];
+    self.groupedVideos = [NSMutableDictionary dictionary];
+    self.sectionTitles = [NSMutableArray array];
     
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 60.0;
@@ -89,32 +94,6 @@
     
     [self loadExistingVideos];
     [self getEvents];
-}
-
-- (void)viewWillLayoutSubviews {
-    [super viewWillLayoutSubviews];
-    self.tableView.frame = self.view.bounds;
-}
-
-- (void)deleteDownloadDirectory {
-    NSString *documentsDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-    self.downloadDirectory = [documentsDir stringByAppendingPathComponent:@"downloaded-events"];
-    
-    NSError *error;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:self.downloadDirectory]) {
-        [[NSFileManager defaultManager] removeItemAtPath:self.downloadDirectory error:&error];
-        if (error) {
-            NSLog(@"Failed to clear directory: %@", error.localizedDescription);
-        }
-    }
-    
-    [[NSFileManager defaultManager] createDirectoryAtPath:self.downloadDirectory
-                          withIntermediateDirectories:YES
-                                           attributes:nil
-                                                error:&error];
-    if (error) {
-        NSLog(@"Failed to create directory: %@", error.localizedDescription);
-    }
 }
 
 - (void)setupDownloadDirectory {
@@ -139,15 +118,13 @@
     self.tableView.dataSource = self;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     [self.tableView registerClass:[VideoTableViewCell class] forCellReuseIdentifier:@"VideoCell"];
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.tableView.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
     [self.view addSubview:self.tableView];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
+}
+
+- (void)viewWillLayoutSubviews {
+    [super viewWillLayoutSubviews];
+    self.tableView.frame = self.view.bounds;
 }
 
 - (NSDate *)latestDownloadedFileDate {
@@ -157,7 +134,6 @@
     for (NSString *file in files) {
         NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
         NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
-
         NSDate *creationDate = attributes[NSFileCreationDate];
         if (creationDate && (!latestDate || [creationDate compare:latestDate] == NSOrderedDescending)) {
             latestDate = creationDate;
@@ -245,18 +221,6 @@
                 [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
                 if (!moveError) {
                     NSLog(@"File downloaded to: %@", destPath);
-                    
-                    NSDictionary *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:destPath error:nil];
-                    if (fileAttributes) {
-                        NSDate *creationDate = fileAttributes[NSFileCreationDate];
-                        if (creationDate) {
-                            NSLog(@"File %@ creation date: %@", fileName, creationDate);
-                        } else {
-                            NSLog(@"File %@ has no creation date available", fileName);
-                        }
-                    } else {
-                        NSLog(@"Could not retrieve attributes for file: %@", fileName);
-                    }
                 } else {
                     NSLog(@"File move failed with error: %@", moveError.localizedDescription);
                 }
@@ -273,6 +237,8 @@
 
 - (void)loadExistingVideos {
     [self.videoFiles removeAllObjects];
+    [self.groupedVideos removeAllObjects];
+    [self.sectionTitles removeAllObjects];
     
     NSError *error;
     NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
@@ -286,7 +252,8 @@
             NSDate *creationDate = [attributes fileCreationDate];
             
             [filesWithDates addObject:@{@"path": filePath,
-                                      @"date": creationDate ?: [NSDate distantPast]}];
+                                      @"date": creationDate ?: [NSDate distantPast],
+                                      @"filename": file}];
         }
     }
     
@@ -294,9 +261,42 @@
         return [obj2[@"date"] compare:obj1[@"date"]];
     }];
     
+    // Group videos by date
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    dateFormatter.dateStyle = NSDateFormatterMediumStyle;
+    dateFormatter.timeStyle = NSDateFormatterNoStyle;
+    
     for (NSDictionary *fileInfo in filesWithDates) {
-        [self.videoFiles addObject:fileInfo[@"path"]];
+        NSString *filePath = fileInfo[@"path"];
+        [self.videoFiles addObject:filePath];
+        
+        NSString *filename = fileInfo[@"filename"];
+        NSString *datePart = [[filename componentsSeparatedByString:@"_"] firstObject];
+        
+        NSDateFormatter *inputFormatter = [[NSDateFormatter alloc] init];
+        [inputFormatter setDateFormat:@"yyyy-MM-dd"];
+        NSDate *date = [inputFormatter dateFromString:datePart];
+        
+        NSString *sectionTitle = [dateFormatter stringFromDate:date] ?: @"Unknown Date";
+        
+        if (!self.groupedVideos[sectionTitle]) {
+            self.groupedVideos[sectionTitle] = [NSMutableArray array];
+            [self.sectionTitles addObject:sectionTitle];
+        }
+        [self.groupedVideos[sectionTitle] addObject:filePath];
     }
+    
+    // Sort section titles in descending order
+    [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+        formatter.dateStyle = NSDateFormatterMediumStyle;
+        formatter.timeStyle = NSDateFormatterNoStyle;
+        
+        NSDate *date1 = [formatter dateFromString:obj1];
+        NSDate *date2 = [formatter dateFromString:obj2];
+        
+        return [date2 compare:date1];
+    }];
     
     [self.tableView reloadData];
 }
@@ -321,23 +321,68 @@
     return thumbnail;
 }
 
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return self.sectionTitles.count;
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.videoFiles.count;
+    NSString *sectionTitle = self.sectionTitles[section];
+    return self.groupedVideos[sectionTitle].count;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return self.sectionTitles[section];
+}
+
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 44)];
+    headerView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(16, 0, tableView.bounds.size.width - 32, 44)];
+    label.text = [self tableView:tableView titleForHeaderInSection:section];
+    label.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    label.textColor = [UIColor darkGrayColor];
+    
+    [headerView addSubview:label];
+    return headerView;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return 44;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 110; // Adjusted for bigger thumbnail
+    return 100;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     VideoTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VideoCell" forIndexPath:indexPath];
     
-    NSString *videoPath = self.videoFiles[indexPath.row];
-    cell.titleLabel.text = [videoPath lastPathComponent];
+    NSString *sectionTitle = self.sectionTitles[indexPath.section];
+    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *filename = [videoPath lastPathComponent];
+    
+    // Extract and format the full time from filename (format: yyyy-MM-dd_HH-mm-ss)
+    NSArray *components = [filename componentsSeparatedByString:@"_"];
+    if (components.count >= 2) {
+        NSString *timePart = components[1]; // Gets "HH-mm-ss" part
+        NSArray *timeComponents = [timePart componentsSeparatedByString:@"-"];
+        if (timeComponents.count >= 3) {
+            NSString *hour = timeComponents[0];
+            NSString *minute = timeComponents[1];
+            NSString *second = timeComponents[2];
+            cell.titleLabel.text = [NSString stringWithFormat:@"%@:%@:%@", hour, minute, second];
+        } else {
+            cell.titleLabel.text = filename;
+        }
+    } else {
+        cell.titleLabel.text = filename;
+    }
+    
     cell.thumbnailView.image = nil;
     
     [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
-    cell.menuButton.tag = indexPath.row;
+    cell.menuButton.tag = indexPath.section * 1000 + indexPath.row;
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
@@ -352,49 +397,72 @@
     return cell;
 }
 
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
-    playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:self.videoFiles[indexPath.row]]];
-    [self presentViewController:playerVC animated:YES completion:^{ [playerVC.player play]; }];
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-}
-
 - (void)menuTapped:(UIButton *)sender forEvent:(UIEvent *)event {
-    NSInteger row = sender.tag;
-    NSString *videoPath = self.videoFiles[row];
+    NSInteger combinedTag = sender.tag;
+    NSInteger section = combinedTag / 1000;
+    NSInteger row = combinedTag % 1000;
+    
+    NSString *sectionTitle = self.sectionTitles[section];
+    NSString *videoPath = self.groupedVideos[sectionTitle][row];
     
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil
-                                                                         message:nil
-                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
+                                                                       message:nil
+                                                                preferredStyle:UIAlertControllerStyleActionSheet];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Share"
-                                                    style:UIAlertActionStyleDefault
-                                                  handler:^(UIAlertAction * _Nonnull action) {
+                                                   style:UIAlertActionStyleDefault
+                                                 handler:^(UIAlertAction * _Nonnull action) {
         NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
         UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[videoURL]
-                                                                                applicationActivities:nil];
+                                                                            applicationActivities:nil];
         [self presentViewController:activityVC animated:YES completion:nil];
     }]];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
-                                                    style:UIAlertActionStyleDestructive
-                                                  handler:^(UIAlertAction * _Nonnull action) {
+                                                   style:UIAlertActionStyleDestructive
+                                                 handler:^(UIAlertAction * _Nonnull action) {
         NSError *error;
         [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&error];
         if (error) {
             NSLog(@"Failed to delete video: %@", error.localizedDescription);
         } else {
-            [self.videoFiles removeObjectAtIndex:row];
-            [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:0]]
-                                  withRowAnimation:UITableViewRowAnimationAutomatic];
+            [self.videoFiles removeObject:videoPath];
+            [self.groupedVideos[sectionTitle] removeObjectAtIndex:row];
+            
+            if ([self.groupedVideos[sectionTitle] count] == 0) {
+                [self.groupedVideos removeObjectForKey:sectionTitle];
+                [self.sectionTitles removeObjectAtIndex:section];
+                [self.tableView deleteSections:[NSIndexSet indexSetWithIndex:section]
+                              withRowAnimation:UITableViewRowAnimationAutomatic];
+            } else {
+                [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:section]]
+                                      withRowAnimation:UITableViewRowAnimationAutomatic];
+            }
         }
     }]];
     
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                                    style:UIAlertActionStyleCancel
-                                                  handler:nil]];
+                                                   style:UIAlertActionStyleCancel
+                                                 handler:nil]];
+    
+    // For iPad
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        actionSheet.popoverPresentationController.sourceView = sender;
+        actionSheet.popoverPresentationController.sourceRect = sender.bounds;
+    }
     
     [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSString *sectionTitle = self.sectionTitles[indexPath.section];
+    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
+    
+    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
+    playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:videoPath]];
+    [self presentViewController:playerVC animated:YES completion:^{ [playerVC.player play]; }];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
 @end
+
