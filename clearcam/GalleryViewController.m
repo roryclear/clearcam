@@ -317,16 +317,22 @@
     AVAsset *asset = [AVAsset assetWithURL:videoURL];
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
-    
-    CMTime time = CMTimeMakeWithSeconds(0.0, 600);
+
+    // Get the duration of the video
+    CMTime duration = asset.duration;
+    Float64 durationInSeconds = CMTimeGetSeconds(duration);
+    Float64 middleTime = durationInSeconds / 2.0;
+
+    // Set the time to the middle of the video
+    CMTime time = CMTimeMakeWithSeconds(middleTime, 600);
     NSError *error = nil;
     CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
-    
+
     if (!imageRef) {
         NSLog(@"Thumbnail generation failed: %@", error.localizedDescription);
         return nil;
     }
-    
+
     UIImage *thumbnail = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
     return thumbnail;
