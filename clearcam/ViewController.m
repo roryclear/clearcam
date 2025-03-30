@@ -391,7 +391,6 @@ NSMutableDictionary *classColorMap;
     self.fpsLabel.text = @"FPS: 0";
     [self.view addSubview:self.fpsLabel];
 
-    // Rest of the setupUI code remains unchanged...
     self.recordButton = [UIButton buttonWithType:UIButtonTypeCustom];
     CGFloat buttonSize = 80;
     self.recordButton.frame = CGRectMake(0, 0, buttonSize, buttonSize);
@@ -412,7 +411,6 @@ NSMutableDictionary *classColorMap;
 
     [self.recordButton setTitle:@"Record" forState:UIControlStateNormal];
     self.recordButton.titleLabel.alpha = 0;
-
     [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.recordButton];
 
@@ -440,7 +438,7 @@ NSMutableDictionary *classColorMap;
     [self.galleryButton addTarget:self action:@selector(galleryButtonPressed) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.galleryButton];
 
-    [self updateButtonFrames]; // Set initial positions
+    [self updateButtonFrames]; // Just call it once
 }
 
 - (void)updateButtonFrames {
@@ -449,7 +447,6 @@ NSMutableDictionary *classColorMap;
     CGFloat galleryButtonSize = 50;
     CGFloat spacing = 60;
 
-    // Use safe area insets
     UIEdgeInsets safeAreaInsets = self.view.safeAreaInsets;
     CGFloat screenWidth = self.view.bounds.size.width;
     CGFloat screenHeight = self.view.bounds.size.height;
@@ -460,40 +457,53 @@ NSMutableDictionary *classColorMap;
 
     UIDeviceOrientation orientation = [[UIDevice currentDevice] orientation];
 
-    if (UIDeviceOrientationIsLandscape(orientation)) {
-        // Landscape (Left or Right)
-        CGFloat rightMargin = MAX(20, safeAreaInsets.right + 10);
-        self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin,
-                                             screenHeight / 2 - recordButtonSize / 2,
-                                             recordButtonSize,
-                                             recordButtonSize);
-
-        CGFloat settingsX = screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (settingsButtonSize / 2);
-        CGFloat settingsY = screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing;
-        self.settingsButton.frame = CGRectMake(settingsX, settingsY, settingsButtonSize, settingsButtonSize);
-
-        CGFloat galleryX = screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (galleryButtonSize / 2);
-        CGFloat galleryY = screenHeight / 2 + recordButtonSize / 2 + spacing;
-        self.galleryButton.frame = CGRectMake(galleryX, galleryY, galleryButtonSize, galleryButtonSize);
-    } else {
-        // Portrait (only regular portrait reaches here)
-        CGFloat bottomMargin = MAX(20, safeAreaInsets.bottom + 10);
-        CGFloat recordX = (screenWidth - recordButtonSize) / 2;
-        self.recordButton.frame = CGRectMake(recordX,
-                                             screenHeight - recordButtonSize - bottomMargin,
-                                             recordButtonSize,
-                                             recordButtonSize);
-
-        CGFloat settingsX = recordX + recordButtonSize + spacing;
-        CGFloat settingsY = screenHeight - bottomMargin - recordButtonSize / 2 - settingsButtonSize / 2;
-        self.settingsButton.frame = CGRectMake(settingsX, settingsY, settingsButtonSize, settingsButtonSize);
-
-        CGFloat galleryX = recordX - galleryButtonSize - spacing;
-        CGFloat galleryY = screenHeight - bottomMargin - recordButtonSize / 2 - galleryButtonSize / 2;
-        self.galleryButton.frame = CGRectMake(galleryX, galleryY, galleryButtonSize, galleryButtonSize);
+    // Skip if upside-down or invalid
+    if (orientation == UIDeviceOrientationPortraitUpsideDown ||
+        orientation == UIDeviceOrientationFaceUp ||
+        orientation == UIDeviceOrientationFaceDown) {
+        return;
     }
 
-    // fpsLabel stays at its fixed position from setupUI (10, 30, 150, 30)
+    // Default to portrait if orientation isn’t set yet (e.g., on load)
+    if (orientation == UIDeviceOrientationUnknown) {
+        orientation = UIDeviceOrientationPortrait;
+    }
+
+    if (orientation == UIDeviceOrientationLandscapeRight) {
+        // Charge port on the left, buttons on the left
+        CGFloat leftMargin = MAX(20, safeAreaInsets.left + 10);
+        self.recordButton.frame = CGRectMake(leftMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
+        self.settingsButton.frame = CGRectMake(leftMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
+                                               screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing,
+                                               settingsButtonSize, settingsButtonSize);
+        self.galleryButton.frame = CGRectMake(leftMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
+                                              screenHeight / 2 + recordButtonSize / 2 + spacing,
+                                              galleryButtonSize, galleryButtonSize);
+        self.fpsLabel.frame = CGRectMake(screenWidth - 150 - MAX(20, safeAreaInsets.right + 10), 30, 150, 30);
+    } else if (orientation == UIDeviceOrientationLandscapeLeft) {
+        // Charge port on the right, buttons on the right
+        CGFloat rightMargin = MAX(20, safeAreaInsets.right + 10);
+        self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
+        self.settingsButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
+                                               screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing,
+                                               settingsButtonSize, settingsButtonSize);
+        self.galleryButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
+                                              screenHeight / 2 + recordButtonSize / 2 + spacing,
+                                              galleryButtonSize, galleryButtonSize);
+        self.fpsLabel.frame = CGRectMake(MAX(20, safeAreaInsets.left + 10), 30, 150, 30);
+    } else {
+        // Portrait (charge port at bottom)
+        CGFloat bottomMargin = MAX(20, safeAreaInsets.bottom + 10);
+        CGFloat recordX = (screenWidth - recordButtonSize) / 2;
+        self.recordButton.frame = CGRectMake(recordX, screenHeight - recordButtonSize - bottomMargin, recordButtonSize, recordButtonSize);
+        self.settingsButton.frame = CGRectMake(recordX + recordButtonSize + spacing,
+                                               screenHeight - bottomMargin - recordButtonSize / 2 - settingsButtonSize / 2,
+                                               settingsButtonSize, settingsButtonSize);
+        self.galleryButton.frame = CGRectMake(recordX - galleryButtonSize - spacing,
+                                              screenHeight - bottomMargin - recordButtonSize / 2 - galleryButtonSize / 2,
+                                              galleryButtonSize, galleryButtonSize);
+        self.fpsLabel.frame = CGRectMake(10, 30, 150, 30);
+    }
 }
 
 - (void)galleryButtonPressed {
