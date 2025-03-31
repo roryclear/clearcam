@@ -70,6 +70,8 @@
 @property (nonatomic, strong) NSURLSession *downloadSession;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<NSString *> *> *groupedVideos;
 @property (nonatomic, strong) NSMutableArray<NSString *> *sectionTitles;
+@property (nonatomic, strong) UIRefreshControl *refreshControl;
+@property (nonatomic, assign) BOOL isLoadingVideos;
 @end
 
 @implementation GalleryViewController
@@ -83,6 +85,7 @@
     self.videoFiles = [NSMutableArray array];
     self.groupedVideos = [NSMutableDictionary dictionary];
     self.sectionTitles = [NSMutableArray array];
+    self.isLoadingVideos = NO;
     
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 60.0;
@@ -91,9 +94,35 @@
     
     [self setupDownloadDirectory];
     [self setupTableView];
-    
+    [self setupRefreshControl];
     [self loadExistingVideos];
     [self getEvents];
+}
+
+- (void)setupRefreshControl {
+    self.refreshControl = [[UIRefreshControl alloc] init];
+    [self.refreshControl addTarget:self action:@selector(handleRefresh) forControlEvents:UIControlEventValueChanged];
+    if (@available(iOS 10.0, *)) {
+        self.tableView.refreshControl = self.refreshControl;
+    } else {
+        [self.tableView addSubview:self.refreshControl];
+    }
+}
+
+- (void)handleRefresh {
+    if (!self.isLoadingVideos) {
+        [self getEvents];
+    } else {
+        [self.refreshControl endRefreshing];
+    }
+}
+
+- (void)setIsLoadingVideos:(BOOL)isLoadingVideos {
+    _isLoadingVideos = isLoadingVideos;
+    
+    if (!isLoadingVideos && self.refreshControl.isRefreshing) {
+        [self.refreshControl endRefreshing];
+    }
 }
 
 - (void)setupDownloadDirectory {
@@ -119,23 +148,21 @@
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     [self.tableView registerClass:[VideoTableViewCell class] forCellReuseIdentifier:@"VideoCell"];
     self.tableView.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
+
+    if (@available(iOS 11.0, *)) {
+        self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    }
+    
     [self.view addSubview:self.tableView];
     
-    // Enable Auto Layout
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    
-    // Pin to safe area
-    [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
-    ]];
-}
 
-- (void)viewWillLayoutSubviews {
-    [super viewWillLayoutSubviews];
-    self.tableView.frame = self.view.safeAreaLayoutGuide.layoutFrame;
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:0],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:0],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:0],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:0]
+    ]];
 }
 
 - (NSDate *)latestDownloadedFileDate {
@@ -154,6 +181,10 @@
 }
 
 - (void)getEvents {
+    if (self.isLoadingVideos) return;
+    
+    self.isLoadingVideos = YES;
+    
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
@@ -179,6 +210,10 @@
     [request setHTTPMethod:@"GET"];
     
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.isLoadingVideos = NO;
+        });
+        
         if (error) {
             NSLog(@"Request failed: %@", error.localizedDescription);
             return;
@@ -203,6 +238,13 @@
 }
 
 - (void)downloadFiles:(NSArray<NSString *> *)fileNames {
+    if (fileNames.count == 0) {
+        [self loadExistingVideos];
+        return;
+    }
+    
+    self.isLoadingVideos = YES;
+    
     dispatch_group_t downloadGroup = dispatch_group_create();
     for (NSString *fileName in fileNames) {
         dispatch_group_enter(downloadGroup);
@@ -241,7 +283,9 @@
             dispatch_group_leave(downloadGroup);
         }] resume];
     }
+    
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
+        self.isLoadingVideos = NO;
         [self loadExistingVideos];
     });
 }
@@ -411,7 +455,6 @@
     cell.thumbnailView.image = nil;
     
     [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
-    // Removed: cell.menuButton.tag = indexPath.section * 1000 + indexPath.row;
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
@@ -541,4 +584,3 @@
 }
 
 @end
-
