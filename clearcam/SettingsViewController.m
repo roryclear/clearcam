@@ -34,7 +34,13 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
     
-    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) [self checkSubscriptionStatus];
+    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.tableView reloadData];
+            });
+        }];
+    }
     NSLog(@"%d %@",[[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"],[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
     
     // Register for subscription status change notifications
@@ -161,15 +167,6 @@
     [defaults synchronize];
 }
 
-#pragma mark - Subscription Status
-
-- (void)checkSubscriptionStatus {
-    [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.tableView reloadData]; // Refresh the UI based on the subscription status
-        });
-    }];
-}
 
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
     // Called when the subscription status changes (e.g., after a successful purchase)

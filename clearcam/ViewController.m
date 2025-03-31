@@ -53,6 +53,11 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+            // do nothing
+        }];
+    }
     self.recordPressed = NO;
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
