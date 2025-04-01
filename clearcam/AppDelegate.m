@@ -9,7 +9,7 @@
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    // Notification setup
+    NSLog(@"App launched with options: %@", launchOptions);
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     center.delegate = self;
     
@@ -19,18 +19,27 @@
             dispatch_async(dispatch_get_main_queue(), ^{
                 [application registerForRemoteNotifications];
             });
+        } else {
+            NSLog(@"Notification permission denied: %@", error);
         }
     }];
     
-    // Check for notification launch
+    // Handle launch from notification
     if (launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey]) {
-        self.pendingNotification = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
+        NSDictionary *userInfo = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
+        self.pendingNotification = userInfo;
+        NSLog(@"Launched from notification: %@", userInfo);
+        // Only run background code if content-available is present (receipt, not tap)
+        if (userInfo[@"aps"][@"content-available"]) {
+            [self handleNotificationReceived:userInfo];
+        }
     }
     
     return YES;
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
+    NSLog(@"Application became active");
     if (self.pendingNotification) {
         [self handleNotificationNavigation];
         self.pendingNotification = nil;
@@ -41,39 +50,41 @@
 
 - (void)handleNotificationNavigation {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // Get the key window's root view controller
+        NSLog(@"Handling notification navigation (user tapped)");
         UIWindow *window = [UIApplication sharedApplication].keyWindow;
         UIViewController *rootVC = window.rootViewController;
         
-        // Find the topmost presented view controller
         UIViewController *topVC = rootVC;
         while (topVC.presentedViewController) {
             topVC = topVC.presentedViewController;
         }
         
-        // Check if we already have a GalleryViewController visible
         if ([topVC isKindOfClass:[UINavigationController class]]) {
             UINavigationController *nav = (UINavigationController *)topVC;
             if ([nav.topViewController isKindOfClass:[GalleryViewController class]]) {
-                return; // Already showing gallery
+                NSLog(@"GalleryViewController already visible");
+                return;
             }
         }
         
-        // Create and show the GalleryViewController
         GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
         
         if ([topVC isKindOfClass:[UINavigationController class]]) {
-            // Push onto existing nav stack
             [(UINavigationController *)topVC pushViewController:galleryVC animated:YES];
         } else if (topVC.navigationController) {
-            // Push onto existing nav controller
             [topVC.navigationController pushViewController:galleryVC animated:YES];
         } else {
-            // Present modally with new nav controller
             UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:galleryVC];
             [topVC presentViewController:navController animated:YES completion:nil];
         }
     });
+}
+
+- (void)handleNotificationReceived:(NSDictionary *)userInfo {
+    NSLog(@"Notification received (user did NOT tap): %@", userInfo);
+    GalleryViewController *gallery = [[GalleryViewController alloc] init];
+    sleep(15);
+    [gallery getEvents];
 }
 
 #pragma mark - Remote Notification Methods
@@ -91,14 +102,20 @@
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
-    // Show notification when app is in foreground
+    NSDictionary *userInfo = notification.request.content.userInfo;
+    NSLog(@"Will present notification: %@", userInfo);
+    if (userInfo[@"aps"][@"content-available"]) {
+        [self handleNotificationReceived:userInfo];
+    }
     completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
 didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void (^)(void))completionHandler {
-    // Handle notification tap (foreground or background)
+    NSDictionary *userInfo = response.notification.request.content.userInfo;
+    NSLog(@"User tapped notification: %@", userInfo);
+    // Only handle navigation, no custom code here
     [self handleNotificationNavigation];
     completionHandler();
 }
@@ -106,16 +123,26 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 - (void)application:(UIApplication *)application
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
+    NSLog(@"Received remote notification: %@", userInfo);
     
-    if (application.applicationState == UIApplicationStateInactive) {
-        // App was in background and user tapped notification
-        [self handleNotificationNavigation];
-    } else if (application.applicationState == UIApplicationStateBackground) {
-        // App was in background - store notification for when app becomes active
-        self.pendingNotification = userInfo;
+    if (userInfo[@"aps"][@"content-available"]) {
+        NSLog(@"Background notification detected");
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            [self handleNotificationReceived:userInfo];
+            completionHandler(UIBackgroundFetchResultNewData);
+        });
+    } else {
+        if (application.applicationState == UIApplicationStateInactive) {
+            NSLog(@"App inactive - handling navigation");
+            self.pendingNotification = userInfo;
+        } else if (application.applicationState == UIApplicationStateBackground) {
+            NSLog(@"App in background - storing notification");
+            self.pendingNotification = userInfo;
+        } else {
+            NSLog(@"App in foreground - regular notification received");
+        }
+        completionHandler(UIBackgroundFetchResultNoData);
     }
-    
-    completionHandler(UIBackgroundFetchResultNewData);
 }
 
 #pragma mark - Core Data Stack
