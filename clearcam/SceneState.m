@@ -2,6 +2,7 @@
 #import "SettingsManager.h"
 #import "SecretManager.h"
 #import "AppDelegate.h"
+#import "StoreManager.h"
 #import "FileServer.h"
 #import "Email.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
@@ -102,6 +103,12 @@
                     
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 120) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
+                        if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+                            NSLog(@"verifying subscription");
+                            [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                                //do nothing, todo, need to send the notif here?
+                            }];
+                        }
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
                         //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
                         //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
