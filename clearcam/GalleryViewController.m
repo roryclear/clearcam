@@ -365,7 +365,7 @@
     // Get the duration of the video
     CMTime duration = asset.duration;
     Float64 durationInSeconds = CMTimeGetSeconds(duration);
-    Float64 middleTime = durationInSeconds / 2.0;
+    Float64 middleTime = durationInSeconds / 1.75; //little after
 
     // Set the time to the middle of the video
     CMTime time = CMTimeMakeWithSeconds(middleTime, 600);
