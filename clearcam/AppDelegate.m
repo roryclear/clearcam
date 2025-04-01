@@ -1,86 +1,126 @@
 #import "AppDelegate.h"
 #import <UserNotifications/UserNotifications.h>
+#import "GalleryViewController.h"
 
 @interface AppDelegate () <UNUserNotificationCenterDelegate>
-
+@property (nonatomic, strong) NSDictionary *pendingNotification;
 @end
 
 @implementation AppDelegate
 
-@synthesize persistentContainer = _persistentContainer;
-
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    // Notification setup
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-    center.delegate = self; // Set the delegate
-
+    center.delegate = self;
+    
     [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
                           completionHandler:^(BOOL granted, NSError * _Nullable error) {
         if (granted) {
-            NSLog(@"Notification permission granted.");
             dispatch_async(dispatch_get_main_queue(), ^{
-                [[UIApplication sharedApplication] registerForRemoteNotifications];
+                [application registerForRemoteNotifications];
             });
-        } else {
-            NSLog(@"Notification permission denied: %@", error);
         }
     }];
-
+    
+    // Check for notification launch
+    if (launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey]) {
+        self.pendingNotification = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
+    }
+    
     return YES;
 }
 
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    if (self.pendingNotification) {
+        [self handleNotificationNavigation];
+        self.pendingNotification = nil;
+    }
+}
+
+#pragma mark - Notification Handling
+
+- (void)handleNotificationNavigation {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // Get the key window's root view controller
+        UIWindow *window = [UIApplication sharedApplication].keyWindow;
+        UIViewController *rootVC = window.rootViewController;
+        
+        // Find the topmost presented view controller
+        UIViewController *topVC = rootVC;
+        while (topVC.presentedViewController) {
+            topVC = topVC.presentedViewController;
+        }
+        
+        // Check if we already have a GalleryViewController visible
+        if ([topVC isKindOfClass:[UINavigationController class]]) {
+            UINavigationController *nav = (UINavigationController *)topVC;
+            if ([nav.topViewController isKindOfClass:[GalleryViewController class]]) {
+                return; // Already showing gallery
+            }
+        }
+        
+        // Create and show the GalleryViewController
+        GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
+        
+        if ([topVC isKindOfClass:[UINavigationController class]]) {
+            // Push onto existing nav stack
+            [(UINavigationController *)topVC pushViewController:galleryVC animated:YES];
+        } else if (topVC.navigationController) {
+            // Push onto existing nav controller
+            [topVC.navigationController pushViewController:galleryVC animated:YES];
+        } else {
+            // Present modally with new nav controller
+            UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:galleryVC];
+            [topVC presentViewController:navController animated:YES completion:nil];
+        }
+    });
+}
+
+#pragma mark - Remote Notification Methods
+
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
-    NSString *token = [self stringFromDeviceToken:deviceToken];
+    NSString *token = [[deviceToken description] stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"<>"]];
+    token = [token stringByReplacingOccurrencesOfString:@" " withString:@""];
     NSLog(@"Device Token: %@", token);
-    // Send this token to your backend server.
 }
 
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     NSLog(@"Failed to register for remote notifications: %@", error);
 }
 
-- (NSString *)stringFromDeviceToken:(NSData *)deviceToken {
-    const char *data = [deviceToken bytes];
-    NSMutableString *token = [NSMutableString string];
-    for (NSUInteger i = 0; i < [deviceToken length]; i++) {
-        [token appendFormat:@"%02.2hhx", data[i]];
-    }
-    return [token copy];
-}
-
-// Handle incoming notifications while app is in the foreground
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
-    completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound | UNNotificationPresentationOptionBadge);
+    // Show notification when app is in foreground
+    completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
 }
 
-//Handle user interaction with notifications (tap)
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
 didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void (^)(void))completionHandler {
-    // Handle notification tap here.
+    // Handle notification tap (foreground or background)
+    [self handleNotificationNavigation];
     completionHandler();
 }
 
-// Handle silent notifications and notifications while app is in background/closed.
-- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
-    NSLog(@"Received remote notification: %@", userInfo);
-
-    if (userInfo[@"aps"][@"content-available"]) {
-        // Silent notification handling
-        NSLog(@"Received silent notification.");
-
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            // Perform background tasks here.
-            sleep(5); // Simulate a background task. Replace with actual task.
-            completionHandler(UIBackgroundFetchResultNewData); // Or UIBackgroundFetchResultNoData
-            NSLog(@"Silent notification background task completed.");
-        });
-    } else {
-        // Regular notification handling.
-        completionHandler(UIBackgroundFetchResultNewData);
+- (void)application:(UIApplication *)application
+didReceiveRemoteNotification:(NSDictionary *)userInfo
+fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
+    
+    if (application.applicationState == UIApplicationStateInactive) {
+        // App was in background and user tapped notification
+        [self handleNotificationNavigation];
+    } else if (application.applicationState == UIApplicationStateBackground) {
+        // App was in background - store notification for when app becomes active
+        self.pendingNotification = userInfo;
     }
+    
+    completionHandler(UIBackgroundFetchResultNewData);
 }
+
+#pragma mark - Core Data Stack
+
+@synthesize persistentContainer = _persistentContainer;
 
 - (NSPersistentContainer *)persistentContainer {
     if (_persistentContainer == nil) {
