@@ -301,14 +301,15 @@
     NSMutableArray *filesWithDates = [NSMutableArray array];
     
     for (NSString *file in contents) {
-        if ([file.pathExtension isEqualToString:@"mp4"]) {
+        NSString *extension = file.pathExtension.lowercaseString;
+        if ([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"]) {
             NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
             NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
             NSDate *creationDate = [attributes fileCreationDate];
             
             [filesWithDates addObject:@{@"path": filePath,
-                                      @"date": creationDate ?: [NSDate distantPast],
-                                      @"filename": file}];
+                                        @"date": creationDate ?: [NSDate distantPast],
+                                        @"filename": file}];
         }
     }
     
@@ -316,7 +317,6 @@
         return [obj2[@"date"] compare:obj1[@"date"]];
     }];
     
-    // Group videos by date
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     dateFormatter.dateStyle = NSDateFormatterMediumStyle;
     dateFormatter.timeStyle = NSDateFormatterNoStyle;
@@ -341,7 +341,6 @@
         [self.groupedVideos[sectionTitle] addObject:filePath];
     }
     
-    // Sort section titles in descending order
     [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         formatter.dateStyle = NSDateFormatterMediumStyle;
@@ -388,13 +387,23 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSString *sectionTitle = self.sectionTitles[indexPath.section];
-    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *filePath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *extension = filePath.pathExtension.lowercaseString;
     
-    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
-    playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:videoPath]];
-    [self presentViewController:playerVC animated:YES completion:^{
-        [playerVC.player play];
-    }];
+    if ([extension isEqualToString:@"mp4"]) {
+        AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
+        playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:filePath]];
+        [self presentViewController:playerVC animated:YES completion:^{
+            [playerVC.player play];
+        }];
+    } else if ([extension isEqualToString:@"aes"]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Encrypted File"
+                                                                      message:@"This file is encrypted (.aes) and cannot be played."
+                                                               preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    }
+    
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
@@ -432,13 +441,14 @@
     VideoTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VideoCell" forIndexPath:indexPath];
     
     NSString *sectionTitle = self.sectionTitles[indexPath.section];
-    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
-    NSString *filename = [videoPath lastPathComponent];
+    NSString *filePath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *filename = [filePath lastPathComponent];
+    NSString *extension = filePath.pathExtension.lowercaseString;
     
-    // Extract and format the full time from filename (format: yyyy-MM-dd_HH-mm-ss)
+    // Set title label (same logic as before)
     NSArray *components = [filename componentsSeparatedByString:@"_"];
     if (components.count >= 2) {
-        NSString *timePart = components[1]; // Gets "HH-mm-ss" part
+        NSString *timePart = components[1];
         NSArray *timeComponents = [timePart componentsSeparatedByString:@"-"];
         if (timeComponents.count >= 3) {
             NSString *hour = timeComponents[0];
@@ -454,17 +464,28 @@
     
     cell.thumbnailView.image = nil;
     
-    [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
-    
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            VideoTableViewCell *updateCell = [tableView cellForRowAtIndexPath:indexPath];
-            if (updateCell) {
-                updateCell.thumbnailView.image = thumbnail;
-            }
+    if ([extension isEqualToString:@"mp4"]) {
+        // Generate thumbnail for MP4 files
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            UIImage *thumbnail = [self generateThumbnailForVideoAtPath:filePath];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                VideoTableViewCell *updateCell = [tableView cellForRowAtIndexPath:indexPath];
+                if (updateCell) {
+                    updateCell.thumbnailView.image = thumbnail;
+                }
+            });
         });
-    });
+    } else if ([extension isEqualToString:@"aes"]) {
+        // Use a lock icon for AES files
+        UIImage *lockImage = [UIImage systemImageNamed:@"lock.fill"];
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:40];
+        UIImage *scaledLockImage = [lockImage imageByApplyingSymbolConfiguration:config];
+        cell.thumbnailView.image = scaledLockImage;
+        cell.thumbnailView.contentMode = UIViewContentModeCenter; // Center the lock icon
+        cell.thumbnailView.tintColor = [UIColor systemGrayColor];
+    }
+    
+    [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
     
     return cell;
 }
