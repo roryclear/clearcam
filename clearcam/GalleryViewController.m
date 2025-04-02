@@ -1,5 +1,6 @@
 #import "GalleryViewController.h"
 #import "StoreManager.h"
+#import "SecretManager.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 
@@ -304,6 +305,29 @@
         NSString *extension = file.pathExtension.lowercaseString;
         if ([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"]) {
             NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
+            
+            if([extension isEqualToString:@"aes"]){
+                NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&error];
+                if (encryptedData) {
+                    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+                    __block NSData *decryptedData = nil; // Add __block specifier
+                    __block NSString *successfulKey = nil; // Add __block specifier
+
+                    for (NSString *key in storedKeys) {
+                        decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+                        if (decryptedData) {
+                            successfulKey = key;
+                            break;
+                        }
+                    }
+
+                    if (decryptedData) {
+                        NSURL *url = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
+                        filePath = [url path];
+                    }
+                }
+            }
+            
             NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
             NSDate *creationDate = [attributes fileCreationDate];
             
@@ -602,6 +626,21 @@
     }
     
     [self presentViewController:actionSheet animated:YES completion:nil];
+}
+
+- (NSURL *)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
+    // Remove only the .aes extension
+    NSString *fileName = [aesFileURL lastPathComponent];
+    if ([fileName hasSuffix:@".aes"]) {
+        fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
+    }
+    NSURL *decFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
+    NSError *writeError = nil;
+    [decryptedData writeToURL:decFileURL options:NSDataWritingAtomic error:&writeError];
+    if (writeError) {
+        return nil;
+    }
+    return decFileURL;
 }
 
 @end
