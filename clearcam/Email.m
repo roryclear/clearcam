@@ -52,7 +52,7 @@
     }
 
     NSData *fileData = imageData;
-    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
+    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"];
     if (encryptImage) {
         NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
         if (!encryptionKey) {

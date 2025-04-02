@@ -12,10 +12,11 @@
 @property (nonatomic, strong) NSString *selectedResolution;
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
-@property (nonatomic, assign) BOOL encryptEmailDataEnabled;
+@property (nonatomic, assign) BOOL sendNotifEnabled;
 @property (nonatomic, assign) BOOL useOwnEmailServerEnabled; // Track if "Use own email server" is enabled
 @property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
 @property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *notificationSchedules; // Array to store notification schedules
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
 @property (nonatomic, strong) id ipAddressObserver;
 @property (nonatomic, assign) NSInteger threshold; // New property for threshold
@@ -66,11 +67,11 @@
         [defaults setBool:NO forKey:@"stream_via_wifi_enabled"];
     }
     
-    if ([defaults objectForKey:@"encrypt_email_data_enabled"] != nil) {
-        self.encryptEmailDataEnabled = [defaults boolForKey:@"encrypt_email_data_enabled"];
+    if ([defaults objectForKey:@"send_notif_enabled"] != nil) {
+        self.sendNotifEnabled = [defaults boolForKey:@"send_notif_enabled"];
     } else {
-        self.encryptEmailDataEnabled = NO;
-        [defaults setBool:NO forKey:@"encrypt_email_data_enabled"];
+        self.sendNotifEnabled = NO;
+        [defaults setBool:NO forKey:@"send_notif_enabled"];
     }
     
     if ([defaults objectForKey:@"use_own_email_server_enabled"] != nil) {
@@ -85,6 +86,19 @@
     } else {
         self.threshold = 25; // Default value of 25%
         [defaults setInteger:25 forKey:@"threshold"];
+    }
+    
+    self.notificationSchedules = [[defaults arrayForKey:@"notification_schedules"] mutableCopy];
+    if (!self.notificationSchedules) {
+        self.notificationSchedules = [@[@{
+            @"days": @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"],
+            @"startHour": @0,
+            @"startMinute": @0,
+            @"endHour": @23,
+            @"endMinute": @59,
+            @"enabled": @YES
+        }] mutableCopy];
+        [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
     }
     
     self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled;
@@ -170,7 +184,7 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 9; // Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Encrypt, Change Encryption Password, Use own email server, Manage Email Schedules
+        NSInteger baseRows = 9; // Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Send Notifications, Change Encryption Password, Use own email server, Manage Notification Schedules
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
             baseRows += 2; // Add Server Address and Test own server
         }
@@ -257,13 +271,13 @@
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 5 + offset) {
-                cell.textLabel.text = @"Encrypt Email Data (Recommended)";
+                cell.textLabel.text = @"Send Notifications on Events";
                 cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
-                encryptEmailDataSwitch.on = isPremium ? self.encryptEmailDataEnabled : NO;
-                [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = encryptEmailDataSwitch;
-                encryptEmailDataSwitch.enabled = isPremium;
+                UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
+                sendNotifSwitch.on = isPremium ? self.sendNotifEnabled : NO;
+                [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = sendNotifSwitch;
+                sendNotifSwitch.enabled = isPremium;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 6 + offset) {
@@ -281,7 +295,7 @@
                 cell.accessoryView = useOwnEmailServerSwitch;
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 8 + offset) {
-                cell.textLabel.text = @"Manage Email Schedules";
+                cell.textLabel.text = @"Manage Notification Schedules";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
@@ -379,7 +393,7 @@
                 if (!isPremium) {
                     [self showPremiumRequiredAlert];
                 }
-                // Encrypt Email Data - handled by switch
+                // Send Notifications - handled by switch
             } else if (indexPath.row == 6 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
@@ -394,9 +408,12 @@
                 // Use own email server - handled by switch
             } else if (indexPath.row == 8 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
-                // Note: emailSchedules property is removed, so this might need adjustment based on your needs
+                scheduleVC.emailSchedules = [self.notificationSchedules mutableCopy];
                 scheduleVC.completionHandler = ^(NSArray<NSDictionary *> *schedules) {
-                    // Handle schedules if still relevant, otherwise remove this logic
+                    self.notificationSchedules = [schedules mutableCopy];
+                    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                    [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
+                    [defaults synchronize];
                     [self.tableView reloadData];
                 };
                 [self.navigationController pushViewController:scheduleVC animated:YES];
@@ -481,7 +498,7 @@
     [self presentViewController:resultAlert animated:YES completion:nil];
 }
 
-- (void)encryptEmailDataSwitchToggled:(UISwitch *)sender {
+- (void)sendNotifSwitchToggled:(UISwitch *)sender {
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
         sender.on = NO;
         [self showPremiumRequiredAlert];
@@ -493,28 +510,28 @@
         if (!password) {
             [self promptForPasswordWithCompletion:^(BOOL success) {
                 if (success) {
-                    self.encryptEmailDataEnabled = YES;
-                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"encrypt_email_data_enabled"];
+                    self.sendNotifEnabled = YES;
+                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
                     [[NSUserDefaults standardUserDefaults] synchronize];
                 } else {
                     sender.on = NO;
                 }
             }];
         } else {
-            self.encryptEmailDataEnabled = YES;
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"encrypt_email_data_enabled"];
+            self.sendNotifEnabled = YES;
+            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
             [[NSUserDefaults standardUserDefaults] synchronize];
         }
     } else {
-        self.encryptEmailDataEnabled = NO;
-        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"encrypt_email_data_enabled"];
+        self.sendNotifEnabled = NO;
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_notif_enabled"];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
 }
 
 - (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Password"
-                                                                   message:@"Enter a password to encrypt email data"
+                                                                   message:@"Enter a password to encrypt and decrypt your data"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {

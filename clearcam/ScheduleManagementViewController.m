@@ -10,7 +10,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.title = @"Email Alert Schedule";
+    self.title = @"Notification Schedule";
     self.tableView.allowsMultipleSelection = NO;
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ScheduleCell"];
     

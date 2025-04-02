@@ -145,13 +145,13 @@
 
 - (void)sendEmail:(NSString *)filePath {
     NSLog(@"ACC SENDING?");
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
         NSDate *now = [NSDate date];
         NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
         NSInteger currentTime = components.hour * 60 + components.minute;
         NSString *currentDay = @[@"Sun", @"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat"][components.weekday - 1];
 
-        for (NSDictionary *schedule in [[NSUserDefaults standardUserDefaults] arrayForKey:@"email_schedules"] ?: @[]) {
+        for (NSDictionary *schedule in [[NSUserDefaults standardUserDefaults] arrayForKey:@"notification_schedules"] ?: @[]) {
             if (![schedule[@"enabled"] boolValue]) continue;
             if (![schedule[@"days"] containsObject:currentDay]) continue;
 
