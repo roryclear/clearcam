@@ -121,7 +121,8 @@
 
         // If decryption succeeded with a stored key, proceed immediately
         if (decryptedData) {
-            [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+            NSURL *url = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+            if(url) [self openImageInPhotoViewer:url];
         }
     }];
 
@@ -132,31 +133,20 @@
 }
 
 // Helper method to handle decrypted data
-- (void)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-
+- (NSURL *)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
     // Remove only the .aes extension
     NSString *fileName = [aesFileURL lastPathComponent];
     if ([fileName hasSuffix:@".aes"]) {
         fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
     }
-    // todo: can be any file type
-    NSURL *jpgFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
-
+    NSURL *decFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
     NSError *writeError = nil;
-    [decryptedData writeToURL:jpgFileURL options:NSDataWritingAtomic error:&writeError];
+    [decryptedData writeToURL:decFileURL options:NSDataWritingAtomic error:&writeError];
     if (writeError) {
-        NSLog(@"Failed to save .jpg file: %@", writeError.localizedDescription);
         [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription]];
-        return;
+        return nil;
     }
-    [self openImageInPhotoViewer:jpgFileURL];
-    NSError *deleteError = nil;
-    [fileManager removeItemAtURL:aesFileURL error:&deleteError];
-    if (deleteError) {
-        NSLog(@"Failed to delete .aes file: %@", deleteError.localizedDescription);
-        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete the original file: %@", deleteError.localizedDescription]];
-    }
+    return decFileURL;
 }
 
 - (void)promptUserForKeyWithAESFileURL:(NSURL *)aesFileURL encryptedData:(NSData *)encryptedData {
@@ -171,7 +161,8 @@
                 if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
                     NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
                 }
-                [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+                NSURL *url = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+                if(url) [self openImageInPhotoViewer:url];
             } else { // Key didn't work, prompt again
                 NSLog(@"Failed to decrypt data with user-provided key.");
                 [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
