@@ -114,7 +114,7 @@
                         //todo
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
                         //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
-                        //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
+                        //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])) {
                     } else {
                         NSLog(@"NOT sending an email");
                     }
@@ -145,7 +145,7 @@
 
 - (void)sendEmail:(NSString *)filePath {
     NSLog(@"ACC SENDING?");
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])){ //todo add back other stuff
         NSDate *now = [NSDate date];
         NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
         NSInteger currentTime = components.hour * 60 + components.minute;

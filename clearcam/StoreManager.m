@@ -116,12 +116,18 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
-    // Check if we have a stored receipt
+    static BOOL isRequestInProgress = NO;
+
+    if (isRequestInProgress) {
+        NSLog(@"🛑 Subscription verification already in progress. Skipping duplicate request.");
+        return;
+    }
+
+    isRequestInProgress = YES;  // Mark request as in progress
+
     NSString *storedReceipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
     
-    if (storedReceipt) {
-        NSLog(@"📜 Using cached receipt.");
-    } else {
+    if (!storedReceipt) {
         NSLog(@"🔄 Fetching new receipt from App Store.");
         NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
         NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
@@ -130,18 +136,17 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             NSLog(@"No receipt found. User may not have purchased any subscriptions.");
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
+            isRequestInProgress = NO;  // Reset flag
             completion(NO, nil);
             return;
         }
 
         storedReceipt = [receiptData base64EncodedStringWithOptions:0];
 
-        // Save the receipt in NSUserDefaults
         [[NSUserDefaults standardUserDefaults] setObject:storedReceipt forKey:@"subscriptionReceipt"];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
 
-    // Prepare the request to the new verification endpoint
     NSDictionary *requestDict = @{@"receipt": storedReceipt};
     NSError *error;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestDict options:0 error:&error];
@@ -150,6 +155,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         NSLog(@"JSON serialization error: %@", error.localizedDescription);
         [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
+        isRequestInProgress = NO;  // Reset flag
         completion(NO, nil);
         return;
     }
@@ -161,6 +167,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        isRequestInProgress = NO;  // Reset flag when request completes
+
         if (error) {
             NSLog(@"Error verifying receipt: %@", error.localizedDescription);
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
@@ -170,7 +178,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         }
 
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-        NSLog(@"Response from server = %@", jsonResponse);
 
         if (!jsonResponse || ![jsonResponse isKindOfClass:[NSDictionary class]]) {
             NSLog(@"Invalid response from server.");
@@ -183,21 +190,16 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         BOOL isSubscribed = [jsonResponse[@"valid"] boolValue];
 
         if (isSubscribed) {
-            // Extract session token from response
             NSString *sessionToken = jsonResponse[@"session_token"];
             if (sessionToken && [sessionToken isKindOfClass:[NSString class]]) {
-                // Store session token in Keychain
                 [self storeSessionTokenInKeychain:sessionToken];
                 [[NSUserDefaults standardUserDefaults] setObject:[NSDate dateWithTimeIntervalSinceNow:45 * 60] forKey:@"expiry"];
-                NSLog(@"Stored session token: %@", sessionToken);
             } else {
                 NSLog(@"Warning: No valid session_token in response.");
             }
 
-            NSLog(@"✅ Subscription is active.");
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
-            // Clear session token if subscription is invalid
             [self clearSessionTokenFromKeychain];
             NSLog(@"🚨 Subscription has expired.");
         }
@@ -205,11 +207,12 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
 
-        completion(isSubscribed, nil); // No expiry date since the server doesn't return it
+        completion(isSubscribed, nil);
     }];
 
     [task resume];
 }
+
 
 - (void)storeSessionTokenInKeychain:(NSString *)sessionToken {
     NSDictionary *query = @{

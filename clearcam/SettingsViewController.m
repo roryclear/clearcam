@@ -13,7 +13,8 @@
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 @property (nonatomic, assign) BOOL sendNotifEnabled;
-@property (nonatomic, assign) BOOL useOwnEmailServerEnabled; // Track if "Use own email server" is enabled
+@property (nonatomic, assign) BOOL receiveNotifEnabled; // New property for receiving notifications
+@property (nonatomic, assign) BOOL useOwnServerEnabled;
 @property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
 @property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *notificationSchedules; // Array to store notification schedules
@@ -74,11 +75,18 @@
         [defaults setBool:NO forKey:@"send_notif_enabled"];
     }
     
-    if ([defaults objectForKey:@"use_own_email_server_enabled"] != nil) {
-        self.useOwnEmailServerEnabled = [defaults boolForKey:@"use_own_email_server_enabled"];
+    if ([defaults objectForKey:@"receive_notif_enabled"] != nil) {
+        self.receiveNotifEnabled = [defaults boolForKey:@"receive_notif_enabled"];
     } else {
-        self.useOwnEmailServerEnabled = NO;
-        [defaults setBool:NO forKey:@"use_own_email_server_enabled"];
+        self.receiveNotifEnabled = NO; // Off by default
+        [defaults setBool:NO forKey:@"receive_notif_enabled"];
+    }
+    
+    if ([defaults objectForKey:@"use_own_server_enabled"] != nil) {
+        self.useOwnServerEnabled = [defaults boolForKey:@"use_own_server_enabled"];
+    } else {
+        self.useOwnServerEnabled = NO;
+        [defaults setBool:NO forKey:@"use_own_server_enabled"];
     }
     
     if ([defaults objectForKey:@"threshold"] != nil) {
@@ -101,7 +109,7 @@
         [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
     }
     
-    self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled;
+    self.isEmailServerSectionExpanded = self.useOwnServerEnabled;
     self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1";
     
     [defaults synchronize];
@@ -156,6 +164,21 @@
     [defaults synchronize];
 }
 
+- (void)receiveNotifSwitchToggled:(UISwitch *)sender {
+    self.receiveNotifEnabled = sender.on;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:self.receiveNotifEnabled forKey:@"receive_notif_enabled"];
+    [defaults synchronize];
+    
+    if (sender.on) {
+        NSLog(@"Receive Notifications on This Device turned ON");
+        [[UIApplication sharedApplication] registerForRemoteNotifications];
+    } else {
+        NSLog(@"Receive Notifications on This Device turned OFF");
+        [[UIApplication sharedApplication] unregisterForRemoteNotifications];
+    }
+}
+
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.tableView reloadData];
@@ -184,8 +207,8 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 9; // Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Send Notifications, Change Encryption Password, Use own email server, Manage Notification Schedules
-        if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
+        NSInteger baseRows = 10; // Increased by 1 for the new toggle
+        if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded) {
             baseRows += 2; // Add Server Address and Test own server
         }
         if (self.isPresetsSectionExpanded) {
@@ -281,29 +304,37 @@
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 6 + offset) {
+                cell.textLabel.text = @"Receive Notifications on This Device";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
+                receiveNotifSwitch.on = self.receiveNotifEnabled;
+                [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = receiveNotifSwitch;
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 7 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 7 + offset) {
-                cell.textLabel.text = @"Use own email server";
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
-                useOwnEmailServerSwitch.on = self.useOwnEmailServerEnabled;
-                [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = useOwnEmailServerSwitch;
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Manage Notification Schedules";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 9 + offset) {
+                cell.textLabel.text = @"Use Own Notification Server";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
+                useOwnEmailServerSwitch.on = self.useOwnServerEnabled;
+                [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = useOwnEmailServerSwitch;
+                cell.userInteractionEnabled = YES;
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 cell.textLabel.text = @"Server Address";
                 cell.detailTextLabel.text = self.emailServerAddress;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
@@ -395,6 +426,8 @@
                 }
                 // Send Notifications - handled by switch
             } else if (indexPath.row == 6 + offset) {
+                // Receive Notifications - handled by switch
+            } else if (indexPath.row == 7 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                         if (success) {
@@ -404,8 +437,6 @@
                 } else {
                     [self showPremiumRequiredAlert];
                 }
-            } else if (indexPath.row == 7 + offset) {
-                // Use own email server - handled by switch
             } else if (indexPath.row == 8 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
                 scheduleVC.emailSchedules = [self.notificationSchedules mutableCopy];
@@ -417,9 +448,11 @@
                     [self.tableView reloadData];
                 };
                 [self.navigationController pushViewController:scheduleVC animated:YES];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 9 + offset) {
+                // Use Own Notification Server - handled by switch
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 [self showEmailServerAddressInputDialog];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
                 [self testEmailServer];
             }
         }
@@ -443,11 +476,11 @@
 }
 
 - (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
-    self.useOwnEmailServerEnabled = sender.on;
+    self.useOwnServerEnabled = sender.on;
     self.isEmailServerSectionExpanded = sender.on;
     
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setBool:self.useOwnEmailServerEnabled forKey:@"use_own_email_server_enabled"];
+    [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
     [defaults synchronize];
     
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];

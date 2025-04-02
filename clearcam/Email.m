@@ -17,7 +17,7 @@
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
     NSString *server = @"https://www.rors.ai";
     
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
         if (![server hasPrefix:@"http"]) {
             server = [@"http://" stringByAppendingString:server];
@@ -78,7 +78,7 @@
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
     // Include session_token only if not using own email server
-    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (sessionToken) {
             [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
