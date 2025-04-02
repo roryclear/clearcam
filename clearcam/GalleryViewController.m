@@ -515,7 +515,6 @@
 }
 
 - (void)menuTapped:(UIButton *)sender forEvent:(UIEvent *)event {
-    // Get the indexPath from the button's position in the table view
     CGPoint touchPoint = [sender convertPoint:CGPointZero toView:self.tableView];
     NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:touchPoint];
     
@@ -527,7 +526,6 @@
     NSInteger section = indexPath.section;
     NSInteger row = indexPath.row;
     
-    // Validate section
     if (section >= self.sectionTitles.count) {
         NSLog(@"Invalid section: %ld, total sections: %lu", (long)section, (unsigned long)self.sectionTitles.count);
         return;
@@ -535,7 +533,6 @@
     
     NSString *sectionTitle = self.sectionTitles[section];
     
-    // Validate row
     if (row >= self.groupedVideos[sectionTitle].count) {
         NSLog(@"Invalid row: %ld for section '%@', total rows: %lu", (long)row, sectionTitle, (unsigned long)self.groupedVideos[sectionTitle].count);
         return;
@@ -543,6 +540,7 @@
     
     NSString *videoPath = self.groupedVideos[sectionTitle][row];
     NSString *filename = [videoPath lastPathComponent];
+    NSString *originalAesPath = [self.downloadDirectory stringByAppendingPathComponent:[filename stringByAppendingPathExtension:@"aes"]];
     
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil
                                                                          message:nil
@@ -566,16 +564,26 @@
             NSLog(@"No session token found in Keychain. Proceeding with local deletion only.");
         }
         
-        // Perform local deletion immediately
+        // Perform local deletion for both decrypted .mp4 and original .aes (if they exist)
         NSError *localError;
-        if ([[NSFileManager defaultManager] fileExistsAtPath:videoPath]) {
-            [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&localError];
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        
+        // Delete decrypted .mp4 file (if it exists)
+        if ([fileManager fileExistsAtPath:videoPath]) {
+            [fileManager removeItemAtPath:videoPath error:&localError];
             if (localError) {
-                NSLog(@"Failed to delete local video: %@", localError.localizedDescription);
+                NSLog(@"Failed to delete decrypted file at %@: %@", videoPath, localError.localizedDescription);
                 return;
             }
-        } else {
-            NSLog(@"File not found at path: %@", videoPath);
+        }
+        
+        // Delete original .aes file (if it exists)
+        if ([fileManager fileExistsAtPath:originalAesPath]) {
+            [fileManager removeItemAtPath:originalAesPath error:&localError];
+            if (localError) {
+                NSLog(@"Failed to delete original .aes file at %@: %@", originalAesPath, localError.localizedDescription);
+                return;
+            }
         }
         
         // Update data source and table view
@@ -594,12 +602,13 @@
         }
         [self.tableView endUpdates];
         
-        // Send DELETE request to backend (async, non-blocking)
+        // Send DELETE request to backend using the original .aes filename
         if (sessionToken) {
+            NSString *backendFilename = [filename hasSuffix:@".aes"] ? filename : [filename stringByAppendingPathExtension:@"aes"];
             NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
             components.queryItems = @[
                 [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken],
-                [NSURLQueryItem queryItemWithName:@"name" value:filename]
+                [NSURLQueryItem queryItemWithName:@"name" value:backendFilename]
             ];
             
             NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL];
@@ -608,7 +617,7 @@
             [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
                 NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
                 if (!error && httpResponse.statusCode == 200) {
-                    NSLog(@"Successfully deleted %@ from backend", filename);
+                    NSLog(@"Successfully deleted %@ from backend", backendFilename);
                 } else {
                     NSLog(@"Failed to delete from backend: %@, status code: %ld", error.localizedDescription, (long)httpResponse.statusCode);
                 }
@@ -635,11 +644,30 @@
         fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
     }
     NSURL *decFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
+    
     NSError *writeError = nil;
     [decryptedData writeToURL:decFileURL options:NSDataWritingAtomic error:&writeError];
     if (writeError) {
+        NSLog(@"Failed to write decrypted data: %@", writeError.localizedDescription);
         return nil;
     }
+    
+    // Preserve the original creation date
+    NSError *attributesError = nil;
+    NSDictionary *originalAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:[aesFileURL path] error:&attributesError];
+    if (originalAttributes && !attributesError) {
+        NSDate *originalCreationDate = originalAttributes[NSFileCreationDate];
+        if (originalCreationDate) {
+            NSDictionary *newAttributes = @{NSFileCreationDate: originalCreationDate};
+            [[NSFileManager defaultManager] setAttributes:newAttributes ofItemAtPath:[decFileURL path] error:&attributesError];
+            if (attributesError) {
+                NSLog(@"Failed to set creation date: %@", attributesError.localizedDescription);
+            }
+        }
+    } else {
+        NSLog(@"Failed to get original attributes: %@", attributesError.localizedDescription);
+    }
+    
     return decFileURL;
 }
 
