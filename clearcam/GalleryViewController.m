@@ -1,5 +1,6 @@
 #import "GalleryViewController.h"
 #import "StoreManager.h"
+#import "SecretManager.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 
@@ -184,7 +185,7 @@
     if (self.isLoadingVideos) return;
     
     self.isLoadingVideos = YES;
-    
+        
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
@@ -301,14 +302,38 @@
     NSMutableArray *filesWithDates = [NSMutableArray array];
     
     for (NSString *file in contents) {
-        if ([file.pathExtension isEqualToString:@"mp4"]) {
+        NSString *extension = file.pathExtension.lowercaseString;
+        if ([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"]) {
             NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
+            
+            if ([extension isEqualToString:@"aes"]) {
+                NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&error];
+                if (encryptedData) {
+                    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+                    __block NSData *decryptedData = nil;
+                    __block NSString *successfulKey = nil;
+
+                    for (NSString *key in storedKeys) {
+                        decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+                        if (decryptedData) {
+                            successfulKey = key;
+                            break;
+                        }
+                    }
+
+                    if (decryptedData) {
+                        NSURL *url = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
+                        filePath = [url path];
+                    }
+                }
+            }
+            
             NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
             NSDate *creationDate = [attributes fileCreationDate];
             
             [filesWithDates addObject:@{@"path": filePath,
-                                      @"date": creationDate ?: [NSDate distantPast],
-                                      @"filename": file}];
+                                        @"date": creationDate ?: [NSDate distantPast],
+                                        @"filename": file}];
         }
     }
     
@@ -316,7 +341,6 @@
         return [obj2[@"date"] compare:obj1[@"date"]];
     }];
     
-    // Group videos by date
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     dateFormatter.dateStyle = NSDateFormatterMediumStyle;
     dateFormatter.timeStyle = NSDateFormatterNoStyle;
@@ -341,7 +365,6 @@
         [self.groupedVideos[sectionTitle] addObject:filePath];
     }
     
-    // Sort section titles in descending order
     [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         formatter.dateStyle = NSDateFormatterMediumStyle;
@@ -362,12 +385,10 @@
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
 
-    // Get the duration of the video
     CMTime duration = asset.duration;
     Float64 durationInSeconds = CMTimeGetSeconds(duration);
-    Float64 middleTime = durationInSeconds / 2.0;
+    Float64 middleTime = durationInSeconds / 1.75;
 
-    // Set the time to the middle of the video
     CMTime time = CMTimeMakeWithSeconds(middleTime, 600);
     NSError *error = nil;
     CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
@@ -388,14 +409,135 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSString *sectionTitle = self.sectionTitles[indexPath.section];
-    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *filePath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *extension = filePath.pathExtension.lowercaseString;
     
-    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
-    playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:videoPath]];
-    [self presentViewController:playerVC animated:YES completion:^{
-        [playerVC.player play];
-    }];
+    if ([extension isEqualToString:@"mp4"]) {
+        AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
+        playerVC.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:filePath]];
+        [self presentViewController:playerVC animated:YES completion:^{
+            [playerVC.player play];
+        }];
+    } else if ([extension isEqualToString:@"aes"]) {
+        NSError *readError = nil;
+        NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&readError];
+        if (!encryptedData) {
+            NSLog(@"Failed to read .aes file: %@", readError.localizedDescription);
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription]];
+            return;
+        }
+        
+        NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+        __block NSData *decryptedData = nil;
+        __block NSString *successfulKey = nil;
+
+        for (NSString *key in storedKeys) {
+            decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+            if (decryptedData) {
+                successfulKey = key;
+                break;
+            }
+        }
+
+        if (decryptedData) {
+            // Decryption succeeded with a stored key, proceed to play
+            NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
+            if (decryptedURL) {
+                AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
+                playerVC.player = [AVPlayer playerWithURL:decryptedURL];
+                [self presentViewController:playerVC animated:YES completion:^{
+                    [playerVC.player play];
+                }];
+            }
+        } else {
+            // No stored key worked, prompt the user
+            [self promptUserForKeyWithAESFileURL:[NSURL fileURLWithPath:filePath] encryptedData:encryptedData];
+        }
+    }
+    
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)promptUserForKeyWithAESFileURL:(NSURL *)aesFileURL encryptedData:(NSData *)encryptedData {
+    [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+        if (userProvidedKey) { // User provided a key
+            NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
+            if (decryptedData) { // Key worked
+                NSError *saveError = nil;
+                NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
+                NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
+                NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
+                if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
+                    NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
+                }
+                NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
+                if (decryptedURL) {
+                    // Reload the table view to reflect the decrypted state
+                    [self loadExistingVideos];
+                    
+                    // Play the video
+                    AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
+                    playerVC.player = [AVPlayer playerWithURL:decryptedURL];
+                    [self presentViewController:playerVC animated:YES completion:^{
+                        [playerVC.player play];
+                    }];
+                }
+            } else { // Key didn't work, prompt again
+                NSLog(@"Failed to decrypt data with user-provided key.");
+                [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
+                    [self promptUserForKeyWithAESFileURL:aesFileURL encryptedData:encryptedData];
+                }];
+            }
+        } else { // User canceled
+            NSLog(@"User canceled key entry.");
+            [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
+        }
+    }];
+}
+
+- (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
+                                                                  message:@"Please provide the key to decrypt the file."
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Decryption Key";
+        textField.secureTextEntry = YES;
+    }];
+
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:^(UIAlertAction * _Nonnull action) {
+        NSString *key = alert.textFields.firstObject.text;
+        completion(key);
+    }];
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        completion(nil);
+    }];
+
+    [alert addAction:okAction];
+    [alert addAction:cancelAction];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showErrorAlertWithMessage:(NSString *)message {
+    [self showErrorAlertWithMessage:message completion:nil];
+}
+
+- (void)showErrorAlertWithMessage:(NSString *)message completion:(void (^)(void))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                  message:message
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        if (completion) {
+            completion();
+        }
+    }];
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -432,13 +574,13 @@
     VideoTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VideoCell" forIndexPath:indexPath];
     
     NSString *sectionTitle = self.sectionTitles[indexPath.section];
-    NSString *videoPath = self.groupedVideos[sectionTitle][indexPath.row];
-    NSString *filename = [videoPath lastPathComponent];
+    NSString *filePath = self.groupedVideos[sectionTitle][indexPath.row];
+    NSString *filename = [filePath lastPathComponent];
+    NSString *extension = filePath.pathExtension.lowercaseString;
     
-    // Extract and format the full time from filename (format: yyyy-MM-dd_HH-mm-ss)
     NSArray *components = [filename componentsSeparatedByString:@"_"];
     if (components.count >= 2) {
-        NSString *timePart = components[1]; // Gets "HH-mm-ss" part
+        NSString *timePart = components[1];
         NSArray *timeComponents = [timePart componentsSeparatedByString:@"-"];
         if (timeComponents.count >= 3) {
             NSString *hour = timeComponents[0];
@@ -454,23 +596,31 @@
     
     cell.thumbnailView.image = nil;
     
-    [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
-    
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        UIImage *thumbnail = [self generateThumbnailForVideoAtPath:videoPath];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            VideoTableViewCell *updateCell = [tableView cellForRowAtIndexPath:indexPath];
-            if (updateCell) {
-                updateCell.thumbnailView.image = thumbnail;
-            }
+    if ([extension isEqualToString:@"mp4"]) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            UIImage *thumbnail = [self generateThumbnailForVideoAtPath:filePath];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                VideoTableViewCell *updateCell = [tableView cellForRowAtIndexPath:indexPath];
+                if (updateCell) {
+                    updateCell.thumbnailView.image = thumbnail;
+                }
+            });
         });
-    });
+    } else if ([extension isEqualToString:@"aes"]) {
+        UIImage *lockImage = [UIImage systemImageNamed:@"lock.fill"];
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:40];
+        UIImage *scaledLockImage = [lockImage imageByApplyingSymbolConfiguration:config];
+        cell.thumbnailView.image = scaledLockImage;
+        cell.thumbnailView.contentMode = UIViewContentModeCenter;
+        cell.thumbnailView.tintColor = [UIColor systemGrayColor];
+    }
+    
+    [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
     
     return cell;
 }
 
 - (void)menuTapped:(UIButton *)sender forEvent:(UIEvent *)event {
-    // Get the indexPath from the button's position in the table view
     CGPoint touchPoint = [sender convertPoint:CGPointZero toView:self.tableView];
     NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:touchPoint];
     
@@ -482,7 +632,6 @@
     NSInteger section = indexPath.section;
     NSInteger row = indexPath.row;
     
-    // Validate section
     if (section >= self.sectionTitles.count) {
         NSLog(@"Invalid section: %ld, total sections: %lu", (long)section, (unsigned long)self.sectionTitles.count);
         return;
@@ -490,7 +639,6 @@
     
     NSString *sectionTitle = self.sectionTitles[section];
     
-    // Validate row
     if (row >= self.groupedVideos[sectionTitle].count) {
         NSLog(@"Invalid row: %ld for section '%@', total rows: %lu", (long)row, sectionTitle, (unsigned long)self.groupedVideos[sectionTitle].count);
         return;
@@ -498,6 +646,7 @@
     
     NSString *videoPath = self.groupedVideos[sectionTitle][row];
     NSString *filename = [videoPath lastPathComponent];
+    NSString *originalAesPath = [self.downloadDirectory stringByAppendingPathComponent:[filename stringByAppendingPathExtension:@"aes"]];
     
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil
                                                                          message:nil
@@ -515,25 +664,30 @@
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
                                                     style:UIAlertActionStyleDestructive
                                                   handler:^(UIAlertAction * _Nonnull action) {
-        // Retrieve session token
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (!sessionToken) {
             NSLog(@"No session token found in Keychain. Proceeding with local deletion only.");
         }
         
-        // Perform local deletion immediately
         NSError *localError;
-        if ([[NSFileManager defaultManager] fileExistsAtPath:videoPath]) {
-            [[NSFileManager defaultManager] removeItemAtPath:videoPath error:&localError];
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        
+        if ([fileManager fileExistsAtPath:videoPath]) {
+            [fileManager removeItemAtPath:videoPath error:&localError];
             if (localError) {
-                NSLog(@"Failed to delete local video: %@", localError.localizedDescription);
+                NSLog(@"Failed to delete decrypted file at %@: %@", videoPath, localError.localizedDescription);
                 return;
             }
-        } else {
-            NSLog(@"File not found at path: %@", videoPath);
         }
         
-        // Update data source and table view
+        if ([fileManager fileExistsAtPath:originalAesPath]) {
+            [fileManager removeItemAtPath:originalAesPath error:&localError];
+            if (localError) {
+                NSLog(@"Failed to delete original .aes file at %@: %@", originalAesPath, localError.localizedDescription);
+                return;
+            }
+        }
+        
         [self.videoFiles removeObject:videoPath];
         [self.groupedVideos[sectionTitle] removeObjectAtIndex:row];
         
@@ -549,12 +703,12 @@
         }
         [self.tableView endUpdates];
         
-        // Send DELETE request to backend (async, non-blocking)
         if (sessionToken) {
+            NSString *backendFilename = [filename hasSuffix:@".aes"] ? filename : [filename stringByAppendingPathExtension:@"aes"];
             NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
             components.queryItems = @[
                 [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken],
-                [NSURLQueryItem queryItemWithName:@"name" value:filename]
+                [NSURLQueryItem queryItemWithName:@"name" value:backendFilename]
             ];
             
             NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL];
@@ -563,7 +717,7 @@
             [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
                 NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
                 if (!error && httpResponse.statusCode == 200) {
-                    NSLog(@"Successfully deleted %@ from backend", filename);
+                    NSLog(@"Successfully deleted %@ from backend", backendFilename);
                 } else {
                     NSLog(@"Failed to delete from backend: %@, status code: %ld", error.localizedDescription, (long)httpResponse.statusCode);
                 }
@@ -581,6 +735,38 @@
     }
     
     [self presentViewController:actionSheet animated:YES completion:nil];
+}
+
+- (NSURL *)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
+    NSString *fileName = [aesFileURL lastPathComponent];
+    if ([fileName hasSuffix:@".aes"]) {
+        fileName = [fileName stringByReplacingOccurrencesOfString:@".aes" withString:@"" options:NSBackwardsSearch range:NSMakeRange(0, fileName.length)];
+    }
+    NSURL *decFileURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask][0] URLByAppendingPathComponent:fileName];
+    
+    NSError *writeError = nil;
+    [decryptedData writeToURL:decFileURL options:NSDataWritingAtomic error:&writeError];
+    if (writeError) {
+        NSLog(@"Failed to write decrypted data: %@", writeError.localizedDescription);
+        return nil;
+    }
+    
+    NSError *attributesError = nil;
+    NSDictionary *originalAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:[aesFileURL path] error:&attributesError];
+    if (originalAttributes && !attributesError) {
+        NSDate *originalCreationDate = originalAttributes[NSFileCreationDate];
+        if (originalCreationDate) {
+            NSDictionary *newAttributes = @{NSFileCreationDate: originalCreationDate};
+            [[NSFileManager defaultManager] setAttributes:newAttributes ofItemAtPath:[decFileURL path] error:&attributesError];
+            if (attributesError) {
+                NSLog(@"Failed to set creation date: %@", attributesError.localizedDescription);
+            }
+        }
+    } else {
+        NSLog(@"Failed to get original attributes: %@", attributesError.localizedDescription);
+    }
+    
+    return decFileURL;
 }
 
 @end

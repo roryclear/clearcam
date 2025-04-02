@@ -15,25 +15,20 @@
 }
 
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
-    // Default to HTTPS
     NSString *server = @"https://www.rors.ai";
     
-    // Allow HTTP only if user enables "use_own_email_server_enabled"
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
         if (![server hasPrefix:@"http"]) {
-            server = [@"http://" stringByAppendingString:server]; // Ensure HTTP if not set
+            server = [@"http://" stringByAppendingString:server];
         }
     }
 
     NSString *endpoint = @"/send";
-    NSString *toEmail = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
-    if (!toEmail) return;
-
     NSData *imageData = nil;
     NSString *filePathToSend = imagePath;
 
-    if (imagePath.length == 0) { //todo, to test user's endpoint
+    if (imagePath.length == 0) {
         NSLog(@"Image path is empty. Generating blank image.");
         CGSize imageSize = CGSizeMake(1280, 720);
         UIGraphicsBeginImageContext(imageSize);
@@ -57,7 +52,7 @@
     }
 
     NSData *fileData = imageData;
-    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"encrypt_email_data_enabled"];
+    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"];
     if (encryptImage) {
         NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
         if (!encryptionKey) {
@@ -74,12 +69,6 @@
 
     NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
     NSMutableData *bodyData = [NSMutableData data];
-
-    // Add "to" field (email)
-    [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[@"Content-Disposition: form-data; name=\"to\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[toEmail dataUsingEncoding:NSUTF8StringEncoding]];
-    [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
     // Add "file" field (image)
     [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];

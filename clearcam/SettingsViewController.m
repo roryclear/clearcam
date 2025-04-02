@@ -12,13 +12,11 @@
 @property (nonatomic, strong) NSString *selectedResolution;
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
-@property (nonatomic, assign) BOOL sendEmailAlertsEnabled;
-@property (nonatomic, assign) BOOL encryptEmailDataEnabled;
+@property (nonatomic, assign) BOOL sendNotifEnabled;
 @property (nonatomic, assign) BOOL useOwnEmailServerEnabled; // Track if "Use own email server" is enabled
 @property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
 @property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
-@property (nonatomic, strong) NSMutableArray<NSDictionary *> *emailSchedules; // Array to store multiple schedules
-@property (nonatomic, assign) BOOL isScheduleSectionExpanded; // Track if schedule section is expanded
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *notificationSchedules; // Array to store notification schedules
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
 @property (nonatomic, strong) id ipAddressObserver;
 @property (nonatomic, assign) NSInteger threshold; // New property for threshold
@@ -34,14 +32,14 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
     
-    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
         [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.tableView reloadData];
             });
         }];
     }
-    NSLog(@"%d %@",[[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"],[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
+    NSLog(@"%d %@", [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"], [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
     
     // Register for subscription status change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -69,31 +67,11 @@
         [defaults setBool:NO forKey:@"stream_via_wifi_enabled"];
     }
     
-    self.emailSchedules = [[defaults arrayForKey:@"email_schedules"] mutableCopy];
-    if (!self.emailSchedules) {
-        self.emailSchedules = [@[@{
-            @"days": @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"],
-            @"startHour": @0,
-            @"startMinute": @0,
-            @"endHour": @23,
-            @"endMinute": @59,
-            @"enabled": @YES
-        }] mutableCopy];
-        [defaults setObject:self.emailSchedules forKey:@"email_schedules"];
-    }
-    
-    if ([defaults objectForKey:@"send_email_alerts_enabled"] != nil) {
-        self.sendEmailAlertsEnabled = [defaults boolForKey:@"send_email_alerts_enabled"];
+    if ([defaults objectForKey:@"send_notif_enabled"] != nil) {
+        self.sendNotifEnabled = [defaults boolForKey:@"send_notif_enabled"];
     } else {
-        self.sendEmailAlertsEnabled = NO;
-        [defaults setBool:NO forKey:@"send_email_alerts_enabled"];
-    }
-    
-    if ([defaults objectForKey:@"encrypt_email_data_enabled"] != nil) {
-        self.encryptEmailDataEnabled = [defaults boolForKey:@"encrypt_email_data_enabled"];
-    } else {
-        self.encryptEmailDataEnabled = NO;
-        [defaults setBool:NO forKey:@"encrypt_email_data_enabled"];
+        self.sendNotifEnabled = NO;
+        [defaults setBool:NO forKey:@"send_notif_enabled"];
     }
     
     if ([defaults objectForKey:@"use_own_email_server_enabled"] != nil) {
@@ -110,10 +88,21 @@
         [defaults setInteger:25 forKey:@"threshold"];
     }
     
+    self.notificationSchedules = [[defaults arrayForKey:@"notification_schedules"] mutableCopy];
+    if (!self.notificationSchedules) {
+        self.notificationSchedules = [@[@{
+            @"days": @[@"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat", @"Sun"],
+            @"startHour": @0,
+            @"startMinute": @0,
+            @"endHour": @23,
+            @"endMinute": @59,
+            @"enabled": @YES
+        }] mutableCopy];
+        [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
+    }
+    
     self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled;
     self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1";
-    
-    self.isScheduleSectionExpanded = self.sendEmailAlertsEnabled;
     
     [defaults synchronize];
     
@@ -167,26 +156,24 @@
     [defaults synchronize];
 }
 
-
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
-    // Called when the subscription status changes (e.g., after a successful purchase)
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.tableView reloadData]; // Refresh the UI to reflect the new subscription status
+        [self.tableView reloadData];
     });
 }
 
 #pragma mark - Orientation Control
 
 - (BOOL)shouldAutorotate {
-    return NO; // Disable autorotation to lock orientation
+    return NO;
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return UIInterfaceOrientationMaskPortrait; // Only allow portrait orientation
+    return UIInterfaceOrientationMaskPortrait;
 }
 
 - (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
-    return UIInterfaceOrientationPortrait; // Set the preferred orientation to portrait
+    return UIInterfaceOrientationPortrait;
 }
 
 #pragma mark - UITableView DataSource
@@ -197,7 +184,7 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 11; // Updated to 11: Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Email, Send Email Alerts, Encrypt, Change Encryption Password, Use own email server, Manage Email Schedules
+        NSInteger baseRows = 9; // Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Send Notifications, Change Encryption Password, Use own email server, Manage Notification Schedules
         if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
             baseRows += 2; // Add Server Address and Test own server
         }
@@ -229,7 +216,7 @@
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.accessoryView = nil;
 
-    BOOL isPremiumOrUsingOwnServer = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled;
+    BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
@@ -284,39 +271,22 @@
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 5 + offset) {
-                cell.textLabel.text = @"Email Address";
-                NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
-                cell.detailTextLabel.text = email ?: @"Not set";
-                cell.textLabel.textColor = [UIColor labelColor];
-                cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+                cell.textLabel.text = @"Send Notifications on Events";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
+                sendNotifSwitch.on = isPremium ? self.sendNotifEnabled : NO;
+                [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = sendNotifSwitch;
+                sendNotifSwitch.enabled = isPremium;
+                cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 6 + offset) {
-                cell.textLabel.text = @"Send Email Alerts";
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *emailAlertsSwitch = [[UISwitch alloc] init];
-                emailAlertsSwitch.on = isPremiumOrUsingOwnServer ? self.sendEmailAlertsEnabled : NO;
-                [emailAlertsSwitch addTarget:self action:@selector(emailAlertsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = emailAlertsSwitch;
-                emailAlertsSwitch.enabled = isPremiumOrUsingOwnServer;
-                cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 7 + offset) {
-                cell.textLabel.text = @"Encrypt Email Data (Recommended)";
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *encryptEmailDataSwitch = [[UISwitch alloc] init];
-                encryptEmailDataSwitch.on = self.encryptEmailDataEnabled;
-                [encryptEmailDataSwitch addTarget:self action:@selector(encryptEmailDataSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = encryptEmailDataSwitch;
-                encryptEmailDataSwitch.enabled = isPremiumOrUsingOwnServer;
-                cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.textLabel.textColor = isPremiumOrUsingOwnServer ? [UIColor labelColor] : [UIColor grayColor];
+                cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 7 + offset) {
                 cell.textLabel.text = @"Use own email server";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
@@ -324,16 +294,16 @@
                 [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = useOwnEmailServerSwitch;
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 10 + offset) {
-                cell.textLabel.text = @"Manage Email Schedules";
+            } else if (indexPath.row == 8 + offset) {
+                cell.textLabel.text = @"Manage Notification Schedules";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
                 cell.textLabel.text = @"Server Address";
                 cell.detailTextLabel.text = self.emailServerAddress;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 12 + offset) {
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
@@ -393,19 +363,8 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (NSString *)scheduleDescriptionFor:(NSDictionary *)schedule {
-    NSArray *days = schedule[@"days"];
-    NSNumber *startHour = schedule[@"startHour"];
-    NSNumber *endHour = schedule[@"endHour"];
-    
-    NSString *daysString = days.count == 7 ? @"Every day" : [days componentsJoinedByString:@", "];
-    NSString *timeString = [NSString stringWithFormat:@"%02ld:00-%02ld:00",
-                           [startHour longValue], [endHour longValue]];
-    return [NSString stringWithFormat:@"%@ %@", daysString, timeString];
-}
-
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    BOOL isPremiumOrUsingOwnServer = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || self.useOwnEmailServerEnabled;
+    BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
     
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
@@ -431,19 +390,12 @@
             if (indexPath.row == 4 + offset) {
                 [self showThresholdInputDialog];
             } else if (indexPath.row == 5 + offset) {
-                [self showEmailInputDialog];
+                if (!isPremium) {
+                    [self showPremiumRequiredAlert];
+                }
+                // Send Notifications - handled by switch
             } else if (indexPath.row == 6 + offset) {
-                if (!isPremiumOrUsingOwnServer) {
-                    [self showPremiumRequiredAlert];
-                }
-                // Send Email Alerts - handled by switch
-            } else if (indexPath.row == 7 + offset) {
-                if (!isPremiumOrUsingOwnServer) {
-                    [self showPremiumRequiredAlert];
-                }
-                // Encrypt Email Data - handled by switch
-            } else if (indexPath.row == 8 + offset) {
-                if (isPremiumOrUsingOwnServer) {
+                if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                         if (success) {
                             NSLog(@"Encryption password changed successfully.");
@@ -452,23 +404,22 @@
                 } else {
                     [self showPremiumRequiredAlert];
                 }
-            } else if (indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 7 + offset) {
                 // Use own email server - handled by switch
-            } else if (indexPath.row == 10 + offset) {
+            } else if (indexPath.row == 8 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
-                scheduleVC.emailSchedules = [self.emailSchedules mutableCopy];
+                scheduleVC.emailSchedules = [self.notificationSchedules mutableCopy];
                 scheduleVC.completionHandler = ^(NSArray<NSDictionary *> *schedules) {
-                    self.emailSchedules = [schedules mutableCopy];
+                    self.notificationSchedules = [schedules mutableCopy];
                     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-                    [defaults setObject:self.emailSchedules forKey:@"email_schedules"];
+                    [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
                     [defaults synchronize];
                     [self.tableView reloadData];
                 };
-                // Push instead of present
                 [self.navigationController pushViewController:scheduleVC animated:YES];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
                 [self showEmailServerAddressInputDialog];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 12 + offset) {
+            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 [self testEmailServer];
             }
         }
@@ -480,7 +431,7 @@
 
 - (void)showPremiumRequiredAlert {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Premium Required"
-                                                                   message:@"This feature requires a premium subscription or use of your own email server."
+                                                                   message:@"This feature requires a premium subscription."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
@@ -493,7 +444,7 @@
 
 - (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
     self.useOwnEmailServerEnabled = sender.on;
-    self.isEmailServerSectionExpanded = sender.on; // Expand or collapse the section based on toggle state
+    self.isEmailServerSectionExpanded = sender.on;
     
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnEmailServerEnabled forKey:@"use_own_email_server_enabled"];
@@ -509,7 +460,7 @@
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.placeholder = @"Server Address";
-        textField.text = self.emailServerAddress; // Pre-fill with existing address
+        textField.text = self.emailServerAddress;
     }];
     
     UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
@@ -518,11 +469,9 @@
         NSString *address = alert.textFields.firstObject.text;
         if (address.length > 0) {
             self.emailServerAddress = address;
-            // Save the address to NSUserDefaults
             NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
             [defaults setObject:address forKey:@"own_email_server_address"];
             [defaults synchronize];
-            // Reload the table view to show the updated address
             [self.tableView reloadData];
         }
     }];
@@ -539,7 +488,6 @@
 
 - (void)testEmailServer {
     [[Email sharedInstance] sendEmailWithImageAtPath:@""];
-    // You might want to add some feedback here, like an alert showing success/failure
     UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Test Initiated"
                                                                         message:@"Test email has been initiated. Check your server logs for results."
                                                                  preferredStyle:UIAlertControllerStyleAlert];
@@ -550,40 +498,40 @@
     [self presentViewController:resultAlert animated:YES completion:nil];
 }
 
-- (void)encryptEmailDataSwitchToggled:(UISwitch *)sender {
+- (void)sendNotifSwitchToggled:(UISwitch *)sender {
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
+        sender.on = NO;
+        [self showPremiumRequiredAlert];
+        return;
+    }
+    
     if (sender.on) {
-        // Check if a password already exists in the secrets manager
         NSString *password = [self retrievePasswordFromSecretsManager];
         if (!password) {
-            // No password exists, prompt the user to set one
             [self promptForPasswordWithCompletion:^(BOOL success) {
                 if (success) {
-                    // Password set successfully, enable the toggle
-                    self.encryptEmailDataEnabled = YES;
-                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"encrypt_email_data_enabled"];
+                    self.sendNotifEnabled = YES;
+                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
                     [[NSUserDefaults standardUserDefaults] synchronize];
                 } else {
-                    // User canceled, turn the toggle off
                     sender.on = NO;
                 }
             }];
         } else {
-            // Password exists, enable the toggle
-            self.encryptEmailDataEnabled = YES;
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"encrypt_email_data_enabled"];
+            self.sendNotifEnabled = YES;
+            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
             [[NSUserDefaults standardUserDefaults] synchronize];
         }
     } else {
-        // Turn off the toggle
-        self.encryptEmailDataEnabled = NO;
-        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"encrypt_email_data_enabled"];
+        self.sendNotifEnabled = NO;
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_notif_enabled"];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
 }
 
 - (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Password"
-                                                                   message:@"Enter a password to encrypt email data"
+                                                                   message:@"Enter a password to encrypt and decrypt your data"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
@@ -603,11 +551,9 @@
         NSString *confirmPassword = alert.textFields[1].text;
         
         if ([password isEqualToString:confirmPassword] && password.length > 0) {
-            // Save the password to the secrets manager
             [self savePasswordToSecretsManager:password];
             completion(YES);
         } else {
-            // Passwords do not match or are empty
             [self showInvalidPasswordAlert];
             completion(NO);
         }
@@ -637,7 +583,7 @@
 - (NSString *)retrievePasswordFromSecretsManager {
     NSString *storedKey = [[SecretManager sharedManager] getEncryptionKey];
     if (storedKey) {
-        return storedKey; // Assuming only one password is stored
+        return storedKey;
     }
     NSLog(@"No password found in Keychain.");
     return nil;
@@ -656,114 +602,11 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)emailAlertsSwitchToggled:(UISwitch *)sender {
-    if (sender.on) {
-        NSString *email = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
-        if (!email || ![self isValidEmail:email]) {
-            [self showEmailInputDialogWithCompletion:^(BOOL success) {
-                if (success) {
-                    self.sendEmailAlertsEnabled = YES;
-                    self.isScheduleSectionExpanded = YES;
-                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_email_alerts_enabled"];
-                    [[NSUserDefaults standardUserDefaults] synchronize];
-                    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
-                } else {
-                    sender.on = NO;
-                    self.sendEmailAlertsEnabled = NO;
-                    self.isScheduleSectionExpanded = NO;
-                    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_email_alerts_enabled"];
-                    [[NSUserDefaults standardUserDefaults] synchronize];
-                    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
-                }
-            }];
-        } else {
-            self.sendEmailAlertsEnabled = YES;
-            self.isScheduleSectionExpanded = YES;
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_email_alerts_enabled"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
-        }
-    } else {
-        self.sendEmailAlertsEnabled = NO;
-        self.isScheduleSectionExpanded = NO;
-        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_email_alerts_enabled"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
-    }
-}
-
-- (void)showEmailInputDialogWithCompletion:(void (^)(BOOL success))completion {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Email Address"
-                                                                   message:@"Please enter a valid email address to enable email alerts."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Email Address";
-        textField.keyboardType = UIKeyboardTypeEmailAddress;
-        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"]; // Pre-fill with existing email
-    }];
-    
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
-                                                         style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction * _Nonnull action) {
-        NSString *email = alert.textFields.firstObject.text;
-        if ([self isValidEmail:email]) {
-            // Save the email to UserDefaults
-            [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            
-            // Reload the table view to show the updated email
-            [self.tableView reloadData];
-            
-            // Call the completion handler with success
-            completion(YES);
-        } else {
-            // Show an alert for invalid email
-            [self showInvalidEmailAlert];
-            
-            // Call the completion handler with failure
-            completion(NO);
-        }
-    }];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        // Call the completion handler with failure
-        completion(NO);
-    }];
-    
-    [alert addAction:saveAction];
-    [alert addAction:cancelAction];
-    
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (BOOL)isValidEmail:(NSString *)email {
-    NSString *emailRegex = @"[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}";
-    NSPredicate *emailTest = [NSPredicate predicateWithFormat:@"SELF MATCHES %@", emailRegex];
-    return [emailTest evaluateWithObject:email];
-}
-
-- (void)showInvalidEmailAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Invalid Email"
-                                                                   message:@"Please enter a valid email address."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
-                                                       style:UIAlertActionStyleDefault
-                                                     handler:nil];
-    
-    [alert addAction:okAction];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
 #pragma mark - UITableView Delegate
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0 && self.isPresetsSectionExpanded) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-        // Enable swipe-to-delete for preset rows (from row 4 to 4 + presetKeys.count - 1), excluding "all"
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];
             if (![presetKey isEqualToString:@"all"]) {
@@ -780,19 +623,16 @@
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];
 
-            // Prevent deletion of the "all" preset
             if ([presetKey isEqualToString:@"all"]) {
                 NSLog(@"Cannot delete the 'all' preset.");
                 return;
             }
 
-            // Remove the preset
             NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
             NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
             [yoloPresets removeObjectForKey:presetKey];
             [defaults setObject:yoloPresets forKey:@"yolo_presets"];
 
-            // Check if the deleted preset was the currently selected one
             if ([self.selectedPresetKey isEqualToString:presetKey]) {
                 self.selectedPresetKey = @"all";
                 [defaults setObject:@"all" forKey:@"yolo_preset_idx"];
@@ -800,56 +640,13 @@
 
             [defaults synchronize];
 
-            // Animate the deletion of the row
             [tableView beginUpdates];
             [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
             [tableView endUpdates];
 
-            // Reload Section 0 to ensure the UI is fully updated
             [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
         }
     }
-}
-
-- (void)showEmailInputDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Email Address"
-                                                                   message:@"Please enter a valid email address."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Email Address";
-        textField.keyboardType = UIKeyboardTypeEmailAddress;
-        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:@"user_email"];
-    }];
-    
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
-                                                         style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction * _Nonnull action) {
-        NSString *email = alert.textFields.firstObject.text;
-        if ([self isValidEmail:email]) {
-            [[NSUserDefaults standardUserDefaults] setObject:email forKey:@"user_email"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.tableView reloadData];
-            });
-        } else {
-            [self showInvalidEmailAlert];
-        }
-    }];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-    }];
-    
-    [alert addAction:saveAction];
-    [alert addAction:cancelAction];
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self presentViewController:alert animated:YES completion:^{
-            NSLog(@"Email input dialog presentation completed");
-        }];
-    });
 }
 
 #pragma mark - Resolution Picker
@@ -881,14 +678,11 @@
 
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                            style:UIAlertActionStyleCancel
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-    }];
+                                                         handler:nil];
     [alert addAction:cancelAction];
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self presentViewController:alert animated:YES completion:^{
-            NSLog(@"Resolution picker presentation completed");
-        }];
+        [self presentViewController:alert animated:YES completion:nil];
     });
 }
 
@@ -921,35 +715,6 @@
 
 #pragma mark - Preset Management
 
-- (void)showPresetManagementOptions {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Manage Detection Presets"
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    UIAlertAction *addAction = [UIAlertAction actionWithTitle:@"Add Preset"
-                                                        style:UIAlertActionStyleDefault
-                                                      handler:^(UIAlertAction * _Nonnull action) {
-        [self showAddPresetDialog];
-    }];
-    [alert addAction:addAction];
-    UIAlertAction *editAction = [UIAlertAction actionWithTitle:@"Edit Preset"
-                                                         style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction * _Nonnull action) {
-        [self showEditPresetDialog];
-    }];
-    [alert addAction:editAction];
-    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"Delete Preset"
-                                                           style:UIAlertActionStyleDestructive
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        [self showDeletePresetDialog];
-    }];
-    [alert addAction:deleteAction];
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:nil];
-    [alert addAction:cancelAction];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
 - (void)showAddPresetDialog {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Preset"
                                                                    message:@"Enter a name for the new preset"
@@ -966,27 +731,6 @@
         }
     }];
     [alert addAction:saveAction];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)showEditPresetDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Edit Preset"
-                                                                   message:@"Select a preset to edit"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-    for (NSString *presetKey in presetKeys) {
-        UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
-                                                         style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction * _Nonnull action) {
-            NSArray *selectedIndexes = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][presetKey];
-            [self showNumberSelectionForPreset:presetKey selectedIndexes:selectedIndexes];
-        }];
-        [alert addAction:action];
-    }
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:nil];
-    [alert addAction:cancelAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -1011,35 +755,4 @@
     [self.navigationController pushViewController:numberSelectionVC animated:YES];
 }
 
-- (void)showDeletePresetDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Preset"
-                                                                   message:@"Select a preset to delete"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-    for (NSString *presetKey in presetKeys) {
-        if (![presetKey isEqualToString:@"all"]) { // Prevent deletion of the "all" preset
-            UIAlertAction *action = [UIAlertAction actionWithTitle:presetKey
-                                                             style:UIAlertActionStyleDestructive
-                                                           handler:^(UIAlertAction * _Nonnull action) {
-                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-                NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];
-
-                if (yoloPresets) [yoloPresets removeObjectForKey:presetKey];
-                [defaults setObject:yoloPresets forKey:@"yolo_presets"];
-                if ([self.selectedPresetKey isEqualToString:presetKey]) {
-                    self.selectedPresetKey = @"all";
-                    [defaults setObject:@"all" forKey:@"yolo_preset_idx"];
-                }
-                [defaults synchronize];
-                [self.tableView reloadSections:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 2)] withRowAnimation:UITableViewRowAnimationAutomatic];
-            }];
-            [alert addAction:action];
-        }
-    }
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:nil];
-    [alert addAction:cancelAction];
-    [self presentViewController:alert animated:YES completion:nil];
-}
 @end

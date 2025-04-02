@@ -72,20 +72,7 @@ UInt8 *rgbData;
         @[@"toothbrush", [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0]]
     ];
     
-    NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSString *path = @"batch_req_%dx%d";
-    
-    struct utsname systemInfo;
-    uname(&systemInfo);
-    NSString *deviceModel = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
-
-    NSString *fileName;
-    if (([deviceModel hasPrefix:@"iPhone"] && [deviceModel compare:@"iPhone13,1"] < NSOrderedSame) ||
-        ([deviceModel hasPrefix:@"iPad"] && [deviceModel compare:@"iPad13,1"] < NSOrderedSame)) {
-        fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
-    } else {
-        fileName = [NSString stringWithFormat:@"batch_req_%dx%d", self.yolo_res, self.yolo_res];
-    }
+    NSString *fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
 
     NSString *filePath = [[NSBundle mainBundle] pathForResource:fileName ofType:nil];
     NSData *ns_data = nil;

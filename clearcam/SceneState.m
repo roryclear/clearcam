@@ -2,6 +2,7 @@
 #import "SettingsManager.h"
 #import "SecretManager.h"
 #import "AppDelegate.h"
+#import "StoreManager.h"
 #import "FileServer.h"
 #import "Email.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
@@ -102,41 +103,18 @@
                     
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 120) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
+                        if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+                            NSLog(@"verifying subscription");
+                            [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                                [self sendEmail:filePath];
+                            }];
+                        } else {
+                            [self sendEmail:filePath];
+                        }
+                        //todo
                         //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
                         //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
                         //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])) {
-                        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
-                        //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"]){ //todo add back other stuff
-                            // Get the current hour
-                            NSDate *now = [NSDate date];
-                            NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
-                            NSInteger currentTime = components.hour * 60 + components.minute;
-                            NSString *currentDay = @[@"Sun", @"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat"][components.weekday - 1];
-
-                            for (NSDictionary *schedule in [[NSUserDefaults standardUserDefaults] arrayForKey:@"email_schedules"] ?: @[]) {
-                                if (![schedule[@"enabled"] boolValue]) continue;
-                                if (![schedule[@"days"] containsObject:currentDay]) continue;
-
-                                NSInteger startTime = [schedule[@"startHour"] integerValue] * 60 + [schedule[@"startMinute"] integerValue];
-                                NSInteger endTime = [schedule[@"endHour"] integerValue] * 60 + [schedule[@"endMinute"] integerValue];
-
-                                if (currentTime >= startTime && currentTime <= endTime) {
-                                    [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
-                                    self.last_email_time = now;
-                                    if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
-                                    NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
-                                    NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
-                                    id context = [FileServer sharedInstance].context;
-                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                                        NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
-                                        [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
-                                    });
-                                    NSLog(@"Email sent: Within scheduled time");
-                                    break;
-                                }
-                            }
-                            NSLog(@"Email suppressed: Outside scheduled time or no matching schedule");
-                        }
                     } else {
                         NSLog(@"NOT sending an email");
                     }
@@ -162,6 +140,40 @@
     // Keep lastN size within 10
     if (self.lastN.count > 10) {
         [self.lastN removeObjectAtIndex:0];
+    }
+}
+
+- (void)sendEmail:(NSString *)filePath {
+    NSLog(@"ACC SENDING?");
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"])){ //todo add back other stuff
+        NSDate *now = [NSDate date];
+        NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
+        NSInteger currentTime = components.hour * 60 + components.minute;
+        NSString *currentDay = @[@"Sun", @"Mon", @"Tue", @"Wed", @"Thu", @"Fri", @"Sat"][components.weekday - 1];
+
+        for (NSDictionary *schedule in [[NSUserDefaults standardUserDefaults] arrayForKey:@"notification_schedules"] ?: @[]) {
+            if (![schedule[@"enabled"] boolValue]) continue;
+            if (![schedule[@"days"] containsObject:currentDay]) continue;
+
+            NSInteger startTime = [schedule[@"startHour"] integerValue] * 60 + [schedule[@"startMinute"] integerValue];
+            NSInteger endTime = [schedule[@"endHour"] integerValue] * 60 + [schedule[@"endMinute"] integerValue];
+
+            if (currentTime >= startTime && currentTime <= endTime) {
+                [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                self.last_email_time = now;
+                if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
+                NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
+                NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
+                id context = [FileServer sharedInstance].context;
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
+                    [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                });
+                NSLog(@"Email sent: Within scheduled time");
+                break;
+            }
+        }
+        NSLog(@"Email suppressed: Outside scheduled time or no matching schedule");
     }
 }
 
