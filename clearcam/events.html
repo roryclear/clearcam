@@ -4,19 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Events</title>
-    <!-- Add Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
         let currentTimestamp = null;
-        const defaultOffset = 30; // Default offset set to 30 seconds
-        let allEvents = []; // Store events globally for delete all functionality
+        const defaultOffset = 30;
+        let allEvents = [];
 
         async function fetchEvents() {
             try {
                 const response = await fetch('/get-events');
                 if (!response.ok) throw new Error('Failed to fetch events');
                 const events = await response.json();
-                allEvents = events; // Store events for later use
+                allEvents = events;
                 renderEvents(events);
             } catch (error) {
                 console.error('Error fetching events:', error);
@@ -28,45 +27,107 @@
             const container = document.getElementById('eventsContainer');
             container.innerHTML = '';
 
-            events.forEach(event => {
+            // Sort events by timestamp in descending order (newest first)
+            const sortedEvents = [...events].sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
+
+            // Group events by date
+            const eventsByDate = {};
+            sortedEvents.forEach(event => {
                 const dateObj = new Date(event.timeStamp);
-                const year = dateObj.getFullYear();
-                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-                const day = String(dateObj.getDate()).padStart(2, '0');
-                const date = `${year}-${month}-${day}`;
-
-                const startSeconds =
-                    dateObj.getHours() * 3600 +
-                    dateObj.getMinutes() * 60 +
-                    dateObj.getSeconds() - 2;
-
-                const imageURL = event.imageURL;
-
-                const card = document.createElement('div');
-                card.className = 'event-card';
-                card.innerHTML = `
-                    <div class="event-content">
-                        <img 
-                            src="${imageURL}" 
-                            alt="Event Image" 
-                            class="event-image" 
-                            onclick="playEvent('${date}', ${startSeconds})" 
-                            data-retry="0" 
-                            onerror="retryImageLoad(this, '${imageURL}', 3)"
-                        >
-                        <div class="button-group">
-                            <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
-                                <i class="fas fa-download"></i>
-                            </button>
-                            <div class="spacer"></div>
-                            <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(card);
+                const dateKey = dateObj.toDateString();
+                if (!eventsByDate[dateKey]) {
+                    eventsByDate[dateKey] = [];
+                }
+                eventsByDate[dateKey].push(event);
             });
+
+            // Get the most recent date
+            const dateKeys = Object.keys(eventsByDate);
+            const mostRecentDate = dateKeys[0];
+
+            // Render each date group
+            dateKeys.forEach((dateKey, index) => {
+                const isExpanded = dateKey === mostRecentDate; // Expand only the most recent day
+
+                // Create collapsible section
+                const section = document.createElement('div');
+                section.className = 'collapsible-section';
+
+                // Create date header with toggle button
+                const dateHeader = document.createElement('div');
+                dateHeader.className = 'date-header';
+                dateHeader.innerHTML = `
+                    <button class="toggle-btn" onclick="toggleSection(this)">
+                        <i class="fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
+                    </button>
+                    ${dateKey}
+                `;
+                section.appendChild(dateHeader);
+
+                // Create container for this date's events
+                const dateContainer = document.createElement('div');
+                dateContainer.className = 'date-events';
+                dateContainer.style.display = isExpanded ? 'grid' : 'none'; // Use grid for layout
+
+                eventsByDate[dateKey].forEach(event => {
+                    const dateObj = new Date(event.timeStamp);
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    const date = `${year}-${month}-${day}`;
+
+                    const startSeconds =
+                        dateObj.getHours() * 3600 +
+                        dateObj.getMinutes() * 60 +
+                        dateObj.getSeconds() - 2;
+
+                    const imageURL = event.imageURL;
+
+                    const card = document.createElement('div');
+                    card.className = 'event-card';
+                    card.innerHTML = `
+                        <div class="event-content">
+                            <img 
+                                src="${imageURL}" 
+                                alt="Event Image" 
+                                class="event-image" 
+                                onclick="playEvent('${date}', ${startSeconds})" 
+                                data-retry="0" 
+                                onerror="retryImageLoad(this, '${imageURL}', 3)"
+                            >
+                            <div class="button-group">
+                                <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <div class="spacer"></div>
+                                <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    dateContainer.appendChild(card);
+                });
+
+                section.appendChild(dateContainer);
+                container.appendChild(section);
+            });
+        }
+
+        function toggleSection(button) {
+            const section = button.closest('.collapsible-section');
+            const content = section.querySelector('.date-events');
+            const icon = button.querySelector('i');
+
+            if (content.style.display === 'none') {
+                content.style.display = 'grid';
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+            } else {
+                content.style.display = 'none';
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            }
         }
 
         function retryImageLoad(imgElement, imageURL, maxRetries) {
@@ -117,8 +178,6 @@
                 alert("No events to delete.");
                 return;
             }
-
-            // Sort events by timestamp to find earliest and latest
             const sortedEvents = [...allEvents].sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
             const earliestTime = new Date(sortedEvents[0].timeStamp);
             const latestTime = new Date(sortedEvents[sortedEvents.length - 1].timeStamp);
@@ -140,7 +199,7 @@
                 const response = await fetch(`/delete-event?timeStamp=${startTime}&end=${endTime}`, { method: 'GET' });
                 if (!response.ok) throw new Error('Failed to delete events');
                 closeDeleteAllModal();
-                fetchEvents(); // Refresh the event list
+                fetchEvents();
             } catch (error) {
                 console.error('Error deleting batch of events:', error);
                 alert('Failed to delete events.');
@@ -202,7 +261,43 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            gap: 10px;
+        }
+
+        .collapsible-section {
+            width: 100%;
+            max-width: 1240px;
+        }
+
+        .date-header {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            text-align: left;
+            margin: 10px 0;
+            color: #333;
+            cursor: pointer;
+        }
+
+        .toggle-btn {
+            background: none;
+            border: none;
+            font-size: 16px;
+            margin-right: 10px;
+            cursor: pointer;
+            color: #555;
+        }
+
+        .toggle-btn:hover {
+            color: #000;
+        }
+
+        .date-events {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             gap: 15px;
+            width: 100%;
         }
 
         .event-card {
@@ -311,7 +406,7 @@
         }
 
         @media (min-width: 1240px) {
-            #eventsContainer {
+            .date-events {
                 display: grid;
                 grid-template-columns: repeat(2, 600px);
                 gap: 20px;
