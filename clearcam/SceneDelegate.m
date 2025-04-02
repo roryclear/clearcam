@@ -59,7 +59,7 @@
         [aesFileURL getResourceValue:&downloadStatus forKey:NSURLUbiquitousItemDownloadingStatusKey error:&downloadError];
         if (downloadError) {
             NSLog(@"Error checking iCloud download status: %@", downloadError.localizedDescription);
-            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to check iCloud status: %@", downloadError.localizedDescription]];
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to check iCloud status: %@", downloadError.localizedDescription] completion:nil];
             return;
         }
 
@@ -70,7 +70,7 @@
             [fileManager startDownloadingUbiquitousItemAtURL:aesFileURL error:&downloadStartError];
             if (downloadStartError) {
                 NSLog(@"Failed to start downloading iCloud file: %@", downloadStartError.localizedDescription);
-                [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to start download: %@", downloadStartError.localizedDescription]];
+                [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to start download: %@", downloadStartError.localizedDescription] completion:nil];
                 return;
             }
             [self monitorICloudDownloadForURL:aesFileURL];
@@ -81,7 +81,7 @@
         // Check if the file exists locally (for non-iCloud files)
         if (![fileManager fileExistsAtPath:aesFileURL.path]) {
             NSLog(@"File does not exist at path: %@", aesFileURL.path);
-            [self showErrorAlertWithMessage:@"The file does not exist or is not accessible."];
+            [self showErrorAlertWithMessage:@"The file does not exist or is not accessible." completion:nil];
             return;
         }
     }
@@ -98,7 +98,7 @@
         NSData *encryptedData = [NSData dataWithContentsOfURL:newURL options:0 error:&readError];
         if (!encryptedData) {
             NSLog(@"Failed to read .aes file: %@", readError.localizedDescription);
-            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription]];
+            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription] completion:nil];
             return;
         }
         NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
@@ -128,7 +128,7 @@
 
     if (coordinationError) {
         NSLog(@"File coordination failed: %@", coordinationError.localizedDescription);
-        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"File access failed: %@", coordinationError.localizedDescription]];
+        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"File access failed: %@", coordinationError.localizedDescription] completion:nil];
     }
 }
 
@@ -143,7 +143,7 @@
     NSError *writeError = nil;
     [decryptedData writeToURL:decFileURL options:NSDataWritingAtomic error:&writeError];
     if (writeError) {
-        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription]];
+        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to save the decrypted file: %@", writeError.localizedDescription] completion:nil];
         return nil;
     }
     return decFileURL;
@@ -172,7 +172,7 @@
             }
         } else { // User canceled
             NSLog(@"User canceled key entry.");
-            [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
+            [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file." completion:nil];
         }
     }];
 }
@@ -298,10 +298,6 @@
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:okAction];
     [self.window.rootViewController presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)showErrorAlertWithMessage:(NSString *)message {
-    [self showErrorAlertWithMessage:message completion:nil];
 }
 
 #pragma mark - UIDocumentInteractionControllerDelegate
