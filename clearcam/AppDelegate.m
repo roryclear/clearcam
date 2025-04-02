@@ -90,8 +90,14 @@
 #pragma mark - Remote Notification Methods
 
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
-    NSString *token = [[deviceToken description] stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"<>"]];
-    token = [token stringByReplacingOccurrencesOfString:@" " withString:@""];
+    const unsigned char *dataBuffer = (const unsigned char *)[deviceToken bytes];
+    if (!dataBuffer) {
+        return;
+    }
+    NSMutableString *token = [NSMutableString stringWithCapacity:(deviceToken.length * 2)];
+    for (int i = 0; i < deviceToken.length; i++) {
+        [token appendFormat:@"%02x", dataBuffer[i]];
+    }
     NSLog(@"Device Token: %@", token);
 }
 
