@@ -12,25 +12,14 @@
     NSLog(@"App launched with options: %@", launchOptions);
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     center.delegate = self;
-    
-    [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
-                          completionHandler:^(BOOL granted, NSError * _Nullable error) {
-        if (granted) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [application registerForRemoteNotifications];
-            });
-        } else {
-            NSLog(@"Notification permission denied: %@", error);
-        }
-    }];
-    
+
     // Handle launch from notification
     if (launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey]) {
         NSDictionary *userInfo = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
         self.pendingNotification = userInfo;
         NSLog(@"Launched from notification: %@", userInfo);
-        // Only run background code if content-available is present (receipt, not tap)
-        if (userInfo[@"aps"][@"content-available"]) {
+        // Only process if notifications are enabled
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"] && userInfo[@"aps"][@"content-available"]) {
             [self handleNotificationReceived:userInfo];
         }
     }
@@ -40,7 +29,7 @@
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     NSLog(@"Application became active");
-    if (self.pendingNotification) {
+    if (self.pendingNotification && [[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
         [self handleNotificationNavigation];
         self.pendingNotification = nil;
     }
@@ -83,7 +72,7 @@
 - (void)handleNotificationReceived:(NSDictionary *)userInfo {
     NSLog(@"Notification received (user did NOT tap): %@", userInfo);
     GalleryViewController *gallery = [[GalleryViewController alloc] init];
-    sleep(15);
+    sleep(15); // Consider replacing this with a proper async operation
     [gallery getEvents];
 }
 
@@ -110,10 +99,14 @@
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
     NSDictionary *userInfo = notification.request.content.userInfo;
     NSLog(@"Will present notification: %@", userInfo);
-    if (userInfo[@"aps"][@"content-available"]) {
-        [self handleNotificationReceived:userInfo];
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
+        if (userInfo[@"aps"][@"content-available"]) {
+            [self handleNotificationReceived:userInfo];
+        }
+        completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
+    } else {
+        completionHandler(0); // No presentation options when disabled
     }
-    completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
@@ -121,8 +114,9 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void (^)(void))completionHandler {
     NSDictionary *userInfo = response.notification.request.content.userInfo;
     NSLog(@"User tapped notification: %@", userInfo);
-    // Only handle navigation, no custom code here
-    [self handleNotificationNavigation];
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
+        [self handleNotificationNavigation];
+    }
     completionHandler();
 }
 
@@ -130,6 +124,11 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
     NSLog(@"Received remote notification: %@", userInfo);
+    
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
+        completionHandler(UIBackgroundFetchResultNoData);
+        return;
+    }
     
     if (userInfo[@"aps"][@"content-available"]) {
         NSLog(@"Background notification detected");

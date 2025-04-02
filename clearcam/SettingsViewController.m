@@ -5,6 +5,7 @@
 #import "NumberSelectionViewController.h"
 #import "Email.h"
 #import "ScheduleManagementViewController.h"
+#import <UserNotifications/UserNotifications.h>
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -129,7 +130,20 @@
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
     
-    [self.tableView reloadData];
+    // Ensure switch reflects current permission state
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
+                self.receiveNotifEnabled = [defaults boolForKey:@"receive_notif_enabled"];
+            } else {
+                self.receiveNotifEnabled = NO;
+                [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                [defaults synchronize];
+            }
+            [self.tableView reloadData];
+        });
+    }];
 }
 
 - (void)dealloc {
@@ -165,17 +179,68 @@
 }
 
 - (void)receiveNotifSwitchToggled:(UISwitch *)sender {
-    self.receiveNotifEnabled = sender.on;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL hasRequestedPermission = [defaults boolForKey:@"hasRequestedNotificationPermission"];
+    
+    self.receiveNotifEnabled = sender.on;
     [defaults setBool:self.receiveNotifEnabled forKey:@"receive_notif_enabled"];
     [defaults synchronize];
-    
+
     if (sender.on) {
         NSLog(@"Receive Notifications on This Device turned ON");
-        [[UIApplication sharedApplication] registerForRemoteNotifications];
+        
+        if (!hasRequestedPermission) {
+            UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+            [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
+                                  completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (granted) {
+                        NSLog(@"Notification permission granted");
+                        [[UIApplication sharedApplication] registerForRemoteNotifications];
+                        [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
+                        [defaults synchronize];
+                    } else {
+                        NSLog(@"Notification permission denied: %@", error);
+                        self.receiveNotifEnabled = NO;
+                        [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                        [defaults synchronize];
+                        sender.on = NO;
+                        
+                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Permission Denied"
+                                                                                      message:@"Notification permission was denied. You can enable it in Settings."
+                                                                               preferredStyle:UIAlertControllerStyleAlert];
+                        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                        [self presentViewController:alert animated:YES completion:nil];
+                    }
+                });
+            }];
+        } else {
+            UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+            [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (settings.authorizationStatus != UNAuthorizationStatusAuthorized) {
+                        self.receiveNotifEnabled = NO;
+                        [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                        [defaults synchronize];
+                        sender.on = NO;
+                        
+                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enable in Settings"
+                                                                                      message:@"Notifications are disabled. Please enable them in the Settings app."
+                                                                               preferredStyle:UIAlertControllerStyleAlert];
+                        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                        [self presentViewController:alert animated:YES completion:nil];
+                    } else {
+                        NSLog(@"Notifications already authorized");
+                    }
+                });
+            }];
+        }
     } else {
         NSLog(@"Receive Notifications on This Device turned OFF");
-        [[UIApplication sharedApplication] unregisterForRemoteNotifications];
+        // Clear any pending notifications when turning off
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        [center removeAllPendingNotificationRequests];
+        [center removeAllDeliveredNotifications];
     }
 }
 
@@ -207,17 +272,17 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
-        NSInteger baseRows = 10; // Increased by 1 for the new toggle
+        NSInteger baseRows = 10;
         if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded) {
-            baseRows += 2; // Add Server Address and Test own server
+            baseRows += 2;
         }
         if (self.isPresetsSectionExpanded) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-            baseRows += presetKeys.count + 1; // Preset options + "Add Preset" row
+            baseRows += presetKeys.count + 1;
         }
         return baseRows;
     } else if (section == 1) {
-        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1; // Upgrade button
+        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1;
     }
     return 0;
 }
@@ -229,7 +294,6 @@
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
 
-    // Reset cell properties
     cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cell.textLabel.textColor = [UIColor labelColor];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
@@ -424,7 +488,6 @@
                 if (!isPremium) {
                     [self showPremiumRequiredAlert];
                 }
-                // Send Notifications - handled by switch
             } else if (indexPath.row == 6 + offset) {
                 // Receive Notifications - handled by switch
             } else if (indexPath.row == 7 + offset) {
