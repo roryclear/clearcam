@@ -1,4 +1,5 @@
 #import "StoreManager.h"
+#import "FileServer.h"
 
 // Define the notification name
 NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreManagerSubscriptionStatusDidChangeNotification";
@@ -160,15 +161,12 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         return;
     }
 
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/verify_receipt"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"POST";
-    request.HTTPBody = jsonData;
-    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        isRequestInProgress = NO;  // Reset flag when request completes
-
+    [FileServer performPostRequestWithURL:@"https://rors.ai/verify_receipt"
+                                       method:@"POST"
+                                  contentType:@"application/json"
+                                         body:jsonData // Assuming jsonData is already an NSData object
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
+        isRequestInProgress = NO;
         if (error) {
             NSLog(@"Error verifying receipt: %@", error.localizedDescription);
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
@@ -176,9 +174,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             completion(NO, nil);
             return;
         }
-
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-
         if (!jsonResponse || ![jsonResponse isKindOfClass:[NSDictionary class]]) {
             NSLog(@"Invalid response from server.");
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
@@ -186,9 +182,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             completion(NO, nil);
             return;
         }
-
         BOOL isSubscribed = [jsonResponse[@"valid"] boolValue];
-
         if (isSubscribed) {
             NSString *sessionToken = jsonResponse[@"session_token"];
             if (sessionToken && [sessionToken isKindOfClass:[NSString class]]) {
@@ -197,20 +191,15 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             } else {
                 NSLog(@"Warning: No valid session_token in response.");
             }
-
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
             [self clearSessionTokenFromKeychain];
             NSLog(@"🚨 Subscription has expired.");
         }
-
         [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
-
         completion(isSubscribed, nil);
     }];
-
-    [task resume];
 }
 
 

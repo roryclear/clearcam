@@ -2,6 +2,7 @@
 #import <UserNotifications/UserNotifications.h>
 #import "GalleryViewController.h"
 #import "StoreManager.h"
+#import "FileServer.h"
 
 @interface AppDelegate () <UNUserNotificationCenterDelegate>
 @property (nonatomic, strong) NSDictionary *pendingNotification;
@@ -134,34 +135,21 @@
         return;
     }
     
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/add_device"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"POST";
-    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    
-    NSDictionary *body = @{
-        @"device_token": deviceToken,
-        @"session_token": sessionToken
-    };
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
-    request.HTTPBody = jsonData;
-    
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
-                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
+                                       method:@"POST"
+                                  contentType:@"application/json"
+                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Error sending device token: %@", error.localizedDescription);
             return;
         }
-        
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        if (httpResponse.statusCode == 200) {
+        if (response.statusCode == 200) {
             NSLog(@"Device token successfully sent to server");
         } else {
-            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)httpResponse.statusCode);
+            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)response.statusCode);
         }
     }];
-    
-    [task resume];
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center

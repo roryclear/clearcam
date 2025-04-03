@@ -1,6 +1,7 @@
 #import "Email.h"
 #import "SecretManager.h"
 #import "StoreManager.h"
+#import "FileServer.h"
 #import <UIKit/UIKit.h>
 
 @implementation Email
@@ -77,7 +78,7 @@
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // Include session_token only if not using own email server
+    // Include session_token if not using own email server
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (sessionToken) {
@@ -89,25 +90,19 @@
             NSLog(@"Warning: No session token found in Keychain.");
         }
     }
-
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
-    NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    [request setHTTPMethod:@"POST"];
-    [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
-    [request setHTTPBody:bodyData];
-
-    NSURLSession *session = [NSURLSession sharedSession];
-    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    [FileServer performPostRequestWithURL:[server stringByAppendingString:endpoint]
+                                       method:@"POST"
+                                  contentType:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary]
+                                         body:bodyData
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Error: %@", error.localizedDescription);
         } else {
             NSLog(@"Send request completed successfully.");
         }
     }];
-    [task resume];
 }
 
 @end
