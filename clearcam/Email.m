@@ -1,6 +1,7 @@
 #import "Email.h"
 #import "SecretManager.h"
 #import "StoreManager.h"
+#import "FileServer.h"
 #import <UIKit/UIKit.h>
 
 @implementation Email
@@ -17,7 +18,7 @@
 - (void)sendEmailWithImageAtPath:(NSString *)imagePath {
     NSString *server = @"https://www.rors.ai";
     
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
         if (![server hasPrefix:@"http"]) {
             server = [@"http://" stringByAppendingString:server];
@@ -52,7 +53,7 @@
     }
 
     NSData *fileData = imageData;
-    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"];
+    BOOL encryptImage = ![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"];
     if (encryptImage) {
         NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
         if (!encryptionKey) {
@@ -77,8 +78,8 @@
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // Include session_token only if not using own email server
-    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_email_server_enabled"]) {
+    // Include session_token if not using own email server
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (sessionToken) {
             [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
@@ -89,25 +90,19 @@
             NSLog(@"Warning: No session token found in Keychain.");
         }
     }
-
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
-    NSURL *url = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    [request setHTTPMethod:@"POST"];
-    [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)bodyData.length] forHTTPHeaderField:@"Content-Length"];
-    [request setHTTPBody:bodyData];
-
-    NSURLSession *session = [NSURLSession sharedSession];
-    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    [FileServer performPostRequestWithURL:[server stringByAppendingString:endpoint]
+                                       method:@"POST"
+                                  contentType:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary]
+                                         body:bodyData
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"Error: %@", error.localizedDescription);
         } else {
             NSLog(@"Send request completed successfully.");
         }
     }];
-    [task resume];
 }
 
 @end

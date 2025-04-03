@@ -4,7 +4,9 @@
 #import "StoreManager.h"
 #import "NumberSelectionViewController.h"
 #import "Email.h"
+#import "FileServer.h"
 #import "ScheduleManagementViewController.h"
+#import <UserNotifications/UserNotifications.h>
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -13,7 +15,8 @@
 @property (nonatomic, strong) NSString *selectedPresetKey; // For YOLO indexes key
 @property (nonatomic, assign) BOOL isPresetsSectionExpanded; // Track if presets section is expanded
 @property (nonatomic, assign) BOOL sendNotifEnabled;
-@property (nonatomic, assign) BOOL useOwnEmailServerEnabled; // Track if "Use own email server" is enabled
+@property (nonatomic, assign) BOOL receiveNotifEnabled; // New property for receiving notifications
+@property (nonatomic, assign) BOOL useOwnServerEnabled;
 @property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
 @property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *notificationSchedules; // Array to store notification schedules
@@ -27,11 +30,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
-    // Basic setup
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
-    
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
         [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -74,11 +74,18 @@
         [defaults setBool:NO forKey:@"send_notif_enabled"];
     }
     
-    if ([defaults objectForKey:@"use_own_email_server_enabled"] != nil) {
-        self.useOwnEmailServerEnabled = [defaults boolForKey:@"use_own_email_server_enabled"];
+    if ([defaults objectForKey:@"receive_notif_enabled"] != nil) {
+        self.receiveNotifEnabled = [defaults boolForKey:@"receive_notif_enabled"];
     } else {
-        self.useOwnEmailServerEnabled = NO;
-        [defaults setBool:NO forKey:@"use_own_email_server_enabled"];
+        self.receiveNotifEnabled = NO; // Off by default
+        [defaults setBool:NO forKey:@"receive_notif_enabled"];
+    }
+    
+    if ([defaults objectForKey:@"use_own_server_enabled"] != nil) {
+        self.useOwnServerEnabled = [defaults boolForKey:@"use_own_server_enabled"];
+    } else {
+        self.useOwnServerEnabled = NO;
+        [defaults setBool:NO forKey:@"use_own_server_enabled"];
     }
     
     if ([defaults objectForKey:@"threshold"] != nil) {
@@ -101,7 +108,7 @@
         [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
     }
     
-    self.isEmailServerSectionExpanded = self.useOwnEmailServerEnabled;
+    self.isEmailServerSectionExpanded = self.useOwnServerEnabled;
     self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1";
     
     [defaults synchronize];
@@ -121,7 +128,20 @@
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
     
-    [self.tableView reloadData];
+    // Ensure switch reflects current permission state
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
+                self.receiveNotifEnabled = [defaults boolForKey:@"receive_notif_enabled"];
+            } else {
+                self.receiveNotifEnabled = NO;
+                [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                [defaults synchronize];
+            }
+            [self.tableView reloadData];
+        });
+    }];
 }
 
 - (void)dealloc {
@@ -156,6 +176,156 @@
     [defaults synchronize];
 }
 
+- (void)receiveNotifSwitchToggled:(UISwitch *)sender {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL hasRequestedPermission = [defaults boolForKey:@"hasRequestedNotificationPermission"];
+    
+    self.receiveNotifEnabled = sender.on;
+    [defaults setBool:self.receiveNotifEnabled forKey:@"receive_notif_enabled"];
+    [defaults synchronize];
+
+    if (sender.on) {
+        NSLog(@"Receive Notifications on This Device turned ON");
+
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
+                    NSLog(@"Notifications already authorized, sending token...");
+                    [self sendDeviceTokenToServer]; // Send token when toggled ON
+                } else if (!hasRequestedPermission) {
+                    NSLog(@"Requesting permission for notifications...");
+                    [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
+                                          completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (granted) {
+                                NSLog(@"Notification permission granted");
+                                [[UIApplication sharedApplication] registerForRemoteNotifications];
+                                [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
+                                [defaults synchronize];
+                                
+                                [self sendDeviceTokenToServer]; // Send token after granting permission
+                            } else {
+                                NSLog(@"Notification permission denied: %@", error);
+                                self.receiveNotifEnabled = NO;
+                                [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                                [defaults synchronize];
+                                sender.on = NO;
+                                
+                                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Permission Denied"
+                                                                                              message:@"Notification permission was denied. You can enable it in Settings."
+                                                                                       preferredStyle:UIAlertControllerStyleAlert];
+                                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                                [self presentViewController:alert animated:YES completion:nil];
+                            }
+                        });
+                    }];
+                } else {
+                    NSLog(@"Notifications not authorized, showing settings alert.");
+                    self.receiveNotifEnabled = NO;
+                    [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                    [defaults synchronize];
+                    sender.on = NO;
+                    
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enable in Settings"
+                                                                                  message:@"Notifications are disabled. Please enable them in the Settings app."
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
+                    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:alert animated:YES completion:nil];
+                }
+            });
+        }];
+    } else {
+        NSLog(@"Receive Notifications on This Device turned OFF");
+        // Clear any pending notifications when turning off
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        [center removeAllPendingNotificationRequests];
+        [center removeAllDeliveredNotifications];
+        
+        // Delete device token from server
+        [self deleteDeviceTokenFromServer];
+    }
+}
+
+- (void)sendDeviceTokenToServer {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    
+    if (!deviceToken || deviceToken.length == 0) {
+        NSLog(@"No device token found, skipping API call.");
+        return;
+    }
+    
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) {
+        NSLog(@"No session token found in Keychain. Skipping API call.");
+        return;
+    }
+    
+    [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
+                                       method:@"POST"
+                                  contentType:@"application/json"
+                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error sending device token: %@", error.localizedDescription);
+            return;
+        }
+        if (response.statusCode == 200) {
+            NSLog(@"Device token successfully sent to server");
+        } else {
+            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)response.statusCode);
+        }
+    }];
+}
+
+- (void)deleteDeviceTokenFromServer {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    
+    if (!deviceToken || deviceToken.length == 0) {
+        NSLog(@"No device token found, skipping API call.");
+        return;
+    }
+    
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) {
+        NSLog(@"No session token found in Keychain. Skipping API call.");
+        return;
+    }
+    
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/delete_device"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"DELETE";  // Changed from POST to DELETE
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    NSDictionary *body = @{
+        @"device_token": deviceToken,
+        @"session_token": sessionToken
+    };
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    request.HTTPBody = jsonData;
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error deleting device token: %@", error.localizedDescription);
+            return;
+        }
+        
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode == 200) {
+            NSLog(@"Device token successfully deleted from server");
+        } else {
+            NSLog(@"Failed to delete device token, server responded with statusevity code: %ld", (long)httpResponse.statusCode);
+        }
+    }];
+    
+    [task resume];
+}
+
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.tableView reloadData];
@@ -179,22 +349,35 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;
+    return 3; // Camera Settings, Viewer Settings, Upgrade to Premium
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if (section == 0) {
+        return @"Camera Settings";
+    } else if (section == 1) {
+        return @"Viewer Settings";
+    } else if (section == 2 && ![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
+        return nil; // No header for Upgrade to Premium
+    }
+    return nil;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (section == 0) {
-        NSInteger baseRows = 9; // Stream via Wi-Fi, Resolution, Detect Objects, Manage Detection Presets, Threshold, Send Notifications, Change Encryption Password, Use own email server, Manage Notification Schedules
-        if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded) {
-            baseRows += 2; // Add Server Address and Test own server
+    if (section == 0) { // Camera Settings
+        NSInteger baseRows = 9; // All settings except Receive Notifications
+        if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded) {
+            baseRows += 2;
         }
         if (self.isPresetsSectionExpanded) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-            baseRows += presetKeys.count + 1; // Preset options + "Add Preset" row
+            baseRows += presetKeys.count + 1;
         }
         return baseRows;
-    } else if (section == 1) {
-        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1; // Upgrade button
+    } else if (section == 1) { // Viewer Settings
+        return 1; // Just Receive Notifications
+    } else if (section == 2) { // Upgrade to Premium
+        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1;
     }
     return 0;
 }
@@ -206,7 +389,6 @@
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
 
-    // Reset cell properties
     cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cell.textLabel.textColor = [UIColor labelColor];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
@@ -218,7 +400,7 @@
 
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
-    if (indexPath.section == 0) {
+    if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Stream via Wi-Fi";
             NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
@@ -287,23 +469,23 @@
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 7 + offset) {
-                cell.textLabel.text = @"Use own email server";
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
-                useOwnEmailServerSwitch.on = self.useOwnEmailServerEnabled;
-                [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = useOwnEmailServerSwitch;
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Manage Notification Schedules";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 8 + offset) {
+                cell.textLabel.text = @"Use Own Notification Server";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
+                useOwnEmailServerSwitch.on = self.useOwnServerEnabled;
+                [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = useOwnEmailServerSwitch;
+                cell.userInteractionEnabled = YES;
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
                 cell.textLabel.text = @"Server Address";
                 cell.detailTextLabel.text = self.emailServerAddress;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
@@ -311,7 +493,19 @@
                 cell.userInteractionEnabled = YES;
             }
         }
-    } else if (indexPath.section == 1) {
+    } else if (indexPath.section == 1) { // Viewer Settings
+        if (indexPath.row == 0) {
+            cell.textLabel.text = @"Receive Notifications on This Device";
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
+            receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
+            [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = receiveNotifSwitch;
+            receiveNotifSwitch.enabled = isPremium;
+            cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
+            cell.userInteractionEnabled = isPremium;
+        }
+    } else if (indexPath.section == 2) { // Upgrade to Premium
         cell.textLabel.text = @"Upgrade to Premium";
         cell.textLabel.textColor = [UIColor systemBlueColor];
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
@@ -366,7 +560,7 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
     
-    if (indexPath.section == 0) {
+    if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
             // Stream via Wi-Fi - handled by switch
         } else if (indexPath.row == 1) {
@@ -393,7 +587,6 @@
                 if (!isPremium) {
                     [self showPremiumRequiredAlert];
                 }
-                // Send Notifications - handled by switch
             } else if (indexPath.row == 6 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
@@ -405,8 +598,6 @@
                     [self showPremiumRequiredAlert];
                 }
             } else if (indexPath.row == 7 + offset) {
-                // Use own email server - handled by switch
-            } else if (indexPath.row == 8 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
                 scheduleVC.emailSchedules = [self.notificationSchedules mutableCopy];
                 scheduleVC.completionHandler = ^(NSArray<NSDictionary *> *schedules) {
@@ -417,13 +608,21 @@
                     [self.tableView reloadData];
                 };
                 [self.navigationController pushViewController:scheduleVC animated:YES];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 8 + offset) {
+                // Use Own Notification Server - handled by switch
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
                 [self showEmailServerAddressInputDialog];
-            } else if (self.useOwnEmailServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 [self testEmailServer];
             }
         }
-    } else if (indexPath.section == 1) {
+    } else if (indexPath.section == 1) { // Viewer Settings
+        if (indexPath.row == 0) {
+            if (!isPremium) {
+                [self showPremiumRequiredAlert];
+            }
+        }
+    } else if (indexPath.section == 2) { // Upgrade to Premium
         [[StoreManager sharedInstance] fetchAndPurchaseProduct];
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -443,11 +642,11 @@
 }
 
 - (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
-    self.useOwnEmailServerEnabled = sender.on;
+    self.useOwnServerEnabled = sender.on;
     self.isEmailServerSectionExpanded = sender.on;
     
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setBool:self.useOwnEmailServerEnabled forKey:@"use_own_email_server_enabled"];
+    [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
     [defaults synchronize];
     
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
@@ -605,7 +804,7 @@
 #pragma mark - UITableView Delegate
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == 0 && self.isPresetsSectionExpanded) {
+    if (indexPath.section == 0 && self.isPresetsSectionExpanded) { // Only in Camera Settings
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];

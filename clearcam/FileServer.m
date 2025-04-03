@@ -892,6 +892,37 @@
     return framesForURL;
 }
 
++ (void)performPostRequestWithURL:(NSString *)urlString
+                           method:(NSString *)method
+                      contentType:(NSString *)contentType
+                             body:(id)body
+                completionHandler:(void (^)(NSData *data, NSHTTPURLResponse *response, NSError *error))completion {
+    NSURL *url = [NSURL URLWithString:urlString];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = method;
+    [request setValue:contentType forHTTPHeaderField:@"Content-Type"];
+
+    // Handle body based on content type
+    if ([contentType isEqualToString:@"application/json"] && [body isKindOfClass:[NSDictionary class]]) {
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+        request.HTTPBody = jsonData;
+    } else if ([contentType containsString:@"multipart/form-data"] && [body isKindOfClass:[NSData class]]) {
+        [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)[(NSData *)body length]] forHTTPHeaderField:@"Content-Length"];
+        request.HTTPBody = body;
+    } else if (body && [body isKindOfClass:[NSData class]]) {
+        request.HTTPBody = body; // Raw data for other cases
+    }
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (completion) {
+            completion(data, httpResponse, error);
+        }
+    }];
+    [task resume];
+}
+
 - (void)concatenateMP4Files:(NSArray<NSString *> *)filePaths completion:(void (^)(NSString *outputPath, NSError *error))completion {
     AVMutableComposition *composition = [AVMutableComposition composition];
     AVMutableCompositionTrack *videoTrack = [composition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];

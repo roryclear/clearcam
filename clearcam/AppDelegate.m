@@ -1,6 +1,8 @@
 #import "AppDelegate.h"
 #import <UserNotifications/UserNotifications.h>
 #import "GalleryViewController.h"
+#import "StoreManager.h"
+#import "FileServer.h"
 
 @interface AppDelegate () <UNUserNotificationCenterDelegate>
 @property (nonatomic, strong) NSDictionary *pendingNotification;
@@ -12,25 +14,14 @@
     NSLog(@"App launched with options: %@", launchOptions);
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     center.delegate = self;
-    
-    [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
-                          completionHandler:^(BOOL granted, NSError * _Nullable error) {
-        if (granted) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [application registerForRemoteNotifications];
-            });
-        } else {
-            NSLog(@"Notification permission denied: %@", error);
-        }
-    }];
-    
+
     // Handle launch from notification
     if (launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey]) {
         NSDictionary *userInfo = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
         self.pendingNotification = userInfo;
         NSLog(@"Launched from notification: %@", userInfo);
-        // Only run background code if content-available is present (receipt, not tap)
-        if (userInfo[@"aps"][@"content-available"]) {
+        // Only process if notifications are enabled
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"] && userInfo[@"aps"][@"content-available"]) {
             [self handleNotificationReceived:userInfo];
         }
     }
@@ -40,7 +31,7 @@
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     NSLog(@"Application became active");
-    if (self.pendingNotification) {
+    if (self.pendingNotification && [[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
         [self handleNotificationNavigation];
         self.pendingNotification = nil;
     }
@@ -83,7 +74,7 @@
 - (void)handleNotificationReceived:(NSDictionary *)userInfo {
     NSLog(@"Notification received (user did NOT tap): %@", userInfo);
     GalleryViewController *gallery = [[GalleryViewController alloc] init];
-    sleep(15);
+    sleep(15); // Consider replacing this with a proper async operation
     [gallery getEvents];
 }
 
@@ -94,12 +85,20 @@
     if (!dataBuffer) {
         return;
     }
+    
     NSMutableString *token = [NSMutableString stringWithCapacity:(deviceToken.length * 2)];
     for (int i = 0; i < deviceToken.length; i++) {
         [token appendFormat:@"%02x", dataBuffer[i]];
     }
+    
     NSLog(@"Device Token: %@", token);
+    
+    // Save token to NSUserDefaults
+    [[NSUserDefaults standardUserDefaults] setObject:token forKey:@"device_token"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [self sendDeviceTokenToServer];
 }
+
 
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     NSLog(@"Failed to register for remote notifications: %@", error);
@@ -110,10 +109,47 @@
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
     NSDictionary *userInfo = notification.request.content.userInfo;
     NSLog(@"Will present notification: %@", userInfo);
-    if (userInfo[@"aps"][@"content-available"]) {
-        [self handleNotificationReceived:userInfo];
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
+        if (userInfo[@"aps"][@"content-available"]) {
+            [self handleNotificationReceived:userInfo];
+        }
+        completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
+    } else {
+        completionHandler(0); // No presentation options when disabled
     }
-    completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
+}
+
+- (void)sendDeviceTokenToServer { //todo duplicate!!
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    
+    if (!deviceToken || deviceToken.length == 0) {
+        NSLog(@"No device token found, skipping API call.");
+        return;
+    }
+    
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) {
+        NSLog(@"No session token found in Keychain. Skipping API call.");
+        return;
+    }
+    
+    [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
+                                       method:@"POST"
+                                  contentType:@"application/json"
+                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error sending device token: %@", error.localizedDescription);
+            return;
+        }
+        if (response.statusCode == 200) {
+            NSLog(@"Device token successfully sent to server");
+        } else {
+            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)response.statusCode);
+        }
+    }];
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
@@ -121,8 +157,9 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void (^)(void))completionHandler {
     NSDictionary *userInfo = response.notification.request.content.userInfo;
     NSLog(@"User tapped notification: %@", userInfo);
-    // Only handle navigation, no custom code here
-    [self handleNotificationNavigation];
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
+        [self handleNotificationNavigation];
+    }
     completionHandler();
 }
 
@@ -130,6 +167,11 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
     NSLog(@"Received remote notification: %@", userInfo);
+    
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
+        completionHandler(UIBackgroundFetchResultNoData);
+        return;
+    }
     
     if (userInfo[@"aps"][@"content-available"]) {
         NSLog(@"Background notification detected");
