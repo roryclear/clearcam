@@ -96,7 +96,7 @@
     // Save token to NSUserDefaults
     [[NSUserDefaults standardUserDefaults] setObject:token forKey:@"device_token"];
     [[NSUserDefaults standardUserDefaults] synchronize];
-    [self sendDeviceTokenToServer];
+    [FileServer sendDeviceTokenToServer];
 }
 
 
@@ -117,39 +117,6 @@
     } else {
         completionHandler(0); // No presentation options when disabled
     }
-}
-
-- (void)sendDeviceTokenToServer { //todo duplicate!!
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *deviceToken = [defaults stringForKey:@"device_token"];
-    
-    if (!deviceToken || deviceToken.length == 0) {
-        NSLog(@"No device token found, skipping API call.");
-        return;
-    }
-    
-    // Retrieve session token from Keychain
-    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken || sessionToken.length == 0) {
-        NSLog(@"No session token found in Keychain. Skipping API call.");
-        return;
-    }
-    
-    [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
-                                       method:@"POST"
-                                  contentType:@"application/json"
-                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"Error sending device token: %@", error.localizedDescription);
-            return;
-        }
-        if (response.statusCode == 200) {
-            NSLog(@"Device token successfully sent to server");
-        } else {
-            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)response.statusCode);
-        }
-    }];
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center

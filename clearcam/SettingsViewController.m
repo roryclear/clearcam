@@ -192,7 +192,7 @@
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
                     NSLog(@"Notifications already authorized, sending token...");
-                    [self sendDeviceTokenToServer]; // Send token when toggled ON
+                    [FileServer sendDeviceTokenToServer]; // Send token when toggled ON
                 } else if (!hasRequestedPermission) {
                     NSLog(@"Requesting permission for notifications...");
                     [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
@@ -204,7 +204,7 @@
                                 [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
                                 [defaults synchronize];
                                 
-                                [self sendDeviceTokenToServer]; // Send token after granting permission
+                                [FileServer sendDeviceTokenToServer]; // Send token after granting permission
                             } else {
                                 NSLog(@"Notification permission denied: %@", error);
                                 self.receiveNotifEnabled = NO;
@@ -245,39 +245,6 @@
         // Delete device token from server
         [self deleteDeviceTokenFromServer];
     }
-}
-
-- (void)sendDeviceTokenToServer {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *deviceToken = [defaults stringForKey:@"device_token"];
-    
-    if (!deviceToken || deviceToken.length == 0) {
-        NSLog(@"No device token found, skipping API call.");
-        return;
-    }
-    
-    // Retrieve session token from Keychain
-    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken || sessionToken.length == 0) {
-        NSLog(@"No session token found in Keychain. Skipping API call.");
-        return;
-    }
-    
-    [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
-                                       method:@"POST"
-                                  contentType:@"application/json"
-                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"Error sending device token: %@", error.localizedDescription);
-            return;
-        }
-        if (response.statusCode == 200) {
-            NSLog(@"Device token successfully sent to server");
-        } else {
-            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)response.statusCode);
-        }
-    }];
 }
 
 - (void)deleteDeviceTokenFromServer {
