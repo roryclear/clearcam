@@ -454,10 +454,12 @@
                 cell.textLabel.text = @"Receive Notifications on This Device";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
-                receiveNotifSwitch.on = self.receiveNotifEnabled;
+                receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
                 [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = receiveNotifSwitch;
-                cell.userInteractionEnabled = YES;
+                receiveNotifSwitch.enabled = isPremium;
+                cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
+                cell.userInteractionEnabled = isPremium;
             } else if (indexPath.row == 7 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
                 cell.detailTextLabel.text = nil;
@@ -499,7 +501,6 @@
 
     return cell;
 }
-
 - (void)showThresholdInputDialog {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Threshold"
                                                                    message:@"Enter a % value between 1 and 100 (default is 25)."
@@ -572,7 +573,9 @@
                     [self showPremiumRequiredAlert];
                 }
             } else if (indexPath.row == 6 + offset) {
-                // Receive Notifications - handled by switch
+                if (!isPremium) {
+                    [self showPremiumRequiredAlert];
+                }
             } else if (indexPath.row == 7 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
