@@ -53,7 +53,7 @@
     }
 
     NSData *fileData = imageData;
-    BOOL encryptImage = [[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"];
+    BOOL encryptImage = ![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"];
     if (encryptImage) {
         NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
         if (!encryptionKey) {
