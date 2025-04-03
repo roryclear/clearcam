@@ -247,7 +247,6 @@
     }
 }
 
-
 - (void)sendDeviceTokenToServer {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *deviceToken = [defaults stringForKey:@"device_token"];
@@ -320,7 +319,7 @@
         if (httpResponse.statusCode == 200) {
             NSLog(@"Device token successfully deleted from server");
         } else {
-            NSLog(@"Failed to delete device token, server responded with status code: %ld", (long)httpResponse.statusCode);
+            NSLog(@"Failed to delete device token, server responded with statusevity code: %ld", (long)httpResponse.statusCode);
         }
     }];
     
@@ -350,12 +349,23 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;
+    return 3; // Camera Settings, Viewer Settings, Upgrade to Premium
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if (section == 0) {
+        return @"Camera Settings";
+    } else if (section == 1) {
+        return @"Viewer Settings";
+    } else if (section == 2 && ![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
+        return nil; // No header for Upgrade to Premium
+    }
+    return nil;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (section == 0) {
-        NSInteger baseRows = 10;
+    if (section == 0) { // Camera Settings
+        NSInteger baseRows = 9; // All settings except Receive Notifications
         if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded) {
             baseRows += 2;
         }
@@ -364,7 +374,9 @@
             baseRows += presetKeys.count + 1;
         }
         return baseRows;
-    } else if (section == 1) {
+    } else if (section == 1) { // Viewer Settings
+        return 1; // Just Receive Notifications
+    } else if (section == 2) { // Upgrade to Premium
         return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1;
     }
     return 0;
@@ -388,7 +400,7 @@
 
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
-    if (indexPath.section == 0) {
+    if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Stream via Wi-Fi";
             NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
@@ -451,27 +463,17 @@
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 6 + offset) {
-                cell.textLabel.text = @"Receive Notifications on This Device";
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
-                receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
-                [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = receiveNotifSwitch;
-                receiveNotifSwitch.enabled = isPremium;
-                cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = isPremium;
-            } else if (indexPath.row == 7 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 8 + offset) {
+            } else if (indexPath.row == 7 + offset) {
                 cell.textLabel.text = @"Manage Notification Schedules";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Use Own Notification Server";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
@@ -479,11 +481,11 @@
                 [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = useOwnEmailServerSwitch;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
                 cell.textLabel.text = @"Server Address";
                 cell.detailTextLabel.text = self.emailServerAddress;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
@@ -491,7 +493,19 @@
                 cell.userInteractionEnabled = YES;
             }
         }
-    } else if (indexPath.section == 1) {
+    } else if (indexPath.section == 1) { // Viewer Settings
+        if (indexPath.row == 0) {
+            cell.textLabel.text = @"Receive Notifications on This Device";
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
+            receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
+            [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = receiveNotifSwitch;
+            receiveNotifSwitch.enabled = isPremium;
+            cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
+            cell.userInteractionEnabled = isPremium;
+        }
+    } else if (indexPath.section == 2) { // Upgrade to Premium
         cell.textLabel.text = @"Upgrade to Premium";
         cell.textLabel.textColor = [UIColor systemBlueColor];
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
@@ -501,6 +515,7 @@
 
     return cell;
 }
+
 - (void)showThresholdInputDialog {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Threshold"
                                                                    message:@"Enter a % value between 1 and 100 (default is 25)."
@@ -545,7 +560,7 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
     
-    if (indexPath.section == 0) {
+    if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
             // Stream via Wi-Fi - handled by switch
         } else if (indexPath.row == 1) {
@@ -573,10 +588,6 @@
                     [self showPremiumRequiredAlert];
                 }
             } else if (indexPath.row == 6 + offset) {
-                if (!isPremium) {
-                    [self showPremiumRequiredAlert];
-                }
-            } else if (indexPath.row == 7 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                         if (success) {
@@ -586,7 +597,7 @@
                 } else {
                     [self showPremiumRequiredAlert];
                 }
-            } else if (indexPath.row == 8 + offset) {
+            } else if (indexPath.row == 7 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
                 scheduleVC.emailSchedules = [self.notificationSchedules mutableCopy];
                 scheduleVC.completionHandler = ^(NSArray<NSDictionary *> *schedules) {
@@ -597,15 +608,21 @@
                     [self.tableView reloadData];
                 };
                 [self.navigationController pushViewController:scheduleVC animated:YES];
-            } else if (indexPath.row == 9 + offset) {
+            } else if (indexPath.row == 8 + offset) {
                 // Use Own Notification Server - handled by switch
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
                 [self showEmailServerAddressInputDialog];
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 11 + offset) {
+            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
                 [self testEmailServer];
             }
         }
-    } else if (indexPath.section == 1) {
+    } else if (indexPath.section == 1) { // Viewer Settings
+        if (indexPath.row == 0) {
+            if (!isPremium) {
+                [self showPremiumRequiredAlert];
+            }
+        }
+    } else if (indexPath.section == 2) { // Upgrade to Premium
         [[StoreManager sharedInstance] fetchAndPurchaseProduct];
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -787,7 +804,7 @@
 #pragma mark - UITableView Delegate
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == 0 && self.isPresetsSectionExpanded) {
+    if (indexPath.section == 0 && self.isPresetsSectionExpanded) { // Only in Camera Settings
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];
