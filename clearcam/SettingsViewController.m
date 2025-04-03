@@ -38,9 +38,7 @@
                 [self.tableView reloadData];
             });
         }];
-    }
-    NSLog(@"%d %@", [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"], [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
-    
+    }    
     // Register for subscription status change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(subscriptionStatusDidChange:)
@@ -185,28 +183,22 @@
     [defaults synchronize];
 
     if (sender.on) {
-        NSLog(@"Receive Notifications on This Device turned ON");
-
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
         [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
-                    NSLog(@"Notifications already authorized, sending token...");
                     [FileServer sendDeviceTokenToServer]; // Send token when toggled ON
                 } else if (!hasRequestedPermission) {
-                    NSLog(@"Requesting permission for notifications...");
                     [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
                                           completionHandler:^(BOOL granted, NSError * _Nullable error) {
                         dispatch_async(dispatch_get_main_queue(), ^{
                             if (granted) {
-                                NSLog(@"Notification permission granted");
                                 [[UIApplication sharedApplication] registerForRemoteNotifications];
                                 [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
                                 [defaults synchronize];
                                 
                                 [FileServer sendDeviceTokenToServer]; // Send token after granting permission
                             } else {
-                                NSLog(@"Notification permission denied: %@", error);
                                 self.receiveNotifEnabled = NO;
                                 [defaults setBool:NO forKey:@"receive_notif_enabled"];
                                 [defaults synchronize];
@@ -221,7 +213,6 @@
                         });
                     }];
                 } else {
-                    NSLog(@"Notifications not authorized, showing settings alert.");
                     self.receiveNotifEnabled = NO;
                     [defaults setBool:NO forKey:@"receive_notif_enabled"];
                     [defaults synchronize];
@@ -236,7 +227,6 @@
             });
         }];
     } else {
-        NSLog(@"Receive Notifications on This Device turned OFF");
         // Clear any pending notifications when turning off
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
         [center removeAllPendingNotificationRequests];
@@ -251,21 +241,14 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *deviceToken = [defaults stringForKey:@"device_token"];
     
-    if (!deviceToken || deviceToken.length == 0) {
-        NSLog(@"No device token found, skipping API call.");
-        return;
-    }
+    if (!deviceToken || deviceToken.length == 0) return;
     
     // Retrieve session token from Keychain
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken || sessionToken.length == 0) {
-        NSLog(@"No session token found in Keychain. Skipping API call.");
-        return;
-    }
-    
+    if (!sessionToken || sessionToken.length == 0) return;
     NSURL *url = [NSURL URLWithString:@"https://rors.ai/delete_device"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"DELETE";  // Changed from POST to DELETE
+    request.HTTPMethod = @"DELETE"; 
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     
     NSDictionary *body = @{
@@ -277,17 +260,8 @@
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
                                                                  completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"Error deleting device token: %@", error.localizedDescription);
-            return;
-        }
-        
+        if (error) return;
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        if (httpResponse.statusCode == 200) {
-            NSLog(@"Device token successfully deleted from server");
-        } else {
-            NSLog(@"Failed to delete device token, server responded with statusevity code: %ld", (long)httpResponse.statusCode);
-        }
     }];
     
     [task resume];
@@ -557,9 +531,6 @@
             } else if (indexPath.row == 6 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
-                        if (success) {
-                            NSLog(@"Encryption password changed successfully.");
-                        }
                     }];
                 } else {
                     [self showPremiumRequiredAlert];
@@ -742,7 +713,6 @@
     
     NSError *error = nil;
     BOOL success = [[SecretManager sharedManager] saveEncryptionKey:password error:&error];
-    
     if (!success) NSLog(@"Failed to save password to Keychain: %@", error.localizedDescription);
 }
 
@@ -751,7 +721,6 @@
     if (storedKey) {
         return storedKey;
     }
-    NSLog(@"No password found in Keychain.");
     return nil;
 }
 
@@ -789,10 +758,7 @@
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];
 
-            if ([presetKey isEqualToString:@"all"]) {
-                NSLog(@"Cannot delete the 'all' preset.");
-                return;
-            }
+            if ([presetKey isEqualToString:@"all"]) return;
 
             NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
             NSMutableDictionary *yoloPresets = [[defaults objectForKey:@"yolo_presets"] mutableCopy];

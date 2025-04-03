@@ -147,7 +147,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
 
     OSStatus status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
     if (status != errSecSuccess) {
-        NSLog(@"Failed to save decryption key: %d", (int)status);
         if (error) {
             *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
                                          code:status
@@ -177,8 +176,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         NSData *keyData = (__bridge_transfer NSData *)result;
         return [[NSString alloc] initWithData:keyData encoding:NSUTF8StringEncoding];
     }
-
-    NSLog(@"Encryption key not found.");
     return nil;
 }
 
@@ -204,7 +201,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     
     OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
     if (status != errSecSuccess && status != errSecItemNotFound) {
-        NSLog(@"Failed to delete key from Keychain: %d", (int)status);
         if (error) {
             *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
                                          code:status
@@ -224,7 +220,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     
     OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
     if (status != errSecSuccess && status != errSecItemNotFound) {
-        NSLog(@"Failed to delete all keys from Keychain: %d", (int)status);
         if (error) {
             *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
                                          code:status

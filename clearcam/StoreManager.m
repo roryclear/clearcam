@@ -38,25 +38,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 #pragma mark - SKProductsRequestDelegate
 
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
-    NSLog(@"✅ Received response from App Store.");
-
-    if (response.invalidProductIdentifiers.count > 0) {
-        NSLog(@"🚨 Invalid product IDs: %@", response.invalidProductIdentifiers);
-    }
-
-    if (response.products.count == 0) {
-        NSLog(@"🚨 No valid products found! Double-check subscription status in App Store Connect.");
-        return;
-    }
-
-    // Print details of the subscription
-    for (SKProduct *product in response.products) {
-        NSLog(@"✅ Found product: %@", product.productIdentifier);
-        NSLog(@"Title: %@", product.localizedTitle);
-        NSLog(@"Description: %@", product.localizedDescription);
-        NSLog(@"Price: %@", product.price);
-    }
-
+    if (response.products.count == 0) return;
     self.premiumProduct = response.products.firstObject;
     [self purchaseProduct];
 }
@@ -71,8 +53,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     if ([SKPaymentQueue canMakePayments] && self.premiumProduct) {
         SKPayment *payment = [SKPayment paymentWithProduct:self.premiumProduct];
         [[SKPaymentQueue defaultQueue] addPayment:payment];
-    } else {
-        NSLog(@"Purchases are disabled on this device.");
     }
 }
 
@@ -82,7 +62,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     for (SKPaymentTransaction *transaction in transactions) {
         switch (transaction.transactionState) {
             case SKPaymentTransactionStatePurchased:
-                NSLog(@"Purchase successful!");
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
                 // After a successful purchase, verify the subscription status
                 [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
@@ -94,12 +73,10 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                 break;
                 
             case SKPaymentTransactionStateFailed:
-                NSLog(@"Purchase failed: %@", transaction.error.localizedDescription);
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
                 break;
                 
             case SKPaymentTransactionStateRestored:
-                NSLog(@"Purchase restored.");
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
                 // After restoring purchases, verify the subscription status
                 [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
@@ -119,22 +96,17 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
     static BOOL isRequestInProgress = NO;
 
-    if (isRequestInProgress) {
-        NSLog(@"🛑 Subscription verification already in progress. Skipping duplicate request.");
-        return;
-    }
+    if (isRequestInProgress) return;
 
     isRequestInProgress = YES;  // Mark request as in progress
 
     NSString *storedReceipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
     
     if (!storedReceipt) {
-        NSLog(@"🔄 Fetching new receipt from App Store.");
         NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
         NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
 
         if (!receiptData) {
-            NSLog(@"No receipt found. User may not have purchased any subscriptions.");
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             isRequestInProgress = NO;  // Reset flag
@@ -153,7 +125,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestDict options:0 error:&error];
 
     if (error) {
-        NSLog(@"JSON serialization error: %@", error.localizedDescription);
         [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         isRequestInProgress = NO;  // Reset flag
@@ -164,11 +135,10 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     [FileServer performPostRequestWithURL:@"https://rors.ai/verify_receipt"
                                        method:@"POST"
                                   contentType:@"application/json"
-                                         body:jsonData // Assuming jsonData is already an NSData object
+                                         body:jsonData
                             completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
         isRequestInProgress = NO;
         if (error) {
-            NSLog(@"Error verifying receipt: %@", error.localizedDescription);
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             completion(NO, nil);
@@ -176,7 +146,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         }
         NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
         if (!jsonResponse || ![jsonResponse isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"Invalid response from server.");
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             completion(NO, nil);
@@ -188,13 +157,10 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             if (sessionToken && [sessionToken isKindOfClass:[NSString class]]) {
                 [self storeSessionTokenInKeychain:sessionToken];
                 [[NSUserDefaults standardUserDefaults] setObject:[NSDate dateWithTimeIntervalSinceNow:45 * 60] forKey:@"expiry"];
-            } else {
-                NSLog(@"Warning: No valid session_token in response.");
             }
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {
             [self clearSessionTokenFromKeychain];
-            NSLog(@"🚨 Subscription has expired.");
         }
         [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
@@ -213,12 +179,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 
     // Delete any existing token first
     SecItemDelete((__bridge CFDictionaryRef)query);
-
     // Add the new token
     OSStatus status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
-    if (status != errSecSuccess) {
-        NSLog(@"Failed to store session token in Keychain: %d", (int)status);
-    }
 }
 
 - (void)clearSessionTokenFromKeychain {

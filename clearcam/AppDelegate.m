@@ -11,7 +11,6 @@
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    NSLog(@"App launched with options: %@", launchOptions);
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     center.delegate = self;
 
@@ -19,7 +18,6 @@
     if (launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey]) {
         NSDictionary *userInfo = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
         self.pendingNotification = userInfo;
-        NSLog(@"Launched from notification: %@", userInfo);
         // Only process if notifications are enabled
         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"] && userInfo[@"aps"][@"content-available"]) {
             [self handleNotificationReceived:userInfo];
@@ -30,7 +28,6 @@
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
-    NSLog(@"Application became active");
     if (self.pendingNotification && [[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
         [self handleNotificationNavigation];
         self.pendingNotification = nil;
@@ -41,7 +38,6 @@
 
 - (void)handleNotificationNavigation {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"Handling notification navigation (user tapped)");
         UIWindow *window = [UIApplication sharedApplication].keyWindow;
         UIViewController *rootVC = window.rootViewController;
         
@@ -52,10 +48,7 @@
         
         if ([topVC isKindOfClass:[UINavigationController class]]) {
             UINavigationController *nav = (UINavigationController *)topVC;
-            if ([nav.topViewController isKindOfClass:[GalleryViewController class]]) {
-                NSLog(@"GalleryViewController already visible");
-                return;
-            }
+            if ([nav.topViewController isKindOfClass:[GalleryViewController class]]) return;
         }
         
         GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
@@ -72,7 +65,7 @@
 }
 
 - (void)handleNotificationReceived:(NSDictionary *)userInfo {
-    NSLog(@"Notification received (user did NOT tap): %@", userInfo);
+    NSLog(@"Notification received %@", userInfo);
     GalleryViewController *gallery = [[GalleryViewController alloc] init];
     sleep(15); // Consider replacing this with a proper async operation
     [gallery getEvents];
@@ -90,10 +83,6 @@
     for (int i = 0; i < deviceToken.length; i++) {
         [token appendFormat:@"%02x", dataBuffer[i]];
     }
-    
-    NSLog(@"Device Token: %@", token);
-    
-    // Save token to NSUserDefaults
     [[NSUserDefaults standardUserDefaults] setObject:token forKey:@"device_token"];
     [[NSUserDefaults standardUserDefaults] synchronize];
     [FileServer sendDeviceTokenToServer];
@@ -108,7 +97,6 @@
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
     NSDictionary *userInfo = notification.request.content.userInfo;
-    NSLog(@"Will present notification: %@", userInfo);
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
         if (userInfo[@"aps"][@"content-available"]) {
             [self handleNotificationReceived:userInfo];
@@ -123,7 +111,6 @@
 didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void (^)(void))completionHandler {
     NSDictionary *userInfo = response.notification.request.content.userInfo;
-    NSLog(@"User tapped notification: %@", userInfo);
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
         [self handleNotificationNavigation];
     }
@@ -133,34 +120,21 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 - (void)application:(UIApplication *)application
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
-    NSLog(@"Received remote notification: %@", userInfo);
-    
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"receive_notif_enabled"]) {
         completionHandler(UIBackgroundFetchResultNoData);
         return;
     }
     
     if (userInfo[@"aps"][@"content-available"]) {
-        NSLog(@"Background notification detected");
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             [self handleNotificationReceived:userInfo];
             completionHandler(UIBackgroundFetchResultNewData);
         });
     } else {
-        if (application.applicationState == UIApplicationStateInactive) {
-            NSLog(@"App inactive - handling navigation");
-            self.pendingNotification = userInfo;
-        } else if (application.applicationState == UIApplicationStateBackground) {
-            NSLog(@"App in background - storing notification");
-            self.pendingNotification = userInfo;
-        } else {
-            NSLog(@"App in foreground - regular notification received");
-        }
+        if (application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground) self.pendingNotification = userInfo;
         completionHandler(UIBackgroundFetchResultNoData);
     }
 }
-
-#pragma mark - Core Data Stack
 
 @synthesize persistentContainer = _persistentContainer;
 
@@ -168,10 +142,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
     if (_persistentContainer == nil) {
         _persistentContainer = [[NSPersistentContainer alloc] initWithName:@"SegmentsModel"];
         [_persistentContainer loadPersistentStoresWithCompletionHandler:^(NSPersistentStoreDescription *storeDescription, NSError *error) {
-            if (error) {
-                NSLog(@"Unresolved error %@, %@", error, error.userInfo);
-                abort();
-            }
+            if (error) abort();
         }];
     }
     return _persistentContainer;

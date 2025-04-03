@@ -164,18 +164,12 @@ NSMutableDictionary *classColorMap;
 
     if ([self.captureSession canSetSessionPreset:presetString]) {
         self.captureSession.sessionPreset = presetString;
-    } else {
-        NSLog(@"Unsupported preset: %@", presetString);
-        return;
-    }
+    } else return;
 
     AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
     NSError *error = nil;
     AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
-    if (!input) {
-        NSLog(@"Error setting up camera input: %@", error.localizedDescription);
-        return;
-    }
+    if (!input) return;
     [self.captureSession addInput:input];
 
     AVCaptureVideoDataOutput *output = [[AVCaptureVideoDataOutput alloc] init];
@@ -233,19 +227,12 @@ NSMutableDictionary *classColorMap;
     NSError *error = nil;
     if (![[NSFileManager defaultManager] fileExistsAtPath:dayFolderURL.path]) {
         [[NSFileManager defaultManager] createDirectoryAtURL:dayFolderURL withIntermediateDirectories:YES attributes:nil error:&error];
-        if (error) {
-            NSLog(@"Error creating day folder: %@", error.localizedDescription);
-            return;
-        }
+        if (error) return;
     }
     
     NSURL *outputURL = [dayFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
     self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
-    if (error) {
-        NSLog(@"Error creating asset writer: %@", error.localizedDescription);
-        return;
-    }
-    
+    if (error) return;
     // Check if the device supports HEVC encoding
     NSDictionary *videoSettings;
     videoSettings = @{
@@ -286,7 +273,6 @@ NSMutableDictionary *classColorMap;
     if ([self.assetWriter canAddInput:self.videoWriterInput]) {
         [self.assetWriter addInput:self.videoWriterInput];
     } else {
-        NSLog(@"Cannot add video writer input");
         return;
     }
     
@@ -295,10 +281,7 @@ NSMutableDictionary *classColorMap;
     self.isRecording = YES;
     [self.assetWriter startWriting];
     [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
-    if(![self ensureFreeDiskSpace]) {
-        [self stopRecording];
-        NSLog(@"no space, recording stopped. Delete some stuff");
-    }
+    if(![self ensureFreeDiskSpace]) [self stopRecording];
 }
 
 
@@ -592,21 +575,14 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)stopRecording {
-    if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) {
-        NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
-        return;
-    }
-    
+    if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) return;
     self.isRecording = NO;
     [self.videoWriterInput markAsFinished];
 }
 
 
 - (void)finishRecording {
-    if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) {
-        NSLog(@"Cannot finish writing. Asset writer status: %ld", (long)self.assetWriter.status);
-        return;
-    }
+    if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) return;
     
     NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
     [[NSFileManager defaultManager] createDirectoryAtPath:segmentsDirectory withIntermediateDirectories:YES attributes:nil error:nil];
@@ -641,8 +617,6 @@ NSMutableDictionary *classColorMap;
                     if (![self.fileServer.context save:&parentError]) {
                         NSLog(@"Failed to save parent context: %@", parentError.localizedDescription);
                     }
-                } else {
-                    NSLog(@"Failed to save segment: %@", error.localizedDescription);
                 }
                 
                 // Create a local copy of current_segment_squares, moved to after file save
@@ -660,10 +634,7 @@ NSMutableDictionary *classColorMap;
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
                 NSManagedObject *dayEntity;
                 
-                if (error) {
-                    NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
-                    return;
-                }
+                if (error) return;
                 
                 if (fetchedDays.count > 0) {
                     dayEntity = fetchedDays.firstObject;
@@ -723,7 +694,6 @@ NSMutableDictionary *classColorMap;
     if (!error) {
         return [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
     } else {
-        NSLog(@"Error converting dictionary to JSON string: %@", error.localizedDescription);
         return nil;
     }
 }
@@ -732,10 +702,7 @@ NSMutableDictionary *classColorMap;
     NSError *error = nil;
     NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:&error];
 
-    if (error) {
-        NSLog(@"Error retrieving file system info: %@", error.localizedDescription);
-        return 0;
-    }
+    if (error) return 0;
 
     uint64_t freeSpace = [[attributes objectForKey:NSFileSystemFreeSize] unsignedLongLongValue];
     return freeSpace;
@@ -755,13 +722,9 @@ NSMutableDictionary *classColorMap;
             NSError *fetchError = nil;
             NSArray *dayEntities = [self.fileServer.context executeFetchRequest:fetchRequest error:&fetchError];
 
-            if (fetchError) {
-                NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-                return YES;
-            }
+            if (fetchError) return YES;
 
             if (dayEntities.count == 0 || lastDeletedDayIndex >= dayEntities.count) {
-                NSLog(@"No more DayEntities available. Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
                 [defaults synchronize];
@@ -770,10 +733,6 @@ NSMutableDictionary *classColorMap;
 
             // Fetch event timestamps from Core Data
             NSArray *eventDataArray = [self.fileServer fetchEventDataFromCoreData:self.fileServer.context];
-            if (!eventDataArray || eventDataArray.count == 0) {
-                NSLog(@"No event timestamps found.");
-            }
-
             NSMutableArray<NSNumber *> *eventTimestamps = [NSMutableArray array];
             NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
             [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
@@ -855,12 +814,8 @@ NSMutableDictionary *classColorMap;
                                         [defaults setInteger:lastDeletedSegmentIndex forKey:@"LastDeletedSegmentIndex"];
                                         [defaults synchronize];
                                         return YES;
-                                    } else {
-                                        NSLog(@"Failed to save context after deletion: %@", saveError.localizedDescription);
                                     }
                                 }
-                            } else {
-                                NSLog(@"Failed to delete file %@: %@", segmentURL, deleteError.localizedDescription);
                             }
                         }
                     } @catch (NSException *exception) {
@@ -874,8 +829,6 @@ NSMutableDictionary *classColorMap;
                     [defaults setInteger:dayIndex forKey:@"LastDeletedDayIndex"];
                     [defaults setInteger:lastDeletedSegmentIndex forKey:@"LastDeletedSegmentIndex"];
                     [defaults synchronize];
-                } else {
-                    NSLog(@"Failed to save context: %@", saveError.localizedDescription);
                 }
 
                 // Reset segment index for the next day
@@ -884,7 +837,6 @@ NSMutableDictionary *classColorMap;
 
             // If nothing was deleted, reset the indexes
             if (!deletedFile) {
-                NSLog(@"No more files to delete but still low on space! Resetting deletion indexes.");
                 [defaults removeObjectForKey:@"LastDeletedDayIndex"];
                 [defaults removeObjectForKey:@"LastDeletedSegmentIndex"];
                 [defaults synchronize];
@@ -895,7 +847,6 @@ NSMutableDictionary *classColorMap;
         NSLog(@"Exception in ensureFreeDiskSpace: %@", exception.reason);
         return YES;
     }
-    //NSLog(@"Free space = %f MB", (double)[[[[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue] / (1024.0 * 1024.0));
     return YES;
 }
 

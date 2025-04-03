@@ -30,7 +30,6 @@
     NSString *filePathToSend = imagePath;
 
     if (imagePath.length == 0) {
-        NSLog(@"Image path is empty. Generating blank image.");
         CGSize imageSize = CGSizeMake(1280, 720);
         UIGraphicsBeginImageContext(imageSize);
         CGContextRef context = UIGraphicsGetCurrentContext();
@@ -47,24 +46,15 @@
         imageData = [NSData dataWithContentsOfFile:imagePath];
     }
 
-    if (!imageData) {
-        NSLog(@"Failed to read image data.");
-        return;
-    }
+    if (!imageData) return;
 
     NSData *fileData = imageData;
     BOOL encryptImage = ![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"];
     if (encryptImage) {
         NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
-        if (!encryptionKey) {
-            NSLog(@"Encryption key not found. Encryption aborted.");
-            return;
-        }
+        if (!encryptionKey) return;
         fileData = [[SecretManager sharedManager] encryptData:imageData withKey:encryptionKey];
-        if (!fileData) {
-            NSLog(@"Encryption failed.");
-            return;
-        }
+        if (!fileData) return;
         filePathToSend = [filePathToSend stringByAppendingString:@".aes"];
     }
 
@@ -86,8 +76,6 @@
             [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
             [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
             [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        } else {
-            NSLog(@"Warning: No session token found in Keychain.");
         }
     }
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
@@ -96,13 +84,7 @@
                                        method:@"POST"
                                   contentType:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary]
                                          body:bodyData
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"Error: %@", error.localizedDescription);
-        } else {
-            NSLog(@"Send request completed successfully.");
-        }
-    }];
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {}];
 }
 
 @end

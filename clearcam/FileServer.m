@@ -50,48 +50,12 @@
 - (void)start {
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     self.context = appDelegate.persistentContainer.viewContext;
-
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSURL *documentsURL = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
-    NSString *documentsPath = [documentsURL path];
-
-    NSError *error;
-    NSArray *contents = [fileManager contentsOfDirectoryAtPath:documentsPath error:&error];
-
-    if (error) {
-        NSLog(@"Failed to get contents of Documents directory: %@", error.localizedDescription);
-        return;
-    }
-
-    if ([SettingsManager sharedManager].delete_on_launch) {
-        [[SecretManager sharedManager] deleteAllKeysWithError:&error];
-        for (NSString *file in contents) {
-            if ([file hasPrefix:@"batch_req"]) continue;
-            NSString *filePath = [documentsPath stringByAppendingPathComponent:file];
-            NSError *error = nil;
-            BOOL success = [fileManager removeItemAtPath:filePath error:&error];
-
-            if (!success) {
-                NSLog(@"Failed to delete %@: %@", file, error.localizedDescription);
-            }
-        }
-        [self deleteAllDayEntitiesAndEventsInContext:self.context];
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedDayIndex"];
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LastDeletedSegmentIndex"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-    }
-    
     self.segment_length = 1;
     self.scanner = [[PortScanner alloc] init];
     self.last_req_time = [NSDate now];
     self.basePath = [self getDocumentsDirectory];
     self.durationCache = [[NSMutableDictionary alloc] init];
-    
-    // Check initial state and start server if enabled
-    BOOL streamViaWiFiEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"stream_via_wifi_enabled"];
-    if (streamViaWiFiEnabled) {
-        [self startServer];
-    }
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"stream_via_wifi_enabled"]) [self startServer];
 }
 
 - (void)dealloc {
@@ -101,26 +65,18 @@
 }
 
 - (void)startServer {
-    if (self.isServerRunning) {
-        return;  // Server already running
-    }
-    
+    if (self.isServerRunning) return;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         @try {
             signal(SIGPIPE, SIG_IGN);
-            
             self.serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-            if (self.serverSocket == -1) {
-                NSLog(@"Failed to create socket: %s", strerror(errno));
-                return;
-            }
-            
+            if (self.serverSocket == -1) return;
             struct sockaddr_in serverAddr;
             memset(&serverAddr, 0, sizeof(serverAddr));
             serverAddr.sin_family = AF_INET;
             serverAddr.sin_addr.s_addr = INADDR_ANY;
             serverAddr.sin_port = htons(80);
-            
+
             int opt = 1;
             setsockopt(self.serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
             
@@ -194,10 +150,7 @@
 - (NSArray *)fetchAndProcessSegmentsFromCoreDataForDateParam:(NSString *)dateParam
                                                       start:(double)startTime
                                                     context:(NSManagedObjectContext *)context {
-    if (!context) {
-        NSLog(@"Context is nil, skipping fetch.");
-        return @[];
-    }
+    if (!context) return @[];
 
     __block NSArray *processedSegments = @[];
 
@@ -210,10 +163,7 @@
         dayFetchRequest.fetchLimit = 1; // We only need one DayEntity
 
         NSArray *fetchedDays = [context executeFetchRequest:dayFetchRequest error:&error];
-        if (error || fetchedDays.count == 0) {
-            NSLog(@"Failed to fetch DayEntity: %@ or no day found for %@", error.localizedDescription, dateParam);
-            return;
-        }
+        if (error || fetchedDays.count == 0) return;
 
         NSManagedObject *dayEntity = fetchedDays.firstObject;
 
@@ -225,10 +175,7 @@
         segmentFetchRequest.resultType = NSDictionaryResultType; // Return dictionaries directly
 
         NSArray *fetchedSegments = [context executeFetchRequest:segmentFetchRequest error:&error];
-        if (error) {
-            NSLog(@"Failed to fetch segments: %@", error.localizedDescription);
-            return;
-        }
+        if (error) return;
 
         processedSegments = fetchedSegments;
     }];
@@ -238,10 +185,7 @@
 - (NSArray *)fetchFramesWithURLsFromCoreDataForDateParam:(NSString *)dateParam
                                                    start:(NSInteger)start
                                                  context:(NSManagedObjectContext *)context {
-    if (!context) {
-        NSLog(@"Context is nil, skipping fetch.");
-        return @[];
-    }
+    if (!context) return @[];
 
     __block NSArray *copiedSegments = @[];
 
@@ -254,15 +198,8 @@
 
         NSArray *fetchedDays = [context executeFetchRequest:dayFetchRequest error:&error];
 
-        if (error) {
-            NSLog(@"Failed to fetch DayEntity: %@", error.localizedDescription);
-            return;
-        }
-
-        if (fetchedDays.count == 0) {
-            NSLog(@"No DayEntity found for date %@", dateParam);
-            return;
-        }
+        if (error) return;
+        if (fetchedDays.count == 0) return;
 
         NSManagedObject *dayEntity = fetchedDays.firstObject;
         NSOrderedSet *segments = [dayEntity valueForKey:@"segments"];
@@ -331,10 +268,7 @@
 - (void)handleClientRequest:(int)clientSocket withBasePath:(NSString *)basePath {
     char requestBuffer[1024];
     ssize_t bytesRead = recv(clientSocket, requestBuffer, sizeof(requestBuffer) - 1, 0);
-    if (bytesRead < 0) {
-        NSLog(@"Failed to read request from client: %s", strerror(errno));
-        return;
-    }
+    if (bytesRead < 0) return;
     requestBuffer[bytesRead] = '\0';
     NSString *request = [NSString stringWithUTF8String:requestBuffer];
     NSRange range = [request rangeOfString:@"GET /"];
@@ -380,7 +314,6 @@
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:[presets allKeys] options:0 error:&error];
 
         if (!jsonData) {
-            NSLog(@"JSON Serialization Error: %@", error.localizedDescription);
             NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
             send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
             return;
@@ -500,10 +433,7 @@
         size_t bytesRead;
         while ((bytesRead = fread(buffer, 1, sizeof(buffer), mergedFile)) > 0) {
             ssize_t bytesSent = send(clientSocket, buffer, bytesRead, 0);
-            if (bytesSent < 0) {
-                NSLog(@"Error sending file data: %s", strerror(errno));
-                break;
-            }
+            if (bytesSent < 0) break;
         }
         fclose(mergedFile);
         
@@ -669,25 +599,15 @@
     const int maxRetries = 3;
     int attempt = 0;
     
-    // Validate context
-    if (!self.context) {
-        NSLog(@"Error: Managed object context is nil");
-        return NO;
-    }
+    if (!self.context) return NO;
     
     // Verify entity exists in model
     NSEntityDescription *entity = [NSEntityDescription entityForName:@"EventEntity"
                                              inManagedObjectContext:self.context];
-    if (!entity) {
-        NSLog(@"Error: Entity 'EventEntity' not found in model");
-        return NO;
-    }
+    if (!entity) return NO;
     
     // Validate timestamp range
-    if (startTimeStamp > endTimeStamp) {
-        NSLog(@"Error: startTimeStamp (%lf) must be less than or equal to endTimeStamp (%lf)", startTimeStamp, endTimeStamp);
-        return NO;
-    }
+    if (startTimeStamp > endTimeStamp) return NO;
     
     // Get the app's Documents directory and images folder
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -696,12 +616,9 @@
     
     while (attempt < maxRetries && !success) {
         attempt++;
-        NSLog(@"Attempt %d to delete events between %lf and %lf", attempt, startTimeStamp, endTimeStamp);
-        
         [self.context performBlockAndWait:^{
             NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
             if (!fetchRequest) {
-                NSLog(@"Failed to create fetch request (attempt %d)", attempt);
                 success = NO;
                 return;
             }
@@ -717,28 +634,23 @@
             NSArray *events = nil;
             @try {
                 events = [self.context executeFetchRequest:fetchRequest error:&fetchError];
-                NSLog(@"Fetched %lu events for deletion (attempt %d)", (unsigned long)events.count, attempt);
             }
             @catch (NSException *exception) {
-                NSLog(@"Fetch exception (attempt %d): %@", attempt, exception.reason);
                 success = NO;
                 return;
             }
             
             if (fetchError) {
-                NSLog(@"Fetch error (attempt %d): %@", attempt, fetchError.localizedDescription);
                 success = NO;
                 return;
             }
             
             if (!events) {
-                NSLog(@"Fetch returned nil array (attempt %d)", attempt);
                 success = YES; // Treat as success if no objects to delete
                 return;
             }
             
             if (events.count == 0) {
-                NSLog(@"No events found in range (attempt %d)", attempt);
                 success = YES; // No events in range, still a success
                 return;
             }
@@ -748,7 +660,6 @@
             for (NSManagedObject *event in events) {
                 NSNumber *timeStampNumber = [event valueForKey:@"timeStamp"];
                 if (!timeStampNumber) {
-                    NSLog(@"Warning: Event missing timestamp, skipping image deletion but deleting event");
                     [self.context deleteObject:event];
                     continue;
                 }
@@ -762,21 +673,13 @@
                 // Delete regular image if it exists
                 NSError *fileError = nil;
                 if ([fileManager fileExistsAtPath:imageFilePath]) {
-                    if ([fileManager removeItemAtPath:imageFilePath error:&fileError]) {
-                        NSLog(@"Deleted image at %@", imageFilePath);
-                    } else {
-                        NSLog(@"Failed to delete image at %@: %@", imageFilePath, fileError.localizedDescription);
-                    }
+                    if ([fileManager removeItemAtPath:imageFilePath error:&fileError]) NSLog(@"Deleted image at %@", imageFilePath);
                 }
                 
                 // Delete small image if it exists
                 fileError = nil;
                 if ([fileManager fileExistsAtPath:smallImageFilePath]) {
-                    if ([fileManager removeItemAtPath:smallImageFilePath error:&fileError]) {
-                        NSLog(@"Deleted small image at %@", smallImageFilePath);
-                    } else {
-                        NSLog(@"Failed to delete small image at %@: %@", smallImageFilePath, fileError.localizedDescription);
-                    }
+                    if ([fileManager removeItemAtPath:smallImageFilePath error:&fileError]) NSLog(@"Deleted small image at %@", smallImageFilePath);
                 }
                 
                 // Delete the event from Core Data

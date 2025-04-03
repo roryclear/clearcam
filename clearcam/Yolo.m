@@ -253,10 +253,7 @@ UInt8 *rgbData;
 
 - (NSArray *)yolo_infer:(CGImageRef)cgImage withOrientation:(AVCaptureVideoOrientation)orientation {
     CFDataRef rawData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
-    if (!rawData) {
-        NSLog(@"Failed to get raw image data");
-        return nil;
-    }
+    if (!rawData) return nil;
 
     const UInt8 *rawBytes = CFDataGetBytePtr(rawData);
     size_t length = CFDataGetLength(rawData);
@@ -289,26 +286,16 @@ UInt8 *rgbData;
     CFRelease(rawData);
 
     id<MTLBuffer> buffer = self.buffers[self.input_buffer];
-    if (!buffer || !buffer.contents) {
-        NSLog(@"Metal buffer is not initialized or invalid");
-        return nil;
-    }
+    if (!buffer || !buffer.contents) return nil;
 
     memset(buffer.contents, 0, buffer.length);
     memcpy(buffer.contents, self.rgbData, MIN(buffer.length, width * width * 3));
 
     for (NSMutableDictionary *values in self._q) {
         id<MTLCommandBuffer> commandBuffer = [self.mtl_queue commandBuffer];
-        if (!commandBuffer) {
-            NSLog(@"Failed to create Metal command buffer");
-            continue;
-        }
-
+        if (!commandBuffer) continue;
         id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
-        if (!encoder) {
-            NSLog(@"Failed to create compute command encoder");
-            continue;
-        }
+        if (!encoder) continue;
 
         [encoder setComputePipelineState:self.pipeline_states[@[values[@"name"][0], values[@"datahash"][0]]]]; //ignore warning
         for (int i = 0; i < [(NSArray *)values[@"bufs"] count]; i++) {
@@ -333,17 +320,11 @@ UInt8 *rgbData;
     [self.mtl_buffers_in_flight removeAllObjects];
 
     buffer = self.buffers[self.output_buffer];
-    if (!buffer || !buffer.contents) {
-        NSLog(@"Output buffer is invalid");
-        return nil;
-    }
+    if (!buffer || !buffer.contents) return nil;
 
     const void *bufferPointer = buffer.contents;
     float *floatArray = malloc(buffer.length);
-    if (!floatArray) {
-        NSLog(@"Memory allocation failed for output array");
-        return nil;
-    }
+    if (!floatArray) return nil;
 
     memcpy(floatArray, bufferPointer, buffer.length);
     NSArray *output = [self processOutput:floatArray];
