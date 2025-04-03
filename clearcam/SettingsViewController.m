@@ -712,8 +712,7 @@
     if (!password) return;
     
     NSError *error = nil;
-    BOOL success = [[SecretManager sharedManager] saveEncryptionKey:password error:&error];
-    if (!success) NSLog(@"Failed to save password to Keychain: %@", error.localizedDescription);
+    [[SecretManager sharedManager] saveEncryptionKey:password error:&error];
 }
 
 - (NSString *)retrievePasswordFromSecretsManager {

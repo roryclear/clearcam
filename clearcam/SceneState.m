@@ -90,9 +90,7 @@
                 NSData *imageData = UIImageJPEGRepresentation(uiImage, 1.0); // 1.0 for maximum quality
                 NSString *filePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%lld_small.jpg", roundedUnixTimestamp]];
                 // Write the image data to file
-                if (![imageData writeToFile:filePath atomically:YES]) {
-                    NSLog(@"Failed to save image at path: %@", filePath);
-                } else {
+                if ([imageData writeToFile:filePath atomically:YES]) {
                     //thumbnail
                     UIGraphicsBeginImageContextWithOptions(CGSizeMake(uiImage.size.width / 2, uiImage.size.height / 2), YES, 1.0);
                     [uiImage drawInRect:CGRectMake(0, 0, uiImage.size.width / 2, uiImage.size.height / 2)];
@@ -101,6 +99,7 @@
                     NSData *lowResImageData = UIImageJPEGRepresentation(resizedImage, 0.7);
                     [lowResImageData writeToFile:filePathSmall atomically:YES];
                     
+                    //todo only send with isSubscribed
                     if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 120) { // only once per hour? enforce server side!
                         NSLog(@"sending email");
                         if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
@@ -111,12 +110,6 @@
                         } else {
                             [self sendEmail:filePath];
                         }
-                        //todo
-                        //if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_email_alerts_enabled"] &&
-                        //    ([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
-                        //     [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])) {
-                    } else {
-                        NSLog(@"NOT sending an email");
                     }
                 }
             }
@@ -129,9 +122,7 @@
                 [newEvent setValue:@(current_state) forKey:@"quantity"];
 
                 NSError *saveError = nil;
-                if (![self.backgroundContext save:&saveError]) {
-                    NSLog(@"Failed to save EventEntity: %@, %@", saveError, saveError.userInfo);
-                }
+                [self.backgroundContext save:&saveError];
             }];
         }
 
@@ -144,7 +135,6 @@
 }
 
 - (void)sendEmail:(NSString *)filePath {
-    NSLog(@"ACC SENDING?");
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])){ //todo add back other stuff
         NSDate *now = [NSDate date];
         NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
@@ -169,11 +159,9 @@
                     NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
                     [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
                 });
-                NSLog(@"Email sent: Within scheduled time");
                 break;
             }
         }
-        NSLog(@"Email suppressed: Outside scheduled time or no matching schedule");
     }
 }
 

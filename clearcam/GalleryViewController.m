@@ -136,9 +136,6 @@
                                   withIntermediateDirectories:YES
                                                    attributes:nil
                                                         error:&error];
-        if (error) {
-            NSLog(@"Failed to create directory: %@", error.localizedDescription);
-        }
     }
 }
 
@@ -191,11 +188,7 @@
     
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
     
-    if (sessionToken) {
-        [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
-    } else {
-        NSLog(@"No session token found in Keychain. Proceeding without it.");
-    }
+    if (sessionToken) [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
     
     NSDate *latestDate = [self latestDownloadedFileDate];
     if (latestDate) {
@@ -215,10 +208,7 @@
             self.isLoadingVideos = NO;
         });
         
-        if (error) {
-            NSLog(@"Request failed: %@", error.localizedDescription);
-            return;
-        }
+        if (error) return;
         
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (httpResponse.statusCode == 200) {
@@ -229,11 +219,7 @@
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self downloadFiles:json[@"files"]];
                 });
-            } else {
-                NSLog(@"JSON parsing error: %@ or no 'files' key in response.", jsonError.localizedDescription);
             }
-        } else {
-            NSLog(@"Request failed with status code: %ld", (long)httpResponse.statusCode);
         }
     }] resume];
 }
@@ -253,7 +239,6 @@
         NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (!sessionToken) {
-            NSLog(@"No session token found in Keychain.");
             dispatch_group_leave(downloadGroup);
             return;
         }
@@ -273,13 +258,6 @@
                 NSURL *destURL = [NSURL fileURLWithPath:destPath];
                 
                 [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
-                if (!moveError) {
-                    NSLog(@"File downloaded to: %@", destPath);
-                } else {
-                    NSLog(@"File move failed with error: %@", moveError.localizedDescription);
-                }
-            } else {
-                NSLog(@"Download failed with error: %@, status code: %ld", error.localizedDescription, (long)[(NSHTTPURLResponse *)response statusCode]);
             }
             dispatch_group_leave(downloadGroup);
         }] resume];
@@ -393,10 +371,7 @@
     NSError *error = nil;
     CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
 
-    if (!imageRef) {
-        NSLog(@"Thumbnail generation failed: %@", error.localizedDescription);
-        return nil;
-    }
+    if (!imageRef) return nil;
 
     UIImage *thumbnail = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
@@ -422,7 +397,6 @@
         NSError *readError = nil;
         NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&readError];
         if (!encryptedData) {
-            NSLog(@"Failed to read .aes file: %@", readError.localizedDescription);
             [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription]];
             return;
         }
@@ -467,9 +441,7 @@
                 NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
                 NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
                 NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
-                if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
-                    NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
-                }
+                if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
                 NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                 if (decryptedURL) {
                     // Reload the table view to reflect the decrypted state
@@ -483,13 +455,11 @@
                     }];
                 }
             } else { // Key didn't work, prompt again
-                NSLog(@"Failed to decrypt data with user-provided key.");
                 [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
                     [self promptUserForKeyWithAESFileURL:aesFileURL encryptedData:encryptedData];
                 }];
             }
         } else { // User canceled
-            NSLog(@"User canceled key entry.");
             [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
         }
     }];
@@ -624,25 +594,16 @@
     CGPoint touchPoint = [sender convertPoint:CGPointZero toView:self.tableView];
     NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:touchPoint];
     
-    if (!indexPath) {
-        NSLog(@"Failed to get indexPath for menu button tap");
-        return;
-    }
+    if (!indexPath)  return;
     
     NSInteger section = indexPath.section;
     NSInteger row = indexPath.row;
     
-    if (section >= self.sectionTitles.count) {
-        NSLog(@"Invalid section: %ld, total sections: %lu", (long)section, (unsigned long)self.sectionTitles.count);
-        return;
-    }
+    if (section >= self.sectionTitles.count) return;
     
     NSString *sectionTitle = self.sectionTitles[section];
     
-    if (row >= self.groupedVideos[sectionTitle].count) {
-        NSLog(@"Invalid row: %ld for section '%@', total rows: %lu", (long)row, sectionTitle, (unsigned long)self.groupedVideos[sectionTitle].count);
-        return;
-    }
+    if (row >= self.groupedVideos[sectionTitle].count) return;
     
     NSString *videoPath = self.groupedVideos[sectionTitle][row];
     NSString *filename = [videoPath lastPathComponent];
@@ -665,27 +626,19 @@
                                                     style:UIAlertActionStyleDestructive
                                                   handler:^(UIAlertAction * _Nonnull action) {
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-        if (!sessionToken) {
-            NSLog(@"No session token found in Keychain. Proceeding with local deletion only.");
-        }
+        if (!sessionToken) NSLog(@"No session token found in Keychain. Proceeding with local deletion only.");
         
         NSError *localError;
         NSFileManager *fileManager = [NSFileManager defaultManager];
         
         if ([fileManager fileExistsAtPath:videoPath]) {
             [fileManager removeItemAtPath:videoPath error:&localError];
-            if (localError) {
-                NSLog(@"Failed to delete decrypted file at %@: %@", videoPath, localError.localizedDescription);
-                return;
-            }
+            if (localError) return;
         }
         
         if ([fileManager fileExistsAtPath:originalAesPath]) {
             [fileManager removeItemAtPath:originalAesPath error:&localError];
-            if (localError) {
-                NSLog(@"Failed to delete original .aes file at %@: %@", originalAesPath, localError.localizedDescription);
-                return;
-            }
+            if (localError) return;
         }
         
         [self.videoFiles removeObject:videoPath];
@@ -716,11 +669,6 @@
             
             [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
                 NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-                if (!error && httpResponse.statusCode == 200) {
-                    NSLog(@"Successfully deleted %@ from backend", backendFilename);
-                } else {
-                    NSLog(@"Failed to delete from backend: %@, status code: %ld", error.localizedDescription, (long)httpResponse.statusCode);
-                }
             }] resume];
         }
     }]];
@@ -746,10 +694,7 @@
     
     NSError *writeError = nil;
     [decryptedData writeToURL:decFileURL options:NSDataWritingAtomic error:&writeError];
-    if (writeError) {
-        NSLog(@"Failed to write decrypted data: %@", writeError.localizedDescription);
-        return nil;
-    }
+    if (writeError) return nil;
     
     NSError *attributesError = nil;
     NSDictionary *originalAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:[aesFileURL path] error:&attributesError];
@@ -758,14 +703,8 @@
         if (originalCreationDate) {
             NSDictionary *newAttributes = @{NSFileCreationDate: originalCreationDate};
             [[NSFileManager defaultManager] setAttributes:newAttributes ofItemAtPath:[decFileURL path] error:&attributesError];
-            if (attributesError) {
-                NSLog(@"Failed to set creation date: %@", attributesError.localizedDescription);
-            }
         }
-    } else {
-        NSLog(@"Failed to get original attributes: %@", attributesError.localizedDescription);
     }
-    
     return decFileURL;
 }
 

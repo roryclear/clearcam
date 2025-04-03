@@ -65,7 +65,6 @@
 }
 
 - (void)handleNotificationReceived:(NSDictionary *)userInfo {
-    NSLog(@"Notification received %@", userInfo);
     GalleryViewController *gallery = [[GalleryViewController alloc] init];
     sleep(15); // Consider replacing this with a proper async operation
     [gallery getEvents];
@@ -86,11 +85,6 @@
     [[NSUserDefaults standardUserDefaults] setObject:token forKey:@"device_token"];
     [[NSUserDefaults standardUserDefaults] synchronize];
     [FileServer sendDeviceTokenToServer];
-}
-
-
-- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
-    NSLog(@"Failed to register for remote notifications: %@", error);
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center

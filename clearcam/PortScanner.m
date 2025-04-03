@@ -119,7 +119,6 @@
 - (void)throttledScanNetworkForPort:(int)port withBatchSize:(int)batchSize completion:(void (^)(NSArray<NSString *> *openPorts))completion {
     NSDictionary *ipInfo = [self getLocalIPInfo];
     if (!ipInfo) {
-        NSLog(@"Failed to get local IP info.");
         if (completion) completion(@[]);
         return;
     }

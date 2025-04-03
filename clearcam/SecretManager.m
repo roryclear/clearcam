@@ -44,10 +44,7 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
                 }
             }
         }
-    } else if (status != errSecItemNotFound) {
-        NSLog(@"Failed to retrieve keys from Keychain: %d", (int)status);
     }
-    
     return [keys copy];
 }
 
@@ -80,7 +77,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
 
     OSStatus status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
     if (status != errSecSuccess) {
-        NSLog(@"Failed to save encryption key: %d", (int)status);
         if (error) {
             *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
                                          code:status

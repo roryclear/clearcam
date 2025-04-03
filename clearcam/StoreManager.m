@@ -43,10 +43,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     [self purchaseProduct];
 }
 
-- (void)request:(SKRequest *)request didFailWithError:(NSError *)error {
-    NSLog(@"Failed to fetch products: %@", error.localizedDescription);
-}
-
 #pragma mark - Purchase Product
 
 - (void)purchaseProduct {
@@ -189,12 +185,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         (__bridge id)kSecAttrService: @"com.clearcam.session",
         (__bridge id)kSecAttrAccount: @"sessionToken"
     };
-
-    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
-    if (status != errSecSuccess && status != errSecItemNotFound) {
-        NSLog(@"Failed to clear session token from Keychain: %d", (int)status);
-    }
-}
+    SecItemDelete((__bridge CFDictionaryRef)query);}
 
 // Optional: Retrieve the session token if needed later
 - (NSString *)retrieveSessionTokenFromKeychain {

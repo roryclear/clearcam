@@ -81,14 +81,12 @@
             setsockopt(self.serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
             
             if (bind(self.serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
-                NSLog(@"Failed to bind socket: %s", strerror(errno));
                 close(self.serverSocket);
                 self.serverSocket = -1;
                 return;
             }
             
             if (listen(self.serverSocket, 5) == -1) {
-                NSLog(@"Failed to listen on socket: %s", strerror(errno));
                 close(self.serverSocket);
                 self.serverSocket = -1;
                 return;
@@ -106,7 +104,6 @@
             }
             
         } @catch (NSException *exception) {
-            NSLog(@"Exception in server: %@", exception);
             self.isServerRunning = NO;
             if (self.serverSocket != -1) {
                 close(self.serverSocket);
@@ -669,67 +666,33 @@
                 NSString *imageFileName = [NSString stringWithFormat:@"%lld", roundedTimestamp];
                 NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@".jpg"]];
                 NSString *smallImageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@"_small.jpg"]];
-                
-                // Delete regular image if it exists
+
                 NSError *fileError = nil;
-                if ([fileManager fileExistsAtPath:imageFilePath]) {
-                    if ([fileManager removeItemAtPath:imageFilePath error:&fileError]) NSLog(@"Deleted image at %@", imageFilePath);
-                }
-                
-                // Delete small image if it exists
-                fileError = nil;
-                if ([fileManager fileExistsAtPath:smallImageFilePath]) {
-                    if ([fileManager removeItemAtPath:smallImageFilePath error:&fileError]) NSLog(@"Deleted small image at %@", smallImageFilePath);
-                }
-                
-                // Delete the event from Core Data
+                if ([fileManager fileExistsAtPath:imageFilePath]) [fileManager removeItemAtPath:imageFilePath error:&fileError];
+                if ([fileManager fileExistsAtPath:smallImageFilePath]) [fileManager removeItemAtPath:smallImageFilePath error:&fileError];
                 [self.context deleteObject:event];
-                NSLog(@"Marked event with timestamp %lf for deletion", timeStamp);
             }
             
             // Save changes
             if ([self.context hasChanges]) {
-                NSLog(@"Context has %lu deleted objects to save (attempt %d)", (unsigned long)[self.context.deletedObjects count], attempt);
                 NSError *saveError = nil;
                 @try {
                     success = [self.context save:&saveError];
-                    if (success) {
-                        NSLog(@"Successfully saved deletions (attempt %d)", attempt);
-                    } else {
-                        NSLog(@"Save failed (attempt %d): %@", attempt, saveError.localizedDescription);
-                    }
                 }
                 @catch (NSException *exception) {
-                    NSLog(@"Save exception (attempt %d): %@", attempt, exception.reason);
                     success = NO;
                 }
             } else {
-                NSLog(@"No changes detected in context (attempt %d)", attempt);
                 success = YES; // No changes to save, but this shouldn't happen if events were deleted
             }
         }];
-        
-        if (!success) {
-            NSLog(@"Retrying batch delete (attempt %d/%d)...", attempt, maxRetries);
-            [NSThread sleepForTimeInterval:0.1];
-        }
+        if (!success) [NSThread sleepForTimeInterval:0.1];
     }
-    
-    if (!success) {
-        NSLog(@"Failed to delete events between %lf and %lf after %d attempts", startTimeStamp, endTimeStamp, maxRetries);
-    } else {
-        NSLog(@"Successfully deleted events between %lf and %lf", startTimeStamp, endTimeStamp);
-    }
-    
     return success;
 }
 
 - (NSArray *)fetchFramesForURL:(NSString *)url context:(NSManagedObjectContext *)context {
-    if (!context) {
-        NSLog(@"Context is nil, skipping fetch.");
-        return @[];
-    }
-
+    if (!context) return @[];
     __block NSArray *framesForURL = @[];
 
     [context performBlockAndWait:^{
@@ -743,16 +706,8 @@
         segmentFetchRequest.returnsObjectsAsFaults = NO;
 
         NSArray *segments = [context executeFetchRequest:segmentFetchRequest error:&error];
-        if (error) {
-            NSLog(@"Failed to fetch segment for URL %@: %@", url, error.localizedDescription);
-            return;
-        }
-
-        if (segments.count == 0) {
-            NSLog(@"No segment found for URL %@", url);
-            return;
-        }
-
+        if (error) return;
+        if (segments.count == 0) return;
         NSManagedObject *segment = segments.firstObject;
         NSArray *frames = [[segment valueForKey:@"frames"] array];
         NSMutableArray *tempFrames = [NSMutableArray arrayWithCapacity:frames.count];
@@ -799,31 +754,14 @@
 + (void)sendDeviceTokenToServer {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *deviceToken = [defaults stringForKey:@"device_token"];
-    if (!deviceToken || deviceToken.length == 0) {
-        NSLog(@"No device token found, skipping API call.");
-        return;
-    }
+    if (!deviceToken || deviceToken.length == 0) return;
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken || sessionToken.length == 0) {
-        NSLog(@"No session token found in Keychain. Skipping API call.");
-        return;
-    }
-    
+    if (!sessionToken || sessionToken.length == 0) return;
     [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
                                        method:@"POST"
                                   contentType:@"application/json"
                                          body:@{@"device_token": deviceToken, @"session_token": sessionToken}
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"Error sending device token: %@", error.localizedDescription);
-            return;
-        }
-        if (response.statusCode == 200) {
-            NSLog(@"Device token successfully sent to server");
-        } else {
-            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)response.statusCode);
-        }
-    }];
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) { if (error) return; }];
 }
 
 + (void)performPostRequestWithURL:(NSString *)urlString
@@ -866,11 +804,7 @@
     for (NSString *filePath in filePaths) {
         AVAsset *asset = [AVAsset assetWithURL:[NSURL fileURLWithPath:filePath]];
 
-        if (asset.tracks.count == 0) {
-            NSLog(@"Error: No tracks found in asset %@", filePath);
-            continue;
-        }
-
+        if (asset.tracks.count == 0) continue;
         AVAssetTrack *videoAssetTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
 
         NSError *error = nil;
@@ -878,9 +812,6 @@
                             ofTrack:videoAssetTrack
                              atTime:currentTime
                               error:&error];
-
-        if (error) NSLog(@"Error inserting video track: %@", error.localizedDescription);
-
         currentTime = CMTimeAdd(currentTime, asset.duration);
     }
 
@@ -896,22 +827,15 @@
 
     [exportSession exportAsynchronouslyWithCompletionHandler:^{
         if (exportSession.status == AVAssetExportSessionStatusCompleted) {
-            if (![[NSFileManager defaultManager] fileExistsAtPath:outputPath]) NSLog(@"File not found in Documents: %@", outputPath);
             completion(outputPath, nil);
         } else {
-            NSLog(@"Export failed: %@", exportSession.error.localizedDescription);
             completion(nil, exportSession.error);
         }
     }];
 }
 
 - (NSArray *)fetchEventDataFromCoreData:(NSManagedObjectContext *)context {
-    // Validate context
-    if (!context) {
-        NSLog(@"Error: Managed object context is nil");
-        return @[];
-    }
-    
+    if (!context) return @[];
     __block NSArray *eventDataArray = nil;
     
     // Perform fetch synchronously on the context's queue
@@ -928,19 +852,11 @@
             fetchedEvents = [context executeFetchRequest:fetchRequest error:&error];
         }
         @catch (NSException *exception) {
-            NSLog(@"Fetch exception: %@", exception.reason);
             eventDataArray = @[];
             return;
         }
         
-        if (error) {
-            NSLog(@"Error fetching events: %@, %@", error, error.userInfo);
-            eventDataArray = @[];
-            return;
-        }
-        
-        if (!fetchedEvents) {
-            NSLog(@"Fetch returned nil array");
+        if (error || !fetchedEvents) {
             eventDataArray = @[];
             return;
         }
@@ -952,10 +868,7 @@
         for (NSManagedObject *event in fetchedEvents) {
             // Safely access attributes with nil checks
             NSNumber *timeStampNumber = [event valueForKey:@"timeStamp"];
-            if (!timeStampNumber) {
-                NSLog(@"Warning: Event missing timestamp, skipping");
-                continue;
-            }
+            if (!timeStampNumber) continue;
             
             NSTimeInterval timestamp = [timeStampNumber doubleValue];
             long long roundedTimestamp = (long long)timestamp;
@@ -983,10 +896,7 @@
         size_t chunkSize = fread(buffer, 1, sizeof(buffer), file);
         if (chunkSize == 0) break;
         ssize_t bytesSent = send(socket, buffer, chunkSize, 0);
-        if (bytesSent < 0) {
-            NSLog(@"Failed to send data: %s", strerror(errno));
-            break;
-        }
+        if (bytesSent < 0) break;
         bytesToSend -= bytesSent;
     }
 }
@@ -998,11 +908,7 @@
     NSFetchRequest *eventFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"EventEntity"];
     NSArray *eventEntities = [context executeFetchRequest:eventFetchRequest error:&fetchError];
 
-    if (fetchError) {
-        NSLog(@"Failed to fetch EventEntity objects: %@", fetchError.localizedDescription);
-        return;
-    }
-
+    if (fetchError) return;
     for (NSManagedObject *eventEntity in eventEntities) {
         [context deleteObject:eventEntity];
     }
@@ -1011,10 +917,7 @@
     NSFetchRequest *dayFetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
     NSArray *dayEntities = [context executeFetchRequest:dayFetchRequest error:&fetchError];
 
-    if (fetchError) {
-        NSLog(@"Failed to fetch DayEntity objects: %@", fetchError.localizedDescription);
-        return;
-    }
+    if (fetchError) return;
 
     for (NSManagedObject *dayEntity in dayEntities) {
         [context deleteObject:dayEntity];
@@ -1062,7 +965,6 @@
     dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
     __block NSInteger trimCount = 0;
 
-    NSLog(@"Requested range: %.2f to %.2f (duration: %.2f seconds)", relativeStart, relativeEnd, requestedDuration);
     for (NSInteger i = 0; i < segments.count; i++) {
         NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
         NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
@@ -1073,16 +975,11 @@
         }
 
         NSString *originalFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segments[i][@"url"]];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:originalFilePath]) {
-            NSLog(@"Segment file not found: %@", originalFilePath);
-            continue;
-        }
+        if (![[NSFileManager defaultManager] fileExistsAtPath:originalFilePath]) continue;
 
         NSTimeInterval trimStart = MAX(0, relativeStart - segmentStart);
         NSTimeInterval trimEnd = MIN(segmentDuration, relativeEnd - segmentStart);
         NSTimeInterval trimmedDuration = trimEnd - trimStart;
-
-        NSLog(@"Segment %ld: %.2f to %.2f (duration: %.2f), trimming to %.2f-%.2f (%.2f seconds)", (long)i, segmentStart, segmentEnd, segmentDuration, trimStart, trimEnd, trimmedDuration);
 
         NSString *trimmedFilePath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"trimmed_%ld.mp4", (long)i]];
         AVURLAsset *asset = [AVURLAsset assetWithURL:[NSURL fileURLWithPath:originalFilePath]];
@@ -1096,7 +993,6 @@
         if (CMTimeCompare(CMTimeAdd(startTime, durationTime), CMTimeMakeWithSeconds(segmentDuration, 600)) > 0) {
             durationTime = CMTimeSubtract(CMTimeMakeWithSeconds(segmentDuration, 600), startTime);
             timeRange = CMTimeRangeMake(startTime, durationTime);
-            NSLog(@"Adjusted duration for segment %ld to fit asset: %.2f seconds", (long)i, CMTimeGetSeconds(durationTime));
         }
         exportSession.timeRange = timeRange;
 
@@ -1126,16 +1022,6 @@
 
         trimCount++;
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
-            switch (exportSession.status) {
-                case AVAssetExportSessionStatusCompleted:
-                    NSLog(@"Processed segment %ld successfully%@, duration: %.2f seconds", (long)i, low_res ? @" at 960x540" : @"", CMTimeGetSeconds(timeRange.duration));
-                    break;
-                case AVAssetExportSessionStatusFailed:
-                    NSLog(@"Failed to process segment %ld: %@", (long)i, exportSession.error);
-                    break;
-                default:
-                    break;
-            }
             dispatch_semaphore_signal(trimSema);
         }];
     }
@@ -1192,8 +1078,7 @@
     NSError *renameError = nil;
     [[NSFileManager defaultManager] moveItemAtPath:outputPath toPath:newOutputPath error:&renameError];
     if (renameError) {
-        NSLog(@"Failed to rename file: %@", renameError);
-        return outputPath; // Return original path if renaming fails
+        return outputPath;
     }
 
     return newOutputPath;

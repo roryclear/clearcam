@@ -58,18 +58,15 @@
         NSError *downloadError = nil;
         [aesFileURL getResourceValue:&downloadStatus forKey:NSURLUbiquitousItemDownloadingStatusKey error:&downloadError];
         if (downloadError) {
-            NSLog(@"Error checking iCloud download status: %@", downloadError.localizedDescription);
             [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to check iCloud status: %@", downloadError.localizedDescription] completion:nil];
             return;
         }
 
-        NSLog(@"iCloud download status: %@", downloadStatus);
 
         if (![downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
             NSError *downloadStartError = nil;
             [fileManager startDownloadingUbiquitousItemAtURL:aesFileURL error:&downloadStartError];
             if (downloadStartError) {
-                NSLog(@"Failed to start downloading iCloud file: %@", downloadStartError.localizedDescription);
                 [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to start download: %@", downloadStartError.localizedDescription] completion:nil];
                 return;
             }
@@ -80,7 +77,6 @@
     } else {
         // Check if the file exists locally (for non-iCloud files)
         if (![fileManager fileExistsAtPath:aesFileURL.path]) {
-            NSLog(@"File does not exist at path: %@", aesFileURL.path);
             [self showErrorAlertWithMessage:@"The file does not exist or is not accessible." completion:nil];
             return;
         }
@@ -97,7 +93,6 @@
         NSError *readError = nil;
         NSData *encryptedData = [NSData dataWithContentsOfURL:newURL options:0 error:&readError];
         if (!encryptedData) {
-            NSLog(@"Failed to read .aes file: %@", readError.localizedDescription);
             [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription] completion:nil];
             return;
         }
@@ -126,10 +121,7 @@
         }
     }];
 
-    if (coordinationError) {
-        NSLog(@"File coordination failed: %@", coordinationError.localizedDescription);
-        [self showErrorAlertWithMessage:[NSString stringWithFormat:@"File access failed: %@", coordinationError.localizedDescription] completion:nil];
-    }
+    if (coordinationError) [self showErrorAlertWithMessage:[NSString stringWithFormat:@"File access failed: %@", coordinationError.localizedDescription] completion:nil];
 }
 
 // Helper method to handle decrypted data
@@ -158,20 +150,16 @@
                 NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
                 NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
                 NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
-                if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) {
-                    NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
-                }
+                [[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError];
                 NSURL *url = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                 if(url) [self openImageInPhotoViewer:url];
             } else { // Key didn't work, prompt again
-                NSLog(@"Failed to decrypt data with user-provided key.");
                 [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
                     // Call the method again instead of the block
                     [self promptUserForKeyWithAESFileURL:aesFileURL encryptedData:encryptedData];
                 }];
             }
         } else { // User canceled
-            NSLog(@"User canceled key entry.");
             [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file." completion:nil];
         }
     }];
@@ -263,8 +251,6 @@
     NSMetadataQuery *query = notification.object;
     [query enumerateResultsUsingBlock:^(NSMetadataItem *result, NSUInteger idx, BOOL *stop) {
         NSString *downloadStatus = [result valueForAttribute:NSMetadataUbiquitousItemDownloadingStatusKey];
-        NSLog(@"Download status updated: %@", downloadStatus);
-
         if ([downloadStatus isEqualToString:NSURLUbiquitousItemDownloadingStatusCurrent]) {
             // File is downloaded, stop the query and handle the file
             [query stopQuery];

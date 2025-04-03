@@ -614,9 +614,7 @@ NSMutableDictionary *classColorMap;
                 if ([self.backgroundContext save:&error]) {
                     // Save parent context only if necessary
                     NSError *parentError = nil;
-                    if (![self.fileServer.context save:&parentError]) {
-                        NSLog(@"Failed to save parent context: %@", parentError.localizedDescription);
-                    }
+                    [self.fileServer.context save:&parentError];
                 }
                 
                 // Create a local copy of current_segment_squares, moved to after file save
