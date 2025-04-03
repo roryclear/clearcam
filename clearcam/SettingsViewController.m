@@ -191,7 +191,7 @@
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
                     NSLog(@"Notifications already authorized, sending token...");
-                    [self sendDeviceTokenToServer]; // ✅ Always send token when toggled ON
+                    [self sendDeviceTokenToServer]; // Send token when toggled ON
                 } else if (!hasRequestedPermission) {
                     NSLog(@"Requesting permission for notifications...");
                     [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
@@ -203,7 +203,7 @@
                                 [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
                                 [defaults synchronize];
                                 
-                                [self sendDeviceTokenToServer]; // ✅ Send token after granting permission
+                                [self sendDeviceTokenToServer]; // Send token after granting permission
                             } else {
                                 NSLog(@"Notification permission denied: %@", error);
                                 self.receiveNotifEnabled = NO;
@@ -240,6 +240,9 @@
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
         [center removeAllPendingNotificationRequests];
         [center removeAllDeliveredNotifications];
+        
+        // Delete device token from server
+        [self deleteDeviceTokenFromServer];
     }
 }
 
@@ -290,7 +293,51 @@
     [task resume];
 }
 
-
+- (void)deleteDeviceTokenFromServer {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    
+    if (!deviceToken || deviceToken.length == 0) {
+        NSLog(@"No device token found, skipping API call.");
+        return;
+    }
+    
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) {
+        NSLog(@"No session token found in Keychain. Skipping API call.");
+        return;
+    }
+    
+    NSURL *url = [NSURL URLWithString:@"https://web.ai/delete_device"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"DELETE";  // Changed from POST to DELETE
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    NSDictionary *body = @{
+        @"device_token": deviceToken,
+        @"session_token": sessionToken
+    };
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    request.HTTPBody = jsonData;
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error deleting device token: %@", error.localizedDescription);
+            return;
+        }
+        
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode == 200) {
+            NSLog(@"Device token successfully deleted from server");
+        } else {
+            NSLog(@"Failed to delete device token, server responded with status code: %ld", (long)httpResponse.statusCode);
+        }
+    }];
+    
+    [task resume];
+}
 
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
