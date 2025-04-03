@@ -29,11 +29,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
-    // Basic setup
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Settings";
-    
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
         [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -188,53 +185,55 @@
 
     if (sender.on) {
         NSLog(@"Receive Notifications on This Device turned ON");
-        
-        if (!hasRequestedPermission) {
-            UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-            [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
-                                  completionHandler:^(BOOL granted, NSError * _Nullable error) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (granted) {
-                        NSLog(@"Notification permission granted");
-                        [[UIApplication sharedApplication] registerForRemoteNotifications];
-                        [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
-                        [defaults synchronize];
-                    } else {
-                        NSLog(@"Notification permission denied: %@", error);
-                        self.receiveNotifEnabled = NO;
-                        [defaults setBool:NO forKey:@"receive_notif_enabled"];
-                        [defaults synchronize];
-                        sender.on = NO;
-                        
-                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Permission Denied"
-                                                                                      message:@"Notification permission was denied. You can enable it in Settings."
-                                                                               preferredStyle:UIAlertControllerStyleAlert];
-                        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                        [self presentViewController:alert animated:YES completion:nil];
-                    }
-                });
-            }];
-        } else {
-            UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-            [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (settings.authorizationStatus != UNAuthorizationStatusAuthorized) {
-                        self.receiveNotifEnabled = NO;
-                        [defaults setBool:NO forKey:@"receive_notif_enabled"];
-                        [defaults synchronize];
-                        sender.on = NO;
-                        
-                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enable in Settings"
-                                                                                      message:@"Notifications are disabled. Please enable them in the Settings app."
-                                                                               preferredStyle:UIAlertControllerStyleAlert];
-                        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                        [self presentViewController:alert animated:YES completion:nil];
-                    } else {
-                        NSLog(@"Notifications already authorized");
-                    }
-                });
-            }];
-        }
+
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
+                    NSLog(@"Notifications already authorized, sending token...");
+                    [self sendDeviceTokenToServer]; // ✅ Always send token when toggled ON
+                } else if (!hasRequestedPermission) {
+                    NSLog(@"Requesting permission for notifications...");
+                    [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
+                                          completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (granted) {
+                                NSLog(@"Notification permission granted");
+                                [[UIApplication sharedApplication] registerForRemoteNotifications];
+                                [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
+                                [defaults synchronize];
+                                
+                                [self sendDeviceTokenToServer]; // ✅ Send token after granting permission
+                            } else {
+                                NSLog(@"Notification permission denied: %@", error);
+                                self.receiveNotifEnabled = NO;
+                                [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                                [defaults synchronize];
+                                sender.on = NO;
+                                
+                                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Permission Denied"
+                                                                                              message:@"Notification permission was denied. You can enable it in Settings."
+                                                                                       preferredStyle:UIAlertControllerStyleAlert];
+                                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                                [self presentViewController:alert animated:YES completion:nil];
+                            }
+                        });
+                    }];
+                } else {
+                    NSLog(@"Notifications not authorized, showing settings alert.");
+                    self.receiveNotifEnabled = NO;
+                    [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                    [defaults synchronize];
+                    sender.on = NO;
+                    
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enable in Settings"
+                                                                                  message:@"Notifications are disabled. Please enable them in the Settings app."
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
+                    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:alert animated:YES completion:nil];
+                }
+            });
+        }];
     } else {
         NSLog(@"Receive Notifications on This Device turned OFF");
         // Clear any pending notifications when turning off
@@ -243,6 +242,55 @@
         [center removeAllDeliveredNotifications];
     }
 }
+
+
+- (void)sendDeviceTokenToServer {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    
+    if (!deviceToken || deviceToken.length == 0) {
+        NSLog(@"No device token found, skipping API call.");
+        return;
+    }
+    
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) {
+        NSLog(@"No session token found in Keychain. Skipping API call.");
+        return;
+    }
+    
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/add_device"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    NSDictionary *body = @{
+        @"device_token": deviceToken,
+        @"session_token": sessionToken
+    };
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    request.HTTPBody = jsonData;
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error sending device token: %@", error.localizedDescription);
+            return;
+        }
+        
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode == 200) {
+            NSLog(@"Device token successfully sent to server");
+        } else {
+            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)httpResponse.statusCode);
+        }
+    }];
+    
+    [task resume];
+}
+
+
 
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{

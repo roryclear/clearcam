@@ -1,6 +1,7 @@
 #import "AppDelegate.h"
 #import <UserNotifications/UserNotifications.h>
 #import "GalleryViewController.h"
+#import "StoreManager.h"
 
 @interface AppDelegate () <UNUserNotificationCenterDelegate>
 @property (nonatomic, strong) NSDictionary *pendingNotification;
@@ -83,12 +84,20 @@
     if (!dataBuffer) {
         return;
     }
+    
     NSMutableString *token = [NSMutableString stringWithCapacity:(deviceToken.length * 2)];
     for (int i = 0; i < deviceToken.length; i++) {
         [token appendFormat:@"%02x", dataBuffer[i]];
     }
+    
     NSLog(@"Device Token: %@", token);
+    
+    // Save token to NSUserDefaults
+    [[NSUserDefaults standardUserDefaults] setObject:token forKey:@"device_token"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [self sendDeviceTokenToServer];
 }
+
 
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     NSLog(@"Failed to register for remote notifications: %@", error);
@@ -107,6 +116,52 @@
     } else {
         completionHandler(0); // No presentation options when disabled
     }
+}
+
+- (void)sendDeviceTokenToServer { //todo duplicate!!
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    
+    if (!deviceToken || deviceToken.length == 0) {
+        NSLog(@"No device token found, skipping API call.");
+        return;
+    }
+    
+    // Retrieve session token from Keychain
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) {
+        NSLog(@"No session token found in Keychain. Skipping API call.");
+        return;
+    }
+    
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/add_device"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    
+    NSDictionary *body = @{
+        @"device_token": deviceToken,
+        @"session_token": sessionToken
+    };
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    request.HTTPBody = jsonData;
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Error sending device token: %@", error.localizedDescription);
+            return;
+        }
+        
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode == 200) {
+            NSLog(@"Device token successfully sent to server");
+        } else {
+            NSLog(@"Failed to send device token, server responded with status code: %ld", (long)httpResponse.statusCode);
+        }
+    }];
+    
+    [task resume];
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
