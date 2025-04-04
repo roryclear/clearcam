@@ -664,11 +664,9 @@
                 NSTimeInterval timeStamp = [timeStampNumber doubleValue];
                 long long roundedTimestamp = (long long)floor(timeStamp); // Floor to integer
                 NSString *imageFileName = [NSString stringWithFormat:@"%lld", roundedTimestamp];
-                NSString *imageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@".jpg"]];
                 NSString *smallImageFilePath = [imagesDirectory stringByAppendingPathComponent:[imageFileName stringByAppendingString:@"_small.jpg"]];
 
                 NSError *fileError = nil;
-                if ([fileManager fileExistsAtPath:imageFilePath]) [fileManager removeItemAtPath:imageFilePath error:&fileError];
                 if ([fileManager fileExistsAtPath:smallImageFilePath]) [fileManager removeItemAtPath:smallImageFilePath error:&fileError];
                 [self.context deleteObject:event];
             }
