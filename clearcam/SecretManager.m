@@ -310,13 +310,11 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
         return nil;
     }
     
-    // Step 2: Check if the decrypted data is long enough to contain the header
     if (numBytesDecrypted < HEADER_SIZE) {
         free(buffer);
-        return nil; // Data is too short to contain a valid header
+        return nil; 
     }
-    
-    // Step 3: Extract and verify the magic number from the header
+
     uint64_t decryptedMagicNumber;
     memcpy(&decryptedMagicNumber, buffer, HEADER_SIZE);
     if (decryptedMagicNumber != MAGIC_NUMBER) {

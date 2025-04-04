@@ -454,20 +454,18 @@
                         [playerVC.player play];
                     }];
                 }
-            } else { // Key didn't work, prompt again
+            } else {
                 [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
                     [self promptUserForKeyWithAESFileURL:aesFileURL encryptedData:encryptedData];
                 }];
             }
-        } else { // User canceled
-            [self showErrorAlertWithMessage:@"Decryption canceled. A valid key is required to decrypt the file."];
         }
     }];
 }
 
 - (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
-                                                                  message:@"Please provide the key to decrypt the file."
+                                                                  message:@"Please enter the password used by your device to encrypt this data."
                                                            preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {

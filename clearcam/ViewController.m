@@ -234,7 +234,6 @@ NSMutableDictionary *classColorMap;
     NSURL *outputURL = [dayFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"output_%@.mp4", finalTimestamp]];
     self.assetWriter = [AVAssetWriter assetWriterWithURL:outputURL fileType:AVFileTypeMPEG4 error:&error];
     if (error) return;
-    // Check if the device supports HEVC encoding
     NSDictionary *videoSettings;
     videoSettings = @{
         AVVideoCodecKey: AVVideoCodecTypeH264, // Fallback to H.264
@@ -776,7 +775,6 @@ NSMutableDictionary *classColorMap;
                     }
 
                     double segmentSecondsSinceMidnight = segmentTimeStampNumber.doubleValue;
-                    // Check if the segment is within ±60 seconds of any event timestamp
                     BOOL shouldSkipDeletion = NO;
                     for (NSNumber *eventTimestamp in eventTimestamps) {
                         double eventSecondsSinceMidnight = eventTimestamp.doubleValue;
@@ -1022,10 +1020,7 @@ NSMutableDictionary *classColorMap;
     // Check rotation
     CGAffineTransform transform = self.videoWriterInput.transform;
     CGFloat angle = atan2(transform.b, transform.a);
-
-    // Convert radians to degrees
     CGFloat degrees = angle * (180.0 / M_PI);
-
     size_t width_res = CVPixelBufferGetWidth(pixelBuffer);
     size_t height_res = CVPixelBufferGetHeight(pixelBuffer);
 
@@ -1127,7 +1122,3 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-
-
-
-

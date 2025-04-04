@@ -625,8 +625,8 @@
 
 - (void)testnotificationServer {
     [[notification sharedInstance] sendNotification];
-    UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Test Initiated"
-                                                                        message:@"Test notification has been initiated. Check your server logs for results."
+    UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Sent"
+                                                                        message:@"Test notification sent. Check your server."
                                                                  preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
                                                        style:UIAlertActionStyleDefault
@@ -668,7 +668,7 @@
 
 - (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Password"
-                                                                   message:@"Enter a password to encrypt and decrypt your data"
+                                                                   message:@"Enter a password to encrypt your data"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
