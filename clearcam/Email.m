@@ -15,7 +15,7 @@
     return sharedInstance;
 }
 
-- (void)sendEmailWithImageAtPath:(NSString *)imagePath {
+- (void)sendNotification {
     NSString *server = @"https://www.rors.ai";
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
@@ -26,6 +26,39 @@
     }
 
     NSString *endpoint = @"/send";
+    NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
+    NSMutableData *bodyData = [NSMutableData data];
+
+    // Retrieve session token
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken) return;
+
+    // Add "session_token" field
+    [bodyData appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[@"Content-Disposition: form-data; name=\"session_token\"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[sessionToken dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+
+    [FileServer performPostRequestWithURL:[server stringByAppendingString:endpoint]
+                                   method:@"POST"
+                              contentType:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary]
+                                     body:bodyData
+                        completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {}];
+}
+
+
+- (void)uploadImageAtPath:(NSString *)imagePath {
+    NSString *server = @"https://www.rors.ai";
+    
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
+        server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
+        if (![server hasPrefix:@"http"]) {
+            server = [@"http://" stringByAppendingString:server];
+        }
+    }
+
+    NSString *endpoint = @"/upload";
     NSData *imageData = nil;
     NSString *filePathToSend = imagePath;
 
