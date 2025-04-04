@@ -112,6 +112,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [UIApplication sharedApplication].idleTimerDisabled = YES;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self.captureSession startRunning];
     });
@@ -547,6 +548,12 @@ NSMutableDictionary *classColorMap;
 - (void)viewWillLayoutSubviews {
     [super viewWillLayoutSubviews];
     self.previewLayer.frame = [self frameForCurrentOrientation];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    // Enable auto-locking (important!)
+    [UIApplication sharedApplication].idleTimerDisabled = NO;
 }
 
 - (CGRect)frameForCurrentOrientation {
