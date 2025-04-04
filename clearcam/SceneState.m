@@ -19,7 +19,7 @@
         self.lastN = [NSMutableArray array];
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.alerts = [SettingsManager sharedManager].alerts;
-        self.last_email_time = [NSDate dateWithTimeIntervalSince1970:0];
+        self.last_notif_time = [NSDate dateWithTimeIntervalSince1970:0];
 
         // Get Core Data context from AppDelegate
         AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
@@ -56,7 +56,8 @@
         int last_state = (int)roundf((last_totalValue ? [last_totalValue floatValue] : 0.0) / 10.0);
         self.lastN_total[events[i]] = totalValue;
         
-        if (current_state != last_state) {
+        if (current_state != last_state && self.last_notif_time && [[NSDate date] timeIntervalSinceDate:self.last_notif_time] > 60) { //one event per min for now
+            self.last_notif_time = [NSDate now];
             NSDate *date = [NSDate date];
             NSTimeInterval unixTimestamp = [date timeIntervalSince1970];
             long long roundedUnixTimestamp = (long long)unixTimestamp;
@@ -99,17 +100,13 @@
                     NSData *lowResImageData = UIImageJPEGRepresentation(resizedImage, 0.7);
                     [lowResImageData writeToFile:filePathSmall atomically:YES];
                     
-                    //todo only send with isSubscribed
-                    if (self.last_email_time && [[NSDate date] timeIntervalSinceDate:self.last_email_time] > 120) { // only once per hour? enforce server side!
-                        NSLog(@"sending email");
-                        if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
-                            NSLog(@"verifying subscription");
-                            [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                                [self sendEmail:filePath];
-                            }];
-                        } else {
+                    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+                        NSLog(@"verifying subscription");
+                        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
                             [self sendEmail:filePath];
-                        }
+                        }];
+                    } else {
+                        [self sendEmail:filePath];
                     }
                 }
             }
@@ -150,7 +147,6 @@
 
             if (currentTime >= startTime && currentTime <= endTime) {
                 [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
-                self.last_email_time = now;
                 if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
                 NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
                 NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
