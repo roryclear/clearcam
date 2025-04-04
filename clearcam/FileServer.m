@@ -168,7 +168,7 @@
         NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
         segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"day == %@ AND timeStamp >= %f", dayEntity, startTime];
         segmentFetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"timeStamp" ascending:YES]]; // Consistent ordering
-        segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration"];
+        segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration", @"orientation"];
         segmentFetchRequest.resultType = NSDictionaryResultType; // Return dictionaries directly
 
         NSArray *fetchedSegments = [context executeFetchRequest:segmentFetchRequest error:&error];
@@ -930,8 +930,8 @@
 
 
 - (NSString *)processVideoDownloadWithLowRes:(BOOL)low_res
-                                  startTime:(NSTimeInterval)startTimeStamp
-                                    endTime:(NSTimeInterval)endTimeStamp
+                                 startTime:(NSTimeInterval)startTimeStamp
+                                   endTime:(NSTimeInterval)endTimeStamp
                                    context:(NSManagedObjectContext *)context {
     NSDate *startDate = [NSDate dateWithTimeIntervalSince1970:startTimeStamp];
     NSDate *endDate = [NSDate dateWithTimeIntervalSince1970:endTimeStamp];
@@ -965,6 +965,8 @@
     dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
     __block NSInteger trimCount = 0;
 
+    NSInteger orientation = -1;
+
     for (NSInteger i = 0; i < segments.count; i++) {
         NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
         NSTimeInterval segmentDuration = [segments[i][@"duration"] doubleValue];
@@ -973,6 +975,8 @@
         if (segmentEnd <= relativeStart || segmentStart >= relativeEnd) {
             continue;
         }
+        if(orientation == -1) orientation = [segments[i][@"orientation"] intValue];
+
 
         NSString *originalFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segments[i][@"url"]];
         if (![[NSFileManager defaultManager] fileExistsAtPath:originalFilePath]) continue;
@@ -996,28 +1000,45 @@
         }
         exportSession.timeRange = timeRange;
 
+        AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+        CGSize naturalSize = videoTrack.naturalSize;
+        AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
+        videoComposition.frameDuration = CMTimeMake(1, 24); // 24 fps
+
+        AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+        instruction.timeRange = timeRange;
+        AVMutableVideoCompositionLayerInstruction *layerInstruction = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
+        CGAffineTransform transform = CGAffineTransformIdentity;
+        CGSize renderSize = naturalSize;
+
         if (low_res) {
-            AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
-            AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
-            if (videoTrack) {
-                videoComposition.renderSize = CGSizeMake(960, 540); // 540p
-                videoComposition.frameDuration = CMTimeMake(1, 24); // 24 fps
+            CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
+            transform = CGAffineTransformScale(transform, scale, scale);
+            renderSize = CGSizeApplyAffineTransform(naturalSize, CGAffineTransformMakeScale(scale, scale));
+        }
 
-                AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
-                instruction.timeRange = timeRange;
+        if (orientation == 1) {
+            renderSize = CGSizeMake(naturalSize.height, naturalSize.width);
+            CGAffineTransform translate = CGAffineTransformMakeTranslation(naturalSize.height, 0);
+            CGAffineTransform rotate = CGAffineTransformRotate(translate, M_PI_2);
+            transform = rotate;
+        } else if (orientation == 4) {
+            transform = CGAffineTransformTranslate(transform, naturalSize.width / 2.0, naturalSize.height / 2.0);
+            transform = CGAffineTransformRotate(transform, M_PI);
+            transform = CGAffineTransformTranslate(transform, -naturalSize.width / 2.0, -naturalSize.height / 2.0);
+        }
 
-                AVMutableVideoCompositionLayerInstruction *layerInstruction = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
-                CGSize naturalSize = videoTrack.naturalSize;
-                CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
-                CGAffineTransform transform = CGAffineTransformMakeScale(scale, scale);
-                [layerInstruction setTransform:transform atTime:kCMTimeZero];
+        [layerInstruction setTransform:transform atTime:kCMTimeZero];
+        instruction.layerInstructions = @[layerInstruction];
+        videoComposition.instructions = @[instruction];
+        videoComposition.renderSize = renderSize;
 
-                instruction.layerInstructions = @[layerInstruction];
-                videoComposition.instructions = @[instruction];
-            }
+        if (low_res) {
             exportSession.videoComposition = videoComposition;
             exportSession.shouldOptimizeForNetworkUse = YES;
             exportSession.fileLengthLimit = 5 * 1024 * 1024 * (trimmedDuration / 60.0); // ~5 MB per minute
+        } else if (orientation == 1 || orientation == 4) {
+            exportSession.videoComposition = videoComposition;
         }
 
         trimCount++;
@@ -1068,7 +1089,7 @@
     [renameFormatter setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
     NSString *startTimeStr = [renameFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:startTimeStamp]];
     NSString *endTimeStr = [renameFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:endTimeStamp]];
-    NSString *newFileName = [NSString stringWithFormat:@"%s-%s.mp4", startTimeStr.UTF8String, endTimeStr.UTF8String];
+    NSString *newFileName = [NSString stringWithFormat:@"%@-%@.mp4", startTimeStr, endTimeStr];
 
     // Get the directory of the original outputPath and construct the new path
     NSString *directory = [outputPath stringByDeletingLastPathComponent];

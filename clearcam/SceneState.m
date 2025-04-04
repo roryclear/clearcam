@@ -146,14 +146,14 @@
             NSInteger endTime = [schedule[@"endHour"] integerValue] * 60 + [schedule[@"endMinute"] integerValue];
 
             if (currentTime >= startTime && currentTime <= endTime) {
-                [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                [[Email sharedInstance] sendNotification];
                 if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
                 NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
                 NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
                 id context = [FileServer sharedInstance].context;
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
-                    [[Email sharedInstance] sendEmailWithImageAtPath:filePath];
+                    [[Email sharedInstance] uploadImageAtPath:filePath];
                 });
                 break;
             }

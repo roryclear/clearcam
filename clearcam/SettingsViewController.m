@@ -624,7 +624,7 @@
 }
 
 - (void)testEmailServer {
-    [[Email sharedInstance] sendEmailWithImageAtPath:@""];
+    [[Email sharedInstance] sendNotification];
     UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Test Initiated"
                                                                         message:@"Test email has been initiated. Check your server logs for results."
                                                                  preferredStyle:UIAlertControllerStyleAlert];

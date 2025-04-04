@@ -3,6 +3,7 @@
 @interface Email : NSObject
 
 + (instancetype)sharedInstance;
-- (void)sendEmailWithImageAtPath:(NSString *)imagePath;
+- (void)uploadImageAtPath:(NSString *)imagePath;
+- (void)sendNotification;
 
 @end
