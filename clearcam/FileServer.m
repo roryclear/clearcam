@@ -168,7 +168,7 @@
         NSFetchRequest *segmentFetchRequest = [[NSFetchRequest alloc] initWithEntityName:@"SegmentEntity"];
         segmentFetchRequest.predicate = [NSPredicate predicateWithFormat:@"day == %@ AND timeStamp >= %f", dayEntity, startTime];
         segmentFetchRequest.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"timeStamp" ascending:YES]]; // Consistent ordering
-        segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration"];
+        segmentFetchRequest.propertiesToFetch = @[@"url", @"timeStamp", @"duration", @"orientation"];
         segmentFetchRequest.resultType = NSDictionaryResultType; // Return dictionaries directly
 
         NSArray *fetchedSegments = [context executeFetchRequest:segmentFetchRequest error:&error];
@@ -964,6 +964,9 @@
 
     dispatch_semaphore_t trimSema = dispatch_semaphore_create(0);
     __block NSInteger trimCount = 0;
+    
+    NSInteger orientation = [segments[0][@"orientation"] intValue];
+    NSLog(@"rory orientation = %ld",(long)orientation);
 
     for (NSInteger i = 0; i < segments.count; i++) {
         NSTimeInterval segmentStart = [segments[i][@"timeStamp"] doubleValue];
@@ -973,7 +976,7 @@
         if (segmentEnd <= relativeStart || segmentStart >= relativeEnd) {
             continue;
         }
-
+        
         NSString *originalFilePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:segments[i][@"url"]];
         if (![[NSFileManager defaultManager] fileExistsAtPath:originalFilePath]) continue;
 

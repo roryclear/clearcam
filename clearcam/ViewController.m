@@ -646,8 +646,11 @@ NSMutableDictionary *classColorMap;
                 [newSegment setValuesForKeysWithDictionary:@{
                     @"url": segmentURL,
                     @"timeStamp": @(timeStamp),
-                    @"duration": @(CMTimeGetSeconds(time))
+                    @"duration": @(CMTimeGetSeconds(time)),
+                    @"orientation": @((int16_t)self.previewLayer.connection.videoOrientation)
                 }];
+                
+                NSLog(@"rory %ld",(long)self.previewLayer.connection.videoOrientation);
                 
                 // Pre-allocate frames array
                 NSMutableArray<NSManagedObject *> *segmentFrames = [NSMutableArray arrayWithCapacity:segmentSquaresCopy.count];
