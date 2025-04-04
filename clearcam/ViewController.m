@@ -649,10 +649,6 @@ NSMutableDictionary *classColorMap;
                     @"duration": @(CMTimeGetSeconds(time)),
                     @"orientation": @((int16_t)self.previewLayer.connection.videoOrientation)
                 }];
-                
-                NSLog(@"rory %ld",(long)self.previewLayer.connection.videoOrientation);
-                
-                // Pre-allocate frames array
                 NSMutableArray<NSManagedObject *> *segmentFrames = [NSMutableArray arrayWithCapacity:segmentSquaresCopy.count];
                 
                 for (NSDictionary *frameData in segmentSquaresCopy) {
@@ -679,8 +675,6 @@ NSMutableDictionary *classColorMap;
                 [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
                 [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
             }];
-            
-            // Start new recording
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.isProcessingCoreData = NO;
                 [self startNewRecording];
