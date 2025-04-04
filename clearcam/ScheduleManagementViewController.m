@@ -26,18 +26,18 @@
 - (void)doneTapped:(id)sender {
     // Save changes and pop back
     if (self.completionHandler) {
-        self.completionHandler(self.emailSchedules);
+        self.completionHandler(self.notificationSchedules);
     }
     [self.navigationController popViewControllerAnimated:YES];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.emailSchedules.count;
+    return self.notificationSchedules.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ScheduleCell" forIndexPath:indexPath];
-    NSDictionary *schedule = self.emailSchedules[indexPath.row];
+    NSDictionary *schedule = self.notificationSchedules[indexPath.row];
     
     cell.textLabel.text = [self scheduleDescriptionFor:schedule];
     cell.detailTextLabel.text = nil;
@@ -68,17 +68,17 @@
 
 - (void)toggleSwitchChanged:(UISwitch *)sender {
     NSInteger index = sender.tag;
-    NSMutableDictionary *schedule = [self.emailSchedules[index] mutableCopy];
+    NSMutableDictionary *schedule = [self.notificationSchedules[index] mutableCopy];
     schedule[@"enabled"] = @(sender.on);
-    self.emailSchedules[index] = schedule;
+    self.notificationSchedules[index] = schedule;
     [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]] withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     ScheduleEditorViewController *editorVC = [[ScheduleEditorViewController alloc] init];
-    editorVC.schedule = [self.emailSchedules[indexPath.row] mutableCopy];
+    editorVC.schedule = [self.notificationSchedules[indexPath.row] mutableCopy];
     editorVC.completionHandler = ^(NSDictionary *updatedSchedule) {
-        self.emailSchedules[indexPath.row] = updatedSchedule;
+        self.notificationSchedules[indexPath.row] = updatedSchedule;
         [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
     };
     [self.navigationController pushViewController:editorVC animated:YES];
@@ -86,13 +86,13 @@
 }
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSDictionary *schedule = self.emailSchedules[indexPath.row];
+    NSDictionary *schedule = self.notificationSchedules[indexPath.row];
     return ([schedule[@"days"] count] == 7 && [schedule[@"startHour"] isEqual:@0] && [schedule[@"startMinute"] isEqual:@0] && [schedule[@"endHour"] isEqual:@23] && [schedule[@"endMinute"] isEqual:@59]) ? UITableViewCellEditingStyleNone : UITableViewCellEditingStyleDelete;
 }
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (editingStyle == UITableViewCellEditingStyleDelete) {
-        [self.emailSchedules removeObjectAtIndex:indexPath.row];
+        [self.notificationSchedules removeObjectAtIndex:indexPath.row];
         [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
     }
 }
@@ -106,14 +106,14 @@
         @"endMinute": @59,
         @"enabled": @YES
     } mutableCopy];
-    [self.emailSchedules addObject:newSchedule];
-    NSInteger newIndex = self.emailSchedules.count - 1;
+    [self.notificationSchedules addObject:newSchedule];
+    NSInteger newIndex = self.notificationSchedules.count - 1;
     [self.tableView insertRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:newIndex inSection:0]] withRowAnimation:UITableViewRowAnimationAutomatic];
     
     ScheduleEditorViewController *editorVC = [[ScheduleEditorViewController alloc] init];
     editorVC.schedule = newSchedule;
     editorVC.completionHandler = ^(NSDictionary *updatedSchedule) {
-        self.emailSchedules[newIndex] = updatedSchedule;
+        self.notificationSchedules[newIndex] = updatedSchedule;
         [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:newIndex inSection:0]] withRowAnimation:UITableViewRowAnimationNone];
     };
     [self.navigationController pushViewController:editorVC animated:YES];

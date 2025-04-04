@@ -4,7 +4,7 @@
 #import "AppDelegate.h"
 #import "StoreManager.h"
 #import "FileServer.h"
-#import "Email.h"
+#import "notification.h"
 #import <MobileCoreServices/MobileCoreServices.h> // Add this import
 #import <CommonCrypto/CommonCryptor.h>
 
@@ -103,10 +103,10 @@
                     if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
                         NSLog(@"verifying subscription");
                         [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                            [self sendEmail:filePath];
+                            [self sendnotification:filePath];
                         }];
                     } else {
-                        [self sendEmail:filePath];
+                        [self sendnotification:filePath];
                     }
                 }
             }
@@ -131,7 +131,7 @@
     }
 }
 
-- (void)sendEmail:(NSString *)filePath {
+- (void)sendnotification:(NSString *)filePath {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])){ //todo add back other stuff
         NSDate *now = [NSDate date];
         NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
@@ -146,14 +146,14 @@
             NSInteger endTime = [schedule[@"endHour"] integerValue] * 60 + [schedule[@"endMinute"] integerValue];
 
             if (currentTime >= startTime && currentTime <= endTime) {
-                [[Email sharedInstance] sendNotification];
+                [[notification sharedInstance] sendNotification];
                 if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
                 NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
                 NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
                 id context = [FileServer sharedInstance].context;
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSString *filePath = [[FileServer sharedInstance] processVideoDownloadWithLowRes:YES startTime:start endTime:end context:context];
-                    [[Email sharedInstance] uploadImageAtPath:filePath];
+                    [[notification sharedInstance] uploadImageAtPath:filePath];
                 });
                 break;
             }

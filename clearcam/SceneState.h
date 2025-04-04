@@ -11,6 +11,6 @@
 @property (strong, nonatomic) NSManagedObjectContext *backgroundContext;
 @property (strong, nonatomic) NSDate *last_notif_time;
 - (void)processOutput:(NSArray *)array withImage:(CIImage *)image;
-- (void)sendEmail:(NSString *)filePath; //todo, remove
+- (void)sendnotification:(NSString *)filePath; //todo, remove
 
 @end

@@ -3,7 +3,7 @@
 #import "SecretManager.h"
 #import "StoreManager.h"
 #import "NumberSelectionViewController.h"
-#import "Email.h"
+#import "notification.h"
 #import "FileServer.h"
 #import "ScheduleManagementViewController.h"
 #import <UserNotifications/UserNotifications.h>
@@ -17,8 +17,8 @@
 @property (nonatomic, assign) BOOL sendNotifEnabled;
 @property (nonatomic, assign) BOOL receiveNotifEnabled; // New property for receiving notifications
 @property (nonatomic, assign) BOOL useOwnServerEnabled;
-@property (nonatomic, assign) BOOL isEmailServerSectionExpanded; // Track if email server section is expanded
-@property (nonatomic, strong) NSString *emailServerAddress; // Store the email server address
+@property (nonatomic, assign) BOOL isnotificationServerSectionExpanded; // Track if notification server section is expanded
+@property (nonatomic, strong) NSString *notificationServerAddress; // Store the notification server address
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *notificationSchedules; // Array to store notification schedules
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
 @property (nonatomic, strong) id ipAddressObserver;
@@ -106,8 +106,8 @@
         [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
     }
     
-    self.isEmailServerSectionExpanded = self.useOwnServerEnabled;
-    self.emailServerAddress = [defaults stringForKey:@"own_email_server_address"] ?: @"http://192.168.1.1";
+    self.isnotificationServerSectionExpanded = self.useOwnServerEnabled;
+    self.notificationServerAddress = [defaults stringForKey:@"own_notification_server_address"] ?: @"http://192.168.1.1";
     
     [defaults synchronize];
     
@@ -151,9 +151,9 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *ipAddress = [defaults stringForKey:@"DeviceIPAddress"];
     if (ipAddress && ipAddress.length > 0) {
-        self.emailServerAddress = [NSString stringWithFormat:@"http://%@", ipAddress];
+        self.notificationServerAddress = [NSString stringWithFormat:@"http://%@", ipAddress];
     } else {
-        self.emailServerAddress = @"Waiting for IP...";
+        self.notificationServerAddress = @"Waiting for IP...";
     }
 }
 
@@ -307,7 +307,7 @@
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) { // Camera Settings
         NSInteger baseRows = 9; // All settings except Receive Notifications
-        if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded) {
+        if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded) {
             baseRows += 2;
         }
         if (self.isPresetsSectionExpanded) {
@@ -417,16 +417,16 @@
             } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Use Own Notification Server";
                 cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *useOwnEmailServerSwitch = [[UISwitch alloc] init];
-                useOwnEmailServerSwitch.on = self.useOwnServerEnabled;
-                [useOwnEmailServerSwitch addTarget:self action:@selector(useOwnEmailServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = useOwnEmailServerSwitch;
+                UISwitch *useOwnnotificationServerSwitch = [[UISwitch alloc] init];
+                useOwnnotificationServerSwitch.on = self.useOwnServerEnabled;
+                [useOwnnotificationServerSwitch addTarget:self action:@selector(useOwnnotificationServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = useOwnnotificationServerSwitch;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
+            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + offset) {
                 cell.textLabel.text = @"Server Address";
-                cell.detailTextLabel.text = self.emailServerAddress;
+                cell.detailTextLabel.text = self.notificationServerAddress;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + offset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
@@ -537,7 +537,7 @@
                 }
             } else if (indexPath.row == 7 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
-                scheduleVC.emailSchedules = [self.notificationSchedules mutableCopy];
+                scheduleVC.notificationSchedules = [self.notificationSchedules mutableCopy];
                 scheduleVC.completionHandler = ^(NSArray<NSDictionary *> *schedules) {
                     self.notificationSchedules = [schedules mutableCopy];
                     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -548,10 +548,10 @@
                 [self.navigationController pushViewController:scheduleVC animated:YES];
             } else if (indexPath.row == 8 + offset) {
                 // Use Own Notification Server - handled by switch
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 9 + offset) {
-                [self showEmailServerAddressInputDialog];
-            } else if (self.useOwnServerEnabled && self.isEmailServerSectionExpanded && indexPath.row == 10 + offset) {
-                [self testEmailServer];
+            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + offset) {
+                [self shownotificationServerAddressInputDialog];
+            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + offset) {
+                [self testnotificationServer];
             }
         }
     } else if (indexPath.section == 1) { // Viewer Settings
@@ -579,9 +579,9 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)useOwnEmailServerSwitchToggled:(UISwitch *)sender {
+- (void)useOwnnotificationServerSwitchToggled:(UISwitch *)sender {
     self.useOwnServerEnabled = sender.on;
-    self.isEmailServerSectionExpanded = sender.on;
+    self.isnotificationServerSectionExpanded = sender.on;
     
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
@@ -590,14 +590,14 @@
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
-- (void)showEmailServerAddressInputDialog {
+- (void)shownotificationServerAddressInputDialog {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Server Address"
-                                                                   message:@"Please enter the address of your email server."
+                                                                   message:@"Please enter the address of your notification server."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.placeholder = @"Server Address";
-        textField.text = self.emailServerAddress;
+        textField.text = self.notificationServerAddress;
     }];
     
     UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
@@ -605,9 +605,9 @@
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *address = alert.textFields.firstObject.text;
         if (address.length > 0) {
-            self.emailServerAddress = address;
+            self.notificationServerAddress = address;
             NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-            [defaults setObject:address forKey:@"own_email_server_address"];
+            [defaults setObject:address forKey:@"own_notification_server_address"];
             [defaults synchronize];
             [self.tableView reloadData];
         }
@@ -623,10 +623,10 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)testEmailServer {
-    [[Email sharedInstance] sendNotification];
+- (void)testnotificationServer {
+    [[notification sharedInstance] sendNotification];
     UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Test Initiated"
-                                                                        message:@"Test email has been initiated. Check your server logs for results."
+                                                                        message:@"Test notification has been initiated. Check your server logs for results."
                                                                  preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
                                                        style:UIAlertActionStyleDefault

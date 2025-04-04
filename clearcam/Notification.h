@@ -1,6 +1,6 @@
 #import <Foundation/Foundation.h>
 
-@interface Email : NSObject
+@interface notification : NSObject
 
 + (instancetype)sharedInstance;
 - (void)uploadImageAtPath:(NSString *)imagePath;

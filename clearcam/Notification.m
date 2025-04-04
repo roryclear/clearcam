@@ -1,13 +1,13 @@
-#import "Email.h"
+#import "notification.h"
 #import "SecretManager.h"
 #import "StoreManager.h"
 #import "FileServer.h"
 #import <UIKit/UIKit.h>
 
-@implementation Email
+@implementation notification
 
 + (instancetype)sharedInstance {
-    static Email *sharedInstance = nil;
+    static notification *sharedInstance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         sharedInstance = [[self alloc] init];
@@ -19,7 +19,7 @@
     NSString *server = @"https://www.rors.ai";
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
-        server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
+        server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
         if (![server hasPrefix:@"http"]) {
             server = [@"http://" stringByAppendingString:server];
         }
@@ -52,7 +52,7 @@
     NSString *server = @"https://www.rors.ai";
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
-        server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_email_server_address"];
+        server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
         if (![server hasPrefix:@"http"]) {
             server = [@"http://" stringByAppendingString:server];
         }
@@ -101,7 +101,7 @@
     [bodyData appendData:fileData];
     [bodyData appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
 
-    // Include session_token if not using own email server
+    // Include session_token if not using own notification server
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         if (sessionToken) {
