@@ -324,10 +324,6 @@
                         </svg>
                     </a>
                     <input type="date" id="datePicker" name="datePicker">
-                    <select id="classSelector" name="classSelector" onchange="changeClasses()">
-                        <option value="all">Detect All</option>
-                        <option value="People+Vehicles">People+Vehicles</option>
-                    </select>
                 </div>
 
                 <!-- Bottom controls (progress bar, time display, fullscreen button) -->
@@ -401,43 +397,6 @@
                     ["toothbrush", "rgb(102, 179, 153)"]
                 ];
                 
-                function changeClasses() {
-                    const selector = document.getElementById('classSelector');
-                    const selectedValue = selector.value;
-                    let url = `change-classes?indexes=${selectedValue}`;
-                    fetch(url)
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('Network response was not ok');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('There was a problem with the fetch operation:', error);
-                        });
-                }
-        
-        function fetchCurrentClasses() {
-            fetch('get-classes')
-                .then(response => response.json())
-                .then(data => {
-                    if (Array.isArray(data) && data.length > 0) {
-                        updateDropdown(data[0]); // Extract the first element
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching current classes:', error);
-                });
-        }
-
-        function updateDropdown(currentClasses) {
-            const selector = document.getElementById('classSelector');
-            selector.value = currentClasses;
-        }
-
-        // Call fetchCurrentClasses on page load and every minute
-        window.addEventListener('load', fetchCurrentClasses);
-        setInterval(fetchCurrentClasses, 60000); // Every minute
-
                 
                 let currentDate = "";
                 const dateParam = getQueryParam("date");
@@ -868,26 +827,7 @@
                         x++;
                     }
                 }
-        
-        function fetchPresets() {
-            fetch('get-presets')
-                .then(response => response.json())
-                .then(presets => {
-                    const selector = document.getElementById('classSelector');
-                    selector.innerHTML = ''; // Clear existing options
-
-                    presets.forEach(preset => {
-                        const option = document.createElement('option');
-                        option.value = preset;
-                        option.textContent = preset.replace("+", " "); // Optional formatting
-                        selector.appendChild(option);
-                    });
-                })
-                .catch(error => console.error('Error fetching presets:', error));
-        }
-        // Call fetchPresets() when the page loads
-        document.addEventListener("DOMContentLoaded", fetchPresets);
-        
+                
         let portrait = false;
 
         function adjustContainerForOrientation(videoElement) {

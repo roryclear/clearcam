@@ -291,43 +291,6 @@
         }
     }
     
-    if ([filePath hasPrefix:@"change-classes"]) {
-        if (queryParams[@"indexes"]) {
-            if ([[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] objectForKey:queryParams[@"indexes"]]) {
-                [[SettingsManager sharedManager] updateYoloIndexesKey:queryParams[@"indexes"]];
-            } else {
-                [[SettingsManager sharedManager] updateYoloIndexesKey:@"all"];
-            }
-            NSString *httpHeader = @"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-            send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-            return;
-        }
-    }
-    
-    if ([filePath isEqualToString:@"get-presets"]) {
-        NSDictionary *presets = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"];
-        
-        NSError *error;
-        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:[presets allKeys] options:0 error:&error];
-
-        if (!jsonData) {
-            NSString *errorResponse = @"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
-            send(clientSocket, [errorResponse UTF8String], errorResponse.length, 0);
-            return;
-        }
-
-        NSString *httpHeader = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %lu\r\n\r\n", (unsigned long)[jsonData length]];
-        send(clientSocket, [httpHeader UTF8String], httpHeader.length, 0);
-        send(clientSocket, [jsonData bytes], [jsonData length], 0);
-        return;
-    }
-
-    if ([filePath hasPrefix:@"get-classes"]) {
-        NSString *currentClasses = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all"; // Default to "all" if not set
-        [self sendJson200:@[currentClasses] toClient:clientSocket]; // Send as an array
-        return;
-    }
-    
     if ([filePath hasPrefix:@"get-devices"]) {
         // Respond immediately with cached list
         @synchronized (self.scanner.cachedOpenPorts) {
