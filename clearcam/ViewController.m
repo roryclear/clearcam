@@ -102,12 +102,13 @@ NSMutableDictionary *classColorMap;
     [settings addObserver:self forKeyPath:@"preset" options:NSKeyValueObservingOptionNew context:nil];
     
     [self setupCameraWithWidth:settings.width height:settings.height];
-    
-    // Set initial orientation and layout
-    [self setInitialOrientation];
     [self.captureSession startRunning];
     [self startNewRecording];
     [self setupUI];
+    
+    // Log initial state
+    UIDeviceOrientation initialOrientation = [self getCurrentOrientation];
+    NSLog(@"viewDidLoad - Initial orientation: %ld", (long)initialOrientation);
 }
 
 - (void)setInitialOrientation {
@@ -152,6 +153,13 @@ NSMutableDictionary *classColorMap;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self.captureSession startRunning];
     });
+    
+    // Force button layout after view is about to appear
+    UIDeviceOrientation initialOrientation = [self getCurrentOrientation];
+    [self setVideoOrientationForOrientation:initialOrientation];
+    self.previewLayer.frame = self.view.bounds;
+    [self updateButtonFramesForOrientation:initialOrientation];
+    NSLog(@"viewWillAppear - Orientation: %ld, Record button frame: %@", (long)initialOrientation, NSStringFromCGRect(self.recordButton.frame));
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
@@ -169,28 +177,49 @@ NSMutableDictionary *classColorMap;
     [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
 }
 
-- (void)handleDeviceOrientationChange {
+- (UIDeviceOrientation)getCurrentOrientation {
     UIDeviceOrientation deviceOrientation = [[UIDevice currentDevice] orientation];
+    UIInterfaceOrientation statusBarOrientation = UIApplication.sharedApplication.statusBarOrientation;
+
+    if (deviceOrientation == UIDeviceOrientationUnknown || deviceOrientation == UIDeviceOrientationFaceUp || deviceOrientation == UIDeviceOrientationFaceDown) {
+        if (statusBarOrientation == UIInterfaceOrientationLandscapeLeft) {
+            return UIDeviceOrientationLandscapeRight;
+        } else if (statusBarOrientation == UIInterfaceOrientationLandscapeRight) {
+            return UIDeviceOrientationLandscapeLeft;
+        } else {
+            return UIDeviceOrientationPortrait;
+        }
+    }
+    return deviceOrientation;
+}
+
+- (void)setVideoOrientationForOrientation:(UIDeviceOrientation)orientation {
     AVCaptureVideoOrientation videoOrientation;
 
-    if (deviceOrientation == UIDeviceOrientationPortrait) {
+    if (orientation == UIDeviceOrientationPortrait) {
         videoOrientation = AVCaptureVideoOrientationPortrait;
-    } else if (deviceOrientation == UIDeviceOrientationLandscapeLeft) {
+    } else if (orientation == UIDeviceOrientationLandscapeLeft) {
         videoOrientation = AVCaptureVideoOrientationLandscapeRight;
-    } else if (deviceOrientation == UIDeviceOrientationLandscapeRight) {
+    } else if (orientation == UIDeviceOrientationLandscapeRight) {
         videoOrientation = AVCaptureVideoOrientationLandscapeLeft;
     } else {
-        return; // Ignore invalid orientations
+        videoOrientation = AVCaptureVideoOrientationPortrait;
     }
 
     if (self.previewLayer.connection.isVideoOrientationSupported) {
         self.previewLayer.connection.videoOrientation = videoOrientation;
     }
+}
 
+- (void)handleDeviceOrientationChange {
+    UIDeviceOrientation deviceOrientation = [self getCurrentOrientation];
+    [self setVideoOrientationForOrientation:deviceOrientation];
+    
     [UIView animateWithDuration:0.3 animations:^{
-        self.previewLayer.frame = self.view.bounds; // Always full screen
+        self.previewLayer.frame = self.view.bounds;
         [self updateButtonFramesForOrientation:deviceOrientation];
     }];
+    NSLog(@"handleDeviceOrientationChange - Orientation: %ld, Record button frame: %@", (long)deviceOrientation, NSStringFromCGRect(self.recordButton.frame));
 }
 
 - (void)setupCameraWithWidth:(NSString *)width height:(NSString *)height {
@@ -419,30 +448,7 @@ NSMutableDictionary *classColorMap;
     self.settingsButton.layer.cornerRadius = settingsButtonSize / 2;
     self.galleryButton.layer.cornerRadius = galleryButtonSize / 2;
 
-    // Handle only valid orientations
-    if (orientation == UIDeviceOrientationPortraitUpsideDown ||
-        orientation == UIDeviceOrientationFaceUp ||
-        orientation == UIDeviceOrientationFaceDown) {
-        return;
-    }
-
-    if (orientation == UIDeviceOrientationUnknown) {
-        orientation = UIDeviceOrientationPortrait; // Default to portrait
-    }
-
     if (orientation == UIDeviceOrientationLandscapeRight) {
-        // Charge port on left, buttons on right (user’s right)
-        CGFloat rightMargin = MAX(20, safeAreaInsets.right + 10);
-        self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
-        self.settingsButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
-                                               screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing,
-                                               settingsButtonSize, settingsButtonSize);
-        self.galleryButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
-                                              screenHeight / 2 + recordButtonSize / 2 + spacing,
-                                              galleryButtonSize, galleryButtonSize);
-        self.fpsLabel.frame = CGRectMake(MAX(20, safeAreaInsets.left + 10), 30, 150, 30);
-    } else if (orientation == UIDeviceOrientationLandscapeLeft) {
-        // Charge port on right, buttons on left (user’s right)
         CGFloat leftMargin = MAX(20, safeAreaInsets.left + 10);
         self.recordButton.frame = CGRectMake(leftMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
         self.settingsButton.frame = CGRectMake(leftMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
@@ -452,8 +458,17 @@ NSMutableDictionary *classColorMap;
                                               screenHeight / 2 + recordButtonSize / 2 + spacing,
                                               galleryButtonSize, galleryButtonSize);
         self.fpsLabel.frame = CGRectMake(screenWidth - 150 - MAX(20, safeAreaInsets.right + 10), 30, 150, 30);
+    } else if (orientation == UIDeviceOrientationLandscapeLeft) {
+        CGFloat rightMargin = MAX(20, safeAreaInsets.right + 10);
+        self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
+        self.settingsButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
+                                               screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing,
+                                               settingsButtonSize, settingsButtonSize);
+        self.galleryButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
+                                              screenHeight / 2 + recordButtonSize / 2 + spacing,
+                                              galleryButtonSize, galleryButtonSize);
+        self.fpsLabel.frame = CGRectMake(MAX(20, safeAreaInsets.left + 10), 30, 150, 30);
     } else {
-        // Portrait (charge port at bottom)
         CGFloat bottomMargin = MAX(20, safeAreaInsets.bottom + 10);
         CGFloat recordX = (screenWidth - recordButtonSize) / 2;
         self.recordButton.frame = CGRectMake(recordX, screenHeight - recordButtonSize - bottomMargin, recordButtonSize, recordButtonSize);
@@ -630,7 +645,10 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    [self updateButtonFrames];
+    self.previewLayer.frame = self.view.bounds;
+    UIDeviceOrientation currentOrientation = [self getCurrentOrientation];
+    [self updateButtonFramesForOrientation:currentOrientation];
+    NSLog(@"viewDidLayoutSubviews - Orientation: %ld, Record button frame: %@", (long)currentOrientation, NSStringFromCGRect(self.recordButton.frame));
 }
 
 - (void)openSettings {
@@ -1218,3 +1236,4 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
+
