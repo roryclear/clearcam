@@ -442,9 +442,9 @@
             receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
             [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = receiveNotifSwitch;
-            receiveNotifSwitch.enabled = isPremium;
+            receiveNotifSwitch.enabled = isPremium; // Switch disabled for non-premium
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
-            cell.userInteractionEnabled = isPremium;
+            cell.userInteractionEnabled = YES; // Cell remains tappable regardless of premium status
         }
     } else if (indexPath.section == 2) { // Upgrade to Premium
         cell.textLabel.text = @"Upgrade to Premium";
@@ -558,7 +558,7 @@
         if (indexPath.row == 0) {
             if (!isPremium) {
                 [self showPremiumRequiredAlert];
-            }
+            } // No else needed since switch handles the toggle when premium
         }
     } else if (indexPath.section == 2) { // Upgrade to Premium
         [[StoreManager sharedInstance] fetchAndPurchaseProduct];
