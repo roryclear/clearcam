@@ -9,28 +9,34 @@
         let currentTimestamp = null;
         const defaultOffset = 30;
         let allEvents = [];
+        let expandedDates = new Set();
 
         async function fetchEvents() {
             try {
+                console.log('Fetching events...');
                 const response = await fetch('/get-events');
-                if (!response.ok) throw new Error('Failed to fetch events');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const events = await response.json();
+                console.log('Events received:', events);
                 allEvents = events;
                 renderEvents(events);
             } catch (error) {
                 console.error('Error fetching events:', error);
-                document.getElementById('eventsContainer').innerHTML = '<p>Failed to load events.</p>';
+                document.getElementById('eventsContainer').innerHTML = '<p>Failed to load events. Check console for details.</p>';
             }
         }
 
         function renderEvents(events) {
+            console.log('Rendering events:', events);
             const container = document.getElementById('eventsContainer');
             container.innerHTML = '';
 
-            // Sort events by timestamp in descending order (newest first)
-            const sortedEvents = [...events].sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
+            if (!events || events.length === 0) {
+                container.innerHTML = '<p>No events available.</p>';
+                return;
+            }
 
-            // Group events by date
+            const sortedEvents = [...events].sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
             const eventsByDate = {};
             sortedEvents.forEach(event => {
                 const dateObj = new Date(event.timeStamp);
@@ -41,33 +47,29 @@
                 eventsByDate[dateKey].push(event);
             });
 
-            // Get the most recent date
             const dateKeys = Object.keys(eventsByDate);
-            const mostRecentDate = dateKeys[0];
+            console.log('Date keys:', dateKeys);
 
-            // Render each date group
-            dateKeys.forEach((dateKey, index) => {
-                const isExpanded = dateKey === mostRecentDate; // Expand only the most recent day
+            dateKeys.forEach(dateKey => {
+                // Only expand by default if no dates are expanded and this is the first date
+                const isExpanded = expandedDates.has(dateKey) || (!expandedDates.size && dateKey === dateKeys[0]);
 
-                // Create collapsible section
                 const section = document.createElement('div');
                 section.className = 'collapsible-section';
 
-                // Create date header with toggle button
                 const dateHeader = document.createElement('div');
                 dateHeader.className = 'date-header';
                 dateHeader.innerHTML = `
-                    <button class="toggle-btn" onclick="toggleSection(this)">
+                    <button class="toggle-btn" onclick="toggleSection(this, '${dateKey}')">
                         <i class="fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
                     </button>
                     ${dateKey}
                 `;
                 section.appendChild(dateHeader);
 
-                // Create container for this date's events
                 const dateContainer = document.createElement('div');
                 dateContainer.className = 'date-events';
-                dateContainer.style.display = isExpanded ? 'grid' : 'none'; // Use grid for layout
+                dateContainer.style.display = isExpanded ? 'grid' : 'none';
 
                 eventsByDate[dateKey].forEach(event => {
                     const dateObj = new Date(event.timeStamp);
@@ -75,25 +77,19 @@
                     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
                     const day = String(dateObj.getDate()).padStart(2, '0');
                     const date = `${year}-${month}-${day}`;
-
-                    const startSeconds =
-                        dateObj.getHours() * 3600 +
-                        dateObj.getMinutes() * 60 +
-                        dateObj.getSeconds() - 2;
-
-                    const imageURL = event.imageURL;
+                    const startSeconds = dateObj.getHours() * 3600 + dateObj.getMinutes() * 60 + dateObj.getSeconds() - 2;
 
                     const card = document.createElement('div');
                     card.className = 'event-card';
                     card.innerHTML = `
                         <div class="event-content">
                             <img 
-                                src="${imageURL}" 
+                                src="${event.imageURL || ''}" 
                                 alt="Event Image" 
                                 class="event-image" 
                                 onclick="playEvent('${date}', ${startSeconds})" 
                                 data-retry="0" 
-                                onerror="retryImageLoad(this, '${imageURL}', 3)"
+                                onerror="retryImageLoad(this, '${event.imageURL || ''}', 3)"
                             >
                             <div class="button-group">
                                 <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
@@ -111,10 +107,22 @@
 
                 section.appendChild(dateContainer);
                 container.appendChild(section);
+
+                // If this date was expanded, keep it in the Set
+                if (isExpanded) {
+                    expandedDates.add(dateKey);
+                }
+            });
+
+            // Clean up expandedDates: remove dates that no longer exist
+            expandedDates.forEach(dateKey => {
+                if (!dateKeys.includes(dateKey)) {
+                    expandedDates.delete(dateKey);
+                }
             });
         }
 
-        function toggleSection(button) {
+        function toggleSection(button, dateKey) {
             const section = button.closest('.collapsible-section');
             const content = section.querySelector('.date-events');
             const icon = button.querySelector('i');
@@ -123,10 +131,12 @@
                 content.style.display = 'grid';
                 icon.classList.remove('fa-chevron-right');
                 icon.classList.add('fa-chevron-down');
+                expandedDates.add(dateKey);
             } else {
                 content.style.display = 'none';
                 icon.classList.remove('fa-chevron-down');
                 icon.classList.add('fa-chevron-right');
+                expandedDates.delete(dateKey);
             }
         }
 
@@ -139,7 +149,6 @@
                     imgElement.src = imageURL;
                 }, 1000);
             } else {
-                imgElement.removeAttribute('src');
                 imgElement.alt = 'Image failed to load';
                 imgElement.style.opacity = '0.5';
                 imgElement.onclick = null;
@@ -148,9 +157,12 @@
 
         async function deleteEvent(timeStamp) {
             try {
+                console.log('Deleting event with timestamp:', timeStamp);
                 const response = await fetch(`/delete-event?timeStamp=${timeStamp}`, { method: 'GET' });
                 if (!response.ok) throw new Error('Failed to delete event');
-                fetchEvents();
+                
+                // Keep expandedDates as is and re-fetch events
+                await fetchEvents();
             } catch (error) {
                 console.error('Error deleting event:', error);
             }
@@ -217,7 +229,6 @@
             const hours = String(date.getHours()).padStart(2, '0');
             const minutes = String(date.getMinutes()).padStart(2, '0');
             const seconds = String(date.getSeconds()).padStart(2, '0');
-
             return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
         }
 
