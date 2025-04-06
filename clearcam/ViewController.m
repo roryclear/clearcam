@@ -991,7 +991,7 @@ NSMutableDictionary *classColorMap;
             CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
             
             NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-            if(self.recordPressed) [self.scene processOutput:output withImage:ciImage]; //todo, should event detection without recording be a thing?
+            if(self.recordPressed) [self.scene processOutput:output withImage:ciImage orientation:self.previewLayer.connection.videoOrientation]; //todo, should event detection without recording be a thing?
             CGImageRelease(cgImage);
 
             __weak typeof(self) weak_self = self;

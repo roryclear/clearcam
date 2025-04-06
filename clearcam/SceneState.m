@@ -28,7 +28,7 @@
     return self;
 }
 
-- (void)processOutput:(NSArray *)array withImage:(CIImage *)image {
+- (void)processOutput:(NSArray *)array withImage:(CIImage *)image orientation:(AVCaptureVideoOrientation)orientation{
     NSArray *events = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]];
     if(!events) return;
     NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
@@ -67,18 +67,12 @@
             CGImageRef cgImage = [ciContext createCGImage:image fromRect:image.extent];
 
             if (cgImage) {
-                // Convert CGImage to UIImage
                 UIImage *uiImage = [UIImage imageWithCGImage:cgImage];
-
-                // Release CGImage since it was manually created
                 CGImageRelease(cgImage);
-
-                // Get the app's Documents directory
+                uiImage = [self rotatedImage:uiImage forOrientation:orientation];
                 NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
                 NSString *documentsDirectory = [paths firstObject];
                 NSString *imagesDirectory = [documentsDirectory stringByAppendingPathComponent:@"images"];
-
-                // Create the images directory if it doesn't exist
                 if (![[NSFileManager defaultManager] fileExistsAtPath:imagesDirectory]) {
                     [[NSFileManager defaultManager] createDirectoryAtPath:imagesDirectory
                                               withIntermediateDirectories:YES
@@ -88,17 +82,20 @@
 
                 NSData *imageData = UIImageJPEGRepresentation(uiImage, 1.0); // 1.0 for maximum quality
                 NSString *filePathSmall = [imagesDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%lld_small.jpg", roundedUnixTimestamp]];
+                
                 // Write the image data to file
                 if ([imageData writeToFile:filePathSmall atomically:YES]) {
-                    //thumbnail
+                    // Thumbnail generation
                     UIGraphicsBeginImageContextWithOptions(CGSizeMake(uiImage.size.width / 2, uiImage.size.height / 2), YES, 1.0);
                     [uiImage drawInRect:CGRectMake(0, 0, uiImage.size.width / 2, uiImage.size.height / 2)];
                     UIImage *resizedImage = UIGraphicsGetImageFromCurrentImageContext();
                     UIGraphicsEndImageContext();
                     NSData *lowResImageData = UIImageJPEGRepresentation(resizedImage, 0.7);
                     [lowResImageData writeToFile:filePathSmall atomically:YES];
-                    
-                    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
+
+                    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                        ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
+                        [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
                         NSLog(@"verifying subscription");
                         [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
                             [self sendnotification];
@@ -108,6 +105,7 @@
                     }
                 }
             }
+
             [self.backgroundContext performBlockAndWait:^{
                 NSManagedObject *newEvent = [NSEntityDescription insertNewObjectForEntityForName:@"EventEntity"
                                                                           inManagedObjectContext:self.backgroundContext];
@@ -128,6 +126,27 @@
         [self.lastN removeObjectAtIndex:0];
     }
 }
+
+- (UIImage *)rotatedImage:(UIImage *)image forOrientation:(AVCaptureVideoOrientation)orientation {
+    UIImageOrientation uiOrientation;
+    switch (orientation) {
+        case AVCaptureVideoOrientationPortrait:
+            uiOrientation = UIImageOrientationRight;
+            break;
+        case AVCaptureVideoOrientationPortraitUpsideDown:
+            uiOrientation = UIImageOrientationLeft;
+            break;
+        case AVCaptureVideoOrientationLandscapeLeft:
+            uiOrientation = UIImageOrientationDown;
+            break;
+        case AVCaptureVideoOrientationLandscapeRight:
+        default:
+            uiOrientation = UIImageOrientationUp;
+            break;
+    }
+    return [UIImage imageWithCGImage:image.CGImage scale:image.scale orientation:uiOrientation];
+}
+
 
 - (void)sendnotification {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])){ //todo add back other stuff
