@@ -236,24 +236,35 @@
     for (NSString *fileName in fileNames) {
         dispatch_group_enter(downloadGroup);
         
-        NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
-        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-        if (!sessionToken) {
-            dispatch_group_leave(downloadGroup);
-            return;
-        }
-
-        NSURLQueryItem *sessionTokenItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
-        NSURLQueryItem *nameItem = [NSURLQueryItem queryItemWithName:@"name" value:fileName];
-        components.queryItems = @[sessionTokenItem, nameItem];
+        NSURL *url;
+        NSString *saveFileName = fileName; // Default filename for saving
         
-        NSURL *url = components.URL;
+        // Check if fileName is a full URL
+        if ([fileName hasPrefix:@"http://"] || [fileName hasPrefix:@"https://"]) {
+            url = [NSURL URLWithString:fileName];
+            saveFileName = [url lastPathComponent]; // Extract filename from URL
+        } else {
+            // Build URL using /video endpoint
+            NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
+            NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+            if (!sessionToken) {
+                dispatch_group_leave(downloadGroup);
+                return;
+            }
+
+            NSURLQueryItem *sessionTokenItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
+            NSURLQueryItem *nameItem = [NSURLQueryItem queryItemWithName:@"name" value:fileName];
+            components.queryItems = @[sessionTokenItem, nameItem];
+            
+            url = components.URL;
+        }
+        
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
         [request setHTTPMethod:@"GET"];
         
         [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
             if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
-                NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:fileName];
+                NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
                 NSError *moveError;
                 NSURL *destURL = [NSURL fileURLWithPath:destPath];
                 
@@ -268,6 +279,7 @@
         [self loadExistingVideos];
     });
 }
+
 
 - (void)loadExistingVideos {
     [self.videoFiles removeAllObjects];
