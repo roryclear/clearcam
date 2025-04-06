@@ -1,5 +1,6 @@
 #import "StoreManager.h"
 #import "FileServer.h"
+#import <StoreKit/StoreKit.h>
 
 // Define the notification name
 NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreManagerSubscriptionStatusDidChangeNotification";
@@ -7,6 +8,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 @interface StoreManager ()
 @property (nonatomic, strong) SKProductsRequest *productsRequest;
 @property (nonatomic, strong) SKProduct *premiumProduct;
+@property (nonatomic, strong) void (^productInfoCompletionHandler)(SKProduct * _Nullable product, NSError * _Nullable error); // Store completion handler for fetching info
+- (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion;
 @end
 
 @implementation StoreManager
@@ -29,26 +32,109 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)fetchAndPurchaseProduct {
-    NSSet *productIdentifiers = [NSSet setWithObject:@"monthly.premium"];
+    if (self.premiumProduct) {
+        // Product info already available, proceed to purchase
+        [self purchaseProduct:self.premiumProduct];
+    } else {
+        // Fetch the product info first, and *then* call purchase.
+        NSLog(@"Premium product info not yet fetched. Fetching now for purchase...");
+        [self getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
+            // Ensure UI updates potentially triggered by purchase alerts run on main thread
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (product) {
+                    [self purchaseProduct:product];
+                } else {
+                    // Handle error - maybe show an alert?
+                    NSLog(@"Failed to get product info for purchase: %@", error.localizedDescription);
+                    // Consider showing an error alert here, maybe via a notification or delegate.
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                                     message:@"Could not retrieve product information. Please try again later."
+                                                                              preferredStyle:UIAlertControllerStyleAlert];
+                     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                     // Find the top view controller to present the alert
+                     UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+                     while (topController.presentedViewController) {
+                         topController = topController.presentedViewController;
+                     }
+                     [topController presentViewController:alert animated:YES completion:nil];
+                }
+            });
+        }];
+    }
+}
+
+- (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion {
+    if (self.premiumProduct) {
+        if (completion) {
+            completion(self.premiumProduct, nil);
+        }
+        return;
+    }
+
+    // Store the completion handler
+    self.productInfoCompletionHandler = completion;
+
+    // Fetch product info from App Store
+    NSSet *productIdentifiers = [NSSet setWithObject:@"monthly.premium"]; // Your product ID
     self.productsRequest = [[SKProductsRequest alloc] initWithProductIdentifiers:productIdentifiers];
-    self.productsRequest.delegate = self;
+    self.productsRequest.delegate = self; // Delegate methods will handle the response
     [self.productsRequest start];
 }
 
 #pragma mark - SKProductsRequestDelegate
 
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
-    if (response.products.count == 0) return;
-    self.premiumProduct = response.products.firstObject;
-    [self purchaseProduct];
+     NSLog(@"Received product response.");
+    if (response.products.count > 0) {
+        self.premiumProduct = response.products.firstObject;
+        NSLog(@"Premium product fetched: %@", self.premiumProduct.localizedTitle);
+
+        // If there's a completion handler waiting for product info (from getPremiumProductInfo), call it.
+        if (self.productInfoCompletionHandler) {
+            // Ensure handler is called on main thread if it involves UI updates later
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.productInfoCompletionHandler(self.premiumProduct, nil);
+                self.productInfoCompletionHandler = nil; // Clear the handler
+            });
+        }
+    } else {
+        NSLog(@"No products found.");
+        NSError *error = [NSError errorWithDomain:@"StoreManagerError" code:101 userInfo:@{NSLocalizedDescriptionKey: @"No products found."}];
+        if (self.productInfoCompletionHandler) {
+             dispatch_async(dispatch_get_main_queue(), ^{
+                self.productInfoCompletionHandler(nil, error);
+                self.productInfoCompletionHandler = nil;
+             });
+        }
+    }
+     // Clean up the request object
+     self.productsRequest.delegate = nil;
+     self.productsRequest = nil;
+}
+
+- (void)request:(SKRequest *)request didFailWithError:(NSError *)error {
+    NSLog(@"Failed to fetch products: %@", error.localizedDescription);
+     if (self.productInfoCompletionHandler) {
+         dispatch_async(dispatch_get_main_queue(), ^{
+             self.productInfoCompletionHandler(nil, error);
+             self.productInfoCompletionHandler = nil; // Clear the handler
+         });
+     }
+     // Clean up the request object
+     self.productsRequest.delegate = nil;
+     self.productsRequest = nil;
 }
 
 #pragma mark - Purchase Product
 
-- (void)purchaseProduct {
-    if ([SKPaymentQueue canMakePayments] && self.premiumProduct) {
-        SKPayment *payment = [SKPayment paymentWithProduct:self.premiumProduct];
+- (void)purchaseProduct:(SKProduct *)product {
+    if ([SKPaymentQueue canMakePayments] && product) {
+        NSLog(@"Initiating purchase for: %@", product.localizedTitle);
+        SKPayment *payment = [SKPayment paymentWithProduct:product];
         [[SKPaymentQueue defaultQueue] addPayment:payment];
+    } else {
+         NSLog(@"Cannot make payments or product is nil.");
+        // Maybe show an alert to the user here?
     }
 }
 

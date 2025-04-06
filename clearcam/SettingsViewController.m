@@ -7,6 +7,7 @@
 #import "FileServer.h"
 #import "ScheduleManagementViewController.h"
 #import <UserNotifications/UserNotifications.h>
+#import <StoreKit/StoreKit.h>
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -526,14 +527,14 @@
                 [self showThresholdInputDialog];
             } else if (indexPath.row == 5 + offset) {
                 if (!isPremium) {
-                    [self showPremiumRequiredAlert];
+                    [self showUpgradePopup];
                 }
             } else if (indexPath.row == 6 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                     }];
                 } else {
-                    [self showPremiumRequiredAlert];
+                    [self showUpgradePopup];
                 }
             } else if (indexPath.row == 7 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
@@ -557,7 +558,7 @@
     } else if (indexPath.section == 1) { // Viewer Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
-                [self showPremiumRequiredAlert];
+                [self showUpgradePopup];
             } // No else needed since switch handles the toggle when premium
         }
     } else if (indexPath.section == 2) { // Upgrade to Premium
@@ -566,17 +567,67 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
-- (void)showPremiumRequiredAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Premium Required"
-                                                                   message:@"This feature requires a premium subscription."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
-                                                       style:UIAlertActionStyleDefault
-                                                     handler:nil];
-    
-    [alert addAction:okAction];
-    [self presentViewController:alert animated:YES completion:nil];
+- (void)showUpgradePopup {
+    // Optional: Show loading indicator here if needed
+
+    [[StoreManager sharedInstance] getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{ // Ensure UI updates happen on the main thread
+            // Optional: Hide loading indicator here
+
+            if (product) {
+                // Format the price
+                NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+                [formatter setNumberStyle:NSNumberFormatterCurrencyStyle];
+                [formatter setLocale:product.priceLocale];
+                NSString *localizedPrice = [formatter stringFromNumber:product.price];
+
+                // Create the message body with features
+                NSString *features = @"• View Captured Events From Anywhere\n• Receive Event Alerts";
+                NSString *message = [NSString stringWithFormat:@"Unlock premium features:\n\n%@\n", features];
+
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Upgrade to ClearCamera Premium"
+                                                                                message:message
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+
+                // Upgrade Action
+                UIAlertAction *upgradeAction = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Upgrade for %@", localizedPrice ?: @"Price"] // Fallback text
+                                                                        style:UIAlertActionStyleDefault
+                                                                      handler:^(UIAlertAction * _Nonnull action) {
+                                                                          // Initiate the purchase flow
+                                                                          [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+                                                                      }];
+                // Cancel Action
+                UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                                       style:UIAlertActionStyleCancel
+                                                                     handler:nil];
+
+                [alert addAction:upgradeAction];
+                [alert addAction:cancelAction];
+
+                [self presentViewController:alert animated:YES completion:nil];
+
+            } else {
+                // Fallback if product info failed to load
+                NSLog(@"Error fetching product info: %@", error.localizedDescription);
+                UIAlertController *fallbackAlert = [UIAlertController alertControllerWithTitle:@"Upgrade to Premium"
+                                                                                        message:@"Unlock premium features like remote event viewing and alerts. Would you like to upgrade?"
+                                                                                preferredStyle:UIAlertControllerStyleAlert];
+
+                UIAlertAction *upgradeFallbackAction = [UIAlertAction actionWithTitle:@"Upgrade"
+                                                                                style:UIAlertActionStyleDefault
+                                                                              handler:^(UIAlertAction * _Nonnull action) {
+                                                                                    [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+                                                                                }];
+                UIAlertAction *cancelFallbackAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                                                style:UIAlertActionStyleCancel
+                                                                              handler:nil];
+
+                [fallbackAlert addAction:upgradeFallbackAction];
+                [fallbackAlert addAction:cancelFallbackAction];
+                [self presentViewController:fallbackAlert animated:YES completion:nil];
+            }
+        });
+    }];
 }
 
 - (void)useOwnnotificationServerSwitchToggled:(UISwitch *)sender {
@@ -638,7 +689,7 @@
 - (void)sendNotifSwitchToggled:(UISwitch *)sender {
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
         sender.on = NO;
-        [self showPremiumRequiredAlert];
+        [self showUpgradePopup];
         return;
     }
     
