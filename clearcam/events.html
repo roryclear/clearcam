@@ -6,6 +6,7 @@
     <title>Events</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
+        // --- JAVASCRIPT ---
         let currentTimestamp = null;
         const defaultOffset = 30;
         let allEvents = [];
@@ -14,7 +15,7 @@
         async function fetchEvents() {
             try {
                 console.log('Fetching events...');
-                const response = await fetch('/get-events');
+                const response = await fetch('/get-events'); // Adjust endpoint if needed
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const events = await response.json();
                 console.log('Events received:', events);
@@ -22,7 +23,7 @@
                 renderEvents(events);
             } catch (error) {
                 console.error('Error fetching events:', error);
-                document.getElementById('eventsContainer').innerHTML = '<p>Failed to load events. Check console for details.</p>';
+                document.getElementById('eventsContainer').innerHTML = '<p style="color:red;">Failed to load events. Check console for details.</p>';
             }
         }
 
@@ -48,11 +49,10 @@
             });
 
             const dateKeys = Object.keys(eventsByDate);
-            console.log('Date keys:', dateKeys);
+            // console.log('Date keys:', dateKeys); // Less noisy console
 
-            dateKeys.forEach(dateKey => {
-                // Only expand by default if no dates are expanded and this is the first date
-                const isExpanded = expandedDates.has(dateKey) || (!expandedDates.size && dateKey === dateKeys[0]);
+            dateKeys.forEach((dateKey, index) => { // Added index for default expand
+                const isExpanded = expandedDates.has(dateKey) || (expandedDates.size === 0 && index === 0); // Expand first date by default
 
                 const section = document.createElement('div');
                 section.className = 'collapsible-section';
@@ -60,15 +60,18 @@
                 const dateHeader = document.createElement('div');
                 dateHeader.className = 'date-header';
                 dateHeader.innerHTML = `
-                    <button class="toggle-btn" onclick="toggleSection(this, '${dateKey}')">
+                    <button class="toggle-btn" onclick="toggleSection(this, '${dateKey}')" aria-expanded="${isExpanded}">
                         <i class="fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
                     </button>
                     ${dateKey}
                 `;
+                // Make header clickable too
+                 dateHeader.onclick = (e) => { if (!e.target.closest('.toggle-btn')) toggleSection(dateHeader.querySelector('.toggle-btn'), dateKey); };
                 section.appendChild(dateHeader);
 
                 const dateContainer = document.createElement('div');
                 dateContainer.className = 'date-events';
+                // Use grid display, responsive rules will handle columns
                 dateContainer.style.display = isExpanded ? 'grid' : 'none';
 
                 eventsByDate[dateKey].forEach(event => {
@@ -77,26 +80,28 @@
                     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
                     const day = String(dateObj.getDate()).padStart(2, '0');
                     const date = `${year}-${month}-${day}`;
-                    const startSeconds = dateObj.getHours() * 3600 + dateObj.getMinutes() * 60 + dateObj.getSeconds() - 2;
+                    const startSeconds = Math.max(0, dateObj.getHours() * 3600 + dateObj.getMinutes() * 60 + dateObj.getSeconds() - 2);
 
                     const card = document.createElement('div');
                     card.className = 'event-card';
+                    // *** HTML Correction: Added image-container, moved onclick, removed spacer ***
                     card.innerHTML = `
                         <div class="event-content">
-                            <img 
-                                src="${event.imageURL || ''}" 
-                                alt="Event Image" 
-                                class="event-image" 
-                                onclick="playEvent('${date}', ${startSeconds})" 
-                                data-retry="0" 
-                                onerror="retryImageLoad(this, '${event.imageURL || ''}', 3)"
-                            >
+                            <div class="image-container" onclick="playEvent('${date}', ${startSeconds})">
+                                <img
+                                    src="${event.imageURL || ''}"
+                                    alt="Event Image on ${dateKey}"
+                                    class="event-image"
+                                    loading="lazy"
+                                    data-retry="0"
+                                    onerror="retryImageLoad(this, '${event.imageURL || ''}', 3)"
+                                >
+                            </div>
                             <div class="button-group">
-                                <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})">
+                                <button class="action-btn download-btn" onclick="downloadEvent(${dateObj.getTime() / 1000})" title="Download Clip">
                                     <i class="fas fa-download"></i>
                                 </button>
-                                <div class="spacer"></div>
-                                <button class="action-btn delete-btn" onclick="deleteEvent(${dateObj.getTime() / 1000})">
+                                <button class="action-btn delete-btn" onclick="deleteEvent(this, ${dateObj.getTime() / 1000})" title="Delete Event">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -108,15 +113,14 @@
                 section.appendChild(dateContainer);
                 container.appendChild(section);
 
-                // If this date was expanded, keep it in the Set
-                if (isExpanded) {
+                if (isExpanded) { // Ensure added only if it should be
                     expandedDates.add(dateKey);
                 }
             });
 
-            // Clean up expandedDates: remove dates that no longer exist
+            const currentKeysSet = new Set(dateKeys);
             expandedDates.forEach(dateKey => {
-                if (!dateKeys.includes(dateKey)) {
+                if (!currentKeysSet.has(dateKey)) {
                     expandedDates.delete(dateKey);
                 }
             });
@@ -126,51 +130,91 @@
             const section = button.closest('.collapsible-section');
             const content = section.querySelector('.date-events');
             const icon = button.querySelector('i');
+            if (!content || !icon || !section) return;
 
-            if (content.style.display === 'none') {
-                content.style.display = 'grid';
+            const isCurrentlyVisible = window.getComputedStyle(content).display !== 'none';
+
+            if (!isCurrentlyVisible) {
+                content.style.display = 'grid'; // Always use grid
                 icon.classList.remove('fa-chevron-right');
                 icon.classList.add('fa-chevron-down');
+                button.setAttribute('aria-expanded', 'true');
                 expandedDates.add(dateKey);
             } else {
                 content.style.display = 'none';
                 icon.classList.remove('fa-chevron-down');
                 icon.classList.add('fa-chevron-right');
+                 button.setAttribute('aria-expanded', 'false');
                 expandedDates.delete(dateKey);
             }
         }
 
         function retryImageLoad(imgElement, imageURL, maxRetries) {
-            const retryCount = parseInt(imgElement.getAttribute('data-retry'));
+            const retryCount = parseInt(imgElement.getAttribute('data-retry') || '0');
             if (retryCount < maxRetries) {
                 imgElement.setAttribute('data-retry', retryCount + 1);
+                const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
                 setTimeout(() => {
-                    imgElement.src = '';
-                    imgElement.src = imageURL;
-                }, 1000);
+                    const cacheBuster = `?retry=${Date.now()}`;
+                    imgElement.src = imageURL + cacheBuster;
+                }, delay);
             } else {
                 imgElement.alt = 'Image failed to load';
-                imgElement.style.opacity = '0.5';
-                imgElement.onclick = null;
+                imgElement.style.display = 'none'; // Hide broken img icon
+                 const container = imgElement.closest('.image-container');
+                 if (container) {
+                     container.classList.add('image-load-failed');
+                     container.onclick = null;
+                     container.title = 'Image failed to load';
+                 }
             }
         }
 
-        async function deleteEvent(timeStamp) {
+        // *** Fast deleteEvent function (from Msg #18) ***
+        async function deleteEvent(buttonElement, timeStamp) {
+            const cardElement = buttonElement.closest('.event-card');
+            if (!cardElement) {
+                console.error('Could not find parent event card element.');
+                return;
+            }
+            cardElement.style.opacity = '0.5'; // Visual feedback
+            buttonElement.disabled = true;
+
             try {
                 console.log('Deleting event with timestamp:', timeStamp);
                 const response = await fetch(`/delete-event?timeStamp=${timeStamp}`, { method: 'GET' });
-                if (!response.ok) throw new Error('Failed to delete event');
-                
-                // Keep expandedDates as is and re-fetch events
-                await fetchEvents();
+
+                if (!response.ok) {
+                    cardElement.style.opacity = '1'; // Restore on failure
+                    buttonElement.disabled = false;
+                    throw new Error(`Failed to delete event: ${response.status}`);
+                }
+
+                console.log('Event deleted successfully on server.');
+                cardElement.remove(); // Remove directly from DOM
+
+                // Update local array (helps 'Delete Range' accuracy)
+                const indexToRemove = allEvents.findIndex(event => event.timeStamp === timeStamp * 1000);
+                if (indexToRemove > -1) {
+                    allEvents.splice(indexToRemove, 1);
+                }
+                // DO NOT fetchEvents() here
+
             } catch (error) {
                 console.error('Error deleting event:', error);
+                alert(`Error deleting event: ${error.message}`);
+                if (cardElement) cardElement.style.opacity = '1'; // Ensure restored on error
+                if (buttonElement) buttonElement.disabled = false;
             }
         }
 
         function playEvent(date, startSeconds) {
-            let referrer = document.referrer || '/';
-            referrer = referrer.split('?')[0];
+            let referrer = '/';
+             if (document.referrer) {
+                 referrer = document.referrer.split('?')[0];
+             }
+             if (referrer.endsWith('/events')) referrer = referrer.substring(0, referrer.lastIndexOf('/'));
+             if (!referrer.endsWith('/')) referrer += '/';
             window.location.href = `${referrer}?date=${date}&start=${startSeconds}`;
         }
 
@@ -179,7 +223,6 @@
             const eventTime = new Date(timeStamp * 1000);
             const startTime = new Date(eventTime.getTime() - defaultOffset * 1000);
             const endTime = new Date(eventTime.getTime() + defaultOffset * 1000);
-
             document.getElementById("startTime").value = formatDateTimeLocal(startTime);
             document.getElementById("endTime").value = formatDateTimeLocal(endTime);
             document.getElementById("timePickerModal").style.display = "block";
@@ -187,34 +230,39 @@
 
         function showDeleteAllModal() {
             if (allEvents.length === 0) {
-                alert("No events to delete.");
+                alert("No events available to delete.");
                 return;
             }
+            // Use current state of allEvents
             const sortedEvents = [...allEvents].sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
             const earliestTime = new Date(sortedEvents[0].timeStamp);
             const latestTime = new Date(sortedEvents[sortedEvents.length - 1].timeStamp);
-
             document.getElementById("deleteStartTime").value = formatDateTimeLocal(earliestTime);
             document.getElementById("deleteEndTime").value = formatDateTimeLocal(latestTime);
             document.getElementById("deleteAllModal").style.display = "block";
         }
 
         async function confirmDeleteAll() {
-            const startTime = new Date(document.getElementById("deleteStartTime").value).getTime() / 1000;
-            const endTime = new Date(document.getElementById("deleteEndTime").value).getTime() / 1000;
-            if (!startTime || !endTime) {
-                alert("Please select both start and end times.");
-                return;
-            }
+            const startTimeInput = document.getElementById("deleteStartTime").value;
+            const endTimeInput = document.getElementById("deleteEndTime").value;
+            if (!startTimeInput || !endTimeInput) return alert("Please select both start and end times.");
+
+            const startTime = new Date(startTimeInput).getTime() / 1000;
+            const endTime = new Date(endTimeInput).getTime() / 1000;
+            if (isNaN(startTime) || isNaN(endTime)) return alert("Invalid date/time selected.");
+            if (endTime < startTime) return alert("End time cannot be earlier than start time.");
+
+             if (!confirm(`Are you sure you want to delete all events between ${new Date(startTime*1000).toLocaleString()} and ${new Date(endTime*1000).toLocaleString()}? This cannot be undone.`)) return;
 
             try {
                 const response = await fetch(`/delete-event?timeStamp=${startTime}&end=${endTime}`, { method: 'GET' });
-                if (!response.ok) throw new Error('Failed to delete events');
+                if (!response.ok) throw new Error(`Failed to delete events batch: ${response.status}`);
                 closeDeleteAllModal();
-                fetchEvents();
+                expandedDates.clear(); // Must reset state
+                fetchEvents(); // Full refresh needed here
             } catch (error) {
                 console.error('Error deleting batch of events:', error);
-                alert('Failed to delete events.');
+                alert(`Failed to delete events: ${error.message}`);
             }
         }
 
@@ -223,22 +271,21 @@
         }
 
         function formatDateTimeLocal(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
-        }
+             const offset = date.getTimezoneOffset() * 60000;
+             const localDate = new Date(date.getTime() - offset);
+             return localDate.toISOString().slice(0, 19); // YYYY-MM-DDTHH:mm:ss
+         }
 
         function confirmDownload() {
-            const startTime = new Date(document.getElementById("startTime").value).getTime() / 1000;
-            const endTime = new Date(document.getElementById("endTime").value).getTime() / 1000;
-            if (!startTime || !endTime) {
-                alert("Please select both start and end times.");
-                return;
-            }
+            const startTimeInput = document.getElementById("startTime").value;
+            const endTimeInput = document.getElementById("endTime").value;
+            if (!startTimeInput || !endTimeInput) return alert("Please select both start and end times.");
+
+            const startTime = new Date(startTimeInput).getTime() / 1000;
+            const endTime = new Date(endTimeInput).getTime() / 1000;
+            if (isNaN(startTime) || isNaN(endTime)) return alert("Invalid date/time selected.");
+            if (endTime <= startTime) return alert("End time must be after start time.");
+
             window.location.href = `/download?start=${startTime}&end=${endTime}`;
             closeModal();
         }
@@ -247,20 +294,46 @@
             document.getElementById("timePickerModal").style.display = "none";
         }
 
-        window.onload = function() {
-            fetchEvents();
-        };
+        window.onclick = function(event) { // Close modal on overlay click
+            const timeModal = document.getElementById("timePickerModal");
+            const deleteModal = document.getElementById("deleteAllModal");
+            if (event.target == timeModal) closeModal();
+            if (event.target == deleteModal) closeDeleteAllModal();
+        }
+
+        window.onload = fetchEvents;
+
     </script>
     <style>
+        /* --- CSS --- */
+        :root { /* Define colors */
+             --bg-color: #f4f4f4;
+             --card-bg: white;
+             --header-bg: #e9e9e9;
+             --text-color: #333;
+             --icon-color: #555;
+             --icon-hover: #000;
+             --image-bg: #eee; /* BG for aspect ratio box */
+             --image-fail-bg: #fdd;
+             --delete-color: red;
+             --download-color: blue;
+             --modal-bg: white;
+             --modal-overlay: rgba(0,0,0,0.4);
+             --btn-confirm-bg: #4CAF50;
+             --btn-cancel-bg: #aaa;
+             --btn-delete-bg: #e53935;
+        }
+
         body {
             font-family: Arial, sans-serif;
             text-align: center;
             margin: 0;
             padding: 20px;
-            background-color: #f4f4f4;
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
 
-        #header {
+        #header { /* Simple header from user code */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -272,7 +345,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 15px; /* Increased gap slightly */
+            width: 100%;
         }
 
         .collapsible-section {
@@ -286,110 +360,153 @@
             width: 100%;
             text-align: left;
             margin: 10px 0;
-            color: #333;
+            color: var(--text-color);
             cursor: pointer;
+            padding: 8px 10px; /* Padding */
+            background-color: var(--header-bg); /* Background */
+            border-radius: 5px; /* Rounded corners */
+            box-sizing: border-box;
+             transition: background-color 0.2s;
         }
+         .date-header:hover {
+             background-color: #ddd;
+         }
 
         .toggle-btn {
             background: none;
             border: none;
-            font-size: 16px;
+            font-size: 1em;
             margin-right: 10px;
             cursor: pointer;
-            color: #555;
+            color: var(--icon-color);
+            padding: 0 5px;
+            line-height: 1;
+            flex-shrink: 0;
         }
-
-        .toggle-btn:hover {
-            color: #000;
-        }
+        .toggle-btn:hover { color: var(--icon-hover); }
 
         .date-events {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            /* display: grid; is set via JS */
+            grid-template-columns: 1fr; /* Default: single column */
             gap: 15px;
             width: 100%;
+             padding: 0 5px; /* Minimal horizontal padding */
+             box-sizing: border-box;
         }
 
         .event-card {
-            background: white;
+            background: var(--card-bg);
             padding: 15px;
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 600px;
+            max-width: 600px; /* Max width for readability */
             box-sizing: border-box;
+            margin: 0 auto; /* Center card in grid areas */
+            transition: opacity 0.3s ease-out; /* For delete feedback */
         }
 
+        /* *** Corrected event-content styles *** */
         .event-content {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            align-items: stretch; /* Make container and buttons same height */
+            gap: 10px;
+            width: 100%;
         }
 
+        /* *** Re-added image-container styles *** */
+        .image-container {
+             flex-grow: 1; /* Take up space */
+             aspect-ratio: 16 / 9; /* THE KEY FIX */
+             background-color: var(--image-bg); /* Whitespace color */
+             border-radius: 5px;
+             overflow: hidden;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             cursor: pointer;
+             min-width: 0; /* Prevent flexbox overflow */
+             position: relative;
+             transition: background-color 0.2s;
+         }
+         .image-container:hover { background-color: #e0e0e0; }
+         .image-container.image-load-failed {
+              background-color: var(--image-fail-bg);
+              cursor: default;
+          }
+         .image-container.image-load-failed:hover { background-color: var(--image-fail-bg); }
+
+
+        /* *** Corrected event-image styles *** */
         .event-image {
-            width: 92%;
-            height: auto;
-            cursor: pointer;
-            border-radius: 5px;
-            object-fit: cover;
+             display: block;
+             max-width: 100%;
+             max-height: 100%;
+             width: auto; /* Let max values and object-fit handle it */
+             height: auto;
+             object-fit: contain; /* Fit entire image within container */
+             /* Removed explicit width/height, border-radius, etc */
         }
 
+        /* *** Corrected button-group styles *** */
         .button-group {
             display: flex;
             flex-direction: column;
-            gap: 0;
-            margin-left: 10px;
-            flex-shrink: 0;
-            height: 100%;
-            justify-content: space-between;
+            justify-content: space-between; /* Space out buttons */
+            margin-left: 0; /* No margin needed */
+            flex-shrink: 0; /* Don't shrink */
         }
 
-        .spacer {
-            height: 50px;
-        }
+        /* .spacer CSS removed */
 
-        .action-btn {
+        .action-btn { /* Base style for all action buttons */
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 18px;
-            color: #555;
+            font-size: 1.1em; /* Slightly larger icons */
+            color: var(--icon-color);
             padding: 5px;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 30px;
+            width: 35px;
+            height: 35px;
+            border-radius: 4px;
+            transition: background-color 0.2s, color 0.2s, opacity 0.2s;
         }
+         .action-btn:disabled {
+              opacity: 0.5;
+              cursor: not-allowed;
+          }
 
-        .action-btn:hover {
-            color: #000;
-        }
+        /* General hover for non-delete/download */
+        .action-btn:not(.delete-btn):not(.download-btn):not(.delete-all-btn):hover {
+             color: var(--icon-hover);
+             background-color: #f0f0f0;
+         }
 
+        /* Original hover styles from user code for specific buttons */
         .delete-btn:hover,
         .delete-all-btn:hover {
-            color: red;
+            color: var(--delete-color);
         }
-
         .download-btn:hover {
-            color: blue;
+            color: var(--download-color);
         }
 
-        @media (hover: none) {
-            .delete-btn:hover,
-            .delete-all-btn:hover {
-                color: #555;
+         /* Active state provides better feedback */
+         .action-btn:active { background-color: #ddd; }
+         .delete-btn:active, .delete-all-btn:active { color: white; background-color: #d32f2f; }
+         .download-btn:active { color: white; background-color: #1565c0; }
+
+
+        /* Media Query Overrides */
+        @media (hover: none) { /* Remove hover effects for touch */
+            .action-btn:hover, .delete-btn:hover, .delete-all-btn:hover, .download-btn:hover {
+                color: var(--icon-color); /* Reset color */
+                background-color: transparent; /* Remove background */
             }
-            .delete-btn:active,
-            .delete-all-btn:active {
-                color: red;
-            }
-            .download-btn:hover {
-                color: #555;
-            }
-            .download-btn:active {
-                color: blue;
-            }
+             /* Keep active states for tap feedback */
         }
 
         @media (max-width: 600px) {
@@ -397,87 +514,94 @@
                 max-width: 95%;
                 padding: 12px;
             }
-
-            .event-image {
-                width: 88%;
+            .action-btn { /* Smaller buttons on small screens */
+                font-size: 1em;
+                width: 30px;
+                height: 30px;
             }
-
-            .button-group {
-                margin-left: 5px;
-            }
-
-            .spacer {
-                height: 40px;
-            }
-
-            .action-btn {
-                font-size: 16px;
-                width: 25px;
-            }
+             /* Ensure single column below 600px */
+             .date-events { grid-template-columns: 1fr; padding: 0 2px; }
         }
 
-        @media (min-width: 1240px) {
-            .date-events {
-                display: grid;
-                grid-template-columns: repeat(2, 600px);
-                gap: 20px;
-                justify-content: center;
-                max-width: 1240px;
-                margin: 0 auto;
-            }
+        /* Responsive grid columns */
+        @media (min-width: 768px) {
+             .date-events {
+                  display: grid; /* Ensure grid display if hidden */
+                  /* Responsive columns: fit as many as possible > 320px wide */
+                  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                  gap: 20px; /* Wider gap for grid */
+                  justify-content: center;
+                  max-width: 1240px; /* Limit overall width */
+                  margin: 0 auto; /* Center the grid container */
+                  padding: 0; /* Remove padding */
+              }
+              .event-card {
+                   max-width: none; /* Let grid determine size */
+                   margin: 0; /* No auto margin needed */
+               }
+         }
+         /* Removed the specific 1240px query, auto-fit handles larger sizes */
 
-            .event-card {
-                max-width: 600px;
-                margin: 0;
-            }
-        }
 
+        /* Simple Modal Styles (from user code preference) */
         .modal {
             display: none;
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-            text-align: center;
             z-index: 1000;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: auto;
+            max-width: 90%;
+            background: var(--modal-bg);
+            padding: 20px 25px; /* Adjusted padding */
+            border-radius: 10px;
+            box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.2); /* Slightly more shadow */
+            text-align: center;
         }
+         /* Modal Content styling */
+         .modal h3 { margin-top: 0; margin-bottom: 15px; }
+         .modal label { display: block; margin: 8px 0 3px; text-align: left; font-weight: bold; font-size: 0.9em;}
+         .modal input[type="datetime-local"] { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 0.95em; }
+         .modal button { color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; margin: 10px 5px 0; transition: background-color 0.2s, opacity 0.2s; min-width: 90px; }
+         .modal button:hover { opacity: 0.85; }
+         .modal button.confirm-btn { background-color: var(--btn-confirm-bg); }
+         .modal button.cancel-btn { background-color: var(--btn-cancel-bg); }
+         .modal button.confirm-delete-btn { background-color: var(--btn-delete-bg); }
+
+
     </style>
 </head>
 <body>
     <div id="header">
         <h1>Events</h1>
-        <button class="action-btn delete-all-btn" onclick="showDeleteAllModal()">
+        <button class="action-btn delete-all-btn" onclick="showDeleteAllModal()" title="Delete Events by Range">
             <i class="fas fa-trash-alt"></i>
         </button>
     </div>
-    <div id="eventsContainer"></div>
 
-    <div id="timePickerModal" class="modal">
-        <h3>Select Start and End Time</h3>
+    <div id="eventsContainer">
+         <p>Loading events...</p> </div>
+
+    <div id="timePickerModal" class="modal" aria-labelledby="dlModalTitle" role="dialog" aria-modal="true">
+        <h3 id="dlModalTitle">Select Download Time Range</h3>
         <label for="startTime">Start Time:</label>
-        <input type="datetime-local" id="startTime">
-        <br>
+        <input type="datetime-local" id="startTime" name="startTime">
         <label for="endTime">End Time:</label>
-        <input type="datetime-local" id="endTime">
-        <br><br>
-        <button onclick="confirmDownload()">Download</button>
-        <button onclick="closeModal()">Cancel</button>
+        <input type="datetime-local" id="endTime" name="endTime">
+        <button class="confirm-btn" onclick="confirmDownload()">Download</button>
+        <button class="cancel-btn" onclick="closeModal()">Cancel</button>
     </div>
 
-    <div id="deleteAllModal" class="modal">
-        <h3>Delete Events</h3>
-        <label for="deleteStartTime">Delete events from:</label>
-        <input type="datetime-local" id="deleteStartTime">
-        <br>
-        <label for="deleteEndTime">Up to:</label>
-        <input type="datetime-local" id="deleteEndTime">
-        <br><br>
-        <button onclick="confirmDeleteAll()">Delete</button>
-        <button onclick="closeDeleteAllModal()">Cancel</button>
+    <div id="deleteAllModal" class="modal" aria-labelledby="delModalTitle" role="dialog" aria-modal="true">
+        <h3 id="delModalTitle">Delete Events by Range</h3>
+        <label for="deleteStartTime">Delete From (Inclusive):</label>
+        <input type="datetime-local" id="deleteStartTime" name="deleteStartTime">
+        <label for="deleteEndTime">Delete To (Inclusive):</label>
+        <input type="datetime-local" id="deleteEndTime" name="deleteEndTime">
+        <button class="confirm-delete-btn" onclick="confirmDeleteAll()">Delete</button>
+        <button class="cancel-btn" onclick="closeDeleteAllModal()">Cancel</button>
     </div>
+
 </body>
 </html>
