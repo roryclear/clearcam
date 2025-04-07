@@ -243,93 +243,104 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
 
 #define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
 #define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
+#define AES_BLOCK_SIZE kCCBlockSizeAES128
+#define AES_KEY_SIZE kCCKeySizeAES256
 
 - (NSData *)encryptData:(NSData *)data withKey:(NSString *)key {
-    // Step 1: Prepare the header (magic number)
+    if (!data || !key) return nil;
     uint64_t magicNumber = MAGIC_NUMBER;
     NSMutableData *headerData = [NSMutableData dataWithBytes:&magicNumber length:HEADER_SIZE];
-    
-    // Step 2: Combine header and original data
     NSMutableData *dataToEncrypt = [NSMutableData data];
     [dataToEncrypt appendData:headerData];
     [dataToEncrypt appendData:data];
-    
-    // Step 3: Encrypt the combined data
-    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
-    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
-    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
-    
-    size_t bufferSize = dataToEncrypt.length + kCCBlockSizeAES128;
+    char keyPtr[AES_KEY_SIZE + 1];
+    bzero(keyPtr, sizeof(keyPtr));
+    BOOL keyResult = [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+    if (!keyResult) return nil;
+    uint8_t ivBytes[AES_BLOCK_SIZE];
+    int status = SecRandomCopyBytes(kSecRandomDefault, AES_BLOCK_SIZE, ivBytes);
+    if (status != errSecSuccess) return nil;
+    NSData *ivData = [NSData dataWithBytes:ivBytes length:AES_BLOCK_SIZE];
+    size_t bufferSize = dataToEncrypt.length + AES_BLOCK_SIZE;
     void *buffer = malloc(bufferSize);
-    
+    if (buffer == NULL) return nil;
     size_t numBytesEncrypted = 0;
-    CCCryptorStatus status = CCCrypt(kCCEncrypt,
-                                     kCCAlgorithmAES,
-                                     kCCOptionPKCS7Padding,
-                                     keyPtr,
-                                     kCCKeySizeAES256,
-                                     NULL, // IV (NULL for no IV)
-                                     dataToEncrypt.bytes,
-                                     dataToEncrypt.length,
-                                     buffer,
-                                     bufferSize,
-                                     &numBytesEncrypted);
-    
-    if (status == kCCSuccess) {
-        return [NSData dataWithBytesNoCopy:buffer length:numBytesEncrypted];
-    }
-    
-    free(buffer);
-    return nil;
-}
+    CCCryptorStatus cryptStatus = CCCrypt(kCCEncrypt,
+                                          kCCAlgorithmAES,
+                                          kCCOptionPKCS7Padding,
+                                          keyPtr,
+                                          AES_KEY_SIZE,
+                                          ivBytes,
+                                          dataToEncrypt.bytes,
+                                          dataToEncrypt.length,
+                                          buffer,
+                                          bufferSize,
+                                          &numBytesEncrypted);
 
-- (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key {
-    // Step 1: Decrypt the entire data first (we need at least the header)
-    char keyPtr[kCCKeySizeAES256 + 1]; // Buffer for key
-    bzero(keyPtr, sizeof(keyPtr)); // Zero out buffer
-    [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
-    
-    size_t bufferSize = encryptedData.length + kCCBlockSizeAES128;
-    void *buffer = malloc(bufferSize);
-    
-    size_t numBytesDecrypted = 0;
-    CCCryptorStatus status = CCCrypt(kCCDecrypt,
-                                     kCCAlgorithmAES,
-                                     kCCOptionPKCS7Padding,
-                                     keyPtr,
-                                     kCCKeySizeAES256,
-                                     NULL, // IV (NULL for no IV)
-                                     encryptedData.bytes,
-                                     encryptedData.length,
-                                     buffer,
-                                     bufferSize,
-                                     &numBytesDecrypted);
-    
-    if (status != kCCSuccess) {
+    if (cryptStatus == kCCSuccess) {
+        NSMutableData *resultData = [NSMutableData dataWithData:ivData];
+        [resultData appendBytes:buffer length:numBytesEncrypted];
+        free(buffer);
+        return resultData;
+    } else {
         free(buffer);
         return nil;
     }
-    
-    if (numBytesDecrypted < HEADER_SIZE) {
-        free(buffer);
-        return nil; 
+}
+
+- (NSData *)decryptData:(NSData *)encryptedDataWithIv withKey:(NSString *)key {
+    if (!encryptedDataWithIv || !key) return nil;
+    if (encryptedDataWithIv.length <= AES_BLOCK_SIZE) return nil;
+    NSData *ivData = [encryptedDataWithIv subdataWithRange:NSMakeRange(0, AES_BLOCK_SIZE)];
+    const void *ivBytes = ivData.bytes;
+    NSData *encryptedData = [encryptedDataWithIv subdataWithRange:NSMakeRange(AES_BLOCK_SIZE, encryptedDataWithIv.length - AES_BLOCK_SIZE)];
+    const void *encryptedBytes = encryptedData.bytes;
+    size_t encryptedLength = encryptedData.length;
+    char keyPtr[AES_KEY_SIZE + 1];
+    bzero(keyPtr, sizeof(keyPtr));
+    BOOL keyResult = [key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding];
+     if (!keyResult) {
+         NSLog(@"Decryption Error: Failed to get key bytes.");
+        return nil;
+    }
+    size_t bufferSize = encryptedLength;
+    void *buffer = malloc(bufferSize);
+     if (buffer == NULL) {
+         NSLog(@"Decryption Error: Failed to allocate memory for buffer.");
+        return nil;
     }
 
+    size_t numBytesDecrypted = 0;
+    CCCryptorStatus cryptStatus = CCCrypt(kCCDecrypt,
+                                          kCCAlgorithmAES,
+                                          kCCOptionPKCS7Padding,
+                                          keyPtr,
+                                          AES_KEY_SIZE,
+                                          ivBytes,
+                                          encryptedBytes,
+                                          encryptedLength,
+                                          buffer,
+                                          bufferSize,
+                                          &numBytesDecrypted);
+
+    if (cryptStatus != kCCSuccess) {
+        free(buffer);
+        return nil;
+    }
+    if (numBytesDecrypted < HEADER_SIZE) {
+        NSLog(@"Decryption Error: Decrypted data is too short for header.");
+        free(buffer);
+        return nil;
+    }
     uint64_t decryptedMagicNumber;
     memcpy(&decryptedMagicNumber, buffer, HEADER_SIZE);
     if (decryptedMagicNumber != MAGIC_NUMBER) {
         free(buffer);
-        return nil; // Wrong key or corrupted data
+        return nil;
     }
-    
-    // Step 4: Extract the original data (skip the header)
     size_t originalDataLength = numBytesDecrypted - HEADER_SIZE;
-    void *originalDataBuffer = malloc(originalDataLength);
-    memcpy(originalDataBuffer, buffer + HEADER_SIZE, originalDataLength);
-    
-    // Step 5: Return the original data
-    NSData *result = [NSData dataWithBytesNoCopy:originalDataBuffer length:originalDataLength];
-    free(buffer); // Free the full decrypted buffer
+    NSData *result = [NSData dataWithBytes:(buffer + HEADER_SIZE) length:originalDataLength];
+    free(buffer);
     return result;
 }
 
