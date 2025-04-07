@@ -50,7 +50,7 @@
 
 - (void)uploadImageAtPath:(NSString *)imagePath {
     NSString *server = @"https://www.rors.ai";
-    
+
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
         if (![server hasPrefix:@"http"]) {
@@ -62,6 +62,7 @@
     NSData *imageData = nil;
     NSString *filePathToSend = imagePath;
 
+    // Generate a blank image if no path is provided
     if (imagePath.length == 0) {
         CGSize imageSize = CGSizeMake(1280, 720);
         UIGraphicsBeginImageContext(imageSize);
@@ -113,11 +114,51 @@
     }
     [bodyData appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
 
-    [FileServer performPostRequestWithURL:[server stringByAppendingString:endpoint]
-                                       method:@"POST"
-                                  contentType:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary]
-                                         body:bodyData
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {}];
+    // 🔹 STEP 1: Ask your server for a presigned R2 URL
+    NSURL *uploadRequestURL = [NSURL URLWithString:[server stringByAppendingString:endpoint]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:uploadRequestURL];
+    [request setHTTPMethod:@"POST"];
+    [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
+    [request setHTTPBody:bodyData];
+
+    NSURLSessionDataTask *uploadTask = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"❌ Server upload failed: %@", error.localizedDescription);
+            return;
+        }
+
+        NSError *jsonError;
+        NSDictionary *responseDict = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError || !responseDict[@"url"]) {
+            NSLog(@"❌ Failed to parse server response or missing URL");
+            return;
+        }
+
+        NSString *presignedR2URL = responseDict[@"url"];  // 🔥 URL for R2 upload
+
+        // 🔹 STEP 2: Upload the same file to Cloudflare R2
+        NSMutableURLRequest *r2Request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:presignedR2URL]];
+        [r2Request setHTTPMethod:@"PUT"];
+        [r2Request setValue:@"application/octet-stream" forHTTPHeaderField:@"Content-Type"];
+
+        NSURLSessionUploadTask *r2UploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:r2Request fromData:fileData completionHandler:^(NSData *r2Data, NSURLResponse *r2Response, NSError *r2Error) {
+            if (r2Error) {
+                NSLog(@"❌ R2 upload failed: %@", r2Error.localizedDescription);
+            } else {
+                NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)r2Response;
+                if (httpResponse.statusCode == 200) {
+                    NSLog(@"✅ Successfully uploaded to Cloudflare R2!");
+                } else {
+                    NSLog(@"❌ R2 upload failed with HTTP %ld", (long)httpResponse.statusCode);
+                }
+            }
+        }];
+
+        [r2UploadTask resume];  // Start the R2 upload
+    }];
+
+    [uploadTask resume];  // Start the initial server upload request
 }
+
 
 @end
