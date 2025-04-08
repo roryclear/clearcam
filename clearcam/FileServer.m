@@ -973,7 +973,7 @@
         CGSize renderSize = naturalSize;
 
         if (low_res) {
-            CGFloat scale = MIN(960.0 / naturalSize.width, 540.0 / naturalSize.height);
+            CGFloat scale = MIN(1280.0 / naturalSize.width, 720.0 / naturalSize.height);
             transform = CGAffineTransformScale(transform, scale, scale);
             renderSize = CGSizeApplyAffineTransform(naturalSize, CGAffineTransformMakeScale(scale, scale));
         }
@@ -997,7 +997,7 @@
         if (low_res) {
             exportSession.videoComposition = videoComposition;
             exportSession.shouldOptimizeForNetworkUse = YES;
-            exportSession.fileLengthLimit = 5 * 1024 * 1024 * (trimmedDuration / 60.0); // ~5 MB per minute
+            exportSession.fileLengthLimit = 20 * 1024 * 1024 * (trimmedDuration / 60.0);
         } else if (orientation == 1 || orientation == 4) {
             exportSession.videoComposition = videoComposition;
         }

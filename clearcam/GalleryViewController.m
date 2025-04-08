@@ -224,8 +224,8 @@
     }] resume];
 }
 
-- (void)downloadFiles:(NSArray<NSString *> *)fileNames {
-    if (fileNames.count == 0) {
+- (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
+    if (fileURLs.count == 0) {
         [self loadExistingVideos];
         return;
     }
@@ -233,31 +233,12 @@
     self.isLoadingVideos = YES;
     
     dispatch_group_t downloadGroup = dispatch_group_create();
-    for (NSString *fileName in fileNames) {
+    
+    for (NSString *fileURL in fileURLs) {
         dispatch_group_enter(downloadGroup);
         
-        NSURL *url;
-        NSString *saveFileName = fileName; // Default filename for saving
-        
-        // Check if fileName is a full URL
-        if ([fileName hasPrefix:@"http://"] || [fileName hasPrefix:@"https://"]) {
-            url = [NSURL URLWithString:fileName];
-            saveFileName = [url lastPathComponent]; // Extract filename from URL
-        } else {
-            // Build URL using /video endpoint
-            NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
-            NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-            if (!sessionToken) {
-                dispatch_group_leave(downloadGroup);
-                return;
-            }
-
-            NSURLQueryItem *sessionTokenItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
-            NSURLQueryItem *nameItem = [NSURLQueryItem queryItemWithName:@"name" value:fileName];
-            components.queryItems = @[sessionTokenItem, nameItem];
-            
-            url = components.URL;
-        }
+        NSURL *url = [NSURL URLWithString:fileURL];
+        NSString *saveFileName = [url lastPathComponent];  // Extract filename from the R2 URL
         
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
         [request setHTTPMethod:@"GET"];
