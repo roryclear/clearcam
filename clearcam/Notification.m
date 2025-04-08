@@ -81,11 +81,15 @@
         return;
     }
 
+    // Calculate file size (in bytes)
+    NSUInteger fileSize = [imageData length];
+
     // 🔹 STEP 1: Request a Presigned R2 URL from the Server
     NSURLComponents *components = [NSURLComponents componentsWithString:[server stringByAppendingString:@"/upload"]];
     NSURLQueryItem *fileItem = [NSURLQueryItem queryItemWithName:@"filename" value:fileName];
     NSURLQueryItem *sessionItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
-    components.queryItems = @[fileItem, sessionItem];  // Include session_token here
+    NSURLQueryItem *sizeItem = [NSURLQueryItem queryItemWithName:@"size" value:[NSString stringWithFormat:@"%lu", (unsigned long)fileSize]];
+    components.queryItems = @[fileItem, sessionItem, sizeItem];  // Include filename, session_token, and size
 
     NSURL *uploadRequestURL = components.URL;
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:uploadRequestURL];
@@ -110,6 +114,7 @@
         NSMutableURLRequest *r2Request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:presignedR2URL]];
         [r2Request setHTTPMethod:@"PUT"];
         [r2Request setValue:@"application/octet-stream" forHTTPHeaderField:@"Content-Type"];
+        [r2Request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileSize] forHTTPHeaderField:@"Content-Length"]; // Add Content-Length header
 
         NSURLSessionUploadTask *r2UploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:r2Request fromData:imageData completionHandler:^(NSData *r2Data, NSURLResponse *r2Response, NSError *r2Error) {
             if (r2Error) {
@@ -124,13 +129,11 @@
             }
         }];
 
-        [r2UploadTask resume];  // Start the R2 upload
+        [r2UploadTask resume];
     }];
 
-    [uploadTask resume];  // Start the request to get the presigned URL
+    [uploadTask resume];
 }
 
-
-
-
 @end
+
