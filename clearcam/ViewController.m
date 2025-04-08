@@ -596,7 +596,6 @@ NSMutableDictionary *classColorMap;
     self.previewLayer.frame = self.view.bounds;
     UIDeviceOrientation currentOrientation = [self getCurrentOrientation];
     [self updateButtonFrames];
-    NSLog(@"viewDidLayoutSubviews - Orientation: %ld, Record button frame: %@", (long)currentOrientation, NSStringFromCGRect(self.recordButton.frame));
 }
 
 - (void)openSettings {
