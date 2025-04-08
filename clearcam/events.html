@@ -400,7 +400,7 @@
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 600px; /* Max width for readability */
+            max-width: 600px; /* Max width for readability on smaller screens */
             box-sizing: border-box;
             margin: 0 auto; /* Center card in grid areas */
             transition: opacity 0.3s ease-out; /* For delete feedback */
@@ -417,7 +417,7 @@
         /* *** Re-added image-container styles *** */
         .image-container {
              flex-grow: 1; /* Take up space */
-             aspect-ratio: 16 / 9; /* THE KEY FIX */
+             aspect-ratio: 16 / 9; /* Maintains proportion */
              background-color: var(--image-bg); /* Whitespace color */
              border-radius: 5px;
              overflow: hidden;
@@ -428,14 +428,14 @@
              min-width: 0; /* Prevent flexbox overflow */
              position: relative;
              transition: background-color 0.2s;
-         }
+             max-width: 100%; /* Prevents image from exceeding card width */
+        }
          .image-container:hover { background-color: #e0e0e0; }
          .image-container.image-load-failed {
-              background-color: var(--image-fail-bg);
+              background-colorplaatsen: var(--image-fail-bg);
               cursor: default;
           }
          .image-container.image-load-failed:hover { background-color: var(--image-fail-bg); }
-
 
         /* *** Corrected event-image styles *** */
         .event-image {
@@ -499,7 +499,6 @@
          .delete-btn:active, .delete-all-btn:active { color: white; background-color: #d32f2f; }
          .download-btn:active { color: white; background-color: #1565c0; }
 
-
         /* Media Query Overrides */
         @media (hover: none) { /* Remove hover effects for touch */
             .action-btn:hover, .delete-btn:hover, .delete-all-btn:hover, .download-btn:hover {
@@ -527,21 +526,19 @@
         @media (min-width: 768px) {
              .date-events {
                   display: grid; /* Ensure grid display if hidden */
-                  /* Responsive columns: fit as many as possible > 320px wide */
-                  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                  grid-template-columns: repeat(auto-fill, minmax(320px, 400px)); /* Changed from auto-fit to auto-fill, capped at 400px */
                   gap: 20px; /* Wider gap for grid */
-                  justify-content: center;
+                  justify-content: center; /* Center the grid items */
                   max-width: 1240px; /* Limit overall width */
                   margin: 0 auto; /* Center the grid container */
                   padding: 0; /* Remove padding */
               }
               .event-card {
-                   max-width: none; /* Let grid determine size */
-                   margin: 0; /* No auto margin needed */
+                   width: 100%; /* Fit the grid cell */
+                   max-width: 400px; /* Consistent max size */
+                   margin: 0; /* Let grid handle spacing */
                }
          }
-         /* Removed the specific 1240px query, auto-fit handles larger sizes */
-
 
         /* Simple Modal Styles (from user code preference) */
         .modal {
@@ -568,8 +565,6 @@
          .modal button.confirm-btn { background-color: var(--btn-confirm-bg); }
          .modal button.cancel-btn { background-color: var(--btn-cancel-bg); }
          .modal button.confirm-delete-btn { background-color: var(--btn-delete-bg); }
-
-
     </style>
 </head>
 <body>

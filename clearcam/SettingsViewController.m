@@ -582,10 +582,10 @@
                 NSString *localizedPrice = [formatter stringFromNumber:product.price];
 
                 // Create the message body with features
-                NSString *features = @"• View Captured Events From Anywhere\n• Receive Event Alerts";
+                NSString *features = @"• View captured events from anywhere\n• Receive real-time event notifications";
                 NSString *message = [NSString stringWithFormat:@"Unlock premium features:\n\n%@\n", features];
 
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Upgrade to ClearCamera Premium"
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Upgrade to Clearcam Premium"
                                                                                 message:message
                                                                         preferredStyle:UIAlertControllerStyleAlert];
 
