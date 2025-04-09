@@ -434,7 +434,7 @@
                 NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
                 NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
                 NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
-                if (![[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError]) NSLog(@"Failed to save key to SecretManager: %@", saveError.localizedDescription);
+                [[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError];
                 NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                 if (decryptedURL) {
                     // Reload the table view to reflect the decrypted state
@@ -616,9 +616,7 @@
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
                                                     style:UIAlertActionStyleDestructive
                                                   handler:^(UIAlertAction * _Nonnull action) {
-        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-        if (!sessionToken) NSLog(@"No session token found in Keychain. Proceeding with local deletion only.");
-        
+        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];        
         NSError *localError;
         NSFileManager *fileManager = [NSFileManager defaultManager];
         

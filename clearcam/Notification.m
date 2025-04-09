@@ -74,58 +74,33 @@
         imageData = encryptedData;
     }
 
-    // Retrieve session token
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken) {
-        NSLog(@"❌ No session token available");
-        return;
-    }
-
-    // Calculate file size (in bytes)
+    if (!sessionToken) return;
     NSUInteger fileSize = [imageData length];
-
-    // 🔹 STEP 1: Request a Presigned R2 URL from the Server
     NSURLComponents *components = [NSURLComponents componentsWithString:[server stringByAppendingString:@"/upload"]];
     NSURLQueryItem *fileItem = [NSURLQueryItem queryItemWithName:@"filename" value:fileName];
     NSURLQueryItem *sessionItem = [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken];
     NSURLQueryItem *sizeItem = [NSURLQueryItem queryItemWithName:@"size" value:[NSString stringWithFormat:@"%lu", (unsigned long)fileSize]];
-    components.queryItems = @[fileItem, sessionItem, sizeItem];  // Include filename, session_token, and size
+    components.queryItems = @[fileItem, sessionItem, sizeItem];
 
     NSURL *uploadRequestURL = components.URL;
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:uploadRequestURL];
     [request setHTTPMethod:@"GET"];
 
     NSURLSessionDataTask *uploadTask = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"❌ Server request failed: %@", error.localizedDescription);
-            return;
-        }
-
+        if (error) return;
         NSError *jsonError;
         NSDictionary *responseDict = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-        if (jsonError || !responseDict[@"url"]) {
-            NSLog(@"❌ Failed to parse server response or missing URL");
-            return;
-        }
-
-        NSString *presignedR2URL = responseDict[@"url"];  // 🔥 URL for R2 upload
-
-        // 🔹 STEP 2: Upload the File to Cloudflare R2
+        if (jsonError || !responseDict[@"url"]) return;
+        NSString *presignedR2URL = responseDict[@"url"];
         NSMutableURLRequest *r2Request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:presignedR2URL]];
         [r2Request setHTTPMethod:@"PUT"];
         [r2Request setValue:@"application/octet-stream" forHTTPHeaderField:@"Content-Type"];
         [r2Request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileSize] forHTTPHeaderField:@"Content-Length"]; // Add Content-Length header
 
         NSURLSessionUploadTask *r2UploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:r2Request fromData:imageData completionHandler:^(NSData *r2Data, NSURLResponse *r2Response, NSError *r2Error) {
-            if (r2Error) {
-                NSLog(@"❌ R2 upload failed: %@", r2Error.localizedDescription);
-            } else {
+            if (!r2Error) {
                 NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)r2Response;
-                if (httpResponse.statusCode == 200) {
-                    NSLog(@"✅ Successfully uploaded to Cloudflare R2!");
-                } else {
-                    NSLog(@"❌ R2 upload failed with HTTP %ld", (long)httpResponse.statusCode);
-                }
             }
         }];
 

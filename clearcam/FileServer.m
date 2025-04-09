@@ -886,7 +886,7 @@
 
     // Save the context after deletion
     NSError *saveError = nil;
-    if (![context save:&saveError]) NSLog(@"Failed to delete DayEntity and EventEntity objects: %@", saveError.localizedDescription);
+    [context save:&saveError];
 }
 
 
