@@ -105,17 +105,12 @@ NSMutableDictionary *classColorMap;
     [self.captureSession startRunning];
     [self startNewRecording];
     [self setupUI];
-    
-    // Log initial state
     UIDeviceOrientation initialOrientation = [self getCurrentOrientation];
-    NSLog(@"viewDidLoad - Initial orientation: %ld", (long)initialOrientation);
 }
 
 - (void)setInitialOrientation {
     UIDeviceOrientation deviceOrientation = [[UIDevice currentDevice] orientation];
     AVCaptureVideoOrientation videoOrientation;
-
-    // Fallback to status bar orientation if device orientation is ambiguous
     if (deviceOrientation == UIDeviceOrientationUnknown || deviceOrientation == UIDeviceOrientationFaceUp || deviceOrientation == UIDeviceOrientationFaceDown) {
         UIInterfaceOrientation statusBarOrientation = UIApplication.sharedApplication.statusBarOrientation;
         if (statusBarOrientation == UIInterfaceOrientationLandscapeLeft) {
@@ -159,7 +154,6 @@ NSMutableDictionary *classColorMap;
     [self setVideoOrientationForOrientation:initialOrientation];
     self.previewLayer.frame = self.view.bounds;
     [self updateButtonFrames];
-    NSLog(@"viewWillAppear - Orientation: %ld, Record button frame: %@", (long)initialOrientation, NSStringFromCGRect(self.recordButton.frame));
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
@@ -516,7 +510,6 @@ NSMutableDictionary *classColorMap;
     if (orientation == UIDeviceOrientationPortraitUpsideDown ||
         orientation == UIDeviceOrientationFaceUp ||
         orientation == UIDeviceOrientationFaceDown) {
-        NSLog(@"updateButtonFrames - Skipping layout for ignored orientation: %ld", (long)orientation);
         return;
     }
     if (orientation == UIDeviceOrientationLandscapeRight) {
@@ -612,6 +605,7 @@ NSMutableDictionary *classColorMap;
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self.captureSession stopRunning];
     // Enable auto-locking (important!)
     [UIApplication sharedApplication].idleTimerDisabled = NO;
 }
