@@ -401,6 +401,8 @@
                 sendNotifSwitch.on = isPremium ? self.sendNotifEnabled : NO;
                 [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = sendNotifSwitch;
+                
+                // Only disable switch if not premium; otherwise, keep it enabled
                 sendNotifSwitch.enabled = isPremium;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
@@ -633,11 +635,14 @@
 - (void)useOwnnotificationServerSwitchToggled:(UISwitch *)sender {
     self.useOwnServerEnabled = sender.on;
     self.isnotificationServerSectionExpanded = sender.on;
-    
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
     [defaults synchronize];
-    
+    if (!self.useOwnServerEnabled && ![self retrievePasswordFromSecretsManager]) {
+        self.sendNotifEnabled = NO;
+        [defaults setBool:NO forKey:@"send_notif_enabled"];
+        [defaults synchronize];
+    }
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
@@ -694,27 +699,34 @@
     }
     
     if (sender.on) {
-        NSString *password = [self retrievePasswordFromSecretsManager];
-        if (!password) {
-            [self promptForPasswordWithCompletion:^(BOOL success) {
-                if (success) {
-                    self.sendNotifEnabled = YES;
-                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
-                    [[NSUserDefaults standardUserDefaults] synchronize];
-                } else {
-                    sender.on = NO;
-                }
-            }];
-        } else {
+        if (self.useOwnServerEnabled) {
             self.sendNotifEnabled = YES;
             [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
             [[NSUserDefaults standardUserDefaults] synchronize];
+        } else {
+            NSString *password = [self retrievePasswordFromSecretsManager];
+            if (!password) {
+                [self promptForPasswordWithCompletion:^(BOOL success) {
+                    if (success) {
+                        self.sendNotifEnabled = YES;
+                        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
+                        [[NSUserDefaults standardUserDefaults] synchronize];
+                    } else {
+                        sender.on = NO;
+                    }
+                }];
+            } else {
+                self.sendNotifEnabled = YES;
+                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+            }
         }
     } else {
         self.sendNotifEnabled = NO;
         [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_notif_enabled"];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
+    [self.tableView reloadData];
 }
 
 - (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {

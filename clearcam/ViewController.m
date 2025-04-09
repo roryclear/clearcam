@@ -587,7 +587,6 @@ NSMutableDictionary *classColorMap;
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     self.previewLayer.frame = self.view.bounds;
-    UIDeviceOrientation currentOrientation = [self getCurrentOrientation];
     [self updateButtonFrames];
 }
 
