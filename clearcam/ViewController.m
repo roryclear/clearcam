@@ -434,11 +434,13 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)setupUI {
-    self.fpsLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, 150, 30)];
+    self.fpsLabel = [[UILabel alloc] init];
     self.fpsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
     self.fpsLabel.textColor = [UIColor whiteColor];
-    self.fpsLabel.font = [UIFont boldSystemFontOfSize:18];
+    self.fpsLabel.font = [UIFont boldSystemFontOfSize:14];
     self.fpsLabel.text = @"FPS: 0";
+    [self.fpsLabel sizeToFit]; // Size to fit the text
+    self.fpsLabel.frame = CGRectMake(10, 50, self.fpsLabel.frame.size.width + 8, self.fpsLabel.frame.size.height + 4);
     [self.view addSubview:self.fpsLabel];
 
     self.recordButton = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -521,7 +523,10 @@ NSMutableDictionary *classColorMap;
         self.galleryButton.frame = CGRectMake(leftMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
                                               screenHeight / 2 + recordButtonSize / 2 + spacing,
                                               galleryButtonSize, galleryButtonSize);
-        self.fpsLabel.frame = CGRectMake(screenWidth - 150 - MAX(20, safeAreaInsets.right + 10), 30, 150, 30);
+        self.fpsLabel.frame = CGRectMake(screenWidth - self.fpsLabel.frame.size.width - MAX(20, safeAreaInsets.right + 10),
+                                        30,
+                                        self.fpsLabel.frame.size.width,
+                                        self.fpsLabel.frame.size.height);
     } else if (orientation == UIDeviceOrientationLandscapeLeft) {
         CGFloat rightMargin = MAX(20, safeAreaInsets.right + 10);
         self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
@@ -531,7 +536,10 @@ NSMutableDictionary *classColorMap;
         self.galleryButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
                                               screenHeight / 2 + recordButtonSize / 2 + spacing,
                                               galleryButtonSize, galleryButtonSize);
-        self.fpsLabel.frame = CGRectMake(MAX(20, safeAreaInsets.left + 10), 30, 150, 30);
+        self.fpsLabel.frame = CGRectMake(MAX(10, safeAreaInsets.left + 5),
+                                        30,
+                                        self.fpsLabel.frame.size.width,
+                                        self.fpsLabel.frame.size.height);
     } else {
         CGFloat bottomMargin = MAX(20, safeAreaInsets.bottom + 10);
         CGFloat recordX = (screenWidth - recordButtonSize) / 2;
@@ -542,7 +550,7 @@ NSMutableDictionary *classColorMap;
         self.galleryButton.frame = CGRectMake(recordX - galleryButtonSize - spacing,
                                               screenHeight - bottomMargin - recordButtonSize / 2 - galleryButtonSize / 2,
                                               galleryButtonSize, galleryButtonSize);
-        self.fpsLabel.frame = CGRectMake(10, 30, 150, 30);
+        self.fpsLabel.frame = CGRectMake(10, 50, self.fpsLabel.frame.size.width, self.fpsLabel.frame.size.height);
     }
 }
 
@@ -1168,6 +1176,11 @@ NSMutableDictionary *classColorMap;
         if (deltaTime >= 1.0) {
             CGFloat fps = self.frameCount / deltaTime;
             self.fpsLabel.text = [NSString stringWithFormat:@"FPS: %.1f", fps];
+            [self.fpsLabel sizeToFit]; // Adjust size to fit new text
+            self.fpsLabel.frame = CGRectMake(self.fpsLabel.frame.origin.x,
+                                           self.fpsLabel.frame.origin.y,
+                                           self.fpsLabel.frame.size.width + 8,
+                                           self.fpsLabel.frame.size.height + 4); // Add padding
             self.frameCount = 0;
             self.lastFrameTime = currentTime;
         }
