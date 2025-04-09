@@ -108,7 +108,7 @@
     }
     
     self.isnotificationServerSectionExpanded = self.useOwnServerEnabled;
-    self.notificationServerAddress = [defaults stringForKey:@"own_notification_server_address"] ?: @"http://192.168.1.1";
+    self.notificationServerAddress = [defaults stringForKey:@"own_notification_server_address"] ?: @"http://192.168.1.1:8080";
     
     [defaults synchronize];
     
@@ -398,14 +398,15 @@
                 cell.textLabel.text = @"Send Notifications on Events";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
-                sendNotifSwitch.on = isPremium ? self.sendNotifEnabled : NO;
+                sendNotifSwitch.on = self.sendNotifEnabled;
                 [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = sendNotifSwitch;
                 
-                // Only disable switch if not premium; otherwise, keep it enabled
-                sendNotifSwitch.enabled = isPremium;
-                cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES;
+                // Enable switch and set text color only if premium OR using own server
+                BOOL isEnabled = isPremium || self.useOwnServerEnabled;
+                sendNotifSwitch.enabled = isEnabled;
+                cell.textLabel.textColor = isEnabled ? [UIColor labelColor] : [UIColor grayColor];
+                cell.userInteractionEnabled = YES; // Still tappable for popup
             } else if (indexPath.row == 6 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
                 cell.detailTextLabel.text = nil;
@@ -638,11 +639,12 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
     [defaults synchronize];
-    if (!self.useOwnServerEnabled && ![self retrievePasswordFromSecretsManager]) {
+    if (!self.useOwnServerEnabled && ![defaults boolForKey:@"isSubscribed"]) {
         self.sendNotifEnabled = NO;
         [defaults setBool:NO forKey:@"send_notif_enabled"];
         [defaults synchronize];
     }
+    
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
@@ -692,40 +694,46 @@
 }
 
 - (void)sendNotifSwitchToggled:(UISwitch *)sender {
-    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
-        sender.on = NO;
-        [self showUpgradePopup];
-        return;
-    }
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL isPremium = [defaults boolForKey:@"isSubscribed"];
     
-    if (sender.on) {
-        if (self.useOwnServerEnabled) {
-            self.sendNotifEnabled = YES;
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-        } else {
+    // Only allow toggling if premium OR using own server
+    if (isPremium || self.useOwnServerEnabled) {
+        self.sendNotifEnabled = sender.on;
+        [defaults setBool:self.sendNotifEnabled forKey:@"send_notif_enabled"];
+        
+        if (sender.on && !self.useOwnServerEnabled) {
+            // If not using own server, require password for premium users
             NSString *password = [self retrievePasswordFromSecretsManager];
             if (!password) {
                 [self promptForPasswordWithCompletion:^(BOOL success) {
                     if (success) {
                         self.sendNotifEnabled = YES;
-                        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
-                        [[NSUserDefaults standardUserDefaults] synchronize];
+                        [defaults setBool:YES forKey:@"send_notif_enabled"];
+                        [defaults synchronize];
                     } else {
+                        self.sendNotifEnabled = NO;
+                        [defaults setBool:NO forKey:@"send_notif_enabled"];
+                        [defaults synchronize];
                         sender.on = NO;
                     }
                 }];
             } else {
-                self.sendNotifEnabled = YES;
-                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"send_notif_enabled"];
-                [[NSUserDefaults standardUserDefaults] synchronize];
+                [defaults synchronize];
             }
+        } else {
+            // If using own server or turning off, no password needed
+            [defaults synchronize];
         }
     } else {
+        // If neither premium nor own server, disable and show upgrade popup
+        sender.on = NO;
         self.sendNotifEnabled = NO;
-        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"send_notif_enabled"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
+        [defaults setBool:NO forKey:@"send_notif_enabled"];
+        [defaults synchronize];
+        [self showUpgradePopup];
     }
+    
     [self.tableView reloadData];
 }
 

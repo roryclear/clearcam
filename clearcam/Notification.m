@@ -17,9 +17,9 @@
 
 - (void)sendNotification {
     NSString *server = @"https://www.rors.ai";
-    
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
+        if(!server) server = @"http://192.168.1.1:8080";
         if (![server hasPrefix:@"http"]) {
             server = [@"http://" stringByAppendingString:server];
         }
@@ -53,6 +53,7 @@
 
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
+        if(!server) server = @"http://192.168.1.1:8080";
         if (![server hasPrefix:@"http"]) {
             server = [@"http://" stringByAppendingString:server];
         }
