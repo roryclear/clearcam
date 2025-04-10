@@ -291,7 +291,7 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 3;
+    return 4;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
@@ -302,6 +302,8 @@
     } else if (section == 2) {
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         return isSubscribed ? @"Subscription" : @"Upgrade to Premium";
+    } else if (section == 3) {
+        return nil; // No header for Terms and Privacy section
     }
     return nil;
 }
@@ -319,9 +321,11 @@
         return baseRows;
     } else if (section == 1) { // Viewer Settings
         return 1; // Just Receive Notifications
-    } else if (section == 2) { // Upgrade to Premium
+    } else if (section == 2) { // Upgrade to Premium / Subscription
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
+    } else if (section == 3) { // Terms and Privacy
+        return 2; // Two rows: "Terms of Use" and "Privacy Policy"
     }
     return 0;
 }
@@ -466,6 +470,20 @@
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         }
+    } else if (indexPath.section == 3) { // Terms and Privacy
+        if (indexPath.row == 0) {
+            cell.textLabel.text = @"Terms of Use";
+            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textAlignment = NSTextAlignmentCenter;
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 1) {
+            cell.textLabel.text = @"Privacy Policy";
+            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textAlignment = NSTextAlignmentCenter;
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
+        }
     }
 
     return cell;
@@ -578,7 +596,6 @@
         if (!isPremium && indexPath.row == 0) {
             [[StoreManager sharedInstance] fetchAndPurchaseProduct];
         } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
-            // Show a loading indicator or confirmation
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restoring Purchases"
                                                                           message:@"Please wait while we restore your previous purchases..."
                                                                    preferredStyle:UIAlertControllerStyleAlert];
@@ -586,10 +603,15 @@
             
             [[StoreManager sharedInstance] restorePurchases];
             
-            // Dismiss the alert after a delay or handle this in StoreManager's callbacks
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [alert dismissViewControllerAnimated:YES completion:nil];
             });
+        }
+    } else if (indexPath.section == 3) { // Terms and Privacy
+        if (indexPath.row == 0) { // Terms of Use
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"] options:@{} completionHandler:nil];
+        } else if (indexPath.row == 1) { // Privacy Policy
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://rors.ai/privacy"] options:@{} completionHandler:nil];
         }
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
