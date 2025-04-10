@@ -291,7 +291,7 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 3; // Camera Settings, Viewer Settings, Upgrade to Premium
+    return 3;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
@@ -299,8 +299,9 @@
         return @"Camera Settings";
     } else if (section == 1) {
         return @"Viewer Settings";
-    } else if (section == 2 && ![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"]) {
-        return nil; // No header for Upgrade to Premium
+    } else if (section == 2) {
+        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+        return isSubscribed ? @"Subscription" : @"Upgrade to Premium";
     }
     return nil;
 }
@@ -319,7 +320,8 @@
     } else if (section == 1) { // Viewer Settings
         return 1; // Just Receive Notifications
     } else if (section == 2) { // Upgrade to Premium
-        return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ? 0 : 1;
+        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+        return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
     }
     return 0;
 }
@@ -450,12 +452,20 @@
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = YES; // Cell remains tappable regardless of premium status
         }
-    } else if (indexPath.section == 2) { // Upgrade to Premium
-        cell.textLabel.text = @"Upgrade to Premium";
-        cell.textLabel.textColor = [UIColor systemBlueColor];
-        cell.textLabel.textAlignment = NSTextAlignmentCenter;
-        cell.accessoryType = UITableViewCellAccessoryNone;
-        cell.userInteractionEnabled = YES;
+    } else if (indexPath.section == 2) { // Upgrade to Premium / Subscription
+        if (!isPremium && indexPath.row == 0) {
+            cell.textLabel.text = @"Upgrade to Premium";
+            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textAlignment = NSTextAlignmentCenter;
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
+        } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
+            cell.textLabel.text = @"Restore Purchases";
+            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textAlignment = NSTextAlignmentCenter;
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
+        }
     }
 
     return cell;
@@ -564,8 +574,23 @@
                 [self showUpgradePopup];
             } // No else needed since switch handles the toggle when premium
         }
-    } else if (indexPath.section == 2) { // Upgrade to Premium
-        [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+    } else if (indexPath.section == 2) { // Upgrade to Premium / Subscription
+        if (!isPremium && indexPath.row == 0) {
+            [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+        } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
+            // Show a loading indicator or confirmation
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restoring Purchases"
+                                                                          message:@"Please wait while we restore your previous purchases..."
+                                                                   preferredStyle:UIAlertControllerStyleAlert];
+            [self presentViewController:alert animated:YES completion:nil];
+            
+            [[StoreManager sharedInstance] restorePurchases];
+            
+            // Dismiss the alert after a delay or handle this in StoreManager's callbacks
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [alert dismissViewControllerAnimated:YES completion:nil];
+            });
+        }
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
