@@ -594,7 +594,7 @@
         }
     } else if (indexPath.section == 2) { // Upgrade to Premium / Subscription
         if (!isPremium && indexPath.row == 0) {
-            [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+            [self showUpgradePopup];
         } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restoring Purchases"
                                                                           message:@"Please wait while we restore your previous purchases..."
@@ -604,7 +604,7 @@
             [[StoreManager sharedInstance] restorePurchases];
             
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [alert dismissViewControllerAnimated:YES completion:nil];
+                [self dismissViewControllerAnimated:YES completion:nil];
             });
         }
     } else if (indexPath.section == 3) { // Terms and Privacy
@@ -640,7 +640,7 @@
                                                                         preferredStyle:UIAlertControllerStyleAlert];
 
                 // Upgrade Action
-                UIAlertAction *upgradeAction = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Upgrade for %@", localizedPrice ?: @"Price"] // Fallback text
+                UIAlertAction *upgradeAction = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Upgrade for %@ per month", localizedPrice ?: @"Price"] // Fallback text
                                                                         style:UIAlertActionStyleDefault
                                                                       handler:^(UIAlertAction * _Nonnull action) {
                                                                           // Initiate the purchase flow
