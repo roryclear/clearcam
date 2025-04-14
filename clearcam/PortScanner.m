@@ -3,6 +3,16 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <fcntl.h> // For non-blocking socket
+#include <unistd.h> // For close()
+
+// Define the UserDefaults key
+NSString * const kShouldScanNetworkKey = @"shouldScanNetworkUserDefaultsKey";
+
+@interface PortScanner ()
+// Declare a private method to check the UserDefaults key and start scanning
+- (void)checkAndStartScanning;
+@end
 
 @implementation PortScanner
 
@@ -12,9 +22,43 @@
     if (self) {
         _cachedOpenPorts = [NSMutableArray array];
         _scanQueue = dispatch_queue_create("com.example.PortScannerQueue", DISPATCH_QUEUE_SERIAL);
+
+        // Register for changes to the UserDefaults key
+        [[NSUserDefaults standardUserDefaults] addObserver:self
+                                                 forKeyPath:kShouldScanNetworkKey
+                                                    options:NSKeyValueObservingOptionNew | NSKeyValueObservingOptionInitial // Get initial value
+                                                    context:NULL];
     }
-    [self updateCachedOpenPortsForPort:80];
     return self;
+}
+
+- (void)dealloc {
+    [[NSUserDefaults standardUserDefaults] removeObserver:self forKeyPath:kShouldScanNetworkKey];
+}
+
+// Observe changes to the UserDefaults key
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey,id> *)change
+                       context:(void *)context {
+    if ([keyPath isEqualToString:kShouldScanNetworkKey]) {
+        [self checkAndStartScanning];
+    } else {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context]; // Call super for other keys
+    }
+}
+
+// Check the UserDefaults key and start scanning if enabled
+- (void)checkAndStartScanning {
+    BOOL shouldScan = [[NSUserDefaults standardUserDefaults] boolForKey:kShouldScanNetworkKey];
+    if (shouldScan) {
+        [self updateCachedOpenPortsForPort:80]; // Start scanning, same as original init
+    } else {
+        NSLog(@"PortScanner: Scanning is disabled via UserDefaults.  Will not scan.");
+        @synchronized (self.cachedOpenPorts) {
+            [self.cachedOpenPorts removeAllObjects]; // Clear cache
+        }
+    }
 }
 
 - (void)updateCachedOpenPortsForPort:(int)port {
@@ -89,7 +133,7 @@
     fcntl(sock, F_SETFL, O_NONBLOCK);
 
     int result = connect(sock, (struct sockaddr *)&server, sizeof(server));
-    
+
     if (result == 0) {
         close(sock);
         return YES; // Port is open
@@ -117,6 +161,16 @@
 }
 
 - (void)throttledScanNetworkForPort:(int)port withBatchSize:(int)batchSize completion:(void (^)(NSArray<NSString *> *openPorts))completion {
+    // Check the UserDefaults key *before* starting the scan
+    BOOL shouldScan = [[NSUserDefaults standardUserDefaults] boolForKey:kShouldScanNetworkKey];
+    if (!shouldScan) {
+        NSLog(@"PortScanner: throttledScanNetworkForPort called, but scanning is disabled.  Returning empty result.");
+        if (completion) {
+            completion(@[]); // Return empty array, not nil
+        }
+        return;
+    }
+
     NSDictionary *ipInfo = [self getLocalIPInfo];
     if (!ipInfo) {
         if (completion) completion(@[]);
@@ -125,7 +179,7 @@
 
     NSString *deviceIP = [self getDeviceIPAddress];
     NSMutableArray<NSString *> *foundIPs = [NSMutableArray array];
-    
+
     // Check device IP first
     if (deviceIP && [self isAppRunningAtIP:deviceIP port:port]) {
         [foundIPs addObject:deviceIP];
@@ -134,17 +188,17 @@
     NSArray<NSString *> *ipList = [self getIPRangeFromIP:ipInfo[@"ip"] subnetMask:ipInfo[@"subnet"]];
     dispatch_group_t scanGroup = dispatch_group_create();
     dispatch_queue_t scanQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
-    
+
     for (NSInteger i = 0; i < ipList.count; i += batchSize) {
         NSRange range = NSMakeRange(i, MIN(batchSize, ipList.count - i));
         NSArray *batch = [ipList subarrayWithRange:range];
-        
+
         for (NSString *ip in batch) {
             // Skip device IP since we already checked it
             if ([ip isEqualToString:deviceIP]) {
                 continue;
             }
-            
+
             dispatch_group_enter(scanGroup);
             dispatch_async(scanQueue, ^{
                 // First check if port is open
@@ -159,11 +213,11 @@
                 dispatch_group_leave(scanGroup);
             });
         }
-        
+
         // Throttle by waiting for the batch to complete before starting the next batch
         dispatch_group_wait(scanGroup, DISPATCH_TIME_FOREVER);
     }
-    
+
     dispatch_group_notify(scanGroup, dispatch_get_main_queue(), ^{
         if (completion) {
             completion([foundIPs copy]);
@@ -175,10 +229,10 @@
 - (BOOL)isAppRunningAtIP:(NSString *)ip port:(int)port {
     NSString *urlString = [NSString stringWithFormat:@"http://%@:%d/get-devices", ip, port];
     NSURL *url = [NSURL URLWithString:urlString];
-    
+
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
     __block BOOL isOurApp = NO;
-    
+
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (!error && data) {
             // Check if the response matches what your app would return
@@ -189,13 +243,13 @@
         }
         dispatch_semaphore_signal(semaphore);
     }];
-    
+
     [task resume];
-    
+
     // Wait with a 2-second timeout
     dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC);
     dispatch_semaphore_wait(semaphore, timeout);
-    
+
     return isOurApp;
 }
 
@@ -218,13 +272,13 @@
         }
     }
     freeifaddrs(interfaces);
-    
+
     if (ipAddress) {
         // Store in NSUserDefaults
         [[NSUserDefaults standardUserDefaults] setObject:ipAddress forKey:@"DeviceIPAddress"];
         [[NSUserDefaults standardUserDefaults] synchronize]; // Ensure it's saved immediately
     }
-    
+
     return ipAddress ? ipAddress : @"No IP found";
 }
 

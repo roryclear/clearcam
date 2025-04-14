@@ -8,6 +8,7 @@
 #import "ScheduleManagementViewController.h"
 #import <UserNotifications/UserNotifications.h>
 #import <StoreKit/StoreKit.h>
+#import "PortScanner.h"
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -169,10 +170,14 @@
 }
 
 - (void)streamViaWiFiSwitchToggled:(UISwitch *)sender {
-    self.streamViaWiFiEnabled = sender.on;
+    BOOL isEnabled = sender.on;
+    self.streamViaWiFiEnabled = isEnabled;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.streamViaWiFiEnabled forKey:@"stream_via_wifi_enabled"];
+    [defaults setBool:isEnabled forKey:@"shouldScanNetworkUserDefaultsKey"];
     [defaults synchronize];
+    NSIndexPath *wifiIndexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    [self.tableView reloadRowsAtIndexPaths:@[wifiIndexPath] withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)receiveNotifSwitchToggled:(UISwitch *)sender {
