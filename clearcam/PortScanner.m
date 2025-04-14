@@ -18,7 +18,7 @@
 }
 
 - (void)updateCachedOpenPortsForPort:(int)port {
-    dispatch_async(self.scanQueue, ^
+    dispatch_async(self.scanQueue, ^{
         [self throttledScanNetworkForPort:port withBatchSize:10 completion:^(NSArray<NSString *> *openPorts) {
             @synchronized (self.cachedOpenPorts) {
                 [self.cachedOpenPorts removeAllObjects];
@@ -229,5 +229,3 @@
 }
 
 @end
-
-
