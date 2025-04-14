@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>To automatically discover other devices running Clearcam. Clearcam needs access to your network.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
