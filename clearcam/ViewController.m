@@ -52,6 +52,7 @@
 NSMutableDictionary *classColorMap;
 
 - (void)viewDidLoad {
+    NSLog(@"NSCameraUsageDescription: %@", [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSCameraUsageDescription"]);
     [super viewDidLoad];
     if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
         [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {

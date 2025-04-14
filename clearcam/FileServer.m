@@ -291,17 +291,6 @@
         }
     }
     
-    if ([filePath hasPrefix:@"get-devices"]) {
-        // Respond immediately with cached list
-        @synchronized (self.scanner.cachedOpenPorts) {
-            [self sendJson200:self.scanner.cachedOpenPorts toClient:clientSocket];
-        }
-        
-        [self.scanner updateCachedOpenPortsForPort:80];
-        return;
-    }
-
-    
     if ([filePath hasPrefix:@"multicamera"] || [filePath hasPrefix:@"events"]) {
         NSString *fileName = [filePath hasPrefix:@"multicamera"] ? @"multicamera.html" : @"events.html";
         NSString *playerFilePath = [[NSBundle mainBundle] pathForResource:[fileName stringByDeletingPathExtension] ofType:@"html"];
