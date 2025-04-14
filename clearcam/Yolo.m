@@ -153,7 +153,8 @@ UInt8 *rgbData;
 - (NSArray *)processOutput:(const float *)output {
     NSArray<NSNumber *> *yoloIndexes = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]];
     NSMutableArray *boxes = [NSMutableArray array];
-    int numPredictions = pow(self.yolo_res / 32, 2) * 21;
+    //int numPredictions = pow(self.yolo_res / 32, 2) * 21;
+    int numPredictions = 8400; //todo, tied to res and stride
 
     for (int index = 0; index < numPredictions; index++) {
         int classId = 0;
