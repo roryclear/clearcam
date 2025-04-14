@@ -8,7 +8,6 @@
 #import "ScheduleManagementViewController.h"
 #import <UserNotifications/UserNotifications.h>
 #import <StoreKit/StoreKit.h>
-#import "PortScanner.h"
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -40,7 +39,7 @@
                 [self.tableView reloadData];
             });
         }];
-    }    
+    }
     // Register for subscription status change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(subscriptionStatusDidChange:)
@@ -170,14 +169,10 @@
 }
 
 - (void)streamViaWiFiSwitchToggled:(UISwitch *)sender {
-    BOOL isEnabled = sender.on;
-    self.streamViaWiFiEnabled = isEnabled;
+    self.streamViaWiFiEnabled = sender.on;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.streamViaWiFiEnabled forKey:@"stream_via_wifi_enabled"];
-    [defaults setBool:isEnabled forKey:@"shouldScanNetworkUserDefaultsKey"];
     [defaults synchronize];
-    NSIndexPath *wifiIndexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    [self.tableView reloadRowsAtIndexPaths:@[wifiIndexPath] withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)receiveNotifSwitchToggled:(UISwitch *)sender {
@@ -254,7 +249,7 @@
     if (!sessionToken || sessionToken.length == 0) return;
     NSURL *url = [NSURL URLWithString:@"https://rors.ai/delete_device"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"DELETE"; 
+    request.HTTPMethod = @"DELETE";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     
     NSDictionary *body = @{
@@ -1010,3 +1005,4 @@
 }
 
 @end
+
