@@ -72,7 +72,8 @@ UInt8 *rgbData;
         @[@"toothbrush", [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0]]
     ];
     
-    NSString *fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
+    //NSString *fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
+    NSString *fileName = @"batch_data";
 
     NSString *filePath = [[NSBundle mainBundle] pathForResource:fileName ofType:nil];
     NSData *ns_data = nil;
@@ -328,27 +329,21 @@ UInt8 *rgbData;
     if (!floatArray) return nil;
 
     memcpy(floatArray, bufferPointer, buffer.length);
-    NSArray *output = [self processOutput:floatArray];
+    NSMutableArray *output = [[NSMutableArray alloc] init];
+    for(int i = 0; i < buffer.length/4; i+=6){ //4 sides + class + conf = 6
+        if(floatArray[i+5] > 0.25){ //todo unhardcode 0.25!
+            NSArray *shape = @[
+                @(floatArray[i]),
+                @(floatArray[i+1]),
+                @(floatArray[i+2]),
+                @(floatArray[i+3]),
+                @(floatArray[i+4]),
+                @(floatArray[i+5])
+            ];
+            [output addObject:shape];
+        }
+    }
     free(floatArray);
-    
-    NSMutableString *classNamesString = [NSMutableString string];
-    for (int i = 0; i < output.count; i++) {
-        [classNamesString appendString:self.yolo_classes[[output[i][4] intValue]][0]];
-        if (i < output.count - 1) [classNamesString appendString:@", "];
-    }
-    /* todo, move or remove?
-    if(output.count > 0){
-        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-        [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-        NSString *currentTimestamp = [dateFormatter stringFromDate:[NSDate date]];
-        NSString *logEntry = [NSString stringWithFormat:@"%@ - Class Names: %@", currentTimestamp, classNamesString];
-        NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] stringByAppendingPathComponent:@"logs.txt"];
-        NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath] ?: [NSFileHandle fileHandleForWritingAtPath:([[NSFileManager defaultManager] createFileAtPath:filePath contents:nil attributes:nil], filePath)];
-        [fileHandle seekToEndOfFile];
-        [fileHandle writeData:[[logEntry stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
-        [fileHandle closeFile];
-    }
-    */
     return output;
 }
 
