@@ -254,6 +254,19 @@ UInt8 *rgbData;
 }
 
 - (NSArray *)yolo_infer:(CGImageRef)cgImage withOrientation:(AVCaptureVideoOrientation)orientation {
+    
+    NSDictionary<NSString *, NSArray<NSNumber *> *> *presets = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"];
+    NSString *presetKey = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"];
+
+    NSArray<NSNumber *> *presetIndexes = presets[presetKey];
+    if ([presetIndexes isKindOfClass:[NSArray class]]) {
+        self.yoloIndexSet = [NSSet setWithArray:presetIndexes]; //todo, make into a set!
+    } else {
+        NSLog(@"Invalid preset key or data format");
+        self.yoloIndexSet = [NSSet set];
+    }
+    
+    
     CFDataRef rawData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
     if (!rawData) return nil;
 
@@ -327,11 +340,10 @@ UInt8 *rgbData;
     const void *bufferPointer = buffer.contents;
     float *floatArray = malloc(buffer.length);
     if (!floatArray) return nil;
-
     memcpy(floatArray, bufferPointer, buffer.length);
     NSMutableArray *output = [[NSMutableArray alloc] init];
     for(int i = 0; i < buffer.length/4; i+=6){ //4 sides + class + conf = 6
-        if(floatArray[i+5] > 0.25){ //todo unhardcode 0.25!
+        if([self.yoloIndexSet containsObject:@(floatArray[i + 4])] && floatArray[i+5] > 0.25){ //todo unhardcode 0.25!
             NSArray *shape = @[
                 @(floatArray[i]),
                 @(floatArray[i+1]),
