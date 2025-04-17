@@ -4,7 +4,6 @@
 
 @property (nonatomic, strong) NSArray<NSNumber *> *events;
 @property (nonatomic, strong) NSDictionary *alerts;
-@property (nonatomic, assign) BOOL *delete_on_launch;
 
 @property (nonatomic, strong) NSString *width;
 @property (nonatomic, strong) NSString *height;

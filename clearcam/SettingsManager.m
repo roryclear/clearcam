@@ -24,7 +24,6 @@
         if(![[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]) [[NSUserDefaults standardUserDefaults] setObject:@"People+Vehicles" forKey:@"yolo_preset_idx"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self loadResolutionSettings];
-        [self loadDeleteOnLaunch];
     }
     return self;
 }
@@ -48,11 +47,6 @@
     return [defaultAlerts copy];
 }
 
-// New property: delete_on_launch
-- (void)saveDeleteOnLaunch {
-    [[NSUserDefaults standardUserDefaults] setBool:self.delete_on_launch forKey:@"delete_on_launch"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-}
 
 //old
 //self.res = [[Resolution alloc] initWithWidth:3840 height:2160 text_size:5 preset:AVCaptureSessionPreset3840x2160];
@@ -81,19 +75,6 @@
     self.text_size = textSize;
     self.preset = preset;
     [self saveResolutionSettings];
-}
-
-- (void)loadDeleteOnLaunch {
-    if ([[NSUserDefaults standardUserDefaults] objectForKey:@"delete_on_launch"] == nil) {
-        self.delete_on_launch = NO;
-    } else {
-        self.delete_on_launch = [[NSUserDefaults standardUserDefaults] boolForKey:@"delete_on_launch"];
-    }
-}
-
-- (void)updateDeleteOnLaunch:(BOOL)value {
-    self.delete_on_launch = value;
-    [self saveDeleteOnLaunch];
 }
 
 @end
