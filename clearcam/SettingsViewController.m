@@ -611,7 +611,7 @@
         if (indexPath.row == 0) { // Terms of Use
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"] options:@{} completionHandler:nil];
         } else if (indexPath.row == 1) { // Privacy Policy
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://rors.ai/privacy"] options:@{} completionHandler:nil];
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.rors.ai/privacy"] options:@{} completionHandler:nil];
         }
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];

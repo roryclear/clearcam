@@ -265,7 +265,7 @@ UInt8 *rgbData;
     memcpy(floatArray, bufferPointer, buffer.length);
     NSMutableArray *output = [[NSMutableArray alloc] init];
     for(int i = 0; i < buffer.length/4; i+=6){ //4 sides + class + conf = 6
-        if([self.yoloIndexSet containsObject:@(floatArray[i + 4])] && floatArray[i+5] > 0.25){ //todo unhardcode 0.25!
+        if ([self.yoloIndexSet containsObject:@(floatArray[i + 4])] && floatArray[i + 5] > ([[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0)) {
             NSArray *shape = @[
                 @(floatArray[i]),
                 @(floatArray[i+1]),

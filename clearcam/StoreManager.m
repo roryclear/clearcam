@@ -246,7 +246,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         return;
     }
 
-    [FileServer performPostRequestWithURL:@"https://rors.ai/verify_receipt"
+    [FileServer performPostRequestWithURL:@"https://www.rors.ai/verify_receipt"
                                        method:@"POST"
                                   contentType:@"application/json"
                                          body:jsonData
