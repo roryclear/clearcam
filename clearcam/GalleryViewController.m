@@ -232,33 +232,78 @@
     }
     
     self.isLoadingVideos = YES;
+    dispatch_queue_t serialQueue = dispatch_queue_create("com.yourapp.serialDownloadQueue", DISPATCH_QUEUE_SERIAL);
     
-    dispatch_group_t downloadGroup = dispatch_group_create();
-    
-    for (NSString *fileURL in fileURLs) {
-        dispatch_group_enter(downloadGroup);
+    dispatch_async(serialQueue, ^{
+        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
         
-        NSURL *url = [NSURL URLWithString:fileURL];
-        NSString *saveFileName = [url lastPathComponent];  // Extract filename from the R2 URL
+        for (NSString *fileURL in fileURLs) {
+            NSURL *url = [NSURL URLWithString:fileURL];
+            NSString *saveFileName = [url lastPathComponent];
+            NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
+            
+            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+            [request setHTTPMethod:@"GET"];
+            
+            [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+                if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
+                    NSError *moveError;
+                    NSURL *destURL = [NSURL fileURLWithPath:destPath];
+                    
+                    // Move the downloaded file to destination
+                    [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
+                    
+                    // Process the file on main thread
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        NSString *extension = destPath.pathExtension.lowercaseString;
+                        
+                        // Only process mp4 and aes files
+                        if ([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"]) {
+                            if ([self.loadedFilenames containsObject:saveFileName]) {
+                                return; // Skip if already processed
+                            }
+                            
+                            if ([extension isEqualToString:@"aes"]) {
+                                // Handle AES decryption
+                                NSError *decryptionError = nil;
+                                NSData *encryptedData = [NSData dataWithContentsOfURL:destURL options:0 error:&decryptionError];
+                                
+                                if (encryptedData) {
+                                    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+                                    NSData *decryptedData = nil;
+                                    
+                                    // Try all available keys
+                                    for (NSString *key in storedKeys) {
+                                        decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+                                        if (decryptedData) break;
+                                    }
+                                    
+                                    if (decryptedData) {
+                                        // Handle the decrypted data
+                                        NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:destURL];
+                                        if (decryptedURL) {
+                                            [self addVideoFileAtPath:decryptedURL.path];
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Directly add MP4 files
+                                [self addVideoFileAtPath:destPath];
+                            }
+                        }
+                    });
+                }
+                dispatch_semaphore_signal(semaphore);
+            }] resume];
+            
+            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+        }
         
-        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-        [request setHTTPMethod:@"GET"];
-        
-        [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-            if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
-                NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
-                NSError *moveError;
-                NSURL *destURL = [NSURL fileURLWithPath:destPath];
-                
-                [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
-            }
-            dispatch_group_leave(downloadGroup);
-        }] resume];
-    }
-    
-    dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
-        self.isLoadingVideos = NO;
-        [self loadExistingVideos];
+        // All downloads completed
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.isLoadingVideos = NO;
+            [self loadExistingVideos];
+        });
     });
 }
 
@@ -700,3 +745,4 @@
 }
 
 @end
+
