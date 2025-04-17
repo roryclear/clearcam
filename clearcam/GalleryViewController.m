@@ -312,43 +312,44 @@
 
         NSString *finalFileName = [filePath lastPathComponent];
         if ([self.loadedFilenames containsObject:finalFileName]) continue; // Double-check after decryption
-
-        NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
-        NSDate *creationDate = [attributes fileCreationDate] ?: [NSDate distantPast];
-
-        [self.videoFiles addObject:filePath];
-        [self.loadedFilenames addObject:finalFileName];
-
-        NSString *datePart = [[finalFileName componentsSeparatedByString:@"_"] firstObject];
-        NSDate *date = [inputFormatter dateFromString:datePart];
-        NSString *sectionTitle = [dateFormatter stringFromDate:date] ?: @"Unknown Date";
-
-        if (!self.groupedVideos[sectionTitle]) {
-            self.groupedVideos[sectionTitle] = [NSMutableArray array];
-            [self.sectionTitles addObject:sectionTitle];
-        }
-
-        [self.groupedVideos[sectionTitle] addObject:filePath];
-        didAddNewFile = YES;
+        [self addVideoFileAtPath:filePath];
     }
+}
 
-    if (didAddNewFile) {
-        [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-            NSDate *date1 = [dateFormatter dateFromString:obj1];
-            NSDate *date2 = [dateFormatter dateFromString:obj2];
-            return [date2 compare:date1];
+- (void)addVideoFileAtPath:(NSString *)filePath {
+    if (!filePath) return;
+    NSString *filename = [filePath lastPathComponent];
+    if ([self.loadedFilenames containsObject:filename]) return;
+    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
+    NSDate *creationDate = [attributes fileCreationDate] ?: [NSDate distantPast];
+    [self.videoFiles addObject:filePath];
+    [self.loadedFilenames addObject:filename];
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    dateFormatter.dateStyle = NSDateFormatterMediumStyle;
+    dateFormatter.timeStyle = NSDateFormatterNoStyle;
+    NSDateFormatter *inputFormatter = [[NSDateFormatter alloc] init];
+    [inputFormatter setDateFormat:@"yyyy-MM-dd"];
+    NSString *datePart = [[filename componentsSeparatedByString:@"_"] firstObject];
+    NSDate *date = [inputFormatter dateFromString:datePart];
+    NSString *sectionTitle = [dateFormatter stringFromDate:date] ?: @"Unknown Date";
+    if (!self.groupedVideos[sectionTitle]) {
+        self.groupedVideos[sectionTitle] = [NSMutableArray array];
+        [self.sectionTitles addObject:sectionTitle];
+    }
+    [self.groupedVideos[sectionTitle] addObject:filePath];
+    [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+        NSDate *date1 = [dateFormatter dateFromString:obj1];
+        NSDate *date2 = [dateFormatter dateFromString:obj2];
+        return [date2 compare:date1];
+    }];
+    for (NSString *section in self.groupedVideos) {
+        [self.groupedVideos[section] sortUsingComparator:^NSComparisonResult(NSString *path1, NSString *path2) {
+            NSDictionary *attr1 = [[NSFileManager defaultManager] attributesOfItemAtPath:path1 error:nil];
+            NSDictionary *attr2 = [[NSFileManager defaultManager] attributesOfItemAtPath:path2 error:nil];
+            return [attr2.fileCreationDate compare:attr1.fileCreationDate];
         }];
-
-        for (NSString *section in self.groupedVideos) {
-            [self.groupedVideos[section] sortUsingComparator:^NSComparisonResult(NSString *path1, NSString *path2) {
-                NSDictionary *attr1 = [[NSFileManager defaultManager] attributesOfItemAtPath:path1 error:nil];
-                NSDictionary *attr2 = [[NSFileManager defaultManager] attributesOfItemAtPath:path2 error:nil];
-                return [attr2.fileCreationDate compare:attr1.fileCreationDate];
-            }];
-        }
-
-        [self.tableView reloadData];
     }
+    [self.tableView reloadData];
 }
 
 - (UIImage *)generateThumbnailForVideoAtPath:(NSString *)videoPath {
@@ -617,7 +618,7 @@
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
                                                     style:UIAlertActionStyleDestructive
                                                   handler:^(UIAlertAction * _Nonnull action) {
-        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];        
+        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         NSError *localError;
         NSFileManager *fileManager = [NSFileManager defaultManager];
         
