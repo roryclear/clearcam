@@ -225,6 +225,53 @@
     }] resume];
 }
 
+- (void)processVideoFileAtPath:(NSString *)filePath withFilename:(NSString *)filename {
+    NSString *extension = filePath.pathExtension.lowercaseString;
+    
+    // Only process mp4 and aes files
+    if (!([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"])) return;
+    
+    if ([self.loadedFilenames containsObject:filename]) {
+        return; // Skip if already processed
+    }
+    
+    if ([extension isEqualToString:@"aes"]) {
+        // Handle AES decryption
+        NSError *decryptionError = nil;
+        NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&decryptionError];
+        
+        if (encryptedData) {
+            NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+            NSData *decryptedData = nil;
+            
+            // Try all available keys
+            for (NSString *key in storedKeys) {
+                decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+                if (decryptedData) break;
+            }
+            
+            if (decryptedData) {
+                // Handle the decrypted data
+                NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
+                if (decryptedURL) {
+                    filePath = decryptedURL.path;
+                    filename = [filePath lastPathComponent];
+                } else {
+                    [self addVideoFileAtPath:filePath];
+                    return;
+                }
+            } else {
+                [self addVideoFileAtPath:filePath];
+                return;
+            }
+        } else {
+            return;
+        }
+    }
+    
+    [self addVideoFileAtPath:filePath];
+}
+
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
         [self loadExistingVideos];
@@ -255,42 +302,7 @@
                     
                     // Process the file on main thread
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        NSString *extension = destPath.pathExtension.lowercaseString;
-                        
-                        // Only process mp4 and aes files
-                        if ([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"]) {
-                            if ([self.loadedFilenames containsObject:saveFileName]) {
-                                return; // Skip if already processed
-                            }
-                            
-                            if ([extension isEqualToString:@"aes"]) {
-                                // Handle AES decryption
-                                NSError *decryptionError = nil;
-                                NSData *encryptedData = [NSData dataWithContentsOfURL:destURL options:0 error:&decryptionError];
-                                
-                                if (encryptedData) {
-                                    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
-                                    NSData *decryptedData = nil;
-                                    
-                                    // Try all available keys
-                                    for (NSString *key in storedKeys) {
-                                        decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
-                                        if (decryptedData) break;
-                                    }
-                                    
-                                    if (decryptedData) {
-                                        // Handle the decrypted data
-                                        NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:destURL];
-                                        if (decryptedURL) {
-                                            [self addVideoFileAtPath:decryptedURL.path];
-                                        }
-                                    }
-                                }
-                            } else {
-                                // Directly add MP4 files
-                                [self addVideoFileAtPath:destPath];
-                            }
-                        }
+                        [self processVideoFileAtPath:destPath withFilename:saveFileName];
                     });
                 }
                 dispatch_semaphore_signal(semaphore);
@@ -315,49 +327,9 @@
         self.loadedFilenames = [NSMutableSet set];
     }
 
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-    dateFormatter.dateStyle = NSDateFormatterMediumStyle;
-    dateFormatter.timeStyle = NSDateFormatterNoStyle;
-
-    NSDateFormatter *inputFormatter = [[NSDateFormatter alloc] init];
-    [inputFormatter setDateFormat:@"yyyy-MM-dd"];
-
-    BOOL didAddNewFile = NO;
-
     for (NSString *file in contents) {
-        NSString *extension = file.pathExtension.lowercaseString;
-        if (!([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"])) continue;
-
-        if ([self.loadedFilenames containsObject:file]) continue; // Skip if already processed
-
         NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
-
-        // AES decryption block
-        if ([extension isEqualToString:@"aes"]) {
-            NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&error];
-            if (encryptedData) {
-                NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
-                NSData *decryptedData = nil;
-
-                for (NSString *key in storedKeys) {
-                    decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
-                    if (decryptedData) break;
-                }
-
-                if (decryptedData) {
-                    NSURL *url = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
-                    filePath = [url path];
-                } else {
-                    continue;
-                }
-            } else {
-                continue;
-            }
-        }
-
-        NSString *finalFileName = [filePath lastPathComponent];
-        if ([self.loadedFilenames containsObject:finalFileName]) continue; // Double-check after decryption
-        [self addVideoFileAtPath:filePath];
+        [self processVideoFileAtPath:filePath withFilename:file];
     }
 }
 
