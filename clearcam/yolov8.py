@@ -427,13 +427,10 @@ def compute_iou_matrix(boxes):
     return inter / union
 
 def process_output(output, num_predictions=8400, threshold=0.25): #todo 3549 for 416x416, 8400 for 640x640
-    xc = output[0][0]
-    yc = output[0][1]
-    w = output[0][2]
-    h = output[0][3]
-    class_scores = output[0][4:]
+    xc, yc, w, h, class_scores = output[0][0], output[0][1], output[0][2], output[0][3], output[0][4:]
     class_ids = Tensor.argmax(class_scores,axis=0)
     probs = Tensor.max(class_scores, axis=0)
+    probs = Tensor.where(probs>=0.25,probs,0)
     x1 = xc - w / 2
     y1 = yc - h / 2
     x2 = xc + w / 2
@@ -443,12 +440,11 @@ def process_output(output, num_predictions=8400, threshold=0.25): #todo 3549 for
     boxes = boxes[order]
     iou = compute_iou_matrix(boxes)
     iou_mask = (iou > 0.45)
-    suppress_matrix = Tensor.triu(iou_mask,diagonal=1)
-    suppressed = suppress_matrix.any(axis=0)
-    keep = ~suppressed
-    keep = keep.reshape(keep.shape[0],1)
-    boxes *= keep
-    return boxes[:300]
+    suppressed = Tensor.triu(iou_mask,diagonal=1)
+    suppressed = suppressed.any(axis=0)
+    suppressed = suppressed.reshape(suppressed.shape[0],1)
+    boxes *= ~suppressed
+    return boxes
 
 
 def get_weights_location(yolo_variant: str) -> Path:
