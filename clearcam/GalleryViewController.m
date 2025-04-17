@@ -227,31 +227,19 @@
 
 - (void)processVideoFileAtPath:(NSString *)filePath withFilename:(NSString *)filename {
     NSString *extension = filePath.pathExtension.lowercaseString;
-    
-    // Only process mp4 and aes files
     if (!([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"])) return;
-    
-    if ([self.loadedFilenames containsObject:filename]) {
-        return; // Skip if already processed
-    }
-    
+    if ([self.loadedFilenames containsObject:filename]) return;
     if ([extension isEqualToString:@"aes"]) {
-        // Handle AES decryption
         NSError *decryptionError = nil;
         NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&decryptionError];
-        
         if (encryptedData) {
             NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
             NSData *decryptedData = nil;
-            
-            // Try all available keys
             for (NSString *key in storedKeys) {
                 decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
                 if (decryptedData) break;
             }
-            
             if (decryptedData) {
-                // Handle the decrypted data
                 NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
                 if (decryptedURL) {
                     filePath = decryptedURL.path;
@@ -268,7 +256,6 @@
             return;
         }
     }
-    
     [self addVideoFileAtPath:filePath];
 }
 
@@ -296,11 +283,7 @@
                 if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
                     NSError *moveError;
                     NSURL *destURL = [NSURL fileURLWithPath:destPath];
-                    
-                    // Move the downloaded file to destination
                     [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
-                    
-                    // Process the file on main thread
                     dispatch_async(dispatch_get_main_queue(), ^{
                         [self processVideoFileAtPath:destPath withFilename:saveFileName];
                     });
@@ -310,8 +293,6 @@
             
             dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
         }
-        
-        // All downloads completed
         dispatch_async(dispatch_get_main_queue(), ^{
             self.isLoadingVideos = NO;
             [self loadExistingVideos];
@@ -322,11 +303,7 @@
 - (void)loadExistingVideos {
     NSError *error;
     NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
-
-    if (!self.loadedFilenames) {
-        self.loadedFilenames = [NSMutableSet set];
-    }
-
+    if (!self.loadedFilenames) self.loadedFilenames = [NSMutableSet set];
     for (NSString *file in contents) {
         NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
         [self processVideoFileAtPath:filePath withFilename:file];
@@ -374,17 +351,13 @@
     AVAsset *asset = [AVAsset assetWithURL:videoURL];
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
-
     CMTime duration = asset.duration;
     Float64 durationInSeconds = CMTimeGetSeconds(duration);
     Float64 middleTime = durationInSeconds / 1.75;
-
     CMTime time = CMTimeMakeWithSeconds(middleTime, 600);
     NSError *error = nil;
     CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
-
     if (!imageRef) return nil;
-
     UIImage *thumbnail = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
     return thumbnail;
@@ -446,28 +419,21 @@
 
 - (void)promptUserForKeyWithAESFileURL:(NSURL *)aesFileURL encryptedData:(NSData *)encryptedData {
     [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
-        if (userProvidedKey) { // User provided a key
+        if (userProvidedKey) {
             NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
-            if (decryptedData) { // Key worked
+            if (decryptedData) {
                 NSError *saveError = nil;
                 NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
                 NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
                 NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
                 [[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError];
-                
-                // Save the decrypted file
                 NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                 if (decryptedURL) {
-                    // Clear current state
                     [self.videoFiles removeAllObjects];
                     [self.groupedVideos removeAllObjects];
                     [self.sectionTitles removeAllObjects];
                     [self.loadedFilenames removeAllObjects];
-                    
-                    // Reload all videos to reprocess with the new key
                     [self loadExistingVideos];
-                    
-                    // Play the decrypted video
                     AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
                     playerVC.player = [AVPlayer playerWithURL:decryptedURL];
                     [self presentViewController:playerVC animated:YES completion:^{
