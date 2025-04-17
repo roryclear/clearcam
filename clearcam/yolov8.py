@@ -14,7 +14,7 @@ import json
 
 #640x640 imgs to use:
 #https://media.tycsports.com/files/2022/12/03/512501/seleccion-argentina-vs-australia-el-gol-de-lionel-messi-1-1_640x640.webp
-#https://media.tycsports.com/files/2025/04/09/830424/jorge-mas-lionel-messi_640x640.webp #USED FOR EXPORT! TC=2!
+#https://media.tycsports.com/files/2025/04/09/830424/jorge-mas-lionel-messi_640x640.webp
 #+tie in second
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
@@ -386,7 +386,7 @@ class YOLOv8:
     x = self.net(x)
     x = self.fpn(*x)
     x = self.head(x)
-    return process_output_2(x)
+    return process_output(x)
 
   def return_all_trainable_modules(self):
     backbone_modules = [*range(10)]
@@ -409,22 +409,12 @@ def convert_f16_safetensor_to_f32(input_file: Path, output_file: Path):
     f.write(new_metadata_bytes)
     float32_values.tofile(f)
 
-
-
-def iou_between_box_2(box1, box2):
-    return intersection_between_box_2(box1, box2) / union_between_box_2(box1, box2)
-
-def intersection_between_box_2(box1, box2):
+def intersection_between_box(box1, box2):
     x1 = max(box1[0], box2[0])
     y1 = max(box1[1], box2[1])
     x2 = min(box1[2], box2[2])
     y2 = min(box1[3], box2[3])
     return max(0, x2 - x1) * max(0, y2 - y1)
-
-def union_between_box_2(box1, box2):
-    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
-    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
-    return box1_area + box2_area - intersection_between_box_2(box1, box2)
 
 def compute_iou_matrix(boxes):
     x1 = Tensor.maximum(boxes[:, None, 0],boxes[:, None, 0])
@@ -434,24 +424,22 @@ def compute_iou_matrix(boxes):
     inter = Tensor.maximum(Tensor(0), x2 - x1) * Tensor.maximum(Tensor(0), y2 - y1)
     area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
     union = area[:, None] + area[None, :] - inter
-    return inter / (union + 1e-6)
+    return inter / union
 
-def process_output_2(output, num_predictions=8400, threshold=0.25):
-    output = output.flatten()
-    reshaped = output.reshape(84, num_predictions)
-    xc = reshaped[0]
-    yc = reshaped[1]
-    w = reshaped[2]
-    h = reshaped[3]
-    class_scores = reshaped[4:]
+def process_output(output, num_predictions=8400, threshold=0.25): #todo 3549 for 416x416, 8400 for 640x640
+    xc = output[0][0]
+    yc = output[0][1]
+    w = output[0][2]
+    h = output[0][3]
+    class_scores = output[0][4:]
     class_ids = Tensor.argmax(class_scores,axis=0)
     probs = Tensor.max(class_scores, axis=0)
     x1 = xc - w / 2
     y1 = yc - h / 2
     x2 = xc + w / 2
     y2 = yc + h / 2
-    boxes = Tensor.stack(x1, y1, x2, y2, class_ids, probs, dim=1)
-    order = Tensor.sort(probs,descending=True)[1]
+    boxes = Tensor.stack(x1, y1, x2, y2, probs, class_ids, dim=1)
+    order = Tensor.topk(probs,300)[1]
     boxes = boxes[order]
     iou = compute_iou_matrix(boxes)
     iou_mask = (iou > 0.45)
@@ -460,7 +448,7 @@ def process_output_2(output, num_predictions=8400, threshold=0.25):
     keep = ~suppressed
     keep = keep.reshape(keep.shape[0],1)
     boxes *= keep
-    return boxes[:300] #max 300 detections default
+    return boxes[:300]
 
 
 def get_weights_location(yolo_variant: str) -> Path:
@@ -504,13 +492,12 @@ if __name__ == '__main__':
 
   st = time.time()
   predictions = yolo_infer(pre_processed_image)
-  post_predictions_2 = predictions.numpy()
   print(f'did inference in {int(round(((time.time() - st) * 1000)))}ms')
-  post_predictions_2 = [x for x in post_predictions_2 if x[-1] >= 0.25]
-  for x in post_predictions_2: x[4],x[5] = x[5],x[4] #hack, fix later? fix draw_bounding_boxes_and_save so it is like ios
-  post_predictions_2  = [post_predictions_2]
+  predictions = predictions.numpy()
+  predictions = [x for x in predictions if x[-2] >= 0.25]
+  predictions  = [predictions]
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  draw_bounding_boxes_and_save(orig_img_paths=image_location, output_img_paths=out_paths, all_predictions=post_predictions_2, class_labels=class_labels)
+  draw_bounding_boxes_and_save(orig_img_paths=image_location, output_img_paths=out_paths, all_predictions=predictions, class_labels=class_labels)
 
 # TODO for later:
 #  1. Fix SPPF minor difference due to maxpool
