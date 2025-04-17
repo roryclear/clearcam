@@ -385,7 +385,8 @@ class YOLOv8:
   def __call__(self, x):
     x = self.net(x)
     x = self.fpn(*x)
-    return self.head(x)
+    x = self.head(x)
+    return process_output_2(x)
 
   def return_all_trainable_modules(self):
     backbone_modules = [*range(10)]
@@ -459,7 +460,7 @@ def process_output_2(output, num_predictions=8400, threshold=0.25):
     keep = ~suppressed
     keep = keep.reshape(keep.shape[0],1)
     boxes *= keep
-    return boxes
+    return boxes[:300] #max 300 detections default
 
 
 def get_weights_location(yolo_variant: str) -> Path:
@@ -503,9 +504,8 @@ if __name__ == '__main__':
 
   st = time.time()
   predictions = yolo_infer(pre_processed_image)
+  post_predictions_2 = predictions.numpy()
   print(f'did inference in {int(round(((time.time() - st) * 1000)))}ms')
-  post_predictions_2 = process_output_2(predictions)
-  post_predictions_2 = post_predictions_2.numpy()
   post_predictions_2 = [x for x in post_predictions_2 if x[-1] >= 0.25]
   for x in post_predictions_2: x[4],x[5] = x[5],x[4] #hack, fix later? fix draw_bounding_boxes_and_save so it is like ios
   post_predictions_2  = [post_predictions_2]
