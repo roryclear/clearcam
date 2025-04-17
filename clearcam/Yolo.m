@@ -72,7 +72,8 @@ UInt8 *rgbData;
         @[@"toothbrush", [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0]]
     ];
     
-    NSString *fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
+    //NSString *fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
+    NSString *fileName = @"batch_data";
 
     NSString *filePath = [[NSBundle mainBundle] pathForResource:fileName ofType:nil];
     NSData *ns_data = nil;
@@ -150,84 +151,6 @@ UInt8 *rgbData;
     return self;
 }
 
-- (NSArray *)processOutput:(const float *)output {
-    NSArray<NSNumber *> *yoloIndexes = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"][[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"]];
-    NSMutableArray *boxes = [NSMutableArray array];
-    //int numPredictions = pow(self.yolo_res / 32, 2) * 21;
-    int numPredictions = 8400; //todo, tied to res and stride
-
-    for (int index = 0; index < numPredictions; index++) {
-        int classId = 0;
-        float prob = 0.0;
-        
-        for (int i = 0; i < yoloIndexes.count; i++) {
-            float confidence = output[numPredictions * ([yoloIndexes[i] intValue] + 4) + index];
-            if (confidence > prob) {
-                prob = confidence;
-                classId = [yoloIndexes[i] intValue];
-            }
-        }
-
-        //if (prob < 0.25) continue;
-        if (prob < ([[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ? [[NSUserDefaults standardUserDefaults] integerForKey:@"threshold"] / 100.0 : 0.25)) continue;
-
-        float xc = output[index];
-        float yc = output[numPredictions + index];
-        float w = output[2 * numPredictions + index];
-        float h = output[3 * numPredictions + index];
-
-        float x1 = (xc - w / 2);
-        float y1 = (yc - h / 2);
-        float x2 = (xc + w / 2);
-        float y2 = (yc + h / 2);
-
-        [boxes addObject:@[@(x1), @(y1), @(x2), @(y2), @(classId), @(prob)]];
-    }
-
-    [boxes sortUsingComparator:^NSComparisonResult(NSArray *box1, NSArray *box2) {
-        NSNumber *prob1 = box1[5];
-        NSNumber *prob2 = box2[5];
-        return [prob2 compare:prob1];
-    }];
-
-    NSMutableArray *result = [NSMutableArray array];
-    while ([boxes count] > 0) {
-        NSArray *bestBox = boxes[0];
-        [result addObject:bestBox];
-        [boxes removeObjectAtIndex:0];
-
-        NSMutableArray *filteredBoxes = [NSMutableArray array];
-        for (NSArray *box in boxes) {
-            if ([self iouBetweenBox:bestBox andBox:box] < 0.7) {
-                [filteredBoxes addObject:box];
-            }
-        }
-        boxes = filteredBoxes;
-    }
-    return result;
-}
-
-// Calculate intersection between two boxes
-- (CGFloat)intersectionBetweenBox:(NSArray *)box1 andBox:(NSArray *)box2 {
-    CGFloat x1 = MAX([box1[0] floatValue], [box2[0] floatValue]);
-    CGFloat y1 = MAX([box1[1] floatValue], [box2[1] floatValue]);
-    CGFloat x2 = MIN([box1[2] floatValue], [box2[2] floatValue]);
-    CGFloat y2 = MIN([box1[3] floatValue], [box2[3] floatValue]);
-    return MAX(0, x2 - x1) * MAX(0, y2 - y1);
-}
-
-// Calculate union between two boxes
-- (CGFloat)unionBetweenBox:(NSArray *)box1 andBox:(NSArray *)box2 {
-    CGFloat box1Area = ([box1[2] floatValue] - [box1[0] floatValue]) * ([box1[3] floatValue] - [box1[1] floatValue]);
-    CGFloat box2Area = ([box2[2] floatValue] - [box2[0] floatValue]) * ([box2[3] floatValue] - [box2[1] floatValue]);
-    return box1Area + box2Area - [self intersectionBetweenBox:box1 andBox:box2];
-}
-
-// Calculate Intersection over Union (IoU) between two boxes
-- (CGFloat)iouBetweenBox:(NSArray *)box1 andBox:(NSArray *)box2 {
-    return [self intersectionBetweenBox:box1 andBox:box2] / [self unionBetweenBox:box1 andBox:box2];
-}
-
 // Extract values from a string
 - (NSMutableDictionary<NSString *, id> *)extractValues:(NSString *)x {
     NSMutableDictionary<NSString *, id> *values = [@{@"op": [x componentsSeparatedByString:@"("][0]} mutableCopy];
@@ -253,6 +176,19 @@ UInt8 *rgbData;
 }
 
 - (NSArray *)yolo_infer:(CGImageRef)cgImage withOrientation:(AVCaptureVideoOrientation)orientation {
+    
+    NSDictionary<NSString *, NSArray<NSNumber *> *> *presets = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"];
+    NSString *presetKey = [[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_preset_idx"];
+
+    NSArray<NSNumber *> *presetIndexes = presets[presetKey];
+    if ([presetIndexes isKindOfClass:[NSArray class]]) {
+        self.yoloIndexSet = [NSSet setWithArray:presetIndexes]; //todo, make into a set!
+    } else {
+        NSLog(@"Invalid preset key or data format");
+        self.yoloIndexSet = [NSSet set];
+    }
+    
+    
     CFDataRef rawData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
     if (!rawData) return nil;
 
@@ -326,29 +262,22 @@ UInt8 *rgbData;
     const void *bufferPointer = buffer.contents;
     float *floatArray = malloc(buffer.length);
     if (!floatArray) return nil;
-
     memcpy(floatArray, bufferPointer, buffer.length);
-    NSArray *output = [self processOutput:floatArray];
+    NSMutableArray *output = [[NSMutableArray alloc] init];
+    for(int i = 0; i < buffer.length/4; i+=6){ //4 sides + class + conf = 6
+        if ([self.yoloIndexSet containsObject:@(floatArray[i + 4])] && floatArray[i + 5] > ([[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0)) {
+            NSArray *shape = @[
+                @(floatArray[i]),
+                @(floatArray[i+1]),
+                @(floatArray[i+2]),
+                @(floatArray[i+3]),
+                @(floatArray[i+4]),
+                @(floatArray[i+5])
+            ];
+            [output addObject:shape];
+        }
+    }
     free(floatArray);
-    
-    NSMutableString *classNamesString = [NSMutableString string];
-    for (int i = 0; i < output.count; i++) {
-        [classNamesString appendString:self.yolo_classes[[output[i][4] intValue]][0]];
-        if (i < output.count - 1) [classNamesString appendString:@", "];
-    }
-    /* todo, move or remove?
-    if(output.count > 0){
-        NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-        [dateFormatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-        NSString *currentTimestamp = [dateFormatter stringFromDate:[NSDate date]];
-        NSString *logEntry = [NSString stringWithFormat:@"%@ - Class Names: %@", currentTimestamp, classNamesString];
-        NSString *filePath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] stringByAppendingPathComponent:@"logs.txt"];
-        NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:filePath] ?: [NSFileHandle fileHandleForWritingAtPath:([[NSFileManager defaultManager] createFileAtPath:filePath contents:nil attributes:nil], filePath)];
-        [fileHandle seekToEndOfFile];
-        [fileHandle writeData:[[logEntry stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
-        [fileHandle closeFile];
-    }
-    */
     return output;
 }
 

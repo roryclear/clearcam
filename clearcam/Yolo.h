@@ -19,16 +19,12 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) NSString *input_buffer;
 @property (nonatomic, strong) NSString *output_buffer;
 @property (nonatomic, assign) UInt8 *rgbData;
+@property (nonatomic, strong) NSSet<NSNumber *> *yoloIndexSet;
 - (NSArray *)yolo_infer:(CGImageRef)cgImage withOrientation:(AVCaptureVideoOrientation)orientation;
 
 // Initializer
 - (instancetype)init;
-
-- (CGFloat)intersectionBetweenBox:(NSArray *)box1 andBox:(NSArray *)box2;
-- (CGFloat)unionBetweenBox:(NSArray *)box1 andBox:(NSArray *)box2;
-- (CGFloat)iouBetweenBox:(NSArray *)box1 andBox:(NSArray *)box2;
 - (NSMutableDictionary<NSString *, id> *)extractValues:(NSString *)x;
-- (NSArray *)processOutput:(const float *)output;
 
 @end
 

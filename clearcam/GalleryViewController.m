@@ -73,6 +73,7 @@
 @property (nonatomic, strong) NSMutableArray<NSString *> *sectionTitles;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @property (nonatomic, assign) BOOL isLoadingVideos;
+@property (nonatomic, strong) NSMutableSet<NSString *> *loadedFilenames;
 @end
 
 @implementation GalleryViewController
@@ -92,7 +93,7 @@
     config.timeoutIntervalForRequest = 60.0;
     config.timeoutIntervalForResource = 600.0;
     self.downloadSession = [NSURLSession sessionWithConfiguration:config];
-    
+    self.loadedFilenames = [NSMutableSet set];
     [self setupDownloadDirectory];
     [self setupTableView];
     [self setupRefreshControl];
@@ -224,6 +225,40 @@
     }] resume];
 }
 
+- (void)processVideoFileAtPath:(NSString *)filePath withFilename:(NSString *)filename {
+    NSString *extension = filePath.pathExtension.lowercaseString;
+    if (!([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"])) return;
+    if ([self.loadedFilenames containsObject:filename]) return;
+    if ([extension isEqualToString:@"aes"]) {
+        NSError *decryptionError = nil;
+        NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&decryptionError];
+        if (encryptedData) {
+            NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+            NSData *decryptedData = nil;
+            for (NSString *key in storedKeys) {
+                decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+                if (decryptedData) break;
+            }
+            if (decryptedData) {
+                NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
+                if (decryptedURL) {
+                    filePath = decryptedURL.path;
+                    filename = [filePath lastPathComponent];
+                } else {
+                    [self addVideoFileAtPath:filePath];
+                    return;
+                }
+            } else {
+                [self addVideoFileAtPath:filePath];
+                return;
+            }
+        } else {
+            return;
+        }
+    }
+    [self addVideoFileAtPath:filePath];
+}
+
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
         [self loadExistingVideos];
@@ -231,122 +266,83 @@
     }
     
     self.isLoadingVideos = YES;
+    dispatch_queue_t serialQueue = dispatch_queue_create("com.yourapp.serialDownloadQueue", DISPATCH_QUEUE_SERIAL);
     
-    dispatch_group_t downloadGroup = dispatch_group_create();
-    
-    for (NSString *fileURL in fileURLs) {
-        dispatch_group_enter(downloadGroup);
+    dispatch_async(serialQueue, ^{
+        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
         
-        NSURL *url = [NSURL URLWithString:fileURL];
-        NSString *saveFileName = [url lastPathComponent];  // Extract filename from the R2 URL
-        
-        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-        [request setHTTPMethod:@"GET"];
-        
-        [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-            if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
-                NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
-                NSError *moveError;
-                NSURL *destURL = [NSURL fileURLWithPath:destPath];
-                
-                [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
-            }
-            dispatch_group_leave(downloadGroup);
-        }] resume];
-    }
-    
-    dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
-        self.isLoadingVideos = NO;
-        [self loadExistingVideos];
+        for (NSString *fileURL in fileURLs) {
+            NSURL *url = [NSURL URLWithString:fileURL];
+            NSString *saveFileName = [url lastPathComponent];
+            NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
+            
+            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+            [request setHTTPMethod:@"GET"];
+            
+            [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+                if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
+                    NSError *moveError;
+                    NSURL *destURL = [NSURL fileURLWithPath:destPath];
+                    [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [self processVideoFileAtPath:destPath withFilename:saveFileName];
+                    });
+                }
+                dispatch_semaphore_signal(semaphore);
+            }] resume];
+            
+            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.isLoadingVideos = NO;
+            [self loadExistingVideos];
+        });
     });
 }
 
-
 - (void)loadExistingVideos {
-    [self.videoFiles removeAllObjects];
-    [self.groupedVideos removeAllObjects];
-    [self.sectionTitles removeAllObjects];
-    
     NSError *error;
     NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
-    
-    NSMutableArray *filesWithDates = [NSMutableArray array];
-    
+    if (!self.loadedFilenames) self.loadedFilenames = [NSMutableSet set];
     for (NSString *file in contents) {
-        NSString *extension = file.pathExtension.lowercaseString;
-        if ([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"]) {
-            NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
-            
-            if ([extension isEqualToString:@"aes"]) {
-                NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&error];
-                if (encryptedData) {
-                    NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
-                    __block NSData *decryptedData = nil;
-                    __block NSString *successfulKey = nil;
-
-                    for (NSString *key in storedKeys) {
-                        decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
-                        if (decryptedData) {
-                            successfulKey = key;
-                            break;
-                        }
-                    }
-
-                    if (decryptedData) {
-                        NSURL *url = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
-                        filePath = [url path];
-                    }
-                }
-            }
-            
-            NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
-            NSDate *creationDate = [attributes fileCreationDate];
-            
-            [filesWithDates addObject:@{@"path": filePath,
-                                        @"date": creationDate ?: [NSDate distantPast],
-                                        @"filename": file}];
-        }
+        NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
+        [self processVideoFileAtPath:filePath withFilename:file];
     }
-    
-    [filesWithDates sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-        return [obj2[@"date"] compare:obj1[@"date"]];
-    }];
-    
+}
+
+- (void)addVideoFileAtPath:(NSString *)filePath {
+    if (!filePath) return;
+    NSString *filename = [filePath lastPathComponent];
+    if ([self.loadedFilenames containsObject:filename]) return;
+    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
+    NSDate *creationDate = [attributes fileCreationDate] ?: [NSDate distantPast];
+    [self.videoFiles addObject:filePath];
+    [self.loadedFilenames addObject:filename];
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     dateFormatter.dateStyle = NSDateFormatterMediumStyle;
     dateFormatter.timeStyle = NSDateFormatterNoStyle;
-    
-    for (NSDictionary *fileInfo in filesWithDates) {
-        NSString *filePath = fileInfo[@"path"];
-        [self.videoFiles addObject:filePath];
-        
-        NSString *filename = fileInfo[@"filename"];
-        NSString *datePart = [[filename componentsSeparatedByString:@"_"] firstObject];
-        
-        NSDateFormatter *inputFormatter = [[NSDateFormatter alloc] init];
-        [inputFormatter setDateFormat:@"yyyy-MM-dd"];
-        NSDate *date = [inputFormatter dateFromString:datePart];
-        
-        NSString *sectionTitle = [dateFormatter stringFromDate:date] ?: @"Unknown Date";
-        
-        if (!self.groupedVideos[sectionTitle]) {
-            self.groupedVideos[sectionTitle] = [NSMutableArray array];
-            [self.sectionTitles addObject:sectionTitle];
-        }
-        [self.groupedVideos[sectionTitle] addObject:filePath];
+    NSDateFormatter *inputFormatter = [[NSDateFormatter alloc] init];
+    [inputFormatter setDateFormat:@"yyyy-MM-dd"];
+    NSString *datePart = [[filename componentsSeparatedByString:@"_"] firstObject];
+    NSDate *date = [inputFormatter dateFromString:datePart];
+    NSString *sectionTitle = [dateFormatter stringFromDate:date] ?: @"Unknown Date";
+    if (!self.groupedVideos[sectionTitle]) {
+        self.groupedVideos[sectionTitle] = [NSMutableArray array];
+        [self.sectionTitles addObject:sectionTitle];
     }
-    
+    [self.groupedVideos[sectionTitle] addObject:filePath];
     [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        formatter.dateStyle = NSDateFormatterMediumStyle;
-        formatter.timeStyle = NSDateFormatterNoStyle;
-        
-        NSDate *date1 = [formatter dateFromString:obj1];
-        NSDate *date2 = [formatter dateFromString:obj2];
-        
+        NSDate *date1 = [dateFormatter dateFromString:obj1];
+        NSDate *date2 = [dateFormatter dateFromString:obj2];
         return [date2 compare:date1];
     }];
-    
+    for (NSString *section in self.groupedVideos) {
+        [self.groupedVideos[section] sortUsingComparator:^NSComparisonResult(NSString *path1, NSString *path2) {
+            NSDictionary *attr1 = [[NSFileManager defaultManager] attributesOfItemAtPath:path1 error:nil];
+            NSDictionary *attr2 = [[NSFileManager defaultManager] attributesOfItemAtPath:path2 error:nil];
+            return [attr2.fileCreationDate compare:attr1.fileCreationDate];
+        }];
+    }
     [self.tableView reloadData];
 }
 
@@ -355,17 +351,13 @@
     AVAsset *asset = [AVAsset assetWithURL:videoURL];
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
-
     CMTime duration = asset.duration;
     Float64 durationInSeconds = CMTimeGetSeconds(duration);
     Float64 middleTime = durationInSeconds / 1.75;
-
     CMTime time = CMTimeMakeWithSeconds(middleTime, 600);
     NSError *error = nil;
     CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
-
     if (!imageRef) return nil;
-
     UIImage *thumbnail = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
     return thumbnail;
@@ -427,9 +419,9 @@
 
 - (void)promptUserForKeyWithAESFileURL:(NSURL *)aesFileURL encryptedData:(NSData *)encryptedData {
     [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
-        if (userProvidedKey) { // User provided a key
+        if (userProvidedKey) {
             NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
-            if (decryptedData) { // Key worked
+            if (decryptedData) {
                 NSError *saveError = nil;
                 NSString *fileName = [[aesFileURL lastPathComponent] stringByDeletingPathExtension];
                 NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
@@ -437,10 +429,11 @@
                 [[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError];
                 NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                 if (decryptedURL) {
-                    // Reload the table view to reflect the decrypted state
+                    [self.videoFiles removeAllObjects];
+                    [self.groupedVideos removeAllObjects];
+                    [self.sectionTitles removeAllObjects];
+                    [self.loadedFilenames removeAllObjects];
                     [self loadExistingVideos];
-                    
-                    // Play the video
                     AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
                     playerVC.player = [AVPlayer playerWithURL:decryptedURL];
                     [self presentViewController:playerVC animated:YES completion:^{
@@ -616,7 +609,7 @@
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
                                                     style:UIAlertActionStyleDestructive
                                                   handler:^(UIAlertAction * _Nonnull action) {
-        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];        
+        NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
         NSError *localError;
         NSFileManager *fileManager = [NSFileManager defaultManager];
         
@@ -698,3 +691,4 @@
 }
 
 @end
+
