@@ -454,12 +454,20 @@
                 NSString *keyPrefix = [userProvidedKey substringToIndex:MIN(6, userProvidedKey.length)];
                 NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@_%@", fileName, keyPrefix];
                 [[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError];
+                
+                // Save the decrypted file
                 NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:aesFileURL];
                 if (decryptedURL) {
-                    // Reload the table view to reflect the decrypted state
+                    // Clear current state
+                    [self.videoFiles removeAllObjects];
+                    [self.groupedVideos removeAllObjects];
+                    [self.sectionTitles removeAllObjects];
+                    [self.loadedFilenames removeAllObjects];
+                    
+                    // Reload all videos to reprocess with the new key
                     [self loadExistingVideos];
                     
-                    // Play the video
+                    // Play the decrypted video
                     AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
                     playerVC.player = [AVPlayer playerWithURL:decryptedURL];
                     [self presentViewController:playerVC animated:YES completion:^{
