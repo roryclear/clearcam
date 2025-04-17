@@ -88,26 +88,61 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:uploadRequestURL];
     [request setHTTPMethod:@"GET"];
 
+    __weak typeof(self) weakSelf = self;
     NSURLSessionDataTask *uploadTask = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) return;
+        if (error) {
+            NSLog(@"Error getting upload URL: %@", error);
+            return;
+        }
         NSError *jsonError;
         NSDictionary *responseDict = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-        if (jsonError || !responseDict[@"url"]) return;
+        if (jsonError || !responseDict[@"url"]) {
+            NSLog(@"Error parsing upload URL response: %@", jsonError ?: @"Missing 'url' key");
+            return;
+        }
         NSString *presignedR2URL = responseDict[@"url"];
-        NSMutableURLRequest *r2Request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:presignedR2URL]];
-        [r2Request setHTTPMethod:@"PUT"];
-        [r2Request setValue:@"application/octet-stream" forHTTPHeaderField:@"Content-Type"];
-        [r2Request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileSize] forHTTPHeaderField:@"Content-Length"]; // Add Content-Length header
 
-        NSURLSessionUploadTask *r2UploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:r2Request fromData:imageData completionHandler:^(NSData *r2Data, NSURLResponse *r2Response, NSError *r2Error) {
-            if (!r2Error) {
-                NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)r2Response;
+        // Implement retry logic here
+        NSInteger maxRetries = 3;
+        __block NSInteger retryCount = 0;
+
+        void (^uploadWithRetry)(void) = ^{
+            if (retryCount >= maxRetries) {
+                NSLog(@"Image upload failed after %ld retries.", (long)maxRetries);
+                // Optionally handle the final failure, e.g., by calling a delegate method
+                return;
             }
-        }];
 
-        [r2UploadTask resume];
+            NSMutableURLRequest *r2Request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:presignedR2URL]];
+            [r2Request setHTTPMethod:@"PUT"];
+            [r2Request setValue:@"application/octet-stream" forHTTPHeaderField:@"Content-Type"];
+            [r2Request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileSize] forHTTPHeaderField:@"Content-Length"]; // Add Content-Length header
+
+            NSURLSessionUploadTask *r2UploadTask = [[NSURLSession sharedSession] uploadTaskWithRequest:r2Request fromData:imageData completionHandler:^(NSData *r2Data, NSURLResponse *r2Response, NSError *r2Error) {
+                if (!r2Error) {
+                    NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)r2Response;
+                    if (httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+                        NSLog(@"Image uploaded successfully after %ld attempts.", (long)retryCount + 1);
+                        // Optionally handle successful upload, e.g., by calling a delegate method
+                    } else {
+                        NSLog(@"Image upload failed with status code: %ld, attempt: %ld", (long)httpResponse.statusCode, (long)retryCount + 1);
+                        retryCount++;
+                        // Introduce a delay before retrying (e.g., exponential backoff)
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(pow(2, retryCount) * 0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), uploadWithRetry);
+                    }
+                } else {
+                    NSLog(@"Image upload failed with error: %@, attempt: %ld", r2Error, (long)retryCount + 1);
+                    retryCount++;
+                    // Introduce a delay before retrying
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(pow(2, retryCount) * 0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), uploadWithRetry);
+                }
+            }];
+
+            [r2UploadTask resume];
+        };
+
+        uploadWithRetry(); // Start the initial upload attempt
     }];
-
     [uploadTask resume];
 }
 
