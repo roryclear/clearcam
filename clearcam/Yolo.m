@@ -71,10 +71,7 @@ UInt8 *rgbData;
         @[@"teddy bear", [UIColor colorWithRed:0.6 green:0.3 blue:0.9 alpha:1.0]],@[@"hair drier", [UIColor colorWithRed:0.8 green:0.2 blue:0.3 alpha:1.0]],
         @[@"toothbrush", [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0]]
     ];
-    
-    //NSString *fileName = [NSString stringWithFormat:@"batch_req_se1_%dx%d", self.yolo_res, self.yolo_res];
     NSString *fileName = @"batch_data";
-
     NSString *filePath = [[NSBundle mainBundle] pathForResource:fileName ofType:nil];
     NSData *ns_data = nil;
     if (filePath) ns_data = [NSData dataWithContentsOfFile:filePath];
