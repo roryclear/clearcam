@@ -26,6 +26,7 @@
 @property (nonatomic, assign) BOOL isProcessingCoreData;
 @property (nonatomic, assign) BOOL recordPressed;
 @property (nonatomic, assign) BOOL isRecording;
+@property (nonatomic, assign) NSTimeInterval last_check_time;
 @property (nonatomic, assign) CMTime startTime;
 @property (nonatomic, assign) CMTime currentTime;
 @property (nonatomic, strong) AVAssetWriter *assetWriter;
@@ -60,6 +61,7 @@ NSMutableDictionary *classColorMap;
         }];
     }
     self.recordPressed = NO;
+    self.last_check_time = [[NSDate date] timeIntervalSince1970];
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
     self.finishRecordingQueue = dispatch_queue_create("com.example.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
@@ -945,6 +947,23 @@ NSMutableDictionary *classColorMap;
             //todo add back
             if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
                 self.fileServer.segment_length = 60;
+            }
+            if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
+                NSLog(@"Making request at %.2f %.2f seconds", [[NSDate date] timeIntervalSince1970],self.last_check_time);
+                self.last_check_time = [[NSDate date] timeIntervalSince1970];
+                NSString *deviceName = [UIDevice currentDevice].name;
+                NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/get_stream_upload_link?name=%@", [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
+                NSURL *url = [NSURL URLWithString:urlString];
+                NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                                         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    if (error) {
+                        NSLog(@"❌ Error: %@", error.localizedDescription);
+                    } else {
+                        NSString *responseString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                        NSLog(@"✅ Response: %@", responseString);
+                    }
+                }];
+                [task resume];
             }
             if (elapsedTime >= self.fileServer.segment_length) {
                 [self finishRecording];
