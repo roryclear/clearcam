@@ -22,6 +22,9 @@
 
 - (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key;
 - (NSData *)encryptData:(NSData *)data withKey:(NSString *)key;
+//TODO remove these once they work
+- (NSData *)decryptLiveSegment:(NSData *)encryptedDataWithIv withKey:(NSString *)key;
+- (NSData *)encryptLiveSegment:(NSData *)data withKey:(NSString *)key;
 
 @end
 

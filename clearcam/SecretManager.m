@@ -344,4 +344,104 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return result;
 }
 
+- (NSData *)decryptLiveSegment:(NSData *)encryptedDataWithIv withKey:(NSString *)key {
+    if (!encryptedDataWithIv || !key) return nil;
+    if (encryptedDataWithIv.length <= AES_BLOCK_SIZE) return nil;
+
+    NSData *ivData = [encryptedDataWithIv subdataWithRange:NSMakeRange(0, AES_BLOCK_SIZE)];
+    NSData *cipherData = [encryptedDataWithIv subdataWithRange:NSMakeRange(AES_BLOCK_SIZE, encryptedDataWithIv.length - AES_BLOCK_SIZE)];
+
+    char keyPtr[AES_KEY_SIZE + 1];
+    bzero(keyPtr, sizeof(keyPtr));
+    if (![key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding]) return nil;
+
+    size_t bufferSize = cipherData.length + AES_BLOCK_SIZE;
+    void *buffer = malloc(bufferSize);
+    if (!buffer) return nil;
+
+    size_t numBytesDecrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCDecrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     AES_KEY_SIZE,
+                                     ivData.bytes,
+                                     cipherData.bytes,
+                                     cipherData.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesDecrypted);
+
+    if (status != kCCSuccess) {
+        free(buffer);
+        return nil;
+    }
+
+    if (numBytesDecrypted < sizeof(uint64_t) * 2) {
+        free(buffer);
+        return nil;
+    }
+
+    uint64_t magic;
+    uint64_t originalLength;
+    memcpy(&magic, buffer, sizeof(uint64_t));
+    memcpy(&originalLength, buffer + sizeof(uint64_t), sizeof(uint64_t));
+
+    if (magic != MAGIC_NUMBER || originalLength > (numBytesDecrypted - sizeof(uint64_t) * 2)) {
+        free(buffer);
+        return nil;
+    }
+
+    NSData *result = [NSData dataWithBytes:(buffer + sizeof(uint64_t) * 2) length:originalLength];
+    free(buffer);
+    return result;
+}
+
+- (NSData *)encryptLiveSegment:(NSData *)data withKey:(NSString *)key {
+    if (!data || !key) return nil;
+
+    uint64_t magic = MAGIC_NUMBER;
+    uint64_t originalLength = data.length;
+
+    NSMutableData *plaintext = [NSMutableData data];
+    [plaintext appendBytes:&magic length:sizeof(magic)];
+    [plaintext appendBytes:&originalLength length:sizeof(originalLength)];
+    [plaintext appendData:data];
+
+    char keyPtr[AES_KEY_SIZE];
+    bzero(keyPtr, sizeof(keyPtr));
+    if (![key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding]) return nil;
+
+    uint8_t iv[AES_BLOCK_SIZE];
+    if (SecRandomCopyBytes(kSecRandomDefault, sizeof(iv), iv) != errSecSuccess) return nil;
+
+    size_t bufferSize = plaintext.length + AES_BLOCK_SIZE;
+    void *buffer = malloc(bufferSize);
+    if (!buffer) return nil;
+
+    size_t numBytesEncrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCEncrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     AES_KEY_SIZE,
+                                     iv,
+                                     plaintext.bytes,
+                                     plaintext.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesEncrypted);
+
+    if (status != kCCSuccess) {
+        free(buffer);
+        return nil;
+    }
+
+    NSMutableData *final = [NSMutableData dataWithBytes:iv length:sizeof(iv)];
+    [final appendBytes:buffer length:numBytesEncrypted];
+    free(buffer);
+    return final;
+}
+
+
 @end
