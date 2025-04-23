@@ -951,7 +951,7 @@ NSMutableDictionary *classColorMap;
             if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) { //todo, check for flag in settings!
                 NSLog(@"Making request at %.2f %.2f seconds", [[NSDate date] timeIntervalSince1970],self.last_check_time);
                 self.last_check_time = [[NSDate date] timeIntervalSince1970];
-                NSString *deviceName = @"iPhone SE2";
+                NSString *deviceName = [[NSUserDefaults standardUserDefaults] stringForKey:@"device_name"];
                 NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
                 NSLog(@"session token = %@", sessionToken);
 
