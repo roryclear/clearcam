@@ -951,13 +951,12 @@ NSMutableDictionary *classColorMap;
             if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) { //todo, check for flag in settings!
                 NSLog(@"Making request at %.2f %.2f seconds", [[NSDate date] timeIntervalSince1970],self.last_check_time);
                 self.last_check_time = [[NSDate date] timeIntervalSince1970];
-                NSString *deviceName = [UIDevice currentDevice].name;
+                NSString *deviceName = @"iPhone SE2";
                 NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
                 NSLog(@"session token = %@", sessionToken);
 
                 NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
                 NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-
                 NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_upload_link"];
                 components.queryItems = @[
                     [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
