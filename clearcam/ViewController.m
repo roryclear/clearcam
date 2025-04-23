@@ -948,12 +948,25 @@ NSMutableDictionary *classColorMap;
             if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
                 self.fileServer.segment_length = 60;
             }
-            if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
+            if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) { //todo, check for flag in settings!
                 NSLog(@"Making request at %.2f %.2f seconds", [[NSDate date] timeIntervalSince1970],self.last_check_time);
                 self.last_check_time = [[NSDate date] timeIntervalSince1970];
                 NSString *deviceName = [UIDevice currentDevice].name;
-                NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/get_stream_upload_link?name=%@", [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
-                NSURL *url = [NSURL URLWithString:urlString];
+                NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+                NSLog(@"session token = %@", sessionToken);
+
+                NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+                NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+
+                NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_upload_link"];
+                components.queryItems = @[
+                    [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
+                    [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
+                ];
+
+                NSURL *url = components.URL;
+                NSLog(@"Final URL: %@", url);
+
                 NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
                                                                          completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
                     if (error) {
