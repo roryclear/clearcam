@@ -24,6 +24,8 @@
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
 @property (nonatomic, strong) id ipAddressObserver;
 @property (nonatomic, assign) NSInteger threshold; // New property for threshold
+@property (nonatomic, assign) BOOL liveStreamInternetEnabled; // New property for live stream toggle
+@property (nonatomic, strong) NSString *deviceName; // New property for device name
 
 @end
 
@@ -93,6 +95,16 @@
         self.threshold = 25; // Default value of 25%
         [defaults setInteger:25 forKey:@"threshold"];
     }
+    
+    if ([defaults objectForKey:@"live_stream_internet_enabled"] != nil) {
+        self.liveStreamInternetEnabled = [defaults boolForKey:@"live_stream_internet_enabled"];
+    } else {
+        self.liveStreamInternetEnabled = NO;
+        [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
+    }
+    
+    self.deviceName = [defaults stringForKey:@"device_name"] ?: @"My Device";
+    [defaults setObject:self.deviceName forKey:@"device_name"];
     
     self.notificationSchedules = [[defaults arrayForKey:@"notification_schedules"] mutableCopy];
     if (!self.notificationSchedules) {
@@ -173,6 +185,23 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.streamViaWiFiEnabled forKey:@"stream_via_wifi_enabled"];
     [defaults synchronize];
+}
+
+- (void)liveStreamInternetSwitchToggled:(UISwitch *)sender {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL isPremium = [defaults boolForKey:@"isSubscribed"];
+    
+    if (isPremium) {
+        self.liveStreamInternetEnabled = sender.on;
+        [defaults setBool:self.liveStreamInternetEnabled forKey:@"live_stream_internet_enabled"];
+        [defaults synchronize];
+    } else {
+        sender.on = NO;
+        self.liveStreamInternetEnabled = NO;
+        [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
+        [defaults synchronize];
+        [self showUpgradePopup];
+    }
 }
 
 - (void)receiveNotifSwitchToggled:(UISwitch *)sender {
@@ -291,18 +320,20 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 4;
+    return 5; // Increased from 4 to 5 to include Live Stream Settings
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (section == 0) {
         return @"Camera Settings";
     } else if (section == 1) {
-        return @"Viewer Settings";
+        return @"Live Stream Settings"; // New section
     } else if (section == 2) {
+        return @"Viewer Settings";
+    } else if (section == 3) {
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         return isSubscribed ? @"Subscription" : @"Upgrade to Premium";
-    } else if (section == 3) {
+    } else if (section == 4) {
         return nil; // No header for Terms and Privacy section
     }
     return nil;
@@ -319,12 +350,14 @@
             baseRows += presetKeys.count + 1;
         }
         return baseRows;
-    } else if (section == 1) { // Viewer Settings
+    } else if (section == 1) { // Live Stream Settings
+        return 2; // Live Stream over the internet and Device name
+    } else if (section == 2) { // Viewer Settings
         return 1; // Just Receive Notifications
-    } else if (section == 2) { // Upgrade to Premium / Subscription
+    } else if (section == 3) { // Upgrade to Premium / Subscription
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
-    } else if (section == 3) { // Terms and Privacy
+    } else if (section == 4) { // Terms and Privacy
         return 2; // Two rows: "Terms of Use" and "Privacy Policy"
     }
     return 0;
@@ -444,7 +477,25 @@
                 cell.userInteractionEnabled = YES;
             }
         }
-    } else if (indexPath.section == 1) { // Viewer Settings
+    } else if (indexPath.section == 1) { // Live Stream Settings
+        if (indexPath.row == 0) {
+            cell.textLabel.text = @"Live Stream over the Internet";
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            UISwitch *liveStreamSwitch = [[UISwitch alloc] init];
+            liveStreamSwitch.on = isPremium ? self.liveStreamInternetEnabled : NO;
+            [liveStreamSwitch addTarget:self action:@selector(liveStreamInternetSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = liveStreamSwitch;
+            liveStreamSwitch.enabled = isPremium;
+            cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
+            cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 1) {
+            cell.textLabel.text = @"Device Name";
+            cell.detailTextLabel.text = self.deviceName;
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
+            cell.userInteractionEnabled = YES;
+        }
+    } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Receive Notifications on This Device";
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -456,7 +507,7 @@
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = YES; // Cell remains tappable regardless of premium status
         }
-    } else if (indexPath.section == 2) { // Upgrade to Premium / Subscription
+    } else if (indexPath.section == 3) { // Upgrade to Premium / Subscription
         if (!isPremium && indexPath.row == 0) {
             cell.textLabel.text = @"Upgrade to Premium";
             cell.textLabel.textColor = [UIColor systemBlueColor];
@@ -470,7 +521,7 @@
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         }
-    } else if (indexPath.section == 3) { // Terms and Privacy
+    } else if (indexPath.section == 4) { // Terms and Privacy
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Terms of Use";
             cell.textLabel.textColor = [UIColor systemBlueColor];
@@ -517,6 +568,39 @@
                                                                         preferredStyle:UIAlertControllerStyleAlert];
             [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:errorAlert animated:YES completion:nil];
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showDeviceNameInputDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Device Name"
+                                                                   message:@"Enter a name for this device."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Device Name";
+        textField.text = self.deviceName;
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *name = alert.textFields.firstObject.text;
+        if (name.length > 0) {
+            self.deviceName = name;
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setObject:name forKey:@"device_name"];
+            [defaults synchronize];
+            [self.tableView reloadData];
         }
     }];
     
@@ -586,13 +670,25 @@
                 [self testnotificationServer];
             }
         }
-    } else if (indexPath.section == 1) { // Viewer Settings
+    } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
                 [self showUpgradePopup];
-            } // No else needed since switch handles the toggle when premium
+            } // Switch handles toggle when premium
+        } else if (indexPath.row == 1) {
+            if (isPremium) {
+                [self showDeviceNameInputDialog];
+            } else {
+                [self showUpgradePopup];
+            }
         }
-    } else if (indexPath.section == 2) { // Upgrade to Premium / Subscription
+    } else if (indexPath.section == 2) { // Viewer Settings
+        if (indexPath.row == 0) {
+            if (!isPremium) {
+                [self showUpgradePopup];
+            } // Switch handles toggle when premium
+        }
+    } else if (indexPath.section == 3) { // Upgrade to Premium / Subscription
         if (!isPremium && indexPath.row == 0) {
             [self showUpgradePopup];
         } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
@@ -607,7 +703,7 @@
                 [self dismissViewControllerAnimated:YES completion:nil];
             });
         }
-    } else if (indexPath.section == 3) { // Terms and Privacy
+    } else if (indexPath.section == 4) { // Terms and Privacy
         if (indexPath.row == 0) { // Terms of Use
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"] options:@{} completionHandler:nil];
         } else if (indexPath.row == 1) { // Privacy Policy
@@ -632,11 +728,11 @@
                 NSString *localizedPrice = [formatter stringFromNumber:product.price];
 
                 // Create the message body with features
-                NSString *features = @"• View captured events from anywhere\n• Receive real-time event notifications";
+                NSString *features = @"• View captured events from anywhere\n• Receive real-time event notifications\n• Live stream over the internet";
                 NSString *message = [NSString stringWithFormat:@"Unlock premium features:\n\n%@\n", features];
 
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Upgrade to Clearcam Premium"
-                                                                                message:message
+                                                                               message:message
                                                                         preferredStyle:UIAlertControllerStyleAlert];
 
                 // Upgrade Action
@@ -660,17 +756,17 @@
                 // Fallback if product info failed to load
                 NSLog(@"Error fetching product info: %@", error.localizedDescription);
                 UIAlertController *fallbackAlert = [UIAlertController alertControllerWithTitle:@"Upgrade to Premium"
-                                                                                        message:@"Unlock premium features like remote event viewing and alerts. Would you like to upgrade?"
+                                                                                       message:@"Unlock premium features like remote event viewing, alerts, and live streaming. Would you like to upgrade?"
                                                                                 preferredStyle:UIAlertControllerStyleAlert];
 
                 UIAlertAction *upgradeFallbackAction = [UIAlertAction actionWithTitle:@"Upgrade"
-                                                                                style:UIAlertActionStyleDefault
-                                                                              handler:^(UIAlertAction * _Nonnull action) {
-                                                                                    [[StoreManager sharedInstance] fetchAndPurchaseProduct];
-                                                                                }];
+                                                                               style:UIAlertActionStyleDefault
+                                                                             handler:^(UIAlertAction * _Nonnull action) {
+                                                                                   [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+                                                                               }];
                 UIAlertAction *cancelFallbackAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                                                style:UIAlertActionStyleCancel
-                                                                              handler:nil];
+                                                                               style:UIAlertActionStyleCancel
+                                                                             handler:nil];
 
                 [fallbackAlert addAction:upgradeFallbackAction];
                 [fallbackAlert addAction:cancelFallbackAction];
@@ -1005,4 +1101,3 @@
 }
 
 @end
-
