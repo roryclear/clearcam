@@ -3,6 +3,7 @@
 #import "SecretManager.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import "LiveViewController.h"
 
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
@@ -60,45 +61,6 @@
         [self.menuButton.widthAnchor constraintEqualToConstant:44],
         [self.menuButton.heightAnchor constraintEqualToConstant:44]
     ]];
-}
-
-@end
-
-// New Live tab view controller
-@interface LiveViewController : UIViewController <UITableViewDelegate, UITableViewDataSource>
-@property (nonatomic, strong) UITableView *tableView;
-@end
-
-@implementation LiveViewController
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.title = @"Live";
-    [self setupTableView];
-}
-
-- (void)setupTableView {
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    self.tableView.delegate = self;
-    self.tableView.dataSource = self;
-    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
-    [self.view addSubview:self.tableView];
-    
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
-    ]];
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return 0; // Empty for now
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return [UITableViewCell new]; // Empty for now
 }
 
 @end
