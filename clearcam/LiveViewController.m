@@ -1,6 +1,6 @@
-// LiveViewController.m
 #import "LiveViewController.h"
 #import "StoreManager.h"
+#import "DeviceStreamViewController.h" // Import DeviceStreamViewController
 
 @interface LiveViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) NSMutableArray<NSString *> *deviceNames;
@@ -13,6 +13,8 @@
     [super viewDidLoad];
     self.title = @"Live";
     self.deviceNames = [NSMutableArray array];
+
+
     self.session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
     [self setupTableView];
     [self fetchLiveDevices];
@@ -101,6 +103,11 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSString *selectedDevice = self.deviceNames[indexPath.row];
     NSLog(@"Selected device: %@", selectedDevice);
+    
+    DeviceStreamViewController *streamVC = [[DeviceStreamViewController alloc] init];
+    streamVC.deviceName = selectedDevice; // Pass the device name
+    [self.navigationController pushViewController:streamVC animated:YES];
+    
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 

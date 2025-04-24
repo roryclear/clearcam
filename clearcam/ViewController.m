@@ -466,24 +466,24 @@ NSMutableDictionary *classColorMap;
         AVVideoHeightKey: @(videoHeight),
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
-    
-    NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
-    if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
-        // HEVC is supported
-        videoSettings = @{
-            AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
-            AVVideoWidthKey: @(videoWidth),
-            AVVideoHeightKey: @(videoHeight),
-            AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
-        };
-    }
-    
+        
     if (self.isStreaming) {
         NSMutableDictionary *mutableSettings = [videoSettings mutableCopy];
         mutableSettings[AVVideoCompressionPropertiesKey] = @{
             AVVideoAverageBitRateKey: @(500000)
         };
         videoSettings = [mutableSettings copy];
+    } else {
+        NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
+        if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
+            // HEVC is supported
+            videoSettings = @{
+                AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
+                AVVideoWidthKey: @(videoWidth),
+                AVVideoHeightKey: @(videoHeight),
+                AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
+            };
+        }
     }
         
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -867,18 +867,19 @@ NSMutableDictionary *classColorMap;
                     }
                 }
                 
-                // Copy or move the video file to the temp path
-                if ([fileManager copyItemAtURL:self.assetWriter.outputURL toURL:[NSURL fileURLWithPath:tempFilePath] error:&fileError]) {
-                    NSLog(@"✅ Copied video to temp path for upload: %@", tempFilePath);
-                } else {
-                    NSLog(@"❌ Failed to copy video to temp path: %@", fileError);
-                }
-                
-                // Trigger upload if file was successfully copied
-                if ([fileManager fileExistsAtPath:tempFilePath]) {
-                    [self uploadSegment];
-                } else {
-                    NSLog(@"❌ Temp file not found, skipping upload");
+                if (self.assetWriter.outputURL) {
+                    if ([fileManager copyItemAtURL:self.assetWriter.outputURL toURL:[NSURL fileURLWithPath:tempFilePath] error:&fileError]) {
+                        NSLog(@"✅ Copied video to temp path for upload: %@", tempFilePath);
+                    } else {
+                        NSLog(@"❌ Failed to copy video to temp path: %@", fileError);
+                    }
+                    
+                    // Trigger upload if file was successfully copied
+                    if ([fileManager fileExistsAtPath:tempFilePath]) {
+                        [self uploadSegment];
+                    } else {
+                        NSLog(@"❌ Temp file not found, skipping upload");
+                    }
                 }
             }
             
@@ -1289,7 +1290,7 @@ NSMutableDictionary *classColorMap;
                             if ((uploadLink && ![uploadLink isKindOfClass:[NSNull class]])) {
                                 if(self.isStreaming == NO){
                                     NSLog(@"📤 Upload link received: %@", uploadLink);
-                                    //self.streamLink = uploadLink;
+                                    self.streamLink = uploadLink;
                                     self.isStreaming = YES;
                                     dispatch_async(dispatch_get_main_queue(), ^{
                                         [self refreshView];
