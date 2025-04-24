@@ -465,13 +465,21 @@ NSMutableDictionary *classColorMap;
     
     NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
     if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
-        // HEVC is supported
+        // HEVC is supported    
         videoSettings = @{
             AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
             AVVideoWidthKey: @(videoWidth),
             AVVideoHeightKey: @(videoHeight),
             AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
         };
+    }
+    
+    if (self.isStreaming) {
+        NSMutableDictionary *mutableSettings = [videoSettings mutableCopy];
+        mutableSettings[AVVideoCompressionPropertiesKey] = @{
+            AVVideoAverageBitRateKey: @(500000)
+        };
+        videoSettings = [mutableSettings copy];
     }
         
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
