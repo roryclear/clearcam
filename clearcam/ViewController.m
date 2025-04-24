@@ -82,6 +82,7 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     self.segmentLock = [[NSLock alloc] init];
+    self.isStreaming = NO;
         
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
@@ -163,7 +164,6 @@ NSMutableDictionary *classColorMap;
         self.isProcessingCoreData = NO;
         self.recordPressed = wasRecording; // Restore recording state
         self.isRecording = NO;
-        self.isStreaming = NO;
         self.last_check_time = [[NSDate date] timeIntervalSince1970];
         self.startTime = kCMTimeInvalid;
         self.currentTime = kCMTimeZero;
@@ -1144,6 +1144,7 @@ NSMutableDictionary *classColorMap;
                             } else {
                                 if(self.isStreaming){ //todo, messy
                                     self.isStreaming = NO;
+                                    [FileServer sharedInstance].segment_length = 1;
                                     if([SettingsManager sharedManager].old_width && ![[SettingsManager sharedManager].width isEqualToString:[SettingsManager sharedManager].old_width]){
                                         [[SettingsManager sharedManager] revertResolution];
                                         dispatch_async(dispatch_get_main_queue(), ^{
