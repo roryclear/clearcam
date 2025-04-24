@@ -1252,8 +1252,8 @@ NSMutableDictionary *classColorMap;
             }
 
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
-                self.fileServer.segment_length = 60;
+            if (!self.isStreaming && [FileServer sharedInstance].segment_length < 60 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
+                [FileServer sharedInstance].segment_length = 60;
             }
             if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
                 NSLog(@"Making request at %.2f %.2f seconds", [[NSDate date] timeIntervalSince1970],self.last_check_time);
@@ -1291,7 +1291,6 @@ NSMutableDictionary *classColorMap;
                                     NSLog(@"📤 Upload link received: %@", uploadLink);
                                     //self.streamLink = uploadLink;
                                     self.isStreaming = YES;
-                                    [FileServer sharedInstance].segment_length = 2;
                                     dispatch_async(dispatch_get_main_queue(), ^{
                                         [self refreshView];
                                     });
@@ -1299,7 +1298,6 @@ NSMutableDictionary *classColorMap;
                             } else {
                                 if(self.isStreaming){ //todo, messy
                                     self.isStreaming = NO;
-                                    [FileServer sharedInstance].segment_length = 1;
                                     dispatch_async(dispatch_get_main_queue(), ^{
                                         [self refreshView];
                                     });
@@ -1311,98 +1309,99 @@ NSMutableDictionary *classColorMap;
                 }];
                 [task resume];
             }
-            if (elapsedTime >= self.fileServer.segment_length) {
+            if (elapsedTime >= [FileServer sharedInstance].segment_length || (self.isStreaming && elapsedTime > 2.0)) {
                 [self finishRecording];
             }
         }
-
-        AVCaptureVideoOrientation videoOrientation = self.previewLayer.connection.videoOrientation;
-        CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-        CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
-
-        if (self.isProcessing) {
-            return;
-        }
-
-        self.isProcessing = YES;
-
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-            size_t width = CVPixelBufferGetWidth(imageBuffer);
-            size_t height = CVPixelBufferGetHeight(imageBuffer);
-            CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
-
-            NSMutableArray *frameSquares = [[NSMutableArray alloc] init];
-
-            NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDate *now = [NSDate date];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
-            NSDate *midnight = [calendar dateFromComponents:components];
-            NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
-
-            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
-            frame[@"frame_timeStamp"] = @(timeStamp);
-            frame[@"res"] = @(self.yolo.yolo_res);
-            frame[@"aspect_ratio"] = @(aspect_ratio);
-
-            CGFloat targetWidth = self.yolo.yolo_res;
-            CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
-
-            CGFloat scaleX = targetSize.width / width;
-            CGFloat scaleY = targetSize.height / height;
-            CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
-
-            CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
-            CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
-
-            CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
+        if(!self.isStreaming){
+            AVCaptureVideoOrientation videoOrientation = self.previewLayer.connection.videoOrientation;
+            CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+            CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
             
-            NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-            if(self.recordPressed) [self.scene processOutput:output withImage:ciImage orientation:self.previewLayer.connection.videoOrientation];
-            CGImageRelease(cgImage);
-
-            __weak typeof(self) weak_self = self;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                @try {
-                    __strong typeof(weak_self) strongSelf = weak_self;
-                    if (!strongSelf) {
-                        return;
-                    }
-
-                    [strongSelf resetSquares];
-
-                    for (NSArray *detection in output) {
-                        NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];
-                        frameSquare[@"originX"] = detection[0];
-                        frameSquare[@"originY"] = detection[1];
-                        frameSquare[@"bottomRightX"] = detection[2];
-                        frameSquare[@"bottomRightY"] = detection[3];
-                        frameSquare[@"classIndex"] = detection[4];
-                        [frameSquares addObject:frameSquare];
-
-                        [strongSelf drawSquareWithTopLeftX:[detection[0] floatValue]
-                                                   topLeftY:[detection[1] floatValue]
-                                               bottomRightX:[detection[2] floatValue]
-                                               bottomRightY:[detection[3] floatValue]
-                                                 classIndex:[detection[4] intValue]
-                                                aspectRatio:aspect_ratio];
-                    }
-
-                    frame[@"squares"] = frameSquares;
-
-                    dispatch_async(self.segmentQueue, ^{
-                        if (!self.current_segment_squares) {
-                            self.current_segment_squares = [[NSMutableArray alloc] init];
+            if (self.isProcessing) {
+                return;
+            }
+            
+            self.isProcessing = YES;
+            
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+                size_t width = CVPixelBufferGetWidth(imageBuffer);
+                size_t height = CVPixelBufferGetHeight(imageBuffer);
+                CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
+                
+                NSMutableArray *frameSquares = [[NSMutableArray alloc] init];
+                
+                NSCalendar *calendar = [NSCalendar currentCalendar];
+                NSDate *now = [NSDate date];
+                NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
+                NSDate *midnight = [calendar dateFromComponents:components];
+                NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
+                
+                NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
+                frame[@"frame_timeStamp"] = @(timeStamp);
+                frame[@"res"] = @(self.yolo.yolo_res);
+                frame[@"aspect_ratio"] = @(aspect_ratio);
+                
+                CGFloat targetWidth = self.yolo.yolo_res;
+                CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
+                
+                CGFloat scaleX = targetSize.width / width;
+                CGFloat scaleY = targetSize.height / height;
+                CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
+                
+                CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
+                CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
+                
+                CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
+                
+                NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
+                if(self.recordPressed) [self.scene processOutput:output withImage:ciImage orientation:self.previewLayer.connection.videoOrientation];
+                CGImageRelease(cgImage);
+                
+                __weak typeof(self) weak_self = self;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    @try {
+                        __strong typeof(weak_self) strongSelf = weak_self;
+                        if (!strongSelf) {
+                            return;
                         }
-                        [self.current_segment_squares addObject:frame];
-                    });
-
-                    [strongSelf updateFPS];
-                    strongSelf.isProcessing = NO;
-                } @catch (NSException *exception) {
-                    NSLog(@"Exception in main queue block: %@", exception);
-                }
+                        
+                        [strongSelf resetSquares];
+                        
+                        for (NSArray *detection in output) {
+                            NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];
+                            frameSquare[@"originX"] = detection[0];
+                            frameSquare[@"originY"] = detection[1];
+                            frameSquare[@"bottomRightX"] = detection[2];
+                            frameSquare[@"bottomRightY"] = detection[3];
+                            frameSquare[@"classIndex"] = detection[4];
+                            [frameSquares addObject:frameSquare];
+                            
+                            [strongSelf drawSquareWithTopLeftX:[detection[0] floatValue]
+                                                      topLeftY:[detection[1] floatValue]
+                                                  bottomRightX:[detection[2] floatValue]
+                                                  bottomRightY:[detection[3] floatValue]
+                                                    classIndex:[detection[4] intValue]
+                                                   aspectRatio:aspect_ratio];
+                        }
+                        
+                        frame[@"squares"] = frameSquares;
+                        
+                        dispatch_async(self.segmentQueue, ^{
+                            if (!self.current_segment_squares) {
+                                self.current_segment_squares = [[NSMutableArray alloc] init];
+                            }
+                            [self.current_segment_squares addObject:frame];
+                        });
+                        
+                        [strongSelf updateFPS];
+                        strongSelf.isProcessing = NO;
+                    } @catch (NSException *exception) {
+                        NSLog(@"Exception in main queue block: %@", exception);
+                    }
+                });
             });
-        });
+        }
     } @catch (NSException *exception) {
         NSLog(@"Exception occurred: %@, %@", exception, [exception callStackSymbols]);
     }
