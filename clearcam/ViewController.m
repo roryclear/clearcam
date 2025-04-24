@@ -1279,34 +1279,33 @@ NSMutableDictionary *classColorMap;
                                                                          completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
                     if (error) {
                         NSLog(@"❌ Error: %@", error.localizedDescription);
-                    } else {
-                        NSError *jsonError;
-                        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-                        
-                        if (jsonError) {
-                            NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
+                        return;
+                    }
+
+                    NSError *jsonError;
+                    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+                    if (jsonError) {
+                        NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
+                        return;
+                    }
+
+                    NSString *uploadLink = json[@"upload_link"];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (uploadLink && ![uploadLink isKindOfClass:[NSNull class]]) {
+                            if (!self.isStreaming) {
+                                NSLog(@"📤 Upload link received: %@", uploadLink);
+                                self.streamLink = uploadLink;
+                                self.isStreaming = YES;
+                                [self refreshView];
+                            }
                         } else {
-                            NSString *uploadLink = json[@"upload_link"];
-                            if ((uploadLink && ![uploadLink isKindOfClass:[NSNull class]])) {
-                                if(self.isStreaming == NO){
-                                    NSLog(@"📤 Upload link received: %@", uploadLink);
-                                    self.streamLink = uploadLink;
-                                    self.isStreaming = YES;
-                                    dispatch_async(dispatch_get_main_queue(), ^{
-                                        [self refreshView];
-                                    });
-                                }
-                            } else {
-                                if(self.isStreaming){ //todo, messy
-                                    self.isStreaming = NO;
-                                    dispatch_async(dispatch_get_main_queue(), ^{
-                                        [self refreshView];
-                                    });
-                                    NSLog(@"no link");
-                                }
+                            if (self.isStreaming) {
+                                self.isStreaming = NO;
+                                [self refreshView];
+                                NSLog(@"no link");
                             }
                         }
-                    }
+                    });
                 }];
                 [task resume];
             }
