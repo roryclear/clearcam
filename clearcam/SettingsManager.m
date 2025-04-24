@@ -70,25 +70,10 @@
 
 // Update resolution settings
 - (void)updateResolutionWithWidth:(NSString *)width height:(NSString *)height textSize:(NSString *)textSize preset:(NSString *)preset {
-    self.old_width = self.width;
     self.width = width;
     self.height = height;
     self.text_size = textSize;
     self.preset = preset;
-    [self saveResolutionSettings];
-}
-
-- (void)revertResolution{
-    self.width = self.old_width;
-    if([self.width isEqualToString:@"1280"]){
-        self.height = @"720";
-        self.text_size = @"2";
-        self.preset = @"AVCaptureSessionPreset1280x720";
-    } else {
-        self.height = @"1080";
-        self.text_size = @"1";
-        self.preset = @"AVCaptureSessionPreset1920x1080";
-    }
     [self saveResolutionSettings];
 }
 

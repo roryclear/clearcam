@@ -378,6 +378,7 @@ NSMutableDictionary *classColorMap;
 - (void)setupCameraWithWidth:(NSString *)width height:(NSString *)height {
     self.captureSession = [[AVCaptureSession alloc] init];
     NSString *presetString = [NSString stringWithFormat:@"AVCaptureSessionPreset%@x%@", width, height];
+    if(self.isStreaming) presetString = @"AVCaptureSessionPreset640x480";
 
     if ([self.captureSession canSetSessionPreset:presetString]) {
         self.captureSession.sessionPreset = presetString;
@@ -435,6 +436,10 @@ NSMutableDictionary *classColorMap;
     SettingsManager *settings = [SettingsManager sharedManager];
     int videoWidth = [settings.width intValue];
     int videoHeight = [settings.height intValue];
+    if(self.isStreaming){
+        videoHeight = 480;
+        videoWidth = 640;
+    }
     
     // Create a folder for the day within the documents directory
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
@@ -1134,23 +1139,17 @@ NSMutableDictionary *classColorMap;
                                     NSLog(@"📤 Upload link received: %@", uploadLink);
                                     self.isStreaming = YES;
                                     [FileServer sharedInstance].segment_length = 2;
-                                    if(![[SettingsManager sharedManager].width isEqualToString:@"640"]) {
-                                        [[SettingsManager sharedManager] updateResolutionWithWidth:@"640" height:@"480" textSize:@"2" preset:@"AVCaptureSessionPreset640x480"];
-                                        dispatch_async(dispatch_get_main_queue(), ^{
-                                            [self refreshView];
-                                        });
-                                    }
+                                    dispatch_async(dispatch_get_main_queue(), ^{
+                                        [self refreshView];
+                                    });
                                 }
                             } else {
                                 if(self.isStreaming){ //todo, messy
                                     self.isStreaming = NO;
                                     [FileServer sharedInstance].segment_length = 1;
-                                    if([SettingsManager sharedManager].old_width && ![[SettingsManager sharedManager].width isEqualToString:[SettingsManager sharedManager].old_width]){
-                                        [[SettingsManager sharedManager] revertResolution];
-                                        dispatch_async(dispatch_get_main_queue(), ^{
-                                            [self refreshView];
-                                        });
-                                    }
+                                    dispatch_async(dispatch_get_main_queue(), ^{
+                                        [self refreshView];
+                                    });
                                     NSLog(@"no link");
                                 }
                             }
