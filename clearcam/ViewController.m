@@ -8,6 +8,8 @@
 #import "SceneState.h"
 #import "SettingsViewController.h"
 #import "GalleryViewController.h"
+#import <Security/Security.h>
+#import <CommonCrypto/CommonCryptor.h>
 
 @interface ViewController ()
 
@@ -41,6 +43,7 @@
 @property (nonatomic, strong) NSLock *segmentLock;
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
+@property (nonatomic, strong) NSString *streamLink;
 @property (nonatomic, strong) dispatch_queue_t segmentQueue;
 @property (nonatomic, strong) dispatch_queue_t finishRecordingQueue;
 @property (nonatomic, strong) SceneState *scene;
@@ -61,6 +64,7 @@ NSMutableDictionary *classColorMap;
             // do nothing
         }];
     }
+    self.streamLink = @"";
     self.recordPressed = NO;
     self.last_check_time = [[NSDate date] timeIntervalSince1970];
     self.scene = [[SceneState alloc] init];
@@ -465,7 +469,7 @@ NSMutableDictionary *classColorMap;
     
     NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
     if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
-        // HEVC is supported    
+        // HEVC is supported
         videoSettings = @{
             AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
             AVVideoWidthKey: @(videoWidth),
@@ -817,6 +821,7 @@ NSMutableDictionary *classColorMap;
 
 
 - (void)finishRecording {
+    NSLog(@"rory finish recording %ld %@", (long)[FileServer sharedInstance].segment_length, self.isStreaming ? @"YES" : @"NO");
     if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) return;
     
     NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
@@ -832,7 +837,14 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         
         [self.assetWriter finishWritingWithCompletionHandler:^{
-            if (!self.assetWriter.outputURL) return;
+            if (!self.assetWriter.outputURL) {
+                NSLog(@"❌ No output URL for asset writer");
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    self.isProcessingCoreData = NO;
+                    [self startNewRecording];
+                });
+                return;
+            }
             
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
@@ -842,7 +854,34 @@ NSMutableDictionary *classColorMap;
             NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
             [formatter setDateFormat:@"yyyy-MM-dd"];
             NSString *thisDayFoler = [formatter stringFromDate:self.current_file_timestamp];
-                        
+            
+            if(self.isStreaming){
+                // Prepare file for upload
+                NSString *tempFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"segment.mp4.aes"];
+                NSError *fileError = nil;
+                NSFileManager *fileManager = [NSFileManager defaultManager];
+                if ([fileManager fileExistsAtPath:tempFilePath]) {
+                    [fileManager removeItemAtPath:tempFilePath error:&fileError];
+                    if (fileError) {
+                        NSLog(@"❌ Failed to remove existing temp file: %@", fileError);
+                    }
+                }
+                
+                // Copy or move the video file to the temp path
+                if ([fileManager copyItemAtURL:self.assetWriter.outputURL toURL:[NSURL fileURLWithPath:tempFilePath] error:&fileError]) {
+                    NSLog(@"✅ Copied video to temp path for upload: %@", tempFilePath);
+                } else {
+                    NSLog(@"❌ Failed to copy video to temp path: %@", fileError);
+                }
+                
+                // Trigger upload if file was successfully copied
+                if ([fileManager fileExistsAtPath:tempFilePath]) {
+                    [self uploadSegment];
+                } else {
+                    NSLog(@"❌ Temp file not found, skipping upload");
+                }
+            }
+            
             [self.backgroundContext performBlock:^{
                 // Save background context
                 NSError *error = nil;
@@ -850,9 +889,11 @@ NSMutableDictionary *classColorMap;
                     // Save parent context only if necessary
                     NSError *parentError = nil;
                     [self.fileServer.context save:&parentError];
+                } else {
+                    NSLog(@"❌ Failed to save background context: %@", error);
                 }
                 
-                // Create a local copy of current_segment_squares, moved to after file save
+                // Create a local copy of current_segment_squares
                 __block NSArray *segmentSquaresCopy;
                 dispatch_sync(self.segmentQueue, ^{
                     segmentSquaresCopy = [self.current_segment_squares copy];
@@ -862,12 +903,15 @@ NSMutableDictionary *classColorMap;
                 // Fetch or create DayEntity efficiently
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
                 fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", thisDayFoler];
-                fetchRequest.fetchLimit = 1; // Only one DayEntity per date
+                fetchRequest.fetchLimit = 1;
                 
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
                 NSManagedObject *dayEntity;
                 
-                if (error) return;
+                if (error) {
+                    NSLog(@"❌ Fetch request failed: %@", error);
+                    return;
+                }
                 
                 if (fetchedDays.count > 0) {
                     dayEntity = fetchedDays.firstObject;
@@ -909,13 +953,113 @@ NSMutableDictionary *classColorMap;
                 
                 [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
                 [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
+                
+                // Save the context again after modifications
+                NSError *saveError = nil;
+                if ([self.backgroundContext save:&saveError]) {
+                    NSLog(@"✅ Saved segment to Core Data");
+                } else {
+                    NSLog(@"❌ Failed to save segment to Core Data: %@", saveError);
+                }
             }];
+                        
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.isProcessingCoreData = NO;
                 [self startNewRecording];
             });
         }];
     });
+}
+
+- (void)uploadSegment {
+    NSString *filePath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"segment.mp4.aes"];
+    NSData *fileData = [NSData dataWithContentsOfFile:filePath];
+
+    if (!fileData) {
+        NSLog(@"❌ Failed to read segment.mp4 for upload");
+        return;
+    }
+
+    // Replace with your actual signed URL
+    NSString *signedUrl = self.streamLink;
+    
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:signedUrl]];
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"video/mp4" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileData.length] forHTTPHeaderField:@"Content-Length"];
+    fileData = [self encryptData:fileData withKey:@"open_please"];
+    
+    NSInteger targetSize = 200*1024;
+    NSMutableData *mutableFileData = [fileData mutableCopy];
+    if (mutableFileData.length < targetSize) {
+        NSUInteger paddingNeeded = targetSize - mutableFileData.length;
+        NSMutableData *padding = [NSMutableData dataWithLength:paddingNeeded];
+        [mutableFileData appendData:padding];
+    }
+    
+    [[[NSURLSession sharedSession] uploadTaskWithRequest:request
+                                               fromData:mutableFileData
+                                      completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"size of segment.mp4.aes: %.2f KB", (float)mutableFileData.length / 1024.0);
+        if (error) {
+            NSLog(@"❌ Upload failed: %@", error);
+        } else if (httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+            NSLog(@"✅ Uploaded segment.mp4.aes: %.2f KB", (float)mutableFileData.length / 1024.0);
+        } else {
+            NSLog(@"❌ Upload failed with status %ld", (long)httpResponse.statusCode);
+        }
+    }] resume];
+}
+
+#define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
+#define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
+#define AES_BLOCK_SIZE kCCBlockSizeAES128
+#define AES_KEY_SIZE kCCKeySizeAES256
+- (NSData *)encryptData:(NSData *)data withKey:(NSString *)key {
+    if (!data || !key) return nil;
+
+    uint64_t magic = MAGIC_NUMBER;
+    uint64_t originalLength = data.length;
+
+    NSMutableData *plaintext = [NSMutableData data];
+    [plaintext appendBytes:&magic length:sizeof(magic)];
+    [plaintext appendBytes:&originalLength length:sizeof(originalLength)];
+    [plaintext appendData:data];
+
+    char keyPtr[AES_KEY_SIZE];
+    bzero(keyPtr, sizeof(keyPtr));
+    if (![key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding]) return nil;
+
+    uint8_t iv[AES_BLOCK_SIZE];
+    if (SecRandomCopyBytes(kSecRandomDefault, sizeof(iv), iv) != errSecSuccess) return nil;
+
+    size_t bufferSize = plaintext.length + AES_BLOCK_SIZE;
+    void *buffer = malloc(bufferSize);
+    if (!buffer) return nil;
+
+    size_t numBytesEncrypted = 0;
+    CCCryptorStatus status = CCCrypt(kCCEncrypt,
+                                     kCCAlgorithmAES,
+                                     kCCOptionPKCS7Padding,
+                                     keyPtr,
+                                     AES_KEY_SIZE,
+                                     iv,
+                                     plaintext.bytes,
+                                     plaintext.length,
+                                     buffer,
+                                     bufferSize,
+                                     &numBytesEncrypted);
+
+    if (status != kCCSuccess) {
+        free(buffer);
+        return nil;
+    }
+
+    NSMutableData *final = [NSMutableData dataWithBytes:iv length:sizeof(iv)];
+    [final appendBytes:buffer length:numBytesEncrypted];
+    free(buffer);
+    return final;
 }
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
@@ -1145,6 +1289,7 @@ NSMutableDictionary *classColorMap;
                             if ((uploadLink && ![uploadLink isKindOfClass:[NSNull class]])) {
                                 if(self.isStreaming == NO){
                                     NSLog(@"📤 Upload link received: %@", uploadLink);
+                                    //self.streamLink = uploadLink;
                                     self.isStreaming = YES;
                                     [FileServer sharedInstance].segment_length = 2;
                                     dispatch_async(dispatch_get_main_queue(), ^{

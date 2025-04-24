@@ -164,7 +164,7 @@
 
             if (currentTime >= startTime && currentTime <= endTime) {
                 [[notification sharedInstance] sendNotification];
-                if([FileServer sharedInstance].segment_length > 3) [FileServer sharedInstance].segment_length = 3;
+                if([FileServer sharedInstance].segment_length > 2) [FileServer sharedInstance].segment_length = 2;
                 NSTimeInterval start = [[NSDate dateWithTimeIntervalSinceNow:-7.5] timeIntervalSince1970];
                 NSTimeInterval end = [[NSDate dateWithTimeIntervalSinceNow:7.5] timeIntervalSince1970];
                 id context = [FileServer sharedInstance].context;
