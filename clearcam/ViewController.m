@@ -26,6 +26,7 @@
 @property (nonatomic, assign) BOOL isProcessingCoreData;
 @property (nonatomic, assign) BOOL recordPressed;
 @property (nonatomic, assign) BOOL isRecording;
+@property (nonatomic, assign) BOOL isStreaming; //over the internet
 @property (nonatomic, assign) NSTimeInterval last_check_time;
 @property (nonatomic, assign) CMTime startTime;
 @property (nonatomic, assign) CMTime currentTime;
@@ -162,6 +163,7 @@ NSMutableDictionary *classColorMap;
         self.isProcessingCoreData = NO;
         self.recordPressed = wasRecording; // Restore recording state
         self.isRecording = NO;
+        self.isStreaming = NO;
         self.last_check_time = [[NSDate date] timeIntervalSince1970];
         self.startTime = kCMTimeInvalid;
         self.currentTime = kCMTimeZero;
@@ -1127,17 +1129,29 @@ NSMutableDictionary *classColorMap;
                             NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
                         } else {
                             NSString *uploadLink = json[@"upload_link"];
-                            if (uploadLink && ![uploadLink isKindOfClass:[NSNull class]]) {
-                                NSLog(@"📤 Upload link received: %@", uploadLink);
-                                
-                                //[FileServer sharedInstance].segment_length = 2;
-                                //[[SettingsManager sharedManager] updateResolutionWithWidth:@"640" height:@"480" textSize:@"2" preset:@"AVCaptureSessionPreset640x480"];
-                                
-                                //dispatch_async(dispatch_get_main_queue(), ^{
-                                //    [self refreshView];
-                                //});
+                            if ((uploadLink && ![uploadLink isKindOfClass:[NSNull class]])) {
+                                if(self.isStreaming == NO){
+                                    NSLog(@"📤 Upload link received: %@", uploadLink);
+                                    self.isStreaming = YES;
+                                    [FileServer sharedInstance].segment_length = 2;
+                                    if(![[SettingsManager sharedManager].width isEqualToString:@"640"]) {
+                                        [[SettingsManager sharedManager] updateResolutionWithWidth:@"640" height:@"480" textSize:@"2" preset:@"AVCaptureSessionPreset640x480"];
+                                        dispatch_async(dispatch_get_main_queue(), ^{
+                                            [self refreshView];
+                                        });
+                                    }
+                                }
                             } else {
-                                NSLog(@"no link");
+                                if(self.isStreaming){ //todo, messy
+                                    self.isStreaming = NO;
+                                    if([SettingsManager sharedManager].old_width && ![[SettingsManager sharedManager].width isEqualToString:[SettingsManager sharedManager].old_width]){
+                                        [[SettingsManager sharedManager] revertResolution];
+                                        dispatch_async(dispatch_get_main_queue(), ^{
+                                            [self refreshView];
+                                        });
+                                    }
+                                    NSLog(@"no link");
+                                }
                             }
                         }
                     }

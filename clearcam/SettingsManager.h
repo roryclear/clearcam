@@ -8,6 +8,7 @@
 @property (nonatomic, strong) NSString *width;
 @property (nonatomic, strong) NSString *height;
 @property (nonatomic, strong) NSString *text_size;
+@property (nonatomic, strong) NSString *old_width;
 @property (nonatomic, strong) NSString *preset; //todo, resolution
 
 
@@ -16,5 +17,6 @@
 - (void)loadResolutionSettings;
 - (void)saveResolutionSettings;
 - (void)updateResolutionWithWidth:(NSString *)width height:(NSString *)height textSize:(NSString *)textSize preset:(NSString *)preset;
+- (void)revertResolution;
 
 @end
