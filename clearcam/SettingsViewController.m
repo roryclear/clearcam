@@ -1001,7 +1001,7 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *resolutions = @[@"720p", @"1080p"];
+    NSArray *resolutions = @[@"480p",@"720p", @"1080p"];
 
     for (NSString *resolution in resolutions) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:resolution
@@ -1013,6 +1013,8 @@
                 [settingsManager updateResolutionWithWidth:@"1280" height:@"720" textSize:@"2" preset:@"AVCaptureSessionPreset1280x720"];
             } else if ([resolution isEqualToString:@"1080p"]) {
                 [settingsManager updateResolutionWithWidth:@"1920" height:@"1080" textSize:@"3" preset:@"AVCaptureSessionPreset1920x1080"];
+            } else if ([resolution isEqualToString:@"480p"]) {
+                [settingsManager updateResolutionWithWidth:@"640" height:@"480" textSize:@"2" preset:@"AVCaptureSessionPreset640x480"];
             }
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.tableView reloadData];
