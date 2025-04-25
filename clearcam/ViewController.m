@@ -957,11 +957,7 @@ NSMutableDictionary *classColorMap;
                 
                 // Save the context again after modifications
                 NSError *saveError = nil;
-                if ([self.backgroundContext save:&saveError]) {
-                    NSLog(@"✅ Saved segment to Core Data");
-                } else {
-                    NSLog(@"❌ Failed to save segment to Core Data: %@", saveError);
-                }
+                [self.backgroundContext save:&saveError];
             }];
                         
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1253,16 +1249,13 @@ NSMutableDictionary *classColorMap;
             }
 
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            if (!self.isStreaming && [FileServer sharedInstance].segment_length < 60 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
+            if (!self.isStreaming && [FileServer sharedInstance].segment_length < 60 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) { //todo, fix hack in SceneState
                 [FileServer sharedInstance].segment_length = 60;
             }
             if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
-                NSLog(@"Making request at %.2f %.2f seconds", [[NSDate date] timeIntervalSince1970],self.last_check_time);
                 self.last_check_time = [[NSDate date] timeIntervalSince1970];
                 NSString *deviceName = [[NSUserDefaults standardUserDefaults] stringForKey:@"device_name"];
                 NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-                
-                NSLog(@"session token = %@", sessionToken);
 
                 NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
                 NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
@@ -1273,7 +1266,6 @@ NSMutableDictionary *classColorMap;
                 ];
 
                 NSURL *url = components.URL;
-                NSLog(@"Final URL: %@", url);
 
                 NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
                                                                          completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {

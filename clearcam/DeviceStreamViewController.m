@@ -10,6 +10,7 @@
 @property (nonatomic, strong) NSTimer *downloadTimer;
 @property (nonatomic, strong) NSData *lastSegmentData;
 @property (nonatomic, assign) NSUInteger segmentIndex;
+@property (nonatomic, strong) NSString *downloadLink;
 @end
 
 @implementation DeviceStreamViewController
@@ -27,9 +28,61 @@
     [self.view.layer addSublayer:self.playerLayer];
 
     [self.player play];
-    [self downloadAndQueueSegment];
-    [self startDownloadTimer];
-    NSLog(@"device streaming from = %@",self.deviceName);
+    [self fetchDownloadLinkAndStartStreaming];
+
+    NSLog(@"device streaming from = %@", self.deviceName);
+}
+
+- (void)fetchDownloadLinkAndStartStreaming {
+    NSString *deviceName = self.deviceName;
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+
+    if (!deviceName || !sessionToken) {
+        NSLog(@"❌ Missing device name or session token");
+        return;
+    }
+
+    NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_download_link"];
+    components.queryItems = @[
+        [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
+        [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
+    ];
+
+    NSURL *url = components.URL;
+
+    NSURLSessionDataTask *linkTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"❌ Error fetching stream link: %@", error.localizedDescription);
+            return;
+        }
+
+
+        NSError *jsonError;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError) {
+            NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
+            return;
+        }
+
+        NSString *downloadLink = json[@"download_link"];
+        if (![downloadLink isKindOfClass:[NSString class]] || downloadLink.length == 0) {
+            NSLog(@"🚫 Invalid downloadLink link");
+            return;
+        } else {
+            self.downloadLink = downloadLink;
+        }
+
+        NSLog(@"✅ Got download link: %@", self.downloadLink);
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self downloadAndQueueSegment];
+            [self startDownloadTimer];
+        });
+    }];
+    [linkTask resume];
 }
 
 - (void)startDownloadTimer {
@@ -41,7 +94,7 @@
 }
 
 - (void)downloadAndQueueSegment {
-    NSString *urlString = @"";
+    NSString *urlString = self.downloadLink;
     NSURL *remoteURL = [NSURL URLWithString:urlString];
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:remoteURL
