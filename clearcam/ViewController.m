@@ -5,6 +5,7 @@
 #import "FileServer.h"
 #import "SettingsManager.h"
 #import "StoreManager.h"
+#import "SecretManager.h"
 #import "SceneState.h"
 #import "SettingsViewController.h"
 #import "GalleryViewController.h"
@@ -984,7 +985,9 @@ NSMutableDictionary *classColorMap;
     request.HTTPMethod = @"PUT";
     [request setValue:@"video/mp4" forHTTPHeaderField:@"Content-Type"];
     [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileData.length] forHTTPHeaderField:@"Content-Length"];
-    fileData = [self encryptData:fileData withKey:@"open_please"];
+    NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
+    if (!encryptionKey) return;
+    fileData = [self encryptData:fileData withKey:encryptionKey];
     
     NSInteger targetSize = 200*1024;
     NSMutableData *mutableFileData = [fileData mutableCopy];
