@@ -48,6 +48,29 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return [keys copy];
 }
 
+- (nullable NSString *)retrieveDecryptionKeyWithIdentifier:(NSString *)identifier error:(NSError **)error {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kServiceIdentifier,
+        (__bridge id)kSecAttrAccount: identifier,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne
+    };
+
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status == errSecSuccess) {
+        NSData *keyData = (__bridge_transfer NSData *)result;
+        return [[NSString alloc] initWithData:keyData encoding:NSUTF8StringEncoding];
+    } else {
+        if (error) {
+            *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
+                                         code:status
+                                     userInfo:@{NSLocalizedDescriptionKey: [self errorMessageForStatus:status]}];
+        }
+        return nil;
+    }
+}
 
 - (BOOL)saveEncryptionKey:(NSString *)key error:(NSError **)error {
     if (!key) {
@@ -102,7 +125,7 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
     if (status == errSecSuccess) {
         NSArray *items = (__bridge_transfer NSArray *)result;
-        for (NSDictionary *item in items) {
+        for (NSDictionary * item in items) {
             NSString *identifier = item[(__bridge id)kSecAttrAccount];
             if (![identifier isEqualToString:@"encryption_key"]) { // Ignore the encryption key
                 NSData *keyData = item[(__bridge id)kSecValueData];
@@ -116,7 +139,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
 
     return [keys copy];
 }
-
 
 - (BOOL)saveDecryptionKey:(NSString *)key withIdentifier:(NSString *)identifier error:(NSError **)error {
     if (!key || !identifier) {
@@ -153,7 +175,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return YES;
 }
 
-
 - (NSString *)getEncryptionKey {
     NSString *encryptionKeyIdentifier = @"encryption_key";
 
@@ -174,7 +195,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     }
     return nil;
 }
-
 
 #pragma mark - Key Deletion
 
@@ -442,6 +462,5 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     free(buffer);
     return final;
 }
-
 
 @end

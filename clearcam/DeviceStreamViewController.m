@@ -1,5 +1,6 @@
 #import "DeviceStreamViewController.h"
-#import "StoreManager.h" // For session token
+#import "StoreManager.h"
+#import "SecretManager.h"
 #import <AVFoundation/AVFoundation.h>
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCryptor.h>
@@ -11,6 +12,7 @@
 @property (nonatomic, strong) NSData *lastSegmentData;
 @property (nonatomic, assign) NSUInteger segmentIndex;
 @property (nonatomic, strong) NSString *downloadLink;
+@property (nonatomic, strong) NSString *decryptionKey;
 @end
 
 @implementation DeviceStreamViewController
@@ -42,6 +44,14 @@
         return;
     }
 
+    // Attempt to retrieve decryption key from keychain
+    NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", deviceName];
+    NSError *keyError;
+    self.decryptionKey = [[SecretManager sharedManager] retrieveDecryptionKeyWithIdentifier:keyIdentifier error:&keyError];
+    if (keyError) {
+        NSLog(@"⚠️ Keychain retrieval error: %@", keyError.localizedDescription);
+    }
+
     NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
 
@@ -58,7 +68,6 @@
             NSLog(@"❌ Error fetching stream link: %@", error.localizedDescription);
             return;
         }
-
 
         NSError *jsonError;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
@@ -110,80 +119,110 @@
         }
 
         self.lastSegmentData = data;
-        data = [self decryptData:data withKey:@"open_please"];
-        NSString *fileName = [NSString stringWithFormat:@"segment_%lu.mp4", (unsigned long)(self.segmentIndex++ % 2)];
-        NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
-        NSURL *localURL = [NSURL fileURLWithPath:tempPath];
 
-        if ([data writeToURL:localURL atomically:YES]) {
-            NSLog(@"✅ New segment saved: %@", fileName);
-            dispatch_async(dispatch_get_main_queue(), ^{
-                AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
-                AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
-                [self.player insertItem:item afterItem:nil];
-            });
-        } else {
-            NSLog(@"❌ Write failed");
-        }
+        // Try decrypting with the current key or prompt for a new one
+        [self decryptAndQueueSegment:data withCompletion:^(NSData *decryptedData) {
+            if (!decryptedData) {
+                NSLog(@"❌ Decryption failed");
+                return;
+            }
+
+            NSString *fileName = [NSString stringWithFormat:@"segment_%lu.mp4", (unsigned long)(self.segmentIndex++ % 2)];
+            NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+            NSURL *localURL = [NSURL fileURLWithPath:tempPath];
+
+            if ([decryptedData writeToURL:localURL atomically:YES]) {
+                NSLog(@"✅ New segment saved: %@", fileName);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
+                    AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
+                    [self.player insertItem:item afterItem:nil];
+                });
+            } else {
+                NSLog(@"❌ Write failed");
+            }
+        }];
     }];
     [task resume];
 }
 
-#define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
-#define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
-#define AES_BLOCK_SIZE kCCBlockSizeAES128
-#define AES_KEY_SIZE kCCKeySizeAES256
-- (NSData *)decryptData:(NSData *)encryptedDataWithIv withKey:(NSString *)key {
-    if (!encryptedDataWithIv || !key) return nil;
-    if (encryptedDataWithIv.length <= AES_BLOCK_SIZE) return nil;
-
-    NSData *ivData = [encryptedDataWithIv subdataWithRange:NSMakeRange(0, AES_BLOCK_SIZE)];
-    NSData *cipherData = [encryptedDataWithIv subdataWithRange:NSMakeRange(AES_BLOCK_SIZE, encryptedDataWithIv.length - AES_BLOCK_SIZE)];
-
-    char keyPtr[AES_KEY_SIZE + 1];
-    bzero(keyPtr, sizeof(keyPtr));
-    if (![key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding]) return nil;
-
-    size_t bufferSize = cipherData.length + AES_BLOCK_SIZE;
-    void *buffer = malloc(bufferSize);
-    if (!buffer) return nil;
-
-    size_t numBytesDecrypted = 0;
-    CCCryptorStatus status = CCCrypt(kCCDecrypt,
-                                     kCCAlgorithmAES,
-                                     kCCOptionPKCS7Padding,
-                                     keyPtr,
-                                     AES_KEY_SIZE,
-                                     ivData.bytes,
-                                     cipherData.bytes,
-                                     cipherData.length,
-                                     buffer,
-                                     bufferSize,
-                                     &numBytesDecrypted);
-
-    if (status != kCCSuccess) {
-        free(buffer);
-        return nil;
+- (void)decryptAndQueueSegment:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
+    if (self.decryptionKey) {
+        NSData *decryptedData = [[SecretManager sharedManager] decryptLiveSegment:encryptedData withKey:self.decryptionKey];
+        if (decryptedData) {
+            completion(decryptedData);
+            return;
+        } else {
+            NSLog(@"⚠️ Decryption failed with stored key");
+        }
     }
 
-    if (numBytesDecrypted < sizeof(uint64_t) * 2) {
-        free(buffer);
-        return nil;
-    }
+    // Prompt user for key if no key or decryption failed
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+            if (userProvidedKey) {
+                NSData *decryptedData = [[SecretManager sharedManager] decryptLiveSegment:encryptedData withKey:userProvidedKey];
+                if (decryptedData) {
+                    // Save the valid key to keychain
+                    NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", self.deviceName];
+                    NSError *saveError;
+                    [[SecretManager sharedManager] saveDecryptionKey:userProvidedKey withIdentifier:keyIdentifier error:&saveError];
+                    if (saveError) {
+                        NSLog(@"⚠️ Failed to save key to keychain: %@", saveError.localizedDescription);
+                    }
+                    self.decryptionKey = userProvidedKey;
+                    completion(decryptedData);
+                } else {
+                    [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
+                        [self decryptAndQueueSegment:encryptedData withCompletion:completion];
+                    }];
+                }
+            } else {
+                completion(nil); // User cancelled
+            }
+        }];
+    });
+}
 
-    uint64_t magic;
-    uint64_t originalLength;
-    memcpy(&magic, buffer, sizeof(uint64_t));
-    memcpy(&originalLength, buffer + sizeof(uint64_t), sizeof(uint64_t));
+- (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
+                                                                  message:@"Please enter the password used by your device to encrypt this data."
+                                                           preferredStyle:UIAlertControllerStyleAlert];
 
-    if (magic != MAGIC_NUMBER || originalLength > (numBytesDecrypted - sizeof(uint64_t) * 2)) {
-        free(buffer);
-        return nil;
-    }
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Decryption Key";
+        textField.secureTextEntry = YES;
+    }];
 
-    NSData *result = [NSData dataWithBytes:(buffer + sizeof(uint64_t) * 2) length:originalLength];
-    free(buffer);
-    return result;
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:^(UIAlertAction * _Nonnull action) {
+        NSString *key = alert.textFields.firstObject.text;
+        completion(key);
+    }];
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        completion(nil);
+    }];
+
+    [alert addAction:okAction];
+    [alert addAction:cancelAction];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showErrorAlertWithMessage:(NSString *)message completion:(void (^)(void))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                  message:message
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:^(UIAlertAction * _Nonnull action) {
+        if (completion) completion();
+    }];
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)viewDidLayoutSubviews {
