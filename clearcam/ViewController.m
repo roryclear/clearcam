@@ -1295,6 +1295,7 @@ NSMutableDictionary *classColorMap;
                             }
                         } else {
                             if (self.isStreaming) {
+                                self.scene.left_live_time = [NSDate now];
                                 self.isStreaming = NO;
                                 [self refreshView];
                                 NSLog(@"no link");

@@ -20,7 +20,7 @@
         self.lastN_total = [[NSMutableDictionary alloc] init];
         self.alerts = [SettingsManager sharedManager].alerts;
         self.last_notif_time = [NSDate dateWithTimeIntervalSince1970:0];
-
+        self.left_live_time = [NSDate now];
         // Get Core Data context from AppDelegate
         AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
         self.backgroundContext = appDelegate.persistentContainer.newBackgroundContext;
@@ -151,6 +151,7 @@
 - (void)sendnotification {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"send_notif_enabled"] || !([[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"])){ //todo add back other stuff
         NSDate *now = [NSDate date];
+        if ([now timeIntervalSinceDate:self.left_live_time] < 5.0) return;
         [FileServer sharedInstance].last_req_time = [NSDate now]; //todo, this keep segment length 3 for a min
         NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitWeekday) fromDate:now];
         NSInteger currentTime = components.hour * 60 + components.minute;
