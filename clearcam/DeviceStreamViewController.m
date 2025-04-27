@@ -167,7 +167,7 @@
 
 - (void)decryptAndQueueSegment:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     if (self.decryptionKey) {
-        NSData *decryptedData = [[SecretManager sharedManager] decryptLiveSegment:encryptedData withKey:self.decryptionKey];
+        NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:self.decryptionKey];
         if (decryptedData) {
             completion(decryptedData);
             self.decryptionFailedOnce = NO; // Reset on success
@@ -201,7 +201,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
             if (userProvidedKey) {
-                NSData *decryptedData = [[SecretManager sharedManager] decryptLiveSegment:encryptedData withKey:userProvidedKey];
+                NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
                 if (decryptedData) {
                     // Save the valid key to keychain
                     NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", self.deviceName];

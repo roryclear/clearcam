@@ -987,79 +987,21 @@ NSMutableDictionary *classColorMap;
     [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileData.length] forHTTPHeaderField:@"Content-Length"];
     NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
     if (!encryptionKey) return;
-    fileData = [self encryptData:fileData withKey:encryptionKey];
-    
-    NSInteger targetSize = 200*1024;
-    NSMutableData *mutableFileData = [fileData mutableCopy];
-    if (mutableFileData.length < targetSize) {
-        NSUInteger paddingNeeded = targetSize - mutableFileData.length;
-        NSMutableData *padding = [NSMutableData dataWithLength:paddingNeeded];
-        [mutableFileData appendData:padding];
-    }
-    
+    fileData = [[SecretManager sharedManager] encryptData:fileData withKey:encryptionKey];
+        
     [[[NSURLSession sharedSession] uploadTaskWithRequest:request
-                                               fromData:mutableFileData
+                                               fromData:fileData
                                       completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"size of segment.mp4.aes: %.2f KB", (float)mutableFileData.length / 1024.0);
+        NSLog(@"size of segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
         if (error) {
             NSLog(@"❌ Upload failed: %@", error);
         } else if (httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
-            NSLog(@"✅ Uploaded segment.mp4.aes: %.2f KB", (float)mutableFileData.length / 1024.0);
+            NSLog(@"✅ Uploaded segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
         } else {
             NSLog(@"❌ Upload failed with status %ld", (long)httpResponse.statusCode);
         }
     }] resume];
-}
-
-#define MAGIC_NUMBER 0x4D41474943ULL // "MAGIC" in ASCII as a 64-bit value
-#define HEADER_SIZE (sizeof(uint64_t)) // Size of the magic number (8 bytes)
-#define AES_BLOCK_SIZE kCCBlockSizeAES128
-#define AES_KEY_SIZE kCCKeySizeAES256
-- (NSData *)encryptData:(NSData *)data withKey:(NSString *)key {
-    if (!data || !key) return nil;
-
-    uint64_t magic = MAGIC_NUMBER;
-    uint64_t originalLength = data.length;
-
-    NSMutableData *plaintext = [NSMutableData data];
-    [plaintext appendBytes:&magic length:sizeof(magic)];
-    [plaintext appendBytes:&originalLength length:sizeof(originalLength)];
-    [plaintext appendData:data];
-
-    char keyPtr[AES_KEY_SIZE];
-    bzero(keyPtr, sizeof(keyPtr));
-    if (![key getCString:keyPtr maxLength:sizeof(keyPtr) encoding:NSUTF8StringEncoding]) return nil;
-
-    uint8_t iv[AES_BLOCK_SIZE];
-    if (SecRandomCopyBytes(kSecRandomDefault, sizeof(iv), iv) != errSecSuccess) return nil;
-
-    size_t bufferSize = plaintext.length + AES_BLOCK_SIZE;
-    void *buffer = malloc(bufferSize);
-    if (!buffer) return nil;
-
-    size_t numBytesEncrypted = 0;
-    CCCryptorStatus status = CCCrypt(kCCEncrypt,
-                                     kCCAlgorithmAES,
-                                     kCCOptionPKCS7Padding,
-                                     keyPtr,
-                                     AES_KEY_SIZE,
-                                     iv,
-                                     plaintext.bytes,
-                                     plaintext.length,
-                                     buffer,
-                                     bufferSize,
-                                     &numBytesEncrypted);
-
-    if (status != kCCSuccess) {
-        free(buffer);
-        return nil;
-    }
-
-    NSMutableData *final = [NSMutableData dataWithBytes:iv length:sizeof(iv)];
-    [final appendBytes:buffer length:numBytesEncrypted];
-    free(buffer);
-    return final;
 }
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
