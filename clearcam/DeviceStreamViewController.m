@@ -276,4 +276,12 @@
     [self.linkRefreshTimer invalidate];
 }
 
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self.downloadTimer invalidate];
+    self.downloadTimer = nil;
+    [self.linkRefreshTimer invalidate];
+    self.linkRefreshTimer = nil;
+}
+
 @end
