@@ -65,11 +65,14 @@
 }
 
 - (void)handleNotificationReceived:(NSDictionary *)userInfo {
+    return; //TODO, did this do anything before?
+    /*
     GalleryViewController *gallery = [[GalleryViewController alloc] init];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
         sleep(15);
         [gallery getEvents];
     });
+     */
 }
 
 #pragma mark - Remote Notification Methods

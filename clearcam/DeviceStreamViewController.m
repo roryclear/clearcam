@@ -9,10 +9,12 @@
 @property (nonatomic, strong) AVQueuePlayer *player;
 @property (nonatomic, strong) AVPlayerLayer *playerLayer;
 @property (nonatomic, strong) NSTimer *downloadTimer;
+@property (nonatomic, strong) NSTimer *linkRefreshTimer;
 @property (nonatomic, strong) NSData *lastSegmentData;
 @property (nonatomic, assign) NSUInteger segmentIndex;
 @property (nonatomic, strong) NSString *downloadLink;
 @property (nonatomic, strong) NSString *decryptionKey;
+@property (nonatomic, assign) BOOL decryptionFailedOnce;
 @end
 
 @implementation DeviceStreamViewController
@@ -36,6 +38,16 @@
 }
 
 - (void)fetchDownloadLinkAndStartStreaming {
+    [self fetchDownloadLink];
+    // Start timer to refresh download link every 60 seconds
+    self.linkRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:60.0
+                                                             target:self
+                                                           selector:@selector(fetchDownloadLink)
+                                                           userInfo:nil
+                                                            repeats:YES];
+}
+
+- (void)fetchDownloadLink {
     NSString *deviceName = self.deviceName;
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
 
@@ -44,7 +56,7 @@
         return;
     }
 
-    // Attempt to retrieve decryption key from keychain
+    // Retrieve decryption key from keychain
     NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", deviceName];
     NSError *keyError;
     self.decryptionKey = [[SecretManager sharedManager] retrieveDecryptionKeyWithIdentifier:keyIdentifier error:&keyError];
@@ -87,8 +99,8 @@
         NSLog(@"✅ Got download link: %@", self.downloadLink);
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self downloadAndQueueSegment];
-            [self startDownloadTimer];
+            // Start downloading segments only if this is the first fetch
+            if (!self.downloadTimer) [self startDownloadTimer];
         });
     }];
     [linkTask resume];
@@ -104,6 +116,10 @@
 
 - (void)downloadAndQueueSegment {
     NSString *urlString = self.downloadLink;
+    if (!urlString) {
+        NSLog(@"❌ No download link available");
+        return;
+    }
     NSURL *remoteURL = [NSURL URLWithString:urlString];
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:remoteURL
@@ -120,7 +136,10 @@
 
         self.lastSegmentData = data;
 
-        // Try decrypting with the current key or prompt for a new one
+        // Reset decryption failure flag when segment changes
+        self.decryptionFailedOnce = NO;
+
+        // Try decrypting the new segment
         [self decryptAndQueueSegment:data withCompletion:^(NSData *decryptedData) {
             if (!decryptedData) {
                 NSLog(@"❌ Decryption failed");
@@ -151,13 +170,34 @@
         NSData *decryptedData = [[SecretManager sharedManager] decryptLiveSegment:encryptedData withKey:self.decryptionKey];
         if (decryptedData) {
             completion(decryptedData);
+            self.decryptionFailedOnce = NO; // Reset on success
             return;
         } else {
             NSLog(@"⚠️ Decryption failed with stored key");
+            if (self.decryptionFailedOnce) {
+                // Second failure, prompt for key
+                [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
+            } else {
+                // First failure, mark and wait for next segment
+                self.decryptionFailedOnce = YES;
+                completion(nil);
+            }
+            return;
         }
     }
 
-    // Prompt user for key if no key or decryption failed
+    // No key yet, mark first failure and wait for next segment
+    if (!self.decryptionFailedOnce) {
+        self.decryptionFailedOnce = YES;
+        completion(nil);
+        return;
+    }
+
+    // Second failure with no key, prompt user
+    [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
+}
+
+- (void)promptForKeyOnSecondFailure:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
             if (userProvidedKey) {
@@ -171,6 +211,7 @@
                         NSLog(@"⚠️ Failed to save key to keychain: %@", saveError.localizedDescription);
                     }
                     self.decryptionKey = userProvidedKey;
+                    self.decryptionFailedOnce = NO;
                     completion(decryptedData);
                 } else {
                     [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
@@ -232,6 +273,7 @@
 
 - (void)dealloc {
     [self.downloadTimer invalidate];
+    [self.linkRefreshTimer invalidate];
 }
 
 @end
