@@ -1198,54 +1198,16 @@ NSMutableDictionary *classColorMap;
                 [FileServer sharedInstance].segment_length = 60;
             }
             if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
-                self.last_check_time = [[NSDate date] timeIntervalSince1970];
-                NSString *deviceName = [[NSUserDefaults standardUserDefaults] stringForKey:@"device_name"];
-                NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-
-                NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-                NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-                NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_upload_link"];
-                components.queryItems = @[
-                    [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
-                    [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
-                ];
-
-                NSURL *url = components.URL;
-
-                NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
-                                                                         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-                    if (error) {
-                        NSLog(@"❌ Error: %@", error.localizedDescription);
-                        return;
-                    }
-
-                    NSError *jsonError;
-                    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-                    if (jsonError) {
-                        NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
-                        return;
-                    }
-
-                    NSString *uploadLink = json[@"upload_link"];
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        if (uploadLink && ![uploadLink isKindOfClass:[NSNull class]]) {
-                            if (!self.isStreaming) {
-                                NSLog(@"📤 Upload link received: %@", uploadLink);
-                                self.streamLink = uploadLink;
-                                self.isStreaming = YES;
-                                [self refreshView];
-                            }
-                        } else {
-                            if (self.isStreaming) {
-                                self.scene.left_live_time = [NSDate now];
-                                self.isStreaming = NO;
-                                [self refreshView];
-                                NSLog(@"no link");
-                            }
-                        }
-                    });
-                }];
-                [task resume];
+                if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                    ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
+                    [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
+                    NSLog(@"verifying subscription");
+                    [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                        [self checkUploadLink];
+                    }];
+                } else {
+                    [self checkUploadLink];
+                }
             }
             if (elapsedTime >= [FileServer sharedInstance].segment_length || (self.isStreaming && elapsedTime > 2.0)) {
                 [self finishRecording];
@@ -1469,6 +1431,56 @@ NSMutableDictionary *classColorMap;
     return context;
 }
 
+- (void)checkUploadLink {
+    self.last_check_time = [[NSDate date] timeIntervalSince1970];
+    NSString *deviceName = [[NSUserDefaults standardUserDefaults] stringForKey:@"device_name"];
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+
+    NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_upload_link"];
+    components.queryItems = @[
+        [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
+        [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
+    ];
+
+    NSURL *url = components.URL;
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"❌ Error: %@", error.localizedDescription);
+            return;
+        }
+
+        NSError *jsonError;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError) {
+            NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
+            return;
+        }
+
+        NSString *uploadLink = json[@"upload_link"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (uploadLink && ![uploadLink isKindOfClass:[NSNull class]]) {
+                if (!self.isStreaming) {
+                    NSLog(@"📤 Upload link received: %@", uploadLink);
+                    self.streamLink = uploadLink;
+                    self.isStreaming = YES;
+                    [self refreshView];
+                }
+            } else {
+                if (self.isStreaming) {
+                    self.scene.left_live_time = [NSDate now];
+                    self.isStreaming = NO;
+                    [self refreshView];
+                    NSLog(@"no link");
+                }
+            }
+        });
+    }];
+    [task resume];
+}
 
 - (void)updateFPS {
     CFTimeInterval currentTime = CACurrentMediaTime();
