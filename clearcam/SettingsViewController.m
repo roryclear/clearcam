@@ -50,7 +50,8 @@
     
     // Initialize properties from NSUserDefaults
     SettingsManager *settingsManager = [SettingsManager sharedManager];
-    self.selectedResolution = [NSString stringWithFormat:@"%@p", settingsManager.height];
+    NSString *height = settingsManager.height ?: @"720";
+    self.selectedResolution = [NSString stringWithFormat:@"%@p", height];
     self.selectedPresetKey = [[NSUserDefaults standardUserDefaults] stringForKey:@"yolo_preset_idx"] ?: @"all";
     
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -320,14 +321,14 @@
 #pragma mark - UITableView DataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 5; // Increased from 4 to 5 to include Live Stream Settings
+    return 5; // Camera Settings, Live Stream Settings, Viewer Settings, Subscription, Terms and Privacy
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (section == 0) {
         return @"Camera Settings";
     } else if (section == 1) {
-        return @"Live Stream Settings"; // New section
+        return @"Live Stream Settings";
     } else if (section == 2) {
         return @"Viewer Settings";
     } else if (section == 3) {
@@ -358,7 +359,7 @@
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
     } else if (section == 4) { // Terms and Privacy
-        return 2; // Two rows: "Terms of Use" and "Privacy Policy"
+        return 3; // Terms of Use, Privacy Policy, Delete Encryption Keys
     }
     return 0;
 }
@@ -534,6 +535,12 @@
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 2) {
+            cell.textLabel.text = @"Delete Encryption Keys";
+            cell.textLabel.textColor = [UIColor systemRedColor];
+            cell.textLabel.textAlignment = NSTextAlignmentCenter;
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
         }
     }
 
@@ -609,6 +616,43 @@
                                                          handler:nil];
     
     [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showDeleteEncryptionKeysPrompt {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Encryption Keys"
+                                                                   message:@"Are you sure you want to delete all keys from this device?"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"Yes"
+                                                           style:UIAlertActionStyleDestructive
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        // Delete encryption keys
+        NSError *error = nil;
+        [[SecretManager sharedManager] deleteAllKeysWithError:&error];
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        
+        // Turn off "Receive Notifications on This Device" unless "Use Own Server" is on
+        if (!self.useOwnServerEnabled) {
+            self.sendNotifEnabled = NO;
+            [defaults setBool:NO forKey:@"send_notif_enabled"];
+        }
+        
+        // Turn off "Live Stream over the Internet"
+        self.liveStreamInternetEnabled = NO;
+        [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
+        
+        [defaults synchronize];
+        [self.tableView reloadData];
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:deleteAction];
     [alert addAction:cancelAction];
     
     [self presentViewController:alert animated:YES completion:nil];
@@ -708,26 +752,22 @@
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"] options:@{} completionHandler:nil];
         } else if (indexPath.row == 1) { // Privacy Policy
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.rors.ai/privacy"] options:@{} completionHandler:nil];
+        } else if (indexPath.row == 2) { // Delete Encryption Keys
+            [self showDeleteEncryptionKeysPrompt];
         }
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 - (void)showUpgradePopup {
-    // Optional: Show loading indicator here if needed
-
     [[StoreManager sharedInstance] getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{ // Ensure UI updates happen on the main thread
-            // Optional: Hide loading indicator here
-
+        dispatch_async(dispatch_get_main_queue(), ^{
             if (product) {
-                // Format the price
                 NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
                 [formatter setNumberStyle:NSNumberFormatterCurrencyStyle];
                 [formatter setLocale:product.priceLocale];
                 NSString *localizedPrice = [formatter stringFromNumber:product.price];
 
-                // Create the message body with features
                 NSString *features = @"• View captured events from anywhere\n• Receive real-time event notifications\n• Live stream over the internet";
                 NSString *message = [NSString stringWithFormat:@"Unlock premium features:\n\n%@\n", features];
 
@@ -735,14 +775,11 @@
                                                                                message:message
                                                                         preferredStyle:UIAlertControllerStyleAlert];
 
-                // Upgrade Action
-                UIAlertAction *upgradeAction = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Upgrade for %@ per month", localizedPrice ?: @"Price"] // Fallback text
+                UIAlertAction *upgradeAction = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Upgrade for %@ per month", localizedPrice ?: @"Price"]
                                                                         style:UIAlertActionStyleDefault
                                                                       handler:^(UIAlertAction * _Nonnull action) {
-                                                                          // Initiate the purchase flow
                                                                           [[StoreManager sharedInstance] fetchAndPurchaseProduct];
                                                                       }];
-                // Cancel Action
                 UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
                                                                        style:UIAlertActionStyleCancel
                                                                      handler:nil];
@@ -751,9 +788,7 @@
                 [alert addAction:cancelAction];
 
                 [self presentViewController:alert animated:YES completion:nil];
-
             } else {
-                // Fallback if product info failed to load
                 NSLog(@"Error fetching product info: %@", error.localizedDescription);
                 UIAlertController *fallbackAlert = [UIAlertController alertControllerWithTitle:@"Upgrade to Premium"
                                                                                        message:@"Unlock premium features like remote event viewing, alerts, and live streaming. Would you like to upgrade?"
@@ -840,13 +875,11 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     BOOL isPremium = [defaults boolForKey:@"isSubscribed"];
     
-    // Only allow toggling if premium OR using own server
     if (isPremium || self.useOwnServerEnabled) {
         self.sendNotifEnabled = sender.on;
         [defaults setBool:self.sendNotifEnabled forKey:@"send_notif_enabled"];
         
         if (sender.on && !self.useOwnServerEnabled) {
-            // If not using own server, require password for premium users
             NSString *password = [self retrievePasswordFromSecretsManager];
             if (!password) {
                 [self promptForPasswordWithCompletion:^(BOOL success) {
@@ -865,11 +898,9 @@
                 [defaults synchronize];
             }
         } else {
-            // If using own server or turning off, no password needed
             [defaults synchronize];
         }
     } else {
-        // If neither premium nor own server, disable and show upgrade popup
         sender.on = NO;
         self.sendNotifEnabled = NO;
         [defaults setBool:NO forKey:@"send_notif_enabled"];
