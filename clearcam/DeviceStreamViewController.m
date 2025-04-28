@@ -14,6 +14,8 @@
 @property (nonatomic, assign) NSUInteger segmentIndex;
 @property (nonatomic, strong) NSString *downloadLink;
 @property (nonatomic, strong) NSString *decryptionKey;
+@property (nonatomic, strong) NSData *lastFailedEncryptedData;
+@property (nonatomic, assign) NSInteger consecutiveDecryptionFailures;
 @property (nonatomic, assign) BOOL decryptionFailedOnce;
 @end
 
@@ -172,22 +174,38 @@
         NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:self.decryptionKey];
         if (decryptedData) {
             completion(decryptedData);
+            self.consecutiveDecryptionFailures = 0; // ✅ Reset on success
+            self.lastFailedEncryptedData = nil;
             return;
         } else {
             NSLog(@"⚠️ Decryption failed with stored key");
         }
     }
 
-    // Handle failure: whether no key or decryption failure
-    if (self.decryptionFailedOnce) {
-        NSLog(@"🔑 Prompting for key after second failure");
+    // Handle failure
+    BOOL isSameData = [self.lastFailedEncryptedData isEqualToData:encryptedData];
+    if (isSameData) {
+        NSLog(@"🔁 Same failed segment, not incrementing failure count");
+        completion(nil);
+        return;
+    }
+
+    self.consecutiveDecryptionFailures += 1;
+    self.lastFailedEncryptedData = encryptedData;
+
+    NSLog(@"❌ Decryption failure count (different segments): %ld", (long)self.consecutiveDecryptionFailures);
+
+    if (self.consecutiveDecryptionFailures >= 2) {
+        NSLog(@"🔑 Prompting for key after two different segment failures");
         [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
+        self.consecutiveDecryptionFailures = 0;
+        self.lastFailedEncryptedData = nil;
     } else {
-        NSLog(@"⏳ First decryption failure, waiting for second attempt...");
-        self.decryptionFailedOnce = YES;
+        NSLog(@"⏳ Waiting for another different failed segment...");
         completion(nil);
     }
 }
+
 
 - (void)promptForKeyOnSecondFailure:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
