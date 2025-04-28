@@ -193,9 +193,33 @@
     BOOL isPremium = [defaults boolForKey:@"isSubscribed"];
     
     if (isPremium) {
-        self.liveStreamInternetEnabled = sender.on;
-        [defaults setBool:self.liveStreamInternetEnabled forKey:@"live_stream_internet_enabled"];
-        [defaults synchronize];
+        if (sender.on) {
+            NSString *password = [self retrievePasswordFromSecretsManager];
+            if (!password) {
+                [self promptForPasswordWithCompletion:^(BOOL success) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (success) {
+                            self.liveStreamInternetEnabled = YES;
+                            [defaults setBool:YES forKey:@"live_stream_internet_enabled"];
+                        } else {
+                            self.liveStreamInternetEnabled = NO;
+                            [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
+                            sender.on = NO;
+                        }
+                        [defaults synchronize];
+                        [self.tableView reloadData];
+                    });
+                }];
+            } else {
+                self.liveStreamInternetEnabled = sender.on;
+                [defaults setBool:self.liveStreamInternetEnabled forKey:@"live_stream_internet_enabled"];
+                [defaults synchronize];
+            }
+        } else {
+            self.liveStreamInternetEnabled = sender.on;
+            [defaults setBool:self.liveStreamInternetEnabled forKey:@"live_stream_internet_enabled"];
+            [defaults synchronize];
+        }
     } else {
         sender.on = NO;
         self.liveStreamInternetEnabled = NO;
@@ -876,28 +900,31 @@
     BOOL isPremium = [defaults boolForKey:@"isSubscribed"];
     
     if (isPremium || self.useOwnServerEnabled) {
-        self.sendNotifEnabled = sender.on;
-        [defaults setBool:self.sendNotifEnabled forKey:@"send_notif_enabled"];
-        
         if (sender.on && !self.useOwnServerEnabled) {
             NSString *password = [self retrievePasswordFromSecretsManager];
             if (!password) {
                 [self promptForPasswordWithCompletion:^(BOOL success) {
-                    if (success) {
-                        self.sendNotifEnabled = YES;
-                        [defaults setBool:YES forKey:@"send_notif_enabled"];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (success) {
+                            self.sendNotifEnabled = YES;
+                            [defaults setBool:YES forKey:@"send_notif_enabled"];
+                        } else {
+                            self.sendNotifEnabled = NO;
+                            [defaults setBool:NO forKey:@"send_notif_enabled"];
+                            sender.on = NO;
+                        }
                         [defaults synchronize];
-                    } else {
-                        self.sendNotifEnabled = NO;
-                        [defaults setBool:NO forKey:@"send_notif_enabled"];
-                        [defaults synchronize];
-                        sender.on = NO;
-                    }
+                        [self.tableView reloadData];
+                    });
                 }];
             } else {
+                self.sendNotifEnabled = sender.on;
+                [defaults setBool:self.sendNotifEnabled forKey:@"send_notif_enabled"];
                 [defaults synchronize];
             }
         } else {
+            self.sendNotifEnabled = sender.on;
+            [defaults setBool:self.sendNotifEnabled forKey:@"send_notif_enabled"];
             [defaults synchronize];
         }
     } else {
@@ -907,8 +934,6 @@
         [defaults synchronize];
         [self showUpgradePopup];
     }
-    
-    [self.tableView reloadData];
 }
 
 - (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {
