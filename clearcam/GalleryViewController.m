@@ -3,6 +3,7 @@
 #import "SecretManager.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import "LiveViewController.h"
 
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
@@ -64,7 +65,11 @@
 
 @end
 
+// Modified GalleryViewController with tabs
 @interface GalleryViewController () <UITableViewDelegate, UITableViewDataSource>
+@property (nonatomic, strong) UITabBarController *tabController;
+@property (nonatomic, strong) UIViewController *eventsViewController;
+@property (nonatomic, strong) LiveViewController *liveViewController;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSMutableArray<NSString *> *videoFiles;
 @property (nonatomic, strong) NSString *downloadDirectory;
@@ -81,8 +86,25 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.title = @"Events";
     self.navigationController.navigationBarHidden = NO;
+    
+    // Initialize view controllers for tabs
+    self.eventsViewController = [[UIViewController alloc] init];
+    self.eventsViewController.title = @"Events";
+    
+    self.liveViewController = [[LiveViewController alloc] init];
+    self.liveViewController.title = @"Live";
+    
+    // Set up tab bar controller
+    self.tabController = [[UITabBarController alloc] init];
+    self.tabController.viewControllers = @[self.eventsViewController, self.liveViewController];
+    [self addChildViewController:self.tabController];
+    [self.view addSubview:self.tabController.view];
+    self.tabController.view.frame = self.view.bounds;
+    [self.tabController didMoveToParentViewController:self];
+    
+    // Move all the existing events UI to the eventsViewController
+    [self setupEventsViewController];
     
     self.videoFiles = [NSMutableArray array];
     self.groupedVideos = [NSMutableDictionary dictionary];
@@ -95,10 +117,41 @@
     self.downloadSession = [NSURLSession sessionWithConfiguration:config];
     self.loadedFilenames = [NSMutableSet set];
     [self setupDownloadDirectory];
-    [self setupTableView];
-    [self setupRefreshControl];
     [self loadExistingVideos];
     [self getEvents];
+}
+
+- (void)setupEventsViewController {
+    // Move all the existing table view setup to the events view controller
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tableView.delegate = self;
+    self.tableView.dataSource = self;
+    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+    [self.tableView registerClass:[VideoTableViewCell class] forCellReuseIdentifier:@"VideoCell"];
+    self.tableView.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
+
+    if (@available(iOS 11.0, *)) {
+        self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    }
+    
+    [self.eventsViewController.view addSubview:self.tableView];
+    
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.topAnchor constraintEqualToAnchor:self.eventsViewController.view.safeAreaLayoutGuide.topAnchor constant:0],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.eventsViewController.view.safeAreaLayoutGuide.leadingAnchor constant:0],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.eventsViewController.view.safeAreaLayoutGuide.trailingAnchor constant:0],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.eventsViewController.view.safeAreaLayoutGuide.bottomAnchor constant:0]
+    ]];
+    
+    // Setup refresh control for events
+    self.refreshControl = [[UIRefreshControl alloc] init];
+    [self.refreshControl addTarget:self action:@selector(handleRefresh) forControlEvents:UIControlEventValueChanged];
+    if (@available(iOS 10.0, *)) {
+        self.tableView.refreshControl = self.refreshControl;
+    } else {
+        [self.tableView addSubview:self.refreshControl];
+    }
 }
 
 - (void)setupRefreshControl {
@@ -418,7 +471,7 @@
 }
 
 - (void)promptUserForKeyWithAESFileURL:(NSURL *)aesFileURL encryptedData:(NSData *)encryptedData {
-    [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+    [[SecretManager sharedManager] promptUserForKeyFromViewController:self completion:^(NSString *userProvidedKey) {
         if (userProvidedKey) {
             NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
             if (decryptedData) {
@@ -447,34 +500,6 @@
             }
         }
     }];
-}
-
-- (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
-                                                                  message:@"Please enter the password used by your device to encrypt this data."
-                                                           preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Decryption Key";
-        textField.secureTextEntry = YES;
-    }];
-
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
-                                                       style:UIAlertActionStyleDefault
-                                                     handler:^(UIAlertAction * _Nonnull action) {
-        NSString *key = alert.textFields.firstObject.text;
-        completion(key);
-    }];
-
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        completion(nil);
-    }];
-
-    [alert addAction:okAction];
-    [alert addAction:cancelAction];
-    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showErrorAlertWithMessage:(NSString *)message {
@@ -691,4 +716,3 @@
 }
 
 @end
-

@@ -5,9 +5,12 @@
 #import "FileServer.h"
 #import "SettingsManager.h"
 #import "StoreManager.h"
+#import "SecretManager.h"
 #import "SceneState.h"
 #import "SettingsViewController.h"
 #import "GalleryViewController.h"
+#import <Security/Security.h>
+#import <CommonCrypto/CommonCryptor.h>
 
 @interface ViewController ()
 
@@ -26,6 +29,8 @@
 @property (nonatomic, assign) BOOL isProcessingCoreData;
 @property (nonatomic, assign) BOOL recordPressed;
 @property (nonatomic, assign) BOOL isRecording;
+@property (nonatomic, assign) BOOL isStreaming; //over the internet
+@property (nonatomic, assign) NSTimeInterval last_check_time;
 @property (nonatomic, assign) CMTime startTime;
 @property (nonatomic, assign) CMTime currentTime;
 @property (nonatomic, strong) AVAssetWriter *assetWriter;
@@ -39,6 +44,7 @@
 @property (nonatomic, strong) NSLock *segmentLock;
 @property (nonatomic, strong) NSManagedObjectContext *backgroundContext;
 @property (nonatomic, strong) NSString *dayFolderName;
+@property (nonatomic, strong) NSString *streamLink;
 @property (nonatomic, strong) dispatch_queue_t segmentQueue;
 @property (nonatomic, strong) dispatch_queue_t finishRecordingQueue;
 @property (nonatomic, strong) SceneState *scene;
@@ -59,7 +65,9 @@ NSMutableDictionary *classColorMap;
             // do nothing
         }];
     }
+    self.streamLink = @"";
     self.recordPressed = NO;
+    self.last_check_time = [[NSDate date] timeIntervalSince1970];
     self.scene = [[SceneState alloc] init];
     self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
     self.finishRecordingQueue = dispatch_queue_create("com.example.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
@@ -79,6 +87,7 @@ NSMutableDictionary *classColorMap;
     self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
     self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
     self.segmentLock = [[NSLock alloc] init];
+    self.isStreaming = NO;
         
     self.ciContext = [CIContext context];
     self.yolo = [[Yolo alloc] init];
@@ -108,6 +117,155 @@ NSMutableDictionary *classColorMap;
     [self setupUI];
     UIDeviceOrientation initialOrientation = [self getCurrentOrientation];
 }
+
+- (void)refreshView {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // Preserve recording state
+        BOOL wasRecording = self.recordPressed;
+        
+        // Stop and clean up the current capture session
+        if (self.captureSession.isRunning) {
+            [self.captureSession stopRunning];
+        }
+        [self.captureSession.inputs enumerateObjectsUsingBlock:^(AVCaptureInput *input, NSUInteger idx, BOOL *stop) {
+            [self.captureSession removeInput:input];
+        }];
+        [self.captureSession.outputs enumerateObjectsUsingBlock:^(AVCaptureOutput *output, NSUInteger idx, BOOL *stop) {
+            [self.captureSession removeOutput:output];
+        }];
+        self.captureSession = nil;
+        
+        // Finish any ongoing recording
+        if (self.isRecording) {
+            [self finishRecording];
+        }
+        
+        // Remove notification observers
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:UIDeviceOrientationDidChangeNotification object:nil];
+        [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
+        
+        // Remove KVO observers
+        SettingsManager *settings = [SettingsManager sharedManager];
+        [settings removeObserver:self forKeyPath:@"width"];
+        [settings removeObserver:self forKeyPath:@"height"];
+        [settings removeObserver:self forKeyPath:@"text_size"];
+        [settings removeObserver:self forKeyPath:@"preset"];
+        
+        // Reset UI and remove all sublayers
+        [self resetUI];
+        [self.previewLayer removeFromSuperlayer];
+        self.previewLayer = nil;
+        
+        // Reset all properties to initial state
+        self.fpsLabel = nil;
+        self.recordButton = nil;
+        self.settingsButton = nil;
+        self.galleryButton = nil;
+        self.lastFrameTime = 0;
+        self.frameCount = 0;
+        self.yolo = nil;
+        self.ciContext = nil;
+        self.isProcessing = NO;
+        self.isProcessingCoreData = NO;
+        self.recordPressed = wasRecording; // Restore recording state
+        self.isRecording = NO;
+        self.last_check_time = [[NSDate date] timeIntervalSince1970];
+        self.startTime = kCMTimeInvalid;
+        self.currentTime = kCMTimeZero;
+        self.assetWriter = nil;
+        self.videoWriterInput = nil;
+        self.adaptor = nil;
+        self.fileServer = nil;
+        self.seg_number = 0;
+        self.current_file_timestamp = nil;
+        self.digits = nil;
+        self.current_segment_squares = nil;
+        self.segmentLock = nil;
+        self.backgroundContext = nil;
+        self.dayFolderName = nil;
+        self.segmentQueue = nil;
+        self.finishRecordingQueue = nil;
+        self.scene = nil;
+        
+        // Reinitialize all components as in viewDidLoad
+        self.scene = [[SceneState alloc] init];
+        self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
+        self.finishRecordingQueue = dispatch_queue_create("com.example.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
+        
+        self.current_segment_squares = [[NSMutableArray alloc] init];
+        self.digits = [NSMutableDictionary dictionary];
+        self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
+        self.digits[@"1"] = @[@[ @2, @0, @1, @5 ]];
+        self.digits[@"2"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @0, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
+        self.digits[@"3"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @3 ], @[ @0, @2, @3, @1 ], @[ @0, @4, @3, @1 ]];
+        self.digits[@"4"] = @[@[ @2, @0, @1, @5 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ]];
+        self.digits[@"5"] = @[@[ @0, @0, @3, @1 ], @[ @0, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @2, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
+        self.digits[@"6"] = @[@[ @0, @0, @3, @1 ],@[ @0, @0, @1, @5 ], @[ @1, @2, @2, @1 ], @[ @1, @4, @2, @1 ], @[ @2, @3, @1, @1 ]];
+        self.digits[@"7"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @4 ]];
+        self.digits[@"8"] = @[@[ @0, @0, @1, @5 ], @[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @1, @2, @1, @1 ], @[ @1, @4, @1, @1 ]];
+        self.digits[@"9"] = @[@[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ],@[ @0, @4, @3, @1 ]];
+        self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
+        self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
+        self.segmentLock = [[NSLock alloc] init];
+        
+        self.ciContext = [CIContext context];
+        self.yolo = [[Yolo alloc] init];
+        self.seg_number = 0;
+        self.fileServer = [FileServer sharedInstance];
+        [self.fileServer start];
+        self.backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
+        self.backgroundContext.mergePolicy = NSMergeByPropertyStoreTrumpMergePolicy;
+        self.backgroundContext.parentContext = self.fileServer.context;
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(handleDeviceOrientationChange)
+                                                     name:UIDeviceOrientationDidChangeNotification
+                                                   object:nil];
+        
+        [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
+        
+        [settings addObserver:self forKeyPath:@"width" options:NSKeyValueObservingOptionNew context:nil];
+        [settings addObserver:self forKeyPath:@"height" options:NSKeyValueObservingOptionNew context:nil];
+        [settings addObserver:self forKeyPath:@"text_size" options:NSKeyValueObservingOptionNew context:nil];
+        [settings addObserver:self forKeyPath:@"preset" options:NSKeyValueObservingOptionNew context:nil];
+        
+        // Re-setup camera with current settings
+        [self setupCameraWithWidth:settings.width height:settings.height];
+        
+        // Re-setup UI
+        [self setupUI];
+        
+        // Update record button state if was recording
+        if (self.recordPressed) {
+            [self.recordButton setTitle:@"Stop" forState:UIControlStateNormal];
+            for (CALayer *layer in self.recordButton.layer.sublayers) {
+                if ([layer.name isEqualToString:@"redShape"]) {
+                    CAShapeLayer *redShape = (CAShapeLayer *)layer;
+                    [CATransaction begin];
+                    [CATransaction setAnimationDuration:0.2];
+                    redShape.path = [UIBezierPath bezierPathWithRect:CGRectMake(25, 25, 30, 30)].CGPath;
+                    [CATransaction commit];
+                    break;
+                }
+            }
+        }
+        
+        // Set initial orientation
+        [self setInitialOrientation];
+        
+        // Start the capture session
+        [self.captureSession startRunning];
+        
+        // Start a new recording if was recording
+        if (self.recordPressed) {
+            [self startNewRecording];
+        }
+        
+        // Mimic viewWillAppear setup
+        [UIApplication sharedApplication].idleTimerDisabled = YES;
+    });
+}
+
 
 - (void)setInitialOrientation {
     UIDeviceOrientation deviceOrientation = [[UIDevice currentDevice] orientation];
@@ -225,6 +383,7 @@ NSMutableDictionary *classColorMap;
 - (void)setupCameraWithWidth:(NSString *)width height:(NSString *)height {
     self.captureSession = [[AVCaptureSession alloc] init];
     NSString *presetString = [NSString stringWithFormat:@"AVCaptureSessionPreset%@x%@", width, height];
+    if(self.isStreaming) presetString = @"AVCaptureSessionPreset640x480";
 
     if ([self.captureSession canSetSessionPreset:presetString]) {
         self.captureSession.sessionPreset = presetString;
@@ -282,6 +441,10 @@ NSMutableDictionary *classColorMap;
     SettingsManager *settings = [SettingsManager sharedManager];
     int videoWidth = [settings.width intValue];
     int videoHeight = [settings.height intValue];
+    if(self.isStreaming){
+        videoHeight = 480;
+        videoWidth = 640;
+    }
     
     // Create a folder for the day within the documents directory
     NSURL *documentsDirectory = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] firstObject];
@@ -304,16 +467,24 @@ NSMutableDictionary *classColorMap;
         AVVideoHeightKey: @(videoHeight),
         AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
     };
-    
-    NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
-    if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
-        // HEVC is supported
-        videoSettings = @{
-            AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
-            AVVideoWidthKey: @(videoWidth),
-            AVVideoHeightKey: @(videoHeight),
-            AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
+        
+    if (self.isStreaming) {
+        NSMutableDictionary *mutableSettings = [videoSettings mutableCopy];
+        mutableSettings[AVVideoCompressionPropertiesKey] = @{
+            AVVideoAverageBitRateKey: @(500000)
         };
+        videoSettings = [mutableSettings copy];
+    } else {
+        NSArray<NSString *> *exportPresets = [AVAssetExportSession allExportPresets];
+        if ([exportPresets containsObject:AVAssetExportPresetHEVCHighestQuality]) {
+            // HEVC is supported
+            videoSettings = @{
+                AVVideoCodecKey: AVVideoCodecTypeHEVC, // Use HEVC (H.265)
+                AVVideoWidthKey: @(videoWidth),
+                AVVideoHeightKey: @(videoHeight),
+                AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill
+            };
+        }
     }
         
     self.videoWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoSettings];
@@ -651,6 +822,7 @@ NSMutableDictionary *classColorMap;
 
 
 - (void)finishRecording {
+    NSLog(@"rory finish recording %ld %@", (long)[FileServer sharedInstance].segment_length, self.isStreaming ? @"YES" : @"NO");
     if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) return;
     
     NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];
@@ -666,7 +838,14 @@ NSMutableDictionary *classColorMap;
         [self.videoWriterInput markAsFinished];
         
         [self.assetWriter finishWritingWithCompletionHandler:^{
-            if (!self.assetWriter.outputURL) return;
+            if (!self.assetWriter.outputURL) {
+                NSLog(@"❌ No output URL for asset writer");
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    self.isProcessingCoreData = NO;
+                    [self startNewRecording];
+                });
+                return;
+            }
             
             AVAsset *asset = [AVAsset assetWithURL:self.assetWriter.outputURL];
             CMTime time = asset.duration;
@@ -676,7 +855,35 @@ NSMutableDictionary *classColorMap;
             NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
             [formatter setDateFormat:@"yyyy-MM-dd"];
             NSString *thisDayFoler = [formatter stringFromDate:self.current_file_timestamp];
-                        
+            
+            if(self.isStreaming){
+                // Prepare file for upload
+                NSString *tempFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"segment.mp4.aes"];
+                NSError *fileError = nil;
+                NSFileManager *fileManager = [NSFileManager defaultManager];
+                if ([fileManager fileExistsAtPath:tempFilePath]) {
+                    [fileManager removeItemAtPath:tempFilePath error:&fileError];
+                    if (fileError) {
+                        NSLog(@"❌ Failed to remove existing temp file: %@", fileError);
+                    }
+                }
+                
+                if (self.assetWriter.outputURL) {
+                    if ([fileManager copyItemAtURL:self.assetWriter.outputURL toURL:[NSURL fileURLWithPath:tempFilePath] error:&fileError]) {
+                        NSLog(@"✅ Copied video to temp path for upload: %@", tempFilePath);
+                    } else {
+                        NSLog(@"❌ Failed to copy video to temp path: %@", fileError);
+                    }
+                    
+                    // Trigger upload if file was successfully copied
+                    if ([fileManager fileExistsAtPath:tempFilePath]) {
+                        [self uploadSegment];
+                    } else {
+                        NSLog(@"❌ Temp file not found, skipping upload");
+                    }
+                }
+            }
+            
             [self.backgroundContext performBlock:^{
                 // Save background context
                 NSError *error = nil;
@@ -684,9 +891,11 @@ NSMutableDictionary *classColorMap;
                     // Save parent context only if necessary
                     NSError *parentError = nil;
                     [self.fileServer.context save:&parentError];
+                } else {
+                    NSLog(@"❌ Failed to save background context: %@", error);
                 }
                 
-                // Create a local copy of current_segment_squares, moved to after file save
+                // Create a local copy of current_segment_squares
                 __block NSArray *segmentSquaresCopy;
                 dispatch_sync(self.segmentQueue, ^{
                     segmentSquaresCopy = [self.current_segment_squares copy];
@@ -696,12 +905,15 @@ NSMutableDictionary *classColorMap;
                 // Fetch or create DayEntity efficiently
                 NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:@"DayEntity"];
                 fetchRequest.predicate = [NSPredicate predicateWithFormat:@"date == %@", thisDayFoler];
-                fetchRequest.fetchLimit = 1; // Only one DayEntity per date
+                fetchRequest.fetchLimit = 1;
                 
                 NSArray *fetchedDays = [self.backgroundContext executeFetchRequest:fetchRequest error:&error];
                 NSManagedObject *dayEntity;
                 
-                if (error) return;
+                if (error) {
+                    NSLog(@"❌ Fetch request failed: %@", error);
+                    return;
+                }
                 
                 if (fetchedDays.count > 0) {
                     dayEntity = fetchedDays.firstObject;
@@ -743,13 +955,53 @@ NSMutableDictionary *classColorMap;
                 
                 [newSegment setValue:[NSOrderedSet orderedSetWithArray:segmentFrames] forKey:@"frames"];
                 [[dayEntity mutableOrderedSetValueForKey:@"segments"] addObject:newSegment];
+                
+                // Save the context again after modifications
+                NSError *saveError = nil;
+                [self.backgroundContext save:&saveError];
             }];
+                        
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.isProcessingCoreData = NO;
                 [self startNewRecording];
             });
         }];
     });
+}
+
+- (void)uploadSegment {
+    NSString *filePath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"segment.mp4.aes"];
+    NSData *fileData = [NSData dataWithContentsOfFile:filePath];
+
+    if (!fileData) {
+        NSLog(@"❌ Failed to read segment.mp4 for upload");
+        return;
+    }
+
+    // Replace with your actual signed URL
+    NSString *signedUrl = self.streamLink;
+    
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:signedUrl]];
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"video/mp4" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:[NSString stringWithFormat:@"%lu", (unsigned long)fileData.length] forHTTPHeaderField:@"Content-Length"];
+    NSString *encryptionKey = [[SecretManager sharedManager] getEncryptionKey];
+    if (!encryptionKey) return;
+    fileData = [[SecretManager sharedManager] encryptData:fileData withKey:encryptionKey];
+        
+    [[[NSURLSession sharedSession] uploadTaskWithRequest:request
+                                               fromData:fileData
+                                      completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"size of segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
+        if (error) {
+            NSLog(@"❌ Upload failed: %@", error);
+        } else if (httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+            NSLog(@"✅ Uploaded segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
+        } else {
+            NSLog(@"❌ Upload failed with status %ld", (long)httpResponse.statusCode);
+        }
+    }] resume];
 }
 
 - (NSString *)jsonStringFromDictionary:(NSDictionary *)dictionary {
@@ -923,14 +1175,14 @@ NSMutableDictionary *classColorMap;
             } else {
                 self.currentTime = CMTimeSubtract(timestamp, self.startTime);
             }
-
+            
             if (self.videoWriterInput.readyForMoreMediaData) {
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
                 pixelBuffer = [self addTimeStampToPixelBuffer:pixelBuffer];
-
+                
                 BOOL success = NO;
                 int retryCount = 3;
-
+                
                 while (!success && retryCount > 0) {
                     success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
                     if (!success) {
@@ -940,109 +1192,122 @@ NSMutableDictionary *classColorMap;
                 }
                 if (!success) [self finishRecording];
             }
-
+            
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
-            //todo add back
-            if (self.fileServer.segment_length == 1 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) {
-                self.fileServer.segment_length = 60;
+            if (!self.isStreaming && [FileServer sharedInstance].segment_length < 60 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) { //todo, fix hack in SceneState
+                [FileServer sharedInstance].segment_length = 60;
             }
-            if (elapsedTime >= self.fileServer.segment_length) {
+            if([[NSUserDefaults standardUserDefaults] boolForKey:@"live_stream_internet_enabled"]) {
+                   if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
+                    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                        ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
+                        [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
+                        NSLog(@"verifying subscription");
+                        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                            [self checkUploadLink];
+                        }];
+                    } else {
+                        [self checkUploadLink];
+                    }
+                }
+            }
+            if (elapsedTime >= [FileServer sharedInstance].segment_length || (self.isStreaming && elapsedTime > 2.0)) {
                 [self finishRecording];
             }
         }
-
-        AVCaptureVideoOrientation videoOrientation = self.previewLayer.connection.videoOrientation;
-        CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-        CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
-
-        if (self.isProcessing) {
-            return;
-        }
-
-        self.isProcessing = YES;
-
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-            size_t width = CVPixelBufferGetWidth(imageBuffer);
-            size_t height = CVPixelBufferGetHeight(imageBuffer);
-            CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
-
-            NSMutableArray *frameSquares = [[NSMutableArray alloc] init];
-
-            NSCalendar *calendar = [NSCalendar currentCalendar];
-            NSDate *now = [NSDate date];
-            NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
-            NSDate *midnight = [calendar dateFromComponents:components];
-            NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
-
-            NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
-            frame[@"frame_timeStamp"] = @(timeStamp);
-            frame[@"res"] = @(self.yolo.yolo_res);
-            frame[@"aspect_ratio"] = @(aspect_ratio);
-
-            CGFloat targetWidth = self.yolo.yolo_res;
-            CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
-
-            CGFloat scaleX = targetSize.width / width;
-            CGFloat scaleY = targetSize.height / height;
-            CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
-
-            CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
-            CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
-
-            CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
+        if(!self.isStreaming){
+            AVCaptureVideoOrientation videoOrientation = self.previewLayer.connection.videoOrientation;
+            CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+            CIImage *ciImage = [CIImage imageWithCVPixelBuffer:imageBuffer];
             
-            NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
-            if(self.recordPressed) [self.scene processOutput:output withImage:ciImage orientation:self.previewLayer.connection.videoOrientation]; //todo, should event detection without recording be a thing?
-            CGImageRelease(cgImage);
-
-            __weak typeof(self) weak_self = self;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                @try {
-                    __strong typeof(weak_self) strongSelf = weak_self;
-                    if (!strongSelf) {
-                        return;
-                    }
-
-                    [strongSelf resetSquares];
-
-                    for (NSArray *detection in output) {
-                        NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];
-                        frameSquare[@"originX"] = detection[0];
-                        frameSquare[@"originY"] = detection[1];
-                        frameSquare[@"bottomRightX"] = detection[2];
-                        frameSquare[@"bottomRightY"] = detection[3];
-                        frameSquare[@"classIndex"] = detection[4];
-                        [frameSquares addObject:frameSquare];
-
-                        [strongSelf drawSquareWithTopLeftX:[detection[0] floatValue]
-                                                   topLeftY:[detection[1] floatValue]
-                                               bottomRightX:[detection[2] floatValue]
-                                               bottomRightY:[detection[3] floatValue]
-                                                 classIndex:[detection[4] intValue]
-                                                aspectRatio:aspect_ratio];
-                    }
-
-                    frame[@"squares"] = frameSquares;
-
-                    dispatch_async(self.segmentQueue, ^{
-                        if (!self.current_segment_squares) {
-                            self.current_segment_squares = [[NSMutableArray alloc] init];
+            if (self.isProcessing) {
+                return;
+            }
+            
+            self.isProcessing = YES;
+            
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+                size_t width = CVPixelBufferGetWidth(imageBuffer);
+                size_t height = CVPixelBufferGetHeight(imageBuffer);
+                CGFloat aspect_ratio = (CGFloat)width / (CGFloat)height;
+                
+                NSMutableArray *frameSquares = [[NSMutableArray alloc] init];
+                
+                NSCalendar *calendar = [NSCalendar currentCalendar];
+                NSDate *now = [NSDate date];
+                NSDateComponents *components = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:now];
+                NSDate *midnight = [calendar dateFromComponents:components];
+                NSTimeInterval timeStamp = [now timeIntervalSinceDate:midnight];
+                
+                NSMutableDictionary *frame = [[NSMutableDictionary alloc] init];
+                frame[@"frame_timeStamp"] = @(timeStamp);
+                frame[@"res"] = @(self.yolo.yolo_res);
+                frame[@"aspect_ratio"] = @(aspect_ratio);
+                
+                CGFloat targetWidth = self.yolo.yolo_res;
+                CGSize targetSize = CGSizeMake(targetWidth, targetWidth / aspect_ratio);
+                
+                CGFloat scaleX = targetSize.width / width;
+                CGFloat scaleY = targetSize.height / height;
+                CIImage *resizedImage = [ciImage imageByApplyingTransform:CGAffineTransformMakeScale(scaleX, scaleY)];
+                
+                CGRect cropRect = CGRectMake(0, 0, targetSize.width, targetSize.height);
+                CIImage *croppedImage = [resizedImage imageByCroppingToRect:cropRect];
+                
+                CGImageRef cgImage = [self.ciContext createCGImage:croppedImage fromRect:cropRect];
+                
+                NSArray *output = [self.yolo yolo_infer:cgImage withOrientation:videoOrientation];
+                if(self.recordPressed) [self.scene processOutput:output withImage:ciImage orientation:self.previewLayer.connection.videoOrientation];
+                CGImageRelease(cgImage);
+                
+                __weak typeof(self) weak_self = self;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    @try {
+                        __strong typeof(weak_self) strongSelf = weak_self;
+                        if (!strongSelf) {
+                            return;
                         }
-                        [self.current_segment_squares addObject:frame];
-                    });
-
-                    [strongSelf updateFPS];
-                    strongSelf.isProcessing = NO;
-                } @catch (NSException *exception) {
-                    NSLog(@"Exception in main queue block: %@", exception);
-                }
+                        
+                        [strongSelf resetSquares];
+                        
+                        for (NSArray *detection in output) {
+                            NSMutableDictionary *frameSquare = [[NSMutableDictionary alloc] init];
+                            frameSquare[@"originX"] = detection[0];
+                            frameSquare[@"originY"] = detection[1];
+                            frameSquare[@"bottomRightX"] = detection[2];
+                            frameSquare[@"bottomRightY"] = detection[3];
+                            frameSquare[@"classIndex"] = detection[4];
+                            [frameSquares addObject:frameSquare];
+                            
+                            [strongSelf drawSquareWithTopLeftX:[detection[0] floatValue]
+                                                      topLeftY:[detection[1] floatValue]
+                                                  bottomRightX:[detection[2] floatValue]
+                                                  bottomRightY:[detection[3] floatValue]
+                                                    classIndex:[detection[4] intValue]
+                                                   aspectRatio:aspect_ratio];
+                        }
+                        
+                        frame[@"squares"] = frameSquares;
+                        
+                        dispatch_async(self.segmentQueue, ^{
+                            if (!self.current_segment_squares) {
+                                self.current_segment_squares = [[NSMutableArray alloc] init];
+                            }
+                            [self.current_segment_squares addObject:frame];
+                        });
+                        
+                        [strongSelf updateFPS];
+                        strongSelf.isProcessing = NO;
+                    } @catch (NSException *exception) {
+                        NSLog(@"Exception in main queue block: %@", exception);
+                    }
+                });
             });
-        });
+        }
     } @catch (NSException *exception) {
         NSLog(@"Exception occurred: %@, %@", exception, [exception callStackSymbols]);
     }
 }
-
 
 - (CVPixelBufferRef)addColoredRectangleToPixelBuffer:(CVPixelBufferRef)pixelBuffer withColor:(UIColor *)color originX:(CGFloat)originX originY:(CGFloat)originY width:(CGFloat)width height:(CGFloat)height opacity:(CGFloat)opacity {
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
@@ -1068,7 +1333,7 @@ NSMutableDictionary *classColorMap;
     // Get text_size from SettingsManager
     SettingsManager *settings = [SettingsManager sharedManager];
     NSInteger textSize = [settings.text_size intValue];
-    
+    if(self.isStreaming) textSize = 2;
     NSInteger pixelSize = textSize * 2;
     NSInteger spaceSize = textSize;
     NSInteger digitOriginX = spaceSize;
@@ -1168,6 +1433,56 @@ NSMutableDictionary *classColorMap;
     return context;
 }
 
+- (void)checkUploadLink {
+    self.last_check_time = [[NSDate date] timeIntervalSince1970];
+    NSString *deviceName = [[NSUserDefaults standardUserDefaults] stringForKey:@"device_name"];
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+
+    NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_upload_link"];
+    components.queryItems = @[
+        [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
+        [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
+    ];
+
+    NSURL *url = components.URL;
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"❌ Error: %@", error.localizedDescription);
+            return;
+        }
+
+        NSError *jsonError;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError) {
+            NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
+            return;
+        }
+
+        NSString *uploadLink = json[@"upload_link"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (uploadLink && ![uploadLink isKindOfClass:[NSNull class]]) {
+                if (!self.isStreaming) {
+                    NSLog(@"📤 Upload link received: %@", uploadLink);
+                    self.streamLink = uploadLink;
+                    self.isStreaming = YES;
+                    [self refreshView];
+                }
+            } else {
+                if (self.isStreaming) {
+                    self.scene.left_live_time = [NSDate now];
+                    self.isStreaming = NO;
+                    [self refreshView];
+                    NSLog(@"no link");
+                }
+            }
+        });
+    }];
+    [task resume];
+}
 
 - (void)updateFPS {
     CFTimeInterval currentTime = CACurrentMediaTime();
@@ -1190,4 +1505,3 @@ NSMutableDictionary *classColorMap;
     }
 }
 @end
-

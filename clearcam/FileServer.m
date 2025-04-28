@@ -50,7 +50,7 @@
 - (void)start {
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     self.context = appDelegate.persistentContainer.viewContext;
-    self.segment_length = 1;
+    self.segment_length = 60;
     self.scanner = [[PortScanner alloc] init];
     self.last_req_time = [NSDate now];
     self.basePath = [self getDocumentsDirectory];

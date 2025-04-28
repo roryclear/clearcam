@@ -1,6 +1,7 @@
 #import "SecretManager.h"
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCryptor.h>
+#import <UIKit/UIKit.h>
 
 static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace with your app's unique identifier
 
@@ -48,6 +49,29 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return [keys copy];
 }
 
+- (nullable NSString *)retrieveDecryptionKeyWithIdentifier:(NSString *)identifier error:(NSError **)error {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kServiceIdentifier,
+        (__bridge id)kSecAttrAccount: identifier,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne
+    };
+
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status == errSecSuccess) {
+        NSData *keyData = (__bridge_transfer NSData *)result;
+        return [[NSString alloc] initWithData:keyData encoding:NSUTF8StringEncoding];
+    } else {
+        if (error) {
+            *error = [NSError errorWithDomain:@"SecretManagerErrorDomain"
+                                         code:status
+                                     userInfo:@{NSLocalizedDescriptionKey: [self errorMessageForStatus:status]}];
+        }
+        return nil;
+    }
+}
 
 - (BOOL)saveEncryptionKey:(NSString *)key error:(NSError **)error {
     if (!key) {
@@ -87,6 +111,36 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return YES;
 }
 
+- (void)promptUserForKeyFromViewController:(UIViewController *)presentingViewController completion:(void (^)(NSString *key))completion {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
+                                                                   message:@"Please enter the password used by your device to encrypt this data."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Decryption Key";
+        textField.secureTextEntry = YES;
+    }];
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:^(UIAlertAction * _Nonnull action) {
+        NSString *key = alert.textFields.firstObject.text;
+        completion(key);
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        completion(nil);
+    }];
+    
+    [alert addAction:okAction];
+    [alert addAction:cancelAction];
+    
+    [presentingViewController presentViewController:alert animated:YES completion:nil];
+}
+
+
 - (NSArray<NSString *> *)getAllDecryptionKeys {
     NSMutableArray<NSString *> *keys = [NSMutableArray array];
 
@@ -102,7 +156,7 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
     if (status == errSecSuccess) {
         NSArray *items = (__bridge_transfer NSArray *)result;
-        for (NSDictionary *item in items) {
+        for (NSDictionary * item in items) {
             NSString *identifier = item[(__bridge id)kSecAttrAccount];
             if (![identifier isEqualToString:@"encryption_key"]) { // Ignore the encryption key
                 NSData *keyData = item[(__bridge id)kSecValueData];
@@ -116,7 +170,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
 
     return [keys copy];
 }
-
 
 - (BOOL)saveDecryptionKey:(NSString *)key withIdentifier:(NSString *)identifier error:(NSError **)error {
     if (!key || !identifier) {
@@ -153,7 +206,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     return YES;
 }
 
-
 - (NSString *)getEncryptionKey {
     NSString *encryptionKeyIdentifier = @"encryption_key";
 
@@ -174,7 +226,6 @@ static NSString *const kServiceIdentifier = @"com.yourapp.aeskeys"; // Replace w
     }
     return nil;
 }
-
 
 #pragma mark - Key Deletion
 
