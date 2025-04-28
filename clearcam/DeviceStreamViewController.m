@@ -278,10 +278,50 @@
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    
     [self.downloadTimer invalidate];
     self.downloadTimer = nil;
     [self.linkRefreshTimer invalidate];
     self.linkRefreshTimer = nil;
+    
+    [self sendDeleteStreamDownloadLink];
 }
+
+- (void)sendDeleteStreamDownloadLink {
+    NSString *deviceName = self.deviceName;
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+
+    if (!deviceName || !sessionToken) {
+        NSLog(@"❌ Missing device name or session token for delete request");
+        return;
+    }
+
+    NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/delete_stream_download_link"];
+    components.queryItems = @[
+        [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
+        [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
+    ];
+
+    NSURL *url = components.URL;
+
+    NSURLSessionDataTask *deleteTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"❌ Error sending delete request: %@", error.localizedDescription);
+            return;
+        }
+        
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode == 200) {
+            NSLog(@"✅ Successfully deleted stream download link");
+        } else {
+            NSLog(@"⚠️ Delete request failed with status code: %ld", (long)httpResponse.statusCode);
+        }
+    }];
+    [deleteTask resume];
+}
+
 
 @end
