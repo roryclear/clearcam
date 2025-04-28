@@ -1175,14 +1175,14 @@ NSMutableDictionary *classColorMap;
             } else {
                 self.currentTime = CMTimeSubtract(timestamp, self.startTime);
             }
-
+            
             if (self.videoWriterInput.readyForMoreMediaData) {
                 CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
                 pixelBuffer = [self addTimeStampToPixelBuffer:pixelBuffer];
-
+                
                 BOOL success = NO;
                 int retryCount = 3;
-
+                
                 while (!success && retryCount > 0) {
                     success = [self.adaptor appendPixelBuffer:pixelBuffer withPresentationTime:self.currentTime];
                     if (!success) {
@@ -1192,21 +1192,23 @@ NSMutableDictionary *classColorMap;
                 }
                 if (!success) [self finishRecording];
             }
-
+            
             NSTimeInterval elapsedTime = CMTimeGetSeconds(self.currentTime);
             if (!self.isStreaming && [FileServer sharedInstance].segment_length < 60 && [[NSDate now] timeIntervalSinceDate:self.fileServer.last_req_time] > 60) { //todo, fix hack in SceneState
                 [FileServer sharedInstance].segment_length = 60;
             }
-            if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
-                if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
-                    ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
-                    [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
-                    NSLog(@"verifying subscription");
-                    [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+            if([[NSUserDefaults standardUserDefaults] boolForKey:@"live_stream_internet_enabled"]) {
+                   if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
+                    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
+                        ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
+                        [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
+                        NSLog(@"verifying subscription");
+                        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                            [self checkUploadLink];
+                        }];
+                    } else {
                         [self checkUploadLink];
-                    }];
-                } else {
-                    [self checkUploadLink];
+                    }
                 }
             }
             if (elapsedTime >= [FileServer sharedInstance].segment_length || (self.isStreaming && elapsedTime > 2.0)) {
@@ -1331,7 +1333,7 @@ NSMutableDictionary *classColorMap;
     // Get text_size from SettingsManager
     SettingsManager *settings = [SettingsManager sharedManager];
     NSInteger textSize = [settings.text_size intValue];
-    
+    if(self.isStreaming) textSize = 2;
     NSInteger pixelSize = textSize * 2;
     NSInteger spaceSize = textSize;
     NSInteger digitOriginX = spaceSize;
