@@ -2,6 +2,7 @@
 #define SecretManager_h
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 @interface SecretManager : NSObject
 
@@ -23,6 +24,8 @@
 
 - (NSData *)decryptData:(NSData *)encryptedData withKey:(NSString *)key;
 - (NSData *)encryptData:(NSData *)data withKey:(NSString *)key;
+- (void)promptUserForKeyFromViewController:(UIViewController *)presentingViewController
+                                completion:(void (^)(NSString *key))completion;
 
 @end
 

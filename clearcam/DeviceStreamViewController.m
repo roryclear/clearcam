@@ -222,7 +222,7 @@
 
 - (void)promptForKeyOnSecondFailure:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self promptUserForKeyWithCompletion:^(NSString *userProvidedKey) {
+        [[SecretManager sharedManager] promptUserForKeyFromViewController:self completion:^(NSString *userProvidedKey) {
             if (userProvidedKey) {
                 NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:userProvidedKey];
                 if (decryptedData) {
@@ -246,34 +246,6 @@
             }
         }];
     });
-}
-
-- (void)promptUserForKeyWithCompletion:(void (^)(NSString *))completion {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Decryption Key"
-                                                                  message:@"Please enter the password used by your device to encrypt this data."
-                                                           preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Decryption Key";
-        textField.secureTextEntry = YES;
-    }];
-
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
-                                                       style:UIAlertActionStyleDefault
-                                                     handler:^(UIAlertAction * _Nonnull action) {
-        NSString *key = alert.textFields.firstObject.text;
-        completion(key);
-    }];
-
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        completion(nil);
-    }];
-
-    [alert addAction:okAction];
-    [alert addAction:cancelAction];
-    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showErrorAlertWithMessage:(NSString *)message completion:(void (^)(void))completion {
