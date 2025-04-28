@@ -17,6 +17,7 @@
 @property (nonatomic, strong) NSData *lastFailedEncryptedData;
 @property (nonatomic, assign) NSInteger consecutiveDecryptionFailures;
 @property (nonatomic, assign) BOOL decryptionFailedOnce;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingSpinner;
 @end
 
 @implementation DeviceStreamViewController
@@ -25,9 +26,14 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
 
-    self.player = [AVQueuePlayer queuePlayerWithItems:@[]];
-    self.player.volume = 1.0;
+    // Setup spinner
+    self.loadingSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    self.loadingSpinner.center = self.view.center;
+    self.loadingSpinner.color = [UIColor whiteColor];
+    [self.view addSubview:self.loadingSpinner];
+    [self.loadingSpinner startAnimating];
 
+    self.player = [AVQueuePlayer queuePlayerWithItems:@[]];
     self.playerLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
     self.playerLayer.frame = self.view.bounds;
     self.playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
@@ -153,9 +159,16 @@
             NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
             NSURL *localURL = [NSURL fileURLWithPath:tempPath];
 
+            // Delete existing file if any (from old streams)
+            [[NSFileManager defaultManager] removeItemAtURL:localURL error:nil];
+
             if ([decryptedData writeToURL:localURL atomically:YES]) {
                 NSLog(@"✅ New segment saved: %@", fileName);
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    // Hide spinner when we actually have a new decrypted playable file
+                    [self.loadingSpinner stopAnimating];
+                    self.loadingSpinner.hidden = YES;
+
                     AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
                     AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
                     [self.player insertItem:item afterItem:nil];
@@ -332,6 +345,5 @@
     }];
     [deleteTask resume];
 }
-
 
 @end
