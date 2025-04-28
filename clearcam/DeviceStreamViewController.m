@@ -134,17 +134,18 @@
             return;
         }
 
-        self.lastSegmentData = data;
+        // Only set lastSegmentData after successful decryption
+        NSLog(@"📥 New segment downloaded, attempting decryption");
 
-        // Reset decryption failure flag when segment changes
-        self.decryptionFailedOnce = NO;
-
-        // Try decrypting the new segment
         [self decryptAndQueueSegment:data withCompletion:^(NSData *decryptedData) {
             if (!decryptedData) {
                 NSLog(@"❌ Decryption failed");
                 return;
             }
+
+            // Success: now save the segment as "lastSegmentData"
+            self.lastSegmentData = data;
+            self.decryptionFailedOnce = NO; // Only reset on success
 
             NSString *fileName = [NSString stringWithFormat:@"segment_%lu.mp4", (unsigned long)(self.segmentIndex++ % 2)];
             NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
@@ -165,36 +166,27 @@
     [task resume];
 }
 
+
 - (void)decryptAndQueueSegment:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     if (self.decryptionKey) {
         NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:self.decryptionKey];
         if (decryptedData) {
             completion(decryptedData);
-            self.decryptionFailedOnce = NO; // Reset on success
             return;
         } else {
             NSLog(@"⚠️ Decryption failed with stored key");
-            if (self.decryptionFailedOnce) {
-                // Second failure, prompt for key
-                [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
-            } else {
-                // First failure, mark and wait for next segment
-                self.decryptionFailedOnce = YES;
-                completion(nil);
-            }
-            return;
         }
     }
 
-    // No key yet, mark first failure and wait for next segment
-    if (!self.decryptionFailedOnce) {
+    // Handle failure: whether no key or decryption failure
+    if (self.decryptionFailedOnce) {
+        NSLog(@"🔑 Prompting for key after second failure");
+        [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
+    } else {
+        NSLog(@"⏳ First decryption failure, waiting for second attempt...");
         self.decryptionFailedOnce = YES;
         completion(nil);
-        return;
     }
-
-    // Second failure with no key, prompt user
-    [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
 }
 
 - (void)promptForKeyOnSecondFailure:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
