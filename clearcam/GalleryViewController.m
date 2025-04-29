@@ -359,7 +359,38 @@
     if (!self.loadedFilenames) self.loadedFilenames = [NSMutableSet set];
     for (NSString *file in contents) {
         NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
-        [self processVideoFileAtPath:filePath withFilename:file];
+        NSString *outputFilePath = filePath;
+        if ([file hasSuffix:@".aes"]) {
+            NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&error];
+            if (!encryptedData) {
+                [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", error.localizedDescription]];
+                return;
+            }
+            NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
+            NSData *decryptedData = nil;
+            for (NSString *key in storedKeys) {
+                decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
+                if (decryptedData) break;
+            }
+            if(decryptedData){
+                NSString *outputFilename = [file stringByDeletingPathExtension];
+                outputFilePath = [self.downloadDirectory stringByAppendingPathComponent:outputFilename];
+                NSError *writeError = nil;
+                BOOL success = [decryptedData writeToFile:outputFilePath options:NSDataWritingAtomic error:&writeError];
+                if (!success) {
+                    [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to write decrypted file: %@", writeError.localizedDescription]];
+                    return;
+                }
+                NSError *deleteError = nil;
+                BOOL removed = [[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError];
+                if (!removed) {
+                    [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete original encrypted file: %@", deleteError.localizedDescription]];
+                    return;
+                }
+            }
+            
+        }
+        [self addVideoFileAtPath:outputFilePath];
     }
 }
 
