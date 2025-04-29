@@ -164,6 +164,33 @@
 
             if ([decryptedData writeToURL:localURL atomically:YES]) {
                 NSLog(@"✅ New segment saved: %@", fileName);
+                
+                //thumbnail save
+                AVAsset *videoAsset = [AVAsset assetWithURL:localURL];
+                AVAssetImageGenerator *imageGenerator = [[AVAssetImageGenerator alloc] initWithAsset:videoAsset];
+                imageGenerator.appliesPreferredTrackTransform = YES; // To avoid rotated images
+
+                CMTime time = CMTimeMakeWithSeconds(0.0, 600); // Grab first frame (0s)
+                [imageGenerator generateCGImagesAsynchronouslyForTimes:@[[NSValue valueWithCMTime:time]]
+                                                     completionHandler:^(CMTime requestedTime, CGImageRef cgImage, CMTime actualTime, AVAssetImageGeneratorResult result, NSError *error) {
+                    if (result == AVAssetImageGeneratorSucceeded && cgImage) {
+                        UIImage *thumbnail = [UIImage imageWithCGImage:cgImage];
+                        NSData *imageData = UIImageJPEGRepresentation(thumbnail, 0.7); // Compress a bit
+
+                        NSString *filename = [NSString stringWithFormat:@"thumbnail_%@.jpg", self.deviceName];
+                        NSString *documentsPath = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+                        NSString *filePath = [documentsPath stringByAppendingPathComponent:filename];
+                        if ([imageData writeToFile:filePath atomically:YES]) {
+                            NSLog(@"🖼️ Thumbnail saved: %@", filename);
+                        } else {
+                            NSLog(@"❌ Failed to save thumbnail");
+                        }
+                    } else {
+                        NSLog(@"❌ Failed to generate thumbnail: %@", error.localizedDescription);
+                    }
+                }];
+                
+                
                 dispatch_async(dispatch_get_main_queue(), ^{
                     // Hide spinner when we actually have a new decrypted playable file
                     [self.loadingSpinner stopAnimating];
