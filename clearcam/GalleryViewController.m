@@ -278,39 +278,6 @@
     }] resume];
 }
 
-- (void)processVideoFileAtPath:(NSString *)filePath withFilename:(NSString *)filename {
-    NSString *extension = filePath.pathExtension.lowercaseString;
-    if (!([extension isEqualToString:@"mp4"] || [extension isEqualToString:@"aes"])) return;
-    if ([self.loadedFilenames containsObject:filename]) return;
-    if ([extension isEqualToString:@"aes"]) {
-        NSError *decryptionError = nil;
-        NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&decryptionError];
-        if (encryptedData) {
-            NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
-            NSData *decryptedData = nil;
-            for (NSString *key in storedKeys) {
-                decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
-                if (decryptedData) break;
-            }
-            if (decryptedData) {
-                NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
-                if (decryptedURL) {
-                    filePath = decryptedURL.path;
-                    filename = [filePath lastPathComponent];
-                } else {
-                    [self addVideoFileAtPath:filePath];
-                    return;
-                }
-            } else {
-                [self addVideoFileAtPath:filePath];
-                return;
-            }
-        } else {
-            return;
-        }
-    }
-    [self addVideoFileAtPath:filePath];
-}
 
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
@@ -337,9 +304,6 @@
                     NSError *moveError;
                     NSURL *destURL = [NSURL fileURLWithPath:destPath];
                     [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [self processVideoFileAtPath:destPath withFilename:saveFileName];
-                    });
                 }
                 dispatch_semaphore_signal(semaphore);
             }] resume];
