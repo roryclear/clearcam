@@ -429,39 +429,8 @@
     } else if ([extension isEqualToString:@"aes"]) {
         NSError *readError = nil;
         NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&readError];
-        if (!encryptedData) {
-            [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", readError.localizedDescription]];
-            return;
-        }
-        
-        NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
-        __block NSData *decryptedData = nil;
-        __block NSString *successfulKey = nil;
-
-        for (NSString *key in storedKeys) {
-            decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:key];
-            if (decryptedData) {
-                successfulKey = key;
-                break;
-            }
-        }
-
-        if (decryptedData) {
-            // Decryption succeeded with a stored key, proceed to play
-            NSURL *decryptedURL = [self handleDecryptedData:decryptedData fromURL:[NSURL fileURLWithPath:filePath]];
-            if (decryptedURL) {
-                AVPlayerViewController *playerVC = [[AVPlayerViewController alloc] init];
-                playerVC.player = [AVPlayer playerWithURL:decryptedURL];
-                [self presentViewController:playerVC animated:YES completion:^{
-                    [playerVC.player play];
-                }];
-            }
-        } else {
-            // No stored key worked, prompt the user
-            [self promptUserForKeyWithAESFileURL:[NSURL fileURLWithPath:filePath] encryptedData:encryptedData];
-        }
+        [self promptUserForKeyWithAESFileURL:[NSURL fileURLWithPath:filePath] encryptedData:encryptedData];
     }
-    
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
