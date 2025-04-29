@@ -93,7 +93,7 @@
     self.eventsViewController.title = @"Events";
     
     self.liveViewController = [[LiveViewController alloc] init];
-    self.liveViewController.title = @"Live";
+    self.liveViewController.title = @"Live Cameras";
     
     // Set up tab bar controller
     self.tabController = [[UITabBarController alloc] init];

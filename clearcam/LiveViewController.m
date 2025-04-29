@@ -11,7 +11,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Live";
+    self.title = @"Live Cameras";
     self.deviceNames = [NSMutableArray array];
 
 
@@ -92,9 +92,66 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"DeviceCell" forIndexPath:indexPath];
-    cell.textLabel.text = self.deviceNames[indexPath.row];
-    cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
+    
+    // Clear previous content
+    for (UIView *view in cell.contentView.subviews) {
+        [view removeFromSuperview];
+    }
+
+    NSString *deviceName = self.deviceNames[indexPath.row];
+
+    // Thumbnail container (4:3 ratio)
+    UIView *thumbContainer = [[UIView alloc] initWithFrame:CGRectMake(15, 10, 120, 90)];
+    thumbContainer.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    thumbContainer.layer.cornerRadius = 8;
+    thumbContainer.clipsToBounds = YES;
+
+    UIImageView *thumbnailView = [[UIImageView alloc] initWithFrame:thumbContainer.bounds];
+    thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
+    thumbnailView.clipsToBounds = YES;
+
+    NSString *filename = [NSString stringWithFormat:@"thumbnail_%@.jpg", deviceName];
+    NSString *documentsPath = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *filePath = [documentsPath stringByAppendingPathComponent:filename];
+    UIImage *thumbnailImage = [UIImage imageWithContentsOfFile:filePath];
+
+    if (thumbnailImage) {
+        thumbnailView.image = thumbnailImage;
+    } else {
+        thumbnailView.image = nil;
+        // Add play icon in center
+        UIImageView *playIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"play.circle.fill"]];
+        playIcon.tintColor = [UIColor labelColor];
+        playIcon.contentMode = UIViewContentModeScaleAspectFit;
+        playIcon.frame = CGRectMake((thumbContainer.frame.size.width - 40)/2, (thumbContainer.frame.size.height - 40)/2, 40, 40);
+        [thumbContainer addSubview:playIcon];
+    }
+
+    [thumbContainer addSubview:thumbnailView];
+    [cell.contentView addSubview:thumbContainer];
+
+    // Device Name Label
+    UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(150, 25, tableView.frame.size.width - 160, 25)];
+    nameLabel.text = deviceName;
+    nameLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    nameLabel.textColor = [UIColor labelColor];
+
+    // Online Indicator
+    UIView *greenDot = [[UIView alloc] initWithFrame:CGRectMake(150, 60, 10, 10)];
+    greenDot.backgroundColor = [UIColor systemGreenColor];
+    greenDot.layer.cornerRadius = 5;
+
+    UILabel *onlineLabel = [[UILabel alloc] initWithFrame:CGRectMake(165, 57, 100, 15)];
+    onlineLabel.text = @"Online";
+    onlineLabel.font = [UIFont systemFontOfSize:13];
+    onlineLabel.textColor = [UIColor secondaryLabelColor];
+
+    [cell.contentView addSubview:nameLabel];
+    [cell.contentView addSubview:greenDot];
+    [cell.contentView addSubview:onlineLabel];
+
     cell.backgroundColor = [UIColor systemBackgroundColor];
+    
     return cell;
 }
 
@@ -112,7 +169,7 @@
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 44;
+    return 110;
 }
 
 @end
