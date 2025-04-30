@@ -362,37 +362,62 @@
     if (!filePath) return;
     NSString *filename = [filePath lastPathComponent];
     if ([self.loadedFilenames containsObject:filename]) return;
-    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
-    NSDate *creationDate = [attributes fileCreationDate] ?: [NSDate distantPast];
     [self.videoFiles addObject:filePath];
     [self.loadedFilenames addObject:filename];
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-    dateFormatter.dateStyle = NSDateFormatterMediumStyle;
-    dateFormatter.timeStyle = NSDateFormatterNoStyle;
-    NSDateFormatter *inputFormatter = [[NSDateFormatter alloc] init];
-    [inputFormatter setDateFormat:@"yyyy-MM-dd"];
-    NSString *datePart = [[filename componentsSeparatedByString:@"_"] firstObject];
-    NSDate *date = [inputFormatter dateFromString:datePart];
-    NSString *sectionTitle = [dateFormatter stringFromDate:date] ?: @"Unknown Date";
+    NSError *error = nil;
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(\\d{4}-\\d{2}-\\d{2})_(\\d{2}-\\d{2}-\\d{2})"
+                                                                           options:0
+                                                                             error:&error];
+    NSTextCheckingResult *match = [regex firstMatchInString:filename options:0 range:NSMakeRange(0, filename.length)];
+    if (!match) return;
+    NSString *dateStr = [filename substringWithRange:[match rangeAtIndex:1]];
+    NSString *timeStr = [filename substringWithRange:[match rangeAtIndex:2]];
+    NSString *fullTimestamp = [NSString stringWithFormat:@"%@_%@", dateStr, timeStr];
+    NSDateFormatter *fullFormatter = [[NSDateFormatter alloc] init];
+    [fullFormatter setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
+    NSDate *timestampDate = [fullFormatter dateFromString:fullTimestamp];
+    if (!timestampDate) return;
+    NSDateFormatter *sectionFormatter = [[NSDateFormatter alloc] init];
+    sectionFormatter.dateStyle = NSDateFormatterMediumStyle;
+    sectionFormatter.timeStyle = NSDateFormatterNoStyle;
+    NSString *sectionTitle = [sectionFormatter stringFromDate:timestampDate] ?: @"Unknown Date";
     if (!self.groupedVideos[sectionTitle]) {
         self.groupedVideos[sectionTitle] = [NSMutableArray array];
         [self.sectionTitles addObject:sectionTitle];
     }
     [self.groupedVideos[sectionTitle] addObject:filePath];
     [self.sectionTitles sortUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-        NSDate *date1 = [dateFormatter dateFromString:obj1];
-        NSDate *date2 = [dateFormatter dateFromString:obj2];
-        return [date2 compare:date1];
+        NSDate *d1 = [sectionFormatter dateFromString:obj1] ?: [NSDate distantPast];
+        NSDate *d2 = [sectionFormatter dateFromString:obj2] ?: [NSDate distantPast];
+        return [d2 compare:d1];
     }];
     for (NSString *section in self.groupedVideos) {
         [self.groupedVideos[section] sortUsingComparator:^NSComparisonResult(NSString *path1, NSString *path2) {
-            NSDictionary *attr1 = [[NSFileManager defaultManager] attributesOfItemAtPath:path1 error:nil];
-            NSDictionary *attr2 = [[NSFileManager defaultManager] attributesOfItemAtPath:path2 error:nil];
-            return [attr2.fileCreationDate compare:attr1.fileCreationDate];
+            NSString *f1 = [path1 lastPathComponent];
+            NSString *f2 = [path2 lastPathComponent];
+            NSTextCheckingResult *m1 = [regex firstMatchInString:f1 options:0 range:NSMakeRange(0, f1.length)];
+            NSTextCheckingResult *m2 = [regex firstMatchInString:f2 options:0 range:NSMakeRange(0, f2.length)];
+            NSString *ts1 = (m1 ?
+                [NSString stringWithFormat:@"%@_%@",
+                 [f1 substringWithRange:[m1 rangeAtIndex:1]],
+                 [f1 substringWithRange:[m1 rangeAtIndex:2]]] :
+                @"1970-01-01_00-00-00");
+
+            NSString *ts2 = (m2 ?
+                [NSString stringWithFormat:@"%@_%@",
+                 [f2 substringWithRange:[m2 rangeAtIndex:1]],
+                 [f2 substringWithRange:[m2 rangeAtIndex:2]]] :
+                @"1970-01-01_00-00-00");
+
+            NSDate *d1 = [fullFormatter dateFromString:ts1] ?: [NSDate distantPast];
+            NSDate *d2 = [fullFormatter dateFromString:ts2] ?: [NSDate distantPast];
+
+            return [d2 compare:d1];
         }];
     }
     [self.tableView reloadData];
 }
+
 
 - (UIImage *)generateThumbnailForVideoAtPath:(NSString *)videoPath {
     NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
