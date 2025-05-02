@@ -873,11 +873,7 @@ NSMutableDictionary *classColorMap;
                 }
                 
                 if (self.assetWriter.outputURL) {
-                    if ([fileManager copyItemAtURL:self.assetWriter.outputURL toURL:[NSURL fileURLWithPath:tempFilePath] error:&fileError]) {
-                        NSLog(@"✅ Copied video to temp path for upload: %@", tempFilePath);
-                    } else {
-                        NSLog(@"❌ Failed to copy video to temp path: %@", fileError);
-                    }
+                    [fileManager copyItemAtURL:self.assetWriter.outputURL toURL:[NSURL fileURLWithPath:tempFilePath] error:&fileError];
                     
                     // Trigger upload if file was successfully copied
                     if ([fileManager fileExistsAtPath:tempFilePath]) {
@@ -997,7 +993,6 @@ NSMutableDictionary *classColorMap;
                                                fromData:fileData
                                       completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSLog(@"size of segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
         if (error) {
             NSLog(@"❌ Upload failed: %@", error);
         } else if (httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
@@ -1202,7 +1197,7 @@ NSMutableDictionary *classColorMap;
                 [FileServer sharedInstance].segment_length = 60;
             }
             if([[NSUserDefaults standardUserDefaults] boolForKey:@"live_stream_internet_enabled"]) {
-                   if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
+                   if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 5.0) {
                        self.last_check_time = [[NSDate date] timeIntervalSince1970];
                        NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
                        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
@@ -1453,7 +1448,6 @@ NSMutableDictionary *classColorMap;
     ];
 
     NSURL *url = components.URL;
-    NSLog(@"url = %@",url);
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
                                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {

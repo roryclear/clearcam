@@ -4,6 +4,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCryptor.h>
+#import <CommonCrypto/CommonDigest.h>
 
 @interface DeviceStreamViewController ()
 @property (nonatomic, strong) AVQueuePlayer *player;
@@ -86,6 +87,7 @@
     ];
 
     NSURL *url = components.URL;
+    NSLog(@"rory new url = %@",url);
 
     NSURLSessionDataTask *linkTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
@@ -141,11 +143,6 @@
             return;
         }
 
-        if ([self.lastSegmentData isEqualToData:data]) {
-            NSLog(@"🔁 Same segment, skipping");
-            return;
-        }
-
         // Only set lastSegmentData after successful decryption
         NSLog(@"📥 New segment downloaded, attempting decryption");
 
@@ -155,14 +152,12 @@
                 return;
             }
 
-            // Success: now save the segment as "lastSegmentData"
-            NSUInteger hash = data.hash;
-            NSData *hashData = [NSData dataWithBytes:&hash length:sizeof(hash)];
-            if ([self.seenSegmentHashes containsObject:hashData]) {
-                NSLog(@"🔁 Duplicate decrypted segment, skipping queue");
+            NSData *segmentHash = [self sha256DigestForData:data];
+            if ([self.seenSegmentHashes containsObject:segmentHash]) {
+                NSLog(@"🔁 Duplicate segment (SHA-256), skipping queue");
                 return;
             }
-            [self.seenSegmentHashes addObject:hashData];
+            [self.seenSegmentHashes addObject:segmentHash];
             self.successfullyQueuedSegmentCount += 1;
             self.lastSegmentData = data;
             self.decryptionFailedOnce = NO; // Only reset on success
@@ -226,6 +221,11 @@
     [task resume];
 }
 
+- (NSData *)sha256DigestForData:(NSData *)data {
+    uint8_t hash[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, hash);
+    return [NSData dataWithBytes:hash length:CC_SHA256_DIGEST_LENGTH];
+}
 
 - (void)decryptAndQueueSegment:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     if (self.decryptionKey) {
