@@ -18,6 +18,8 @@
 @property (nonatomic, assign) NSInteger consecutiveDecryptionFailures;
 @property (nonatomic, assign) BOOL decryptionFailedOnce;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingSpinner;
+@property (nonatomic, assign) NSInteger successfullyQueuedSegmentCount;
+@property (nonatomic, strong) NSMutableSet<NSData *> *seenSegmentHashes;
 @end
 
 @implementation DeviceStreamViewController
@@ -41,7 +43,9 @@
 
     [self.player play];
     [self fetchDownloadLinkAndStartStreaming];
-
+    
+    self.successfullyQueuedSegmentCount = 0;
+    self.seenSegmentHashes = [NSMutableSet set];
     NSLog(@"device streaming from = %@", self.deviceName);
 }
 
@@ -152,6 +156,14 @@
             }
 
             // Success: now save the segment as "lastSegmentData"
+            NSUInteger hash = data.hash;
+            NSData *hashData = [NSData dataWithBytes:&hash length:sizeof(hash)];
+            if ([self.seenSegmentHashes containsObject:hashData]) {
+                NSLog(@"🔁 Duplicate decrypted segment, skipping queue");
+                return;
+            }
+            [self.seenSegmentHashes addObject:hashData];
+            self.successfullyQueuedSegmentCount += 1;
             self.lastSegmentData = data;
             self.decryptionFailedOnce = NO; // Only reset on success
 
@@ -192,13 +204,19 @@
                 
                 
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    // Hide spinner when we actually have a new decrypted playable file
-                    [self.loadingSpinner stopAnimating];
-                    self.loadingSpinner.hidden = YES;
+                    if (self.successfullyQueuedSegmentCount >= 2) {
+                        [self.loadingSpinner stopAnimating];
+                        self.loadingSpinner.hidden = YES;
+                    }
 
-                    AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
-                    AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
-                    [self.player insertItem:item afterItem:nil];
+                    if (self.successfullyQueuedSegmentCount > 1) {
+                        // Start queuing segments after the first one
+                        AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
+                        AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
+                        [self.player insertItem:item afterItem:nil];
+                    } else {
+                        NSLog(@"⏳ Skipping first segment from playback");
+                    }
                 });
             } else {
                 NSLog(@"❌ Write failed");
