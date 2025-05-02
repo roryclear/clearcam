@@ -50,6 +50,9 @@
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     if (!sessionToken) {
         NSLog(@"No session token available");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.refreshControl endRefreshing];
+        });
         return;
     }
     
@@ -63,17 +66,13 @@
     NSLog(@"Final URL: %@", url);
     
     NSURLSessionDataTask *task = [self.session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"❌ Error: %@", error.localizedDescription);
-            return;
-        }
-        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.refreshControl endRefreshing];
+        });
+        if (error) return;
         NSError *jsonError;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-        if (jsonError) {
-            NSLog(@"❌ JSON Error: %@", jsonError.localizedDescription);
-            return;
-        }
+        if (jsonError) return;
         
         NSArray<NSString *> *deviceNames = json[@"device_names"];
         if (deviceNames) {
@@ -86,7 +85,6 @@
                     }
                 }
                 [self.tableView reloadData];
-                [self.refreshControl endRefreshing];
             });
         }
     }];
