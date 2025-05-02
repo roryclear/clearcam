@@ -5,6 +5,7 @@
 @interface LiveViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) NSMutableArray<NSString *> *deviceNames;
 @property (nonatomic, strong) NSURLSession *session;
+@property (nonatomic, strong) UIRefreshControl *refreshControl;
 @end
 
 @implementation LiveViewController
@@ -36,6 +37,13 @@
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
+    self.refreshControl = [[UIRefreshControl alloc] init];
+    [self.refreshControl addTarget:self action:@selector(refreshDevices) forControlEvents:UIControlEventValueChanged];
+    self.tableView.refreshControl = self.refreshControl;
+}
+
+- (void)refreshDevices {
+    [self fetchLiveDevices];
 }
 
 - (void)fetchLiveDevices {
@@ -78,6 +86,7 @@
                     }
                 }
                 [self.tableView reloadData];
+                [self.refreshControl endRefreshing];
             });
         }
     }];
