@@ -93,15 +93,17 @@
                     NSData *lowResImageData = UIImageJPEGRepresentation(resizedImage, 0.7);
                     [lowResImageData writeToFile:filePathSmall atomically:YES];
 
-                    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
-                        ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
-                        [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
-                        NSLog(@"verifying subscription");
-                        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                    NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
+                    BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+                    BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
+                    if(isSubscribed) {
+                        if (sessionExpiredOrNow) {
+                            [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                                [self sendnotification];
+                            }];
+                        } else {
                             [self sendnotification];
-                        }];
-                    } else {
-                        [self sendnotification];
+                        }
                     }
                 }
             }

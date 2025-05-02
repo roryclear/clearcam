@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 
 @interface StoreManager : NSObject <SKProductsRequestDelegate, SKPaymentTransactionObserver>
+@property (nonatomic, assign) NSTimeInterval last_check_time;
 
 + (instancetype)sharedInstance;
 

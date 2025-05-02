@@ -31,6 +31,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     self = [super init];
     if (self) {
         [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
+        self.last_check_time = [[NSDate date] timeIntervalSince1970];
     }
     return self;
 }
@@ -208,6 +209,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
+    self.last_check_time = [[NSDate date] timeIntervalSince1970];
     static BOOL isRequestInProgress = NO;
 
     if (isRequestInProgress) return;

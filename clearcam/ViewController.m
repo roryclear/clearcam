@@ -60,10 +60,14 @@ NSMutableDictionary *classColorMap;
 - (void)viewDidLoad {
     NSLog(@"NSCameraUsageDescription: %@", [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSCameraUsageDescription"]);
     [super viewDidLoad];
-    if(![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] || ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] || [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending){
-        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-            // do nothing
-        }];
+    NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
+    BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+    BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
+    if(isSubscribed && sessionExpiredOrNow) {
+        if (sessionExpiredOrNow) {
+            [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+            }];
+        }
     }
     self.streamLink = @"";
     self.recordPressed = NO;
@@ -1199,16 +1203,19 @@ NSMutableDictionary *classColorMap;
             }
             if([[NSUserDefaults standardUserDefaults] boolForKey:@"live_stream_internet_enabled"]) {
                    if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 10.0) {
-                    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"] ||
-                        ![[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] ||
-                        [[NSDate date] compare:[[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]] == NSOrderedDescending) {
-                        NSLog(@"verifying subscription");
-                        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                            [self checkUploadLink];
-                        }];
-                    } else {
-                        [self checkUploadLink];
-                    }
+                       self.last_check_time = [[NSDate date] timeIntervalSince1970];
+                       NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
+                       BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+                       BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
+                       if(isSubscribed || [[NSDate date] timeIntervalSince1970] - [StoreManager sharedInstance].last_check_time > 120.0) { //check every 2 mins?
+                           if (sessionExpiredOrNow) {
+                               [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                                   [self checkUploadLink];
+                               }];
+                           } else{
+                               [self checkUploadLink];
+                           }
+                       }
                 }
             }
             if (elapsedTime >= [FileServer sharedInstance].segment_length || (self.isStreaming && elapsedTime > 2.0)) {
@@ -1434,7 +1441,6 @@ NSMutableDictionary *classColorMap;
 }
 
 - (void)checkUploadLink {
-    self.last_check_time = [[NSDate date] timeIntervalSince1970];
     NSString *deviceName = [[NSUserDefaults standardUserDefaults] stringForKey:@"device_name"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
 
@@ -1447,6 +1453,7 @@ NSMutableDictionary *classColorMap;
     ];
 
     NSURL *url = components.URL;
+    NSLog(@"url = %@",url);
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
                                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
