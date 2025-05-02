@@ -4,7 +4,6 @@
 #import <AVFoundation/AVFoundation.h>
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCryptor.h>
-#import <CommonCrypto/CommonDigest.h>
 
 @interface DeviceStreamViewController ()
 @property (nonatomic, strong) AVQueuePlayer *player;
@@ -152,12 +151,13 @@
                 return;
             }
 
-            NSData *segmentHash = [self sha256DigestForData:data];
-            if ([self.seenSegmentHashes containsObject:segmentHash]) {
-                NSLog(@"🔁 Duplicate segment (SHA-256), skipping queue");
+            NSUInteger hash = data.hash;
+            NSData *hashData = [NSData dataWithBytes:&hash length:sizeof(hash)];
+            if ([self.seenSegmentHashes containsObject:hashData]) {
+                NSLog(@"🔁 Duplicate decrypted segment, skipping queue");
                 return;
             }
-            [self.seenSegmentHashes addObject:segmentHash];
+            [self.seenSegmentHashes addObject:hashData];
             self.successfullyQueuedSegmentCount += 1;
             self.lastSegmentData = data;
             self.decryptionFailedOnce = NO; // Only reset on success
@@ -219,12 +219,6 @@
         }];
     }];
     [task resume];
-}
-
-- (NSData *)sha256DigestForData:(NSData *)data {
-    uint8_t hash[CC_SHA256_DIGEST_LENGTH];
-    CC_SHA256(data.bytes, (CC_LONG)data.length, hash);
-    return [NSData dataWithBytes:hash length:CC_SHA256_DIGEST_LENGTH];
 }
 
 - (void)decryptAndQueueSegment:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
