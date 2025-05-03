@@ -52,7 +52,7 @@
 - (void)fetchDownloadLinkAndStartStreaming {
     [self fetchDownloadLink];
     // Start timer to refresh download link every 60 seconds
-    self.linkRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:60.0
+    self.linkRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:50.0
                                                              target:self
                                                            selector:@selector(fetchDownloadLink)
                                                            userInfo:nil
