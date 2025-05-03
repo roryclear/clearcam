@@ -504,7 +504,7 @@
         }
     } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Live Stream over the Internet";
+            cell.textLabel.text = @"Live Stream over Network";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *liveStreamSwitch = [[UISwitch alloc] init];
             liveStreamSwitch.on = isPremium ? self.liveStreamInternetEnabled : NO;
