@@ -73,8 +73,8 @@ NSMutableDictionary *classColorMap;
     self.recordPressed = NO;
     self.last_check_time = [[NSDate date] timeIntervalSince1970];
     self.scene = [[SceneState alloc] init];
-    self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
-    self.finishRecordingQueue = dispatch_queue_create("com.example.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
+    self.segmentQueue = dispatch_queue_create("com.clearcam.segmentQueue", DISPATCH_QUEUE_SERIAL);
+    self.finishRecordingQueue = dispatch_queue_create("com.clearcam.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
     
     self.current_segment_squares = [[NSMutableArray alloc] init];
     self.digits = [NSMutableDictionary dictionary];
