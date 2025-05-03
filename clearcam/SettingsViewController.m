@@ -841,7 +841,12 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
     [defaults synchronize];
-    if (!self.useOwnServerEnabled && ![defaults boolForKey:@"isSubscribed"]) {
+    
+    // Check subscription status and password
+    BOOL isPremium = [defaults boolForKey:@"isSubscribed"];
+    NSString *password = [self retrievePasswordFromSecretsManager];
+    
+    if (!self.useOwnServerEnabled && (!isPremium || !password)) {
         self.sendNotifEnabled = NO;
         [defaults setBool:NO forKey:@"send_notif_enabled"];
         [defaults synchronize];
