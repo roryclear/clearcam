@@ -459,7 +459,7 @@
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 5 + offset) {
-                cell.textLabel.text = @"Send Notifications on Events";
+                cell.textLabel.text = @"Send Videos on Detection";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
                 sendNotifSwitch.on = self.sendNotifEnabled;

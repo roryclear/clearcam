@@ -125,7 +125,64 @@
     [self setupDownloadDirectory];
     [self loadExistingVideos];
     [self getEvents];
+    [self updateTableViewBackground];
 }
+
+- (void)updateTableViewBackground {
+    if (self.videoFiles.count == 0) {
+        UILabel *messageLabel = [[UILabel alloc] initWithFrame:self.eventsViewController.view.bounds];
+        messageLabel.numberOfLines = 0;
+        messageLabel.lineBreakMode = NSLineBreakByWordWrapping;
+
+        // Create the full attributed message
+        NSMutableAttributedString *message = [[NSMutableAttributedString alloc] init];
+
+        // Centered title
+        NSMutableParagraphStyle *centeredStyle = [[NSMutableParagraphStyle alloc] init];
+        centeredStyle.alignment = NSTextAlignmentCenter;
+        centeredStyle.paragraphSpacing = 12.0;
+
+        NSDictionary *titleAttrs = @{
+            NSFontAttributeName: [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline],
+            NSForegroundColorAttributeName: [UIColor labelColor],
+            NSParagraphStyleAttributeName: centeredStyle
+        };
+        [message appendAttributedString:[[NSAttributedString alloc] initWithString:@"No Videos Available\n\n" attributes:titleAttrs]];
+
+        // Left-aligned steps with hanging indent
+        NSMutableParagraphStyle *stepsStyle = [[NSMutableParagraphStyle alloc] init];
+        stepsStyle.alignment = NSTextAlignmentLeft;
+        stepsStyle.headIndent = 20.0;
+        stepsStyle.firstLineHeadIndent = 0.0;
+        stepsStyle.paragraphSpacing = 8.0;
+        stepsStyle.lineBreakMode = NSLineBreakByWordWrapping;
+
+        NSDictionary *stepAttrs = @{
+            NSFontAttributeName: [UIFont preferredFontForTextStyle:UIFontTextStyleBody],
+            NSForegroundColorAttributeName: [UIColor secondaryLabelColor],
+            NSParagraphStyleAttributeName: stepsStyle
+        };
+
+        NSString *stepsText =
+        @"1. Install Clearcam on another phone.\n"
+        "2. Upgrade to Clearcam Premium (must be using the same Apple account on both phones).\n"
+        "3. Turn on \"Send Videos on Detection\" on your other phone and choose a secure password.\n"
+        "4. (Optional) Configure your detection settings and schedule.\n"
+        "5. Start recording.\n";
+
+        [message appendAttributedString:[[NSAttributedString alloc] initWithString:stepsText attributes:stepAttrs]];
+
+        messageLabel.attributedText = message;
+        [messageLabel sizeToFit];
+
+        self.tableView.backgroundView = messageLabel;
+        self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    } else {
+        self.tableView.backgroundView = nil;
+        self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
+    }
+}
+
 
 - (void)setupEventsViewController {
     // Move all the existing table view setup to the events view controller
@@ -422,6 +479,7 @@
         }];
     }
     [self.tableView reloadData];
+    [self updateTableViewBackground];
 }
 
 
