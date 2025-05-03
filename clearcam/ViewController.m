@@ -1395,9 +1395,9 @@ NSMutableDictionary *classColorMap;
         NSString *uploadLink = json[@"upload_link"];
         dispatch_async(dispatch_get_main_queue(), ^{
             if (uploadLink && ![uploadLink isKindOfClass:[NSNull class]]) {
+                self.streamLink = uploadLink;
                 if (!self.isStreaming) {
                     NSLog(@"📤 Upload link received: %@", uploadLink);
-                    self.streamLink = uploadLink;
                     self.isStreaming = YES;
                     [self refreshView];
                 }
