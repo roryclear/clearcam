@@ -148,75 +148,18 @@ NSMutableDictionary *classColorMap;
         [[NSNotificationCenter defaultCenter] removeObserver:self name:UIDeviceOrientationDidChangeNotification object:nil];
         [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
         
-        // Remove KVO observers
-        SettingsManager *settings = [SettingsManager sharedManager];
-        [settings removeObserver:self forKeyPath:@"width"];
-        [settings removeObserver:self forKeyPath:@"height"];
-        [settings removeObserver:self forKeyPath:@"text_size"];
-        [settings removeObserver:self forKeyPath:@"preset"];
-        
         // Reset UI and remove all sublayers
         [self resetUI];
         [self.previewLayer removeFromSuperlayer];
         self.previewLayer = nil;
         
-        // Reset all properties to initial state
-        self.fpsLabel = nil;
-        self.recordButton = nil;
-        self.settingsButton = nil;
-        self.galleryButton = nil;
-        self.lastFrameTime = 0;
-        self.frameCount = 0;
-        self.yolo = nil;
-        self.ciContext = nil;
+
         self.isProcessing = NO;
         self.isProcessingCoreData = NO;
-        self.recordPressed = wasRecording; // Restore recording state
-        self.isRecording = NO;
-        self.last_check_time = [[NSDate date] timeIntervalSince1970];
+        self.recordPressed = wasRecording;
+        self.isRecording = wasRecording;
         self.startTime = kCMTimeInvalid;
         self.currentTime = kCMTimeZero;
-        self.assetWriter = nil;
-        self.videoWriterInput = nil;
-        self.adaptor = nil;
-        self.seg_number = 0;
-        self.current_file_timestamp = nil;
-        self.digits = nil;
-        self.current_segment_squares = nil;
-        self.segmentLock = nil;
-        self.backgroundContext = nil;
-        self.dayFolderName = nil;
-        self.segmentQueue = nil;
-        self.finishRecordingQueue = nil;
-        self.scene = nil;
-        
-        // Reinitialize all components as in viewDidLoad
-        self.scene = [[SceneState alloc] init];
-        self.segmentQueue = dispatch_queue_create("com.example.segmentQueue", DISPATCH_QUEUE_SERIAL);
-        self.finishRecordingQueue = dispatch_queue_create("com.example.finishRecordingQueue", DISPATCH_QUEUE_SERIAL);
-        
-        self.current_segment_squares = [[NSMutableArray alloc] init];
-        self.digits = [NSMutableDictionary dictionary];
-        self.digits[@"0"] = @[@[ @0, @0, @3, @1], @[ @0, @1, @1 , @3], @[ @2, @1, @1 , @3], @[ @0, @4, @3 , @1]];
-        self.digits[@"1"] = @[@[ @2, @0, @1, @5 ]];
-        self.digits[@"2"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @0, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
-        self.digits[@"3"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @3 ], @[ @0, @2, @3, @1 ], @[ @0, @4, @3, @1 ]];
-        self.digits[@"4"] = @[@[ @2, @0, @1, @5 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ]];
-        self.digits[@"5"] = @[@[ @0, @0, @3, @1 ], @[ @0, @1, @1, @1 ], @[ @0, @2, @3, @1 ], @[ @2, @3, @1, @1 ], @[ @0, @4, @3, @1 ]];
-        self.digits[@"6"] = @[@[ @0, @0, @3, @1 ],@[ @0, @0, @1, @5 ], @[ @1, @2, @2, @1 ], @[ @1, @4, @2, @1 ], @[ @2, @3, @1, @1 ]];
-        self.digits[@"7"] = @[@[ @0, @0, @3, @1 ], @[ @2, @1, @1, @4 ]];
-        self.digits[@"8"] = @[@[ @0, @0, @1, @5 ], @[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @1, @2, @1, @1 ], @[ @1, @4, @1, @1 ]];
-        self.digits[@"9"] = @[@[ @2, @0, @1, @5 ], @[ @1, @0, @1, @1 ], @[ @0, @0, @1, @2 ], @[ @0, @2, @3, @1 ],@[ @0, @4, @3, @1 ]];
-        self.digits[@"-"] = @[@[ @0, @2, @3, @1 ]];
-        self.digits[@":"] = @[@[ @1, @1, @1, @1 ], @[ @1, @3, @1, @1 ]];
-        self.segmentLock = [[NSLock alloc] init];
-        
-        self.ciContext = [CIContext context];
-        self.yolo = [[Yolo alloc] init];
-        self.seg_number = 0;
-        self.backgroundContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSPrivateQueueConcurrencyType];
-        self.backgroundContext.mergePolicy = NSMergeByPropertyStoreTrumpMergePolicy;
-        self.backgroundContext.parentContext = self.fileServer.context;
         
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(handleDeviceOrientationChange)
@@ -225,12 +168,8 @@ NSMutableDictionary *classColorMap;
         
         [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
         
-        [settings addObserver:self forKeyPath:@"width" options:NSKeyValueObservingOptionNew context:nil];
-        [settings addObserver:self forKeyPath:@"height" options:NSKeyValueObservingOptionNew context:nil];
-        [settings addObserver:self forKeyPath:@"text_size" options:NSKeyValueObservingOptionNew context:nil];
-        [settings addObserver:self forKeyPath:@"preset" options:NSKeyValueObservingOptionNew context:nil];
-        
-        // Re-setup camera with current settings
+
+        SettingsManager *settings = [SettingsManager sharedManager];
         [self setupCameraWithWidth:settings.width height:settings.height];
         
         // Re-setup UI
@@ -253,20 +192,13 @@ NSMutableDictionary *classColorMap;
         
         // Set initial orientation
         [self setInitialOrientation];
-        
-        // Start the capture session
         [self.captureSession startRunning];
-        
-        // Start a new recording if was recording
         if (self.recordPressed) {
             [self startNewRecording];
         }
-        
-        // Mimic viewWillAppear setup
         [UIApplication sharedApplication].idleTimerDisabled = YES;
     });
 }
-
 
 - (void)setInitialOrientation {
     UIDeviceOrientation deviceOrientation = [[UIDevice currentDevice] orientation];
