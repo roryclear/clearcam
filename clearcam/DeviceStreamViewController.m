@@ -225,9 +225,11 @@
     if (self.decryptionKey) {
         NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:self.decryptionKey];
         if (decryptedData) {
-            completion(decryptedData);
-            self.consecutiveDecryptionFailures = 0; // ✅ Reset on success
+            // Successful decryption, reset all failure tracking
+            self.consecutiveDecryptionFailures = 0;
             self.lastFailedEncryptedData = nil;
+            self.decryptionFailedOnce = NO;
+            completion(decryptedData);
             return;
         } else {
             NSLog(@"⚠️ Decryption failed with stored key");
@@ -236,28 +238,24 @@
 
     // Handle failure
     BOOL isSameData = [self.lastFailedEncryptedData isEqualToData:encryptedData];
-    if (isSameData) {
+    if (!isSameData) {
+        self.consecutiveDecryptionFailures += 1;
+        self.lastFailedEncryptedData = encryptedData;
+        NSLog(@"❌ Decryption failure count: %ld", (long)self.consecutiveDecryptionFailures);
+    } else {
         NSLog(@"🔁 Same failed segment, not incrementing failure count");
-        completion(nil);
-        return;
     }
 
-    self.consecutiveDecryptionFailures += 1;
-    self.lastFailedEncryptedData = encryptedData;
-
-    NSLog(@"❌ Decryption failure count (different segments): %ld", (long)self.consecutiveDecryptionFailures);
-
-    if (self.consecutiveDecryptionFailures >= 2) {
-        NSLog(@"🔑 Prompting for key after two different segment failures");
+    // Prompt for key only after two failures and no valid key
+    if (self.consecutiveDecryptionFailures >= 2 && !self.decryptionKey) {
+        NSLog(@"🔑 Prompting for key after two failures");
         [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
         self.consecutiveDecryptionFailures = 0;
         self.lastFailedEncryptedData = nil;
     } else {
-        NSLog(@"⏳ Waiting for another different failed segment...");
         completion(nil);
     }
 }
-
 
 - (void)promptForKeyOnSecondFailure:(NSData *)encryptedData withCompletion:(void (^)(NSData *))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -273,11 +271,14 @@
                         NSLog(@"⚠️ Failed to save key to keychain: %@", saveError.localizedDescription);
                     }
                     self.decryptionKey = userProvidedKey;
+                    self.consecutiveDecryptionFailures = 0;
+                    self.lastFailedEncryptedData = nil;
                     self.decryptionFailedOnce = NO;
                     completion(decryptedData);
                 } else {
                     [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
-                        [self decryptAndQueueSegment:encryptedData withCompletion:completion];
+                        // Re-prompt for the same segment
+                        [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
                     }];
                 }
             } else {
