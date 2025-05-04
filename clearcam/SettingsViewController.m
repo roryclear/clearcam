@@ -790,54 +790,143 @@
 - (void)showUpgradePopup {
     [[StoreManager sharedInstance] getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (product) {
-                NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
-                [formatter setNumberStyle:NSNumberFormatterCurrencyStyle];
-                [formatter setLocale:product.priceLocale];
-                NSString *localizedPrice = [formatter stringFromNumber:product.price];
-
-                NSString *features = @"• View captured events from anywhere\n• Receive real-time event notifications\n• Live stream over the internet";
-                NSString *message = [NSString stringWithFormat:@"Unlock premium features:\n\n%@\n", features];
-
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Upgrade to Clearcam Premium"
-                                                                               message:message
-                                                                        preferredStyle:UIAlertControllerStyleAlert];
-
-                UIAlertAction *upgradeAction = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Upgrade for %@ per month", localizedPrice ?: @"Price"]
-                                                                        style:UIAlertActionStyleDefault
-                                                                      handler:^(UIAlertAction * _Nonnull action) {
-                                                                          [[StoreManager sharedInstance] fetchAndPurchaseProduct];
-                                                                      }];
-                UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                                       style:UIAlertActionStyleCancel
-                                                                     handler:nil];
-
-                [alert addAction:upgradeAction];
-                [alert addAction:cancelAction];
-
-                [self presentViewController:alert animated:YES completion:nil];
-            } else {
+            if (!product) {
                 NSLog(@"Error fetching product info: %@", error.localizedDescription);
-                UIAlertController *fallbackAlert = [UIAlertController alertControllerWithTitle:@"Upgrade to Premium"
-                                                                                       message:@"Unlock premium features like remote event viewing, alerts, and live streaming. Would you like to upgrade?"
-                                                                                preferredStyle:UIAlertControllerStyleAlert];
-
-                UIAlertAction *upgradeFallbackAction = [UIAlertAction actionWithTitle:@"Upgrade"
-                                                                               style:UIAlertActionStyleDefault
-                                                                             handler:^(UIAlertAction * _Nonnull action) {
-                                                                                   [[StoreManager sharedInstance] fetchAndPurchaseProduct];
-                                                                               }];
-                UIAlertAction *cancelFallbackAction = [UIAlertAction actionWithTitle:@"Cancel"
-                                                                               style:UIAlertActionStyleCancel
-                                                                             handler:nil];
-
-                [fallbackAlert addAction:upgradeFallbackAction];
-                [fallbackAlert addAction:cancelFallbackAction];
-                [self presentViewController:fallbackAlert animated:YES completion:nil];
+                return;
             }
+
+            // Format price
+            NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+            formatter.numberStyle = NSNumberFormatterCurrencyStyle;
+            formatter.locale = product.priceLocale;
+            NSString *localizedPrice = [formatter stringFromNumber:product.price] ?: @"Price";
+
+            // Detect dark mode
+            BOOL isDarkMode = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
+            UIColor *cardBackground = isDarkMode ? [UIColor colorWithWhite:0.1 alpha:1.0] : [UIColor colorWithWhite:1.0 alpha:1.0];
+            UIColor *textColor = isDarkMode ? UIColor.whiteColor : UIColor.blackColor;
+
+            // Overlay
+            UIView *overlay = [[UIView alloc] initWithFrame:self.view.bounds];
+            overlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
+            overlay.tag = 999;
+            [self.view addSubview:overlay];
+
+            // Card
+            UIView *card = [[UIView alloc] init];
+            card.translatesAutoresizingMaskIntoConstraints = NO;
+            card.backgroundColor = cardBackground;
+            card.layer.cornerRadius = 20;
+            card.clipsToBounds = YES;
+            [overlay addSubview:card];
+
+            // Title
+            UILabel *title = [[UILabel alloc] init];
+            title.translatesAutoresizingMaskIntoConstraints = NO;
+            title.text = @"Get Clearcam Premium";
+            title.textColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0]; // gold
+            title.font = [UIFont boldSystemFontOfSize:24];
+            title.textAlignment = NSTextAlignmentCenter;
+
+            // Features
+            UIStackView *featureStack = [[UIStackView alloc] init];
+            featureStack.translatesAutoresizingMaskIntoConstraints = NO;
+            featureStack.axis = UILayoutConstraintAxisVertical;
+            featureStack.spacing = 8;
+
+            NSArray *features = @[
+                @"View captured events from anywhere",
+                @"Receive real-time event notifications",
+                @"Live stream from anywhere",
+                @"End-to-end encryption on all camera data sent from your phone."
+            ];
+
+            for (NSString *item in features) {
+                UILabel *label = [[UILabel alloc] init];
+                label.text = [NSString stringWithFormat:@"• %@", item];
+                label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+                label.textColor = textColor;
+                label.numberOfLines = 0;
+                [featureStack addArrangedSubview:label];
+            }
+
+            // Upgrade button
+            UIButton *upgradeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+            upgradeBtn.translatesAutoresizingMaskIntoConstraints = NO;
+            NSString *upgradeTitle = [NSString stringWithFormat:@"Upgrade for %@ per month", localizedPrice];
+            [upgradeBtn setTitle:upgradeTitle forState:UIControlStateNormal];
+            [upgradeBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+            upgradeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0];
+            upgradeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:17];
+            upgradeBtn.layer.cornerRadius = 12;
+            [upgradeBtn addTarget:self action:@selector(handleUpgradeTap) forControlEvents:UIControlEventTouchUpInside];
+
+            // Cancel button
+            UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+            cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
+            [cancelBtn setTitle:@"Not now" forState:UIControlStateNormal];
+            [cancelBtn setTitleColor:textColor forState:UIControlStateNormal];
+            cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15];
+            [cancelBtn addTarget:self action:@selector(dismissUpgradePopup) forControlEvents:UIControlEventTouchUpInside];
+
+            // Disclaimer label
+            UILabel *disclaimer = [[UILabel alloc] init];
+            disclaimer.translatesAutoresizingMaskIntoConstraints = NO;
+            disclaimer.text = @"Monthly limit of 1000 clip uploads and 1000 minutes or sessions of live stream viewing.";
+            disclaimer.font = [UIFont systemFontOfSize:13];
+            disclaimer.textColor = [textColor colorWithAlphaComponent:0.6];
+            disclaimer.numberOfLines = 0;
+            disclaimer.textAlignment = NSTextAlignmentCenter;
+
+            // Add all to card
+            [card addSubview:title];
+            [card addSubview:featureStack];
+            [card addSubview:upgradeBtn];
+            [card addSubview:cancelBtn];
+            [card addSubview:disclaimer];
+
+            // Constraints
+            [NSLayoutConstraint activateConstraints:@[
+                [card.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
+                [card.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor],
+                [card.widthAnchor constraintEqualToConstant:320],
+
+                [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:24],
+                [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [title.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+
+                [featureStack.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:20],
+                [featureStack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [featureStack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+
+                [upgradeBtn.topAnchor constraintEqualToAnchor:featureStack.bottomAnchor constant:24],
+                [upgradeBtn.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [upgradeBtn.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+                [upgradeBtn.heightAnchor constraintEqualToConstant:48],
+
+                [cancelBtn.topAnchor constraintEqualToAnchor:upgradeBtn.bottomAnchor constant:16],
+                [cancelBtn.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+
+                [disclaimer.topAnchor constraintEqualToAnchor:cancelBtn.bottomAnchor constant:14],
+                [disclaimer.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [disclaimer.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+                [disclaimer.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
+            ]];
         });
     }];
 }
+
+
+- (void)handleUpgradeTap {
+    [self dismissUpgradePopup];
+    [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+}
+
+- (void)dismissUpgradePopup {
+    UIView *overlay = [self.view viewWithTag:999];
+    [overlay removeFromSuperview];
+}
+
 
 - (void)useOwnnotificationServerSwitchToggled:(UISwitch *)sender {
     self.useOwnServerEnabled = sender.on;
