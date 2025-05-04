@@ -460,6 +460,7 @@
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 5 + offset) {
                 cell.textLabel.text = @"Send Videos on Detection";
+                cell.detailTextLabel.text = @"Enable to view events on other devices from anywhere.";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
                 sendNotifSwitch.on = self.sendNotifEnabled;
@@ -473,17 +474,19 @@
                 cell.userInteractionEnabled = YES; // Still tappable for popup
             } else if (indexPath.row == 6 + offset) {
                 cell.textLabel.text = @"Change Encryption Password";
+                cell.detailTextLabel.text = @"All clips and live video will be encrypted before leaving this device.";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 7 + offset) {
-                cell.textLabel.text = @"Manage Notification Schedules";
-                cell.detailTextLabel.text = nil;
+                cell.textLabel.text = @"Manage Detection Schedules";
+                cell.detailTextLabel.text = @"Choose when to detect objects.";
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 8 + offset) {
                 cell.textLabel.text = @"Use Own Notification Server";
+                cell.detailTextLabel.text = @"Send videos to a server that you own.";
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *useOwnnotificationServerSwitch = [[UISwitch alloc] init];
                 useOwnnotificationServerSwitch.on = self.useOwnServerEnabled;
@@ -522,7 +525,8 @@
         }
     } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Receive Notifications on This Device";
+            cell.textLabel.text = @"Receive Notifications";
+            cell.detailTextLabel.text = @"Get notified when a camera catches an event.";
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
             receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
