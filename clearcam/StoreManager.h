@@ -10,7 +10,7 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 
 + (instancetype)sharedInstance;
 
-- (void)fetchAndPurchaseProduct;
+- (void)fetchAndPurchaseProductWithCompletion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate * _Nullable expiryDate))completion;
 - (NSString *)retrieveSessionTokenFromKeychain;
 - (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion;

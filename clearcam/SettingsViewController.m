@@ -918,8 +918,48 @@
 
 
 - (void)handleUpgradeTap {
-    [self dismissUpgradePopup];
-    [[StoreManager sharedInstance] fetchAndPurchaseProduct];
+    // Create and show a loading spinner
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    spinner.color = [UIColor whiteColor];
+    UIView *overlay = [self.view viewWithTag:999];
+    [overlay addSubview:spinner];
+    
+    // Center the spinner in the overlay
+    [NSLayoutConstraint activateConstraints:@[
+        [spinner.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
+        [spinner.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor]
+    ]];
+    
+    [spinner startAnimating];
+    
+    // Disable user interaction on the overlay to prevent multiple taps
+    overlay.userInteractionEnabled = NO;
+    
+    // Fetch and initiate the purchase
+    [[StoreManager sharedInstance] fetchAndPurchaseProductWithCompletion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // Stop the spinner and re-enable interaction
+            [spinner stopAnimating];
+            [spinner removeFromSuperview];
+            overlay.userInteractionEnabled = YES;
+            
+            // Dismiss the upgrade popup
+            [self dismissUpgradePopup];
+            
+            if (!success && error) {
+                // Show error alert if purchase failed
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchase Failed"
+                                                                               message:error.localizedDescription
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                [self presentViewController:alert animated:YES completion:nil];
+            }
+            
+            // Reload table to reflect subscription status
+            [self.tableView reloadData];
+        });
+    }];
 }
 
 - (void)dismissUpgradePopup {

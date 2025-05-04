@@ -9,6 +9,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 @property (nonatomic, strong) SKProductsRequest *productsRequest;
 @property (nonatomic, strong) SKProduct *premiumProduct;
 @property (nonatomic, strong) void (^productInfoCompletionHandler)(SKProduct * _Nullable product, NSError * _Nullable error); // Store completion handler for fetching info
+@property (nonatomic, copy) void (^purchaseCompletionHandler)(BOOL success, NSError * _Nullable error);
+// Implement SKPaymentTransactionObserver method to handle transaction updates
 - (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion;
 @end
 
@@ -18,11 +20,12 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 }
 
-+ (instancetype)sharedInstance {
++ (StoreManager *)sharedInstance {
     static StoreManager *sharedInstance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        sharedInstance = [[self alloc] init];
+        sharedInstance = [[StoreManager alloc] init];
+        [[SKPaymentQueue defaultQueue] addTransactionObserver:sharedInstance];
     });
     return sharedInstance;
 }
@@ -36,28 +39,22 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     return self;
 }
 
-- (void)fetchAndPurchaseProduct {
-    if (self.premiumProduct) {
-        [self purchaseProduct:self.premiumProduct];
-    } else {
-        [self getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (product) {
-                    [self purchaseProduct:product];
-                } else {
-                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
-                                                                                     message:@"Could not retrieve product information. Please try again later."
-                                                                              preferredStyle:UIAlertControllerStyleAlert];
-                     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                     UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
-                     while (topController.presentedViewController) {
-                         topController = topController.presentedViewController;
-                     }
-                     [topController presentViewController:alert animated:YES completion:nil];
-                }
-            });
-        }];
-    }
+- (void)fetchAndPurchaseProductWithCompletion:(void (^)(BOOL success, NSError * _Nullable error))completion {
+    [self getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
+        if (!product) {
+            if (completion) {
+                completion(NO, error ?: [NSError errorWithDomain:@"StoreManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Failed to fetch product information"}]);
+            }
+            return;
+        }
+        
+        // Initiate the purchase
+        SKPayment *payment = [SKPayment paymentWithProduct:product];
+        [[SKPaymentQueue defaultQueue] addPayment:payment];
+        
+        // Store the completion handler to call it when the transaction finishes
+        self.purchaseCompletionHandler = completion;
+    }];
 }
 
 - (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion {
@@ -128,17 +125,28 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 - (void)paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray<SKPaymentTransaction *> *)transactions {
     for (SKPaymentTransaction *transaction in transactions) {
         switch (transaction.transactionState) {
-            case SKPaymentTransactionStatePurchased:
+            case SKPaymentTransactionStatePurchased: {
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
                 [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
                     if (isActive) {
                         [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
+                        if (self.purchaseCompletionHandler) {
+                            self.purchaseCompletionHandler(YES, nil);
+                            self.purchaseCompletionHandler = nil;
+                        }
+                    } else if (self.purchaseCompletionHandler) {
+                        self.purchaseCompletionHandler(NO, [NSError errorWithDomain:@"StoreManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Subscription verification failed"}]);
+                        self.purchaseCompletionHandler = nil;
                     }
                 }];
                 break;
-                
-            case SKPaymentTransactionStateFailed:
+            }
+            case SKPaymentTransactionStateFailed: {
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+                if (self.purchaseCompletionHandler) {
+                    self.purchaseCompletionHandler(NO, transaction.error);
+                    self.purchaseCompletionHandler = nil;
+                }
                 if (transaction.error.code != SKErrorPaymentCancelled) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchase Failed"
@@ -153,8 +161,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                     });
                 }
                 break;
-                
-            case SKPaymentTransactionStateRestored:
+            }
+            case SKPaymentTransactionStateRestored: {
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
                 [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
                     dispatch_async(dispatch_get_main_queue(), ^{
@@ -169,6 +177,10 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                                 topController = topController.presentedViewController;
                             }
                             [topController presentViewController:alert animated:YES completion:nil];
+                            if (self.purchaseCompletionHandler) {
+                                self.purchaseCompletionHandler(YES, nil);
+                                self.purchaseCompletionHandler = nil;
+                            }
                         } else {
                             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"No Purchases Found"
                                                                                           message:@"No previous purchases were found to restore."
@@ -179,11 +191,18 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                                 topController = topController.presentedViewController;
                             }
                             [topController presentViewController:alert animated:YES completion:nil];
+                            if (self.purchaseCompletionHandler) {
+                                self.purchaseCompletionHandler(NO, [NSError errorWithDomain:@"StoreManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"No valid subscriptions found"}]);
+                                self.purchaseCompletionHandler = nil;
+                            }
                         }
                     });
                 }];
                 break;
-                
+            }
+            case SKPaymentTransactionStatePurchasing:
+                // No action needed while purchasing
+                break;
             default:
                 break;
         }
