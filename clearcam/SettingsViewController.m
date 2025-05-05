@@ -872,7 +872,7 @@
             // Disclaimer label
             UILabel *disclaimer = [[UILabel alloc] init];
             disclaimer.translatesAutoresizingMaskIntoConstraints = NO;
-            disclaimer.text = @"Monthly limit of 1000 clip uploads and 1000 minutes or sessions of live stream viewing.";
+            disclaimer.text = @"Monthly limit of 5000 clip uploads and 1000 minutes or sessions of live stream viewing.";
             disclaimer.font = [UIFont systemFontOfSize:13];
             disclaimer.textColor = [textColor colorWithAlphaComponent:0.6];
             disclaimer.numberOfLines = 0;
