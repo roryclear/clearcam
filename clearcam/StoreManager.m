@@ -64,10 +64,10 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         }
         return;
     }
-
+    
     // Store the completion handler
     self.productInfoCompletionHandler = completion;
-
+    
     // Fetch product info from App Store
     NSSet *productIdentifiers = [NSSet setWithObject:@"monthly.premium"]; // Your product ID
     self.productsRequest = [[SKProductsRequest alloc] initWithProductIdentifiers:productIdentifiers];
@@ -78,7 +78,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 #pragma mark - SKProductsRequestDelegate
 
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
-     NSLog(@"Received product response.");
+    NSLog(@"Received product response.");
     if (response.products.count > 0) {
         self.premiumProduct = response.products.firstObject;
         if (self.productInfoCompletionHandler) {
@@ -90,25 +90,25 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     } else {
         NSError *error = [NSError errorWithDomain:@"StoreManagerError" code:101 userInfo:@{NSLocalizedDescriptionKey: @"No products found."}];
         if (self.productInfoCompletionHandler) {
-             dispatch_async(dispatch_get_main_queue(), ^{
+            dispatch_async(dispatch_get_main_queue(), ^{
                 self.productInfoCompletionHandler(nil, error);
                 self.productInfoCompletionHandler = nil;
-             });
+            });
         }
     }
-     self.productsRequest.delegate = nil;
-     self.productsRequest = nil;
+    self.productsRequest.delegate = nil;
+    self.productsRequest = nil;
 }
 
 - (void)request:(SKRequest *)request didFailWithError:(NSError *)error {
-     if (self.productInfoCompletionHandler) {
-         dispatch_async(dispatch_get_main_queue(), ^{
-             self.productInfoCompletionHandler(nil, error);
-             self.productInfoCompletionHandler = nil; // Clear the handler
-         });
-     }
-     self.productsRequest.delegate = nil;
-     self.productsRequest = nil;
+    if (self.productInfoCompletionHandler) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.productInfoCompletionHandler(nil, error);
+            self.productInfoCompletionHandler = nil; // Clear the handler
+        });
+    }
+    self.productsRequest.delegate = nil;
+    self.productsRequest = nil;
 }
 
 #pragma mark - Purchase Product
@@ -150,8 +150,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                 if (transaction.error.code != SKErrorPaymentCancelled) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchase Failed"
-                                                                                      message:transaction.error.localizedDescription
-                                                                               preferredStyle:UIAlertControllerStyleAlert];
+                                                                                       message:transaction.error.localizedDescription
+                                                                                preferredStyle:UIAlertControllerStyleAlert];
                         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                         UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
                         while (topController.presentedViewController) {
@@ -169,8 +169,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                         if (isActive) {
                             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
                             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchases Restored"
-                                                                                          message:@"Your previous purchases have been successfully restored."
-                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                                                                                           message:@"Your previous purchases have been successfully restored."
+                                                                                    preferredStyle:UIAlertControllerStyleAlert];
                             [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                             UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
                             while (topController.presentedViewController) {
@@ -183,8 +183,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                             }
                         } else {
                             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"No Purchases Found"
-                                                                                          message:@"No previous purchases were found to restore."
-                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                                                                                           message:@"No previous purchases were found to restore."
+                                                                                    preferredStyle:UIAlertControllerStyleAlert];
                             [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                             UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
                             while (topController.presentedViewController) {
@@ -216,8 +216,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 - (void)paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restore Failed"
-                                                                      message:error.localizedDescription
-                                                               preferredStyle:UIAlertControllerStyleAlert];
+                                                                       message:error.localizedDescription
+                                                                preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
         while (topController.presentedViewController) {
@@ -225,6 +225,25 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         }
         [topController presentViewController:alert animated:YES completion:nil];
     });
+}
+
+- (void)verifySubscriptionWithCompletionIfSubbed:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
+    NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
+    BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+    BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
+    if (isSubscribed || [[NSDate date] timeIntervalSince1970] - [StoreManager sharedInstance].last_check_time > 120.0) {
+        if (sessionExpiredOrNow) {
+            [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                if (completion) {
+                    completion(isActive, expiryDate);
+                }
+            }];
+        } else {
+            if (completion) {
+                completion(isSubscribed, expiry);
+            }
+        }
+    }
 }
 
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {

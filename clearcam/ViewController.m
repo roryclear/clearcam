@@ -1126,20 +1126,11 @@ NSMutableDictionary *classColorMap;
                 [FileServer sharedInstance].segment_length = 60;
             }
             if([[NSUserDefaults standardUserDefaults] boolForKey:@"live_stream_internet_enabled"]) {
-                   if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 5.0) {
-                       self.last_check_time = [[NSDate date] timeIntervalSince1970];
-                       NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
-                       BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-                       BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
-                       if(isSubscribed || [[NSDate date] timeIntervalSince1970] - [StoreManager sharedInstance].last_check_time > 120.0) { //check every 2 mins?
-                           if (sessionExpiredOrNow) {
-                               [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                                   [self checkUploadLink];
-                               }];
-                           } else{
-                               [self checkUploadLink];
-                           }
-                       }
+               if ([[NSDate date] timeIntervalSince1970] - self.last_check_time > 5.0) {
+                   self.last_check_time = [[NSDate date] timeIntervalSince1970];
+                   [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
+                       [self checkUploadLink];
+                   }];
                 }
             }
             if (elapsedTime >= [FileServer sharedInstance].segment_length || (self.isStreaming && elapsedTime > 2.0)) {
