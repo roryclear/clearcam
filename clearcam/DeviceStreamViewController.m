@@ -43,10 +43,7 @@
 
     [self.player play];
     [self fetchDownloadLinkAndStartStreaming];
-    
-    self.successfullyQueuedSegmentCount = 0;
     self.seenSegmentHashes = [NSMutableSet set];
-    NSLog(@"device streaming from = %@", self.deviceName);
 }
 
 - (void)fetchDownloadLinkAndStartStreaming {
@@ -63,18 +60,12 @@
     NSString *deviceName = self.deviceName;
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
 
-    if (!deviceName || !sessionToken) {
-        NSLog(@"❌ Missing device name or session token");
-        return;
-    }
+    if (!deviceName || !sessionToken) return;
 
-    // Retrieve decryption key from keychain
     NSString *keyIdentifier = [NSString stringWithFormat:@"decryption_key_%@", deviceName];
     NSError *keyError;
     self.decryptionKey = [[SecretManager sharedManager] retrieveDecryptionKeyWithIdentifier:keyIdentifier error:&keyError];
-    if (keyError) {
-        NSLog(@"⚠️ Keychain retrieval error: %@", keyError.localizedDescription);
-    }
+    if (keyError) NSLog(@"⚠️ Keychain retrieval error: %@", keyError.localizedDescription);
 
     NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
@@ -86,20 +77,13 @@
     ];
 
     NSURL *url = components.URL;
-    NSLog(@"rory new url = %@",url);
 
     NSURLSessionDataTask *linkTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            NSLog(@"❌ Error fetching stream link: %@", error.localizedDescription);
-            return;
-        }
+        if (error) return;
 
         NSError *jsonError;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-        if (jsonError) {
-            NSLog(@"⚠️ JSON Parsing Error: %@", jsonError.localizedDescription);
-            return;
-        }
+        if (jsonError) return;
 
         NSString *downloadLink = json[@"download_link"];
         if (![downloadLink isKindOfClass:[NSString class]] || downloadLink.length == 0) {
@@ -158,7 +142,6 @@
                 return;
             }
             [self.seenSegmentHashes addObject:hashData];
-            self.successfullyQueuedSegmentCount += 1;
             self.lastSegmentData = data;
             self.decryptionFailedOnce = NO; // Only reset on success
 
@@ -199,19 +182,11 @@
                 
                 
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if (self.successfullyQueuedSegmentCount >= 2) {
-                        [self.loadingSpinner stopAnimating];
-                        self.loadingSpinner.hidden = YES;
-                    }
-
-                    if (self.successfullyQueuedSegmentCount > 1) {
-                        // Start queuing segments after the first one
-                        AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
-                        AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
-                        [self.player insertItem:item afterItem:nil];
-                    } else {
-                        NSLog(@"⏳ Skipping first segment from playback");
-                    }
+                    AVURLAsset *asset = [AVURLAsset assetWithURL:localURL];
+                    AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
+                    [self.player insertItem:item afterItem:nil];
+                    [self.loadingSpinner stopAnimating];
+                    self.loadingSpinner.hidden = YES;
                 });
             } else {
                 NSLog(@"❌ Write failed");

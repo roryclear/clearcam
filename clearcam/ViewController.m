@@ -789,7 +789,7 @@ NSMutableDictionary *classColorMap;
             [formatter setDateFormat:@"yyyy-MM-dd"];
             NSString *thisDayFoler = [formatter stringFromDate:self.current_file_timestamp];
             
-            if(self.isStreaming){
+            if(self.isStreaming && CMTimeGetSeconds(((AVAsset *)[AVAsset assetWithURL:self.assetWriter.outputURL]).duration) < 5.0){
                 // Prepare file for upload
                 NSString *tempFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"segment.mp4.aes"];
                 NSError *fileError = nil;
