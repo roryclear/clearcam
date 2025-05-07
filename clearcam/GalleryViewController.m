@@ -124,7 +124,9 @@
     self.loadedFilenames = [NSMutableSet set];
     [self setupDownloadDirectory];
     [self loadExistingVideos];
-    [self getEvents];
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
+        [self getEvents];
+    }];
     [self updateTableViewBackground];
 }
 

@@ -34,7 +34,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     self = [super init];
     if (self) {
         [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
-        self.last_check_time = [[NSDate date] timeIntervalSince1970];
     }
     return self;
 }
@@ -231,7 +230,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
     BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
     BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
-    if (isSubscribed || [[NSDate date] timeIntervalSince1970] - [StoreManager sharedInstance].last_check_time > 120.0) {
+    if (isSubscribed || [StoreManager sharedInstance].last_check_time || [[NSDate date] timeIntervalSince1970] - [StoreManager sharedInstance].last_check_time > 120.0) {
         if (sessionExpiredOrNow) {
             [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
                 if (completion) {
@@ -343,7 +342,8 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         (__bridge id)kSecAttrService: @"com.clearcam.session",
         (__bridge id)kSecAttrAccount: @"sessionToken"
     };
-    SecItemDelete((__bridge CFDictionaryRef)query);}
+    SecItemDelete((__bridge CFDictionaryRef)query);
+}
 
 // Optional: Retrieve the session token if needed later
 - (NSString *)retrieveSessionTokenFromKeychain {

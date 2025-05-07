@@ -18,7 +18,9 @@
 
     self.session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
     [self setupTableView];
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
     [self fetchLiveDevices];
+    }];
 }
 
 - (void)setupTableView {
