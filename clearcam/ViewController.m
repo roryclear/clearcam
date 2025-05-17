@@ -755,7 +755,6 @@ NSMutableDictionary *classColorMap;
 
 
 - (void)finishRecording {
-    NSLog(@"rory finish recording %ld %@", (long)[FileServer sharedInstance].segment_length, self.isStreaming ? @"YES" : @"NO");
     if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) return;
     
     NSString *segmentsDirectory = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:self.dayFolderName];

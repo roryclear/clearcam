@@ -301,12 +301,14 @@
     if (self.isLoadingVideos) return;
     
     self.isLoadingVideos = YES;
-        
+    
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
-    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    __block NSString *sessionToken = @"";
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
+        sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    }];
     
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
-    
     if (sessionToken) [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
     
     NSDate *latestDate = [self latestDownloadedFileDate];
