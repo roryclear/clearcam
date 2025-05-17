@@ -303,10 +303,7 @@
     self.isLoadingVideos = YES;
     
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
-    __block NSString *sessionToken = @"";
-    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
-        sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    }];
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
     if (sessionToken) [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
