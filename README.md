@@ -8,7 +8,7 @@ https://apps.apple.com/app/clearcam/id6743237694
 
 ## requirements
 - iOS 15 or newer
-- iPhone SE or newer (older iPhones *might* work)
+- iPhone SE (1st gen) or newer (older iPhones *might* work)
 - dependencies: NONE!
 
 </br>
