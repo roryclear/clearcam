@@ -12,6 +12,10 @@ https://apps.apple.com/app/clearcam/id6743237694
 - dependencies: NONE!
 
 </br>
-<img src="images/recording.PNG" alt="Screenshot" width="30%" style="float: left; margin-right: 10px;" />
-<img src="images/browser_events.PNG" alt="Screenshot" width="30%" style="float: left;" />
+<table>
+  <tr>
+    <td><img src="images/recording.PNG" alt="Screenshot" width="300"/></td>
+    <td><img src="images/browser_events.PNG" alt="Screenshot" width="300"/></td>
+  </tr>
+</table>
 <img src="images/browser_playback.PNG" alt="Screenshot"/>
