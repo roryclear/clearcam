@@ -79,6 +79,7 @@
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @property (nonatomic, assign) BOOL isLoadingVideos;
 @property (nonatomic, strong) NSMutableSet<NSString *> *loadedFilenames;
+@property (nonatomic, strong) NSTimer *refreshTimer;
 @end
 
 @implementation GalleryViewController
@@ -128,7 +129,28 @@
         [self getEvents];
     }];
     [self updateTableViewBackground];
+    [self setupRefreshTimer];
 }
+
+- (void)dealloc {
+    [self.refreshTimer invalidate];
+    self.refreshTimer = nil;
+}
+
+- (void)setupRefreshTimer {
+    self.refreshTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
+                                                        target:self
+                                                      selector:@selector(refreshTimerFired)
+                                                      userInfo:nil
+                                                       repeats:YES];
+}
+
+- (void)refreshTimerFired {
+    if (!self.isLoadingVideos) {
+        [self getEvents];
+    }
+}
+
 
 - (void)updateTableViewBackground {
     if (self.videoFiles.count == 0) {

@@ -229,19 +229,17 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 - (void)verifySubscriptionWithCompletionIfSubbed:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
     NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
     BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-    BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
-    if (isSubscribed || [StoreManager sharedInstance].last_check_time || [[NSDate date] timeIntervalSince1970] - [StoreManager sharedInstance].last_check_time > 120.0 || ![[StoreManager sharedInstance] retrieveSessionTokenFromKeychain]) {
-        if (sessionExpiredOrNow || ![[StoreManager sharedInstance] retrieveSessionTokenFromKeychain]) {
-            [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                if (completion) {
-                    completion(isActive, expiryDate);
-                }
-            }];
-        } else {
-            if (completion) {
-                completion(isSubscribed, expiry);
-            }
-        }
+    NSTimeInterval lastCheck = [StoreManager sharedInstance].last_check_time;
+    BOOL sessionExpired = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
+    BOOL sessionTokenMissing = ![[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    BOOL shouldCheckRemote = sessionExpired || sessionTokenMissing || ([[NSDate date] timeIntervalSince1970] - lastCheck > 120.0);
+
+    if (shouldCheckRemote) {
+        [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+            if (completion) completion(isActive, expiryDate);
+        }];
+    } else {
+        if (completion) completion(isSubscribed, expiry);
     }
 }
 
