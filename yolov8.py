@@ -361,25 +361,25 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import struct
 class YOLORequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != "/yolo":
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Not Found")
-            return
-
-        content_length = int(self.headers.get('Content-Length', 0))
-        img = self.rfile.read(content_length)  # Read and ignore input data
-        np_array = np.frombuffer(img, dtype=np.int8)
-        np_array = np_array.reshape(640,640,3)
-        pre_processed_image = preprocess([np_array])
-        pred = do_inf(pre_processed_image).numpy()
-        response_data = struct.pack('<1800f', *pred)
-
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/octet-stream')
-        self.send_header('Content-Length', str(len(response_data)))
+      if self.path != "/yolo":
+        self.send_response(404)
         self.end_headers()
-        self.wfile.write(response_data)
+        self.wfile.write(b"Not Found")
+        return
+
+      content_length = int(self.headers.get('Content-Length', 0))
+      img = self.rfile.read(content_length)  # Read and ignore input data
+      np_array = np.frombuffer(img, dtype=np.int8)
+      np_array = np_array.reshape(640,640,3)
+      pre_processed_image = preprocess([np_array])
+      pred = do_inf(pre_processed_image).numpy()
+      response_data = struct.pack('<1800f', *pred)
+
+      self.send_response(200)
+      self.send_header('Content-Type', 'application/octet-stream')
+      self.send_header('Content-Length', str(len(response_data)))
+      self.end_headers()
+      self.wfile.write(response_data)
 
 @TinyJit
 def do_inf(image):
