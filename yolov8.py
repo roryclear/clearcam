@@ -372,6 +372,16 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
       np_array = np.frombuffer(img, dtype=np.int8)
       np_array = np_array.reshape(640,640,3)
       pre_processed_image = preprocess([np_array])
+
+      im = np_array
+      im = Tensor(np_array)
+      im = im.unsqueeze(0)
+      #print("after",im)
+      im = im[..., ::-1].permute(0, 3, 1, 2)  # BGR to RGB, BHWC to BCHW, (n, 3, h, w)
+      im = im / 255.0  # 0 - 255 to 0.0 - 1.0
+      pre_processed_image = im
+
+      
       pred = do_inf(pre_processed_image).numpy()
       response_data = struct.pack('<1800f', *pred)
 
