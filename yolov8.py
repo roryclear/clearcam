@@ -373,17 +373,8 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
         img = self.rfile.read(content_length)  # Read and ignore input data
         np_array = np.frombuffer(img, dtype=np.int8)
         np_array = np_array.reshape(640,640,3)
-        pred = do_inf([np_array])
-        print("rory image =",pred)
-        pred = pred.flatten()
-        # Generate 1800 float32 zeros
-        float_list = [0.0] * 1800
-        float_list[0] = random.uniform(0, 1)*640
-        float_list[1] = 151.0
-        float_list[2] = 639.0
-        float_list[3] = 638.0
-        float_list[4] = 0.93
-        float_list[5] = float(random.randint(0,79))
+        pre_processed_image = preprocess([np_array])
+        pred = do_inf(pre_processed_image).numpy()
         response_data = struct.pack('<1800f', *pred)
 
         self.send_response(200)
@@ -395,10 +386,10 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
 import random
 import time
 
+@TinyJit
 def do_inf(image):
-  pre_processed_image = preprocess(image)
-  predictions = yolo_infer(pre_processed_image).numpy()
-  return predictions
+  predictions = yolo_infer(image)
+  return predictions.flatten()
 
 if __name__ == '__main__':
 
