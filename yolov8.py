@@ -370,8 +370,12 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
             return
 
         content_length = int(self.headers.get('Content-Length', 0))
-        _ = self.rfile.read(content_length)  # Read and ignore input data
-
+        img = self.rfile.read(content_length)  # Read and ignore input data
+        np_array = np.frombuffer(img, dtype=np.int8)
+        np_array = np_array.reshape(640,640,3)
+        pred = do_inf([np_array])
+        print("rory image =",pred)
+        pred = pred.flatten()
         # Generate 1800 float32 zeros
         float_list = [0.0] * 1800
         float_list[0] = random.uniform(0, 1)*640
@@ -380,7 +384,7 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
         float_list[3] = 638.0
         float_list[4] = 0.93
         float_list[5] = float(random.randint(0,79))
-        response_data = struct.pack('<1800f', *float_list)
+        response_data = struct.pack('<1800f', *pred)
 
         self.send_response(200)
         self.send_header('Content-Type', 'application/octet-stream')
@@ -390,24 +394,19 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
 
 import random
 import time
-@TinyJit
-def do_inf():
+
+def do_inf(image):
   pre_processed_image = preprocess(image)
   predictions = yolo_infer(pre_processed_image).numpy()
   return predictions
 
 if __name__ == '__main__':
 
-  server_address = ('192.168.1.6', 6667)
-  httpd = HTTPServer(server_address, YOLORequestHandler)
-  print("Serving on http://192.168.1.6:6667")
-  httpd.serve_forever()
-
   # usage : python3 yolov8.py "image_URL OR image_path" "v8 variant" (optional, n is default)
   if len(sys.argv) < 2:
     print("Error: Image URL or path not provided.")
     sys.exit(1)
-
+  
   img_path = sys.argv[1]
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
   print(f'running inference for YOLO version {yolo_variant}')
@@ -428,16 +427,15 @@ if __name__ == '__main__':
   load_state_dict(yolo_infer, state_dict)
   
 
-
-  for _ in range(100):
-    st = time.time()
-    time.sleep(10)
-    predictions = do_inf()
-    print(f'did inference in {int(round(((time.time() - st) * 1000)))}ms')
   #v8 and v3 have same 80 class names for Object Detection
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   #predictions = scale_boxes(pre_processed_image.shape[2:], predictions, image[0].shape)
- #draw_bounding_boxes_and_save(orig_img_path=image_location, output_img_path=out_path, predictions=predictions, class_labels=class_labels)
+  #draw_bounding_boxes_and_save(orig_img_path=image_location, output_img_path=out_path, predictions=predictions, class_labels=class_labels)
+
+  server_address = ('192.168.1.6', 6667)
+  httpd = HTTPServer(server_address, YOLORequestHandler)
+  print("Serving on http://192.168.1.6:6667")
+  httpd.serve_forever()
 
 
 # TODO for later:
@@ -445,4 +443,5 @@ if __name__ == '__main__':
 #  2. AST exp overflow warning while on cpu
 #  3. Make NMS faster
 #  4. Add video inference and webcam support
+
 
