@@ -359,8 +359,6 @@ def get_weights_location(yolo_variant: str) -> Path:
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import struct
-
-import random
 class YOLORequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/yolo":
@@ -383,56 +381,22 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response_data)
 
-import random
-import time
-
 @TinyJit
 def do_inf(image):
   predictions = yolo_infer(image)
   return predictions.flatten()
 
-if __name__ == '__main__':
+if __name__ == '__main__':  
+  yolo_variant = 'n'
 
-  # usage : python3 yolov8.py "image_URL OR image_path" "v8 variant" (optional, n is default)
-  if len(sys.argv) < 2:
-    print("Error: Image URL or path not provided.")
-    sys.exit(1)
-  
-  img_path = sys.argv[1]
-  yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
-  print(f'running inference for YOLO version {yolo_variant}')
-
-  output_folder_path = Path('./outputs_yolov8')
-  output_folder_path.mkdir(parents=True, exist_ok=True)
-  #absolute image path or URL
-  image_location = np.frombuffer(fetch(img_path).read_bytes(), np.uint8)
-  image = [cv2.imdecode(image_location, 1)]
-  out_path = (output_folder_path / f"{Path(img_path).stem}_output{Path(img_path).suffix or '.png'}").as_posix()
-  if not isinstance(image[0], np.ndarray):
-    print('Error in image loading. Check your image file.')
-    sys.exit(1)
   # Different YOLOv8 variants use different w , r, and d multiples. For a list , refer to this yaml file (the scales section) https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/models/v8/yolov8.yaml
   depth, width, ratio = get_variant_multiples(yolo_variant)
   yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
   state_dict = safe_load(get_weights_location(yolo_variant))
   load_state_dict(yolo_infer, state_dict)
-  
-
-  #v8 and v3 have same 80 class names for Object Detection
-  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  #predictions = scale_boxes(pre_processed_image.shape[2:], predictions, image[0].shape)
-  #draw_bounding_boxes_and_save(orig_img_path=image_location, output_img_path=out_path, predictions=predictions, class_labels=class_labels)
 
   server_address = ('192.168.1.6', 6667)
   httpd = HTTPServer(server_address, YOLORequestHandler)
   print("Serving on http://192.168.1.6:6667")
   httpd.serve_forever()
-
-
-# TODO for later:
-#  1. Fix SPPF minor difference due to maxpool
-#  2. AST exp overflow warning while on cpu
-#  3. Make NMS faster
-#  4. Add video inference and webcam support
-
 
