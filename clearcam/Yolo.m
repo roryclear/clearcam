@@ -218,6 +218,8 @@ UInt8 *rgbData;
     }
 
     CFRelease(rawData);
+    
+    return [self sendYOLORequest];
 
     id<MTLBuffer> buffer = self.buffers[self.input_buffer];
     if (!buffer || !buffer.contents) return nil;
@@ -278,4 +280,47 @@ UInt8 *rgbData;
     return output;
 }
 
+- (NSArray *)sendYOLORequest {
+    // Create the URL
+    NSURL *url = [NSURL URLWithString:@"http://192.168.1.6:6667/yolo"];
+    
+    // Create the request
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setHTTPMethod:@"POST"];
+    [request setHTTPBody:[NSData dataWithBytesNoCopy:self.rgbData length:self.yolo_res * self.yolo_res * 3 freeWhenDone:NO]];
+    
+    // Send synchronous request
+    NSURLResponse *response = nil;
+    NSError *error = nil;
+    NSData *responseData = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+    
+    if (error || !responseData) {
+        NSLog(@"YOLO request failed: %@", error);
+        return @[];
+    }
+    
+    // Convert binary float data to array
+    float *floatArray = (float *)responseData.bytes;
+    NSUInteger floatCount = responseData.length / sizeof(float);
+    
+    // Process the results similar to your Metal version
+    NSMutableArray *output = [NSMutableArray new];
+    for (NSUInteger i = 0; i < floatCount; i += 6) { // 4 coords + class + conf
+        float confidence = floatArray[i + 4];
+        NSNumber *classId = @(floatArray[i + 5]);
+        
+        if ([self.yoloIndexSet containsObject:classId] && confidence > ([[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0)) {
+            [output addObject:@[
+                @(floatArray[i]),     // x1
+                @(floatArray[i+1]),   // y1
+                @(floatArray[i+2]),   // x2
+                @(floatArray[i+3]),   // y2
+                classId,              // class
+                @(confidence)         // confidence
+            ]];
+        }
+    }
+    
+    return output;
+}
 @end
