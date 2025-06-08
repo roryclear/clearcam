@@ -403,7 +403,7 @@ class ASGIApp:
             more_body = message.get("more_body", False)
 
         # Inference
-        im = Tensor(body, dtype=dtypes.int8)
+        im = Tensor(body, dtype=dtypes.uint8)
         pred = do_inf(im).numpy()
         response_data = struct.pack('<1800f', *pred)
 
