@@ -379,25 +379,47 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
       self.end_headers()
       self.wfile.write(response_data)
 
+
 @TinyJit
 def do_inf(image):
-  image = image.reshape(1,640,640,3)
-  image = image[..., ::-1].permute(0, 3, 1, 2)
-  image = image / 255.0
-  predictions = yolo_infer(image)
-  return predictions.flatten()
+    image = image.reshape(1, 640, 640, 3)
+    image = image[..., ::-1].permute(0, 3, 1, 2)
+    image = image / 255.0
+    predictions = yolo_infer(image)
+    return predictions.flatten()
 
-if __name__ == '__main__':  
-  yolo_variant = 'n'
+yolo_variant = 'n'
+depth, width, ratio = get_variant_multiples(yolo_variant)
+yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+state_dict = safe_load(get_weights_location(yolo_variant))
+load_state_dict(yolo_infer, state_dict)
 
-  # Different YOLOv8 variants use different w , r, and d multiples. For a list , refer to this yaml file (the scales section) https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/models/v8/yolov8.yaml
-  depth, width, ratio = get_variant_multiples(yolo_variant)
-  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-  state_dict = safe_load(get_weights_location(yolo_variant))
-  load_state_dict(yolo_infer, state_dict)
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import struct
 
-  server_address = ('192.168.1.6', 6667)
-  httpd = HTTPServer(server_address, YOLORequestHandler)
-  print("Serving on http://192.168.1.6:6667")
-  httpd.serve_forever()
+class YOLORequestHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/yolo":
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
 
+        content_length = int(self.headers.get('Content-Length', 0))
+        img = self.rfile.read(content_length)
+
+        im = Tensor(img, dtype=dtypes.int8)
+        pred = do_inf(im).numpy()
+        response_data = struct.pack('<1800f', *pred)
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/octet-stream')
+        self.send_header('Content-Length', str(len(response_data)))
+        self.end_headers()
+        self.wfile.write(response_data)
+
+if __name__ == '__main__':
+    server_address = ('0.0.0.0', 6667)
+    httpd = HTTPServer(server_address, YOLORequestHandler)
+    print("Serving YOLO on http://0.0.0.0:6667")
+    httpd.serve_forever()
