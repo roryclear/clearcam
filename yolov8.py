@@ -385,7 +385,7 @@ class YOLORequestHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get('Content-Length', 0))
         img = self.rfile.read(content_length)
 
-        im = Tensor(img, dtype=dtypes.int8)
+        im = Tensor(img, dtype=dtypes.uint8)
         pred = do_inf(im).numpy()
         response_data = struct.pack('<1800f', *pred)
 
