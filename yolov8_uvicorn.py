@@ -357,31 +357,69 @@ def get_weights_location(yolo_variant: str) -> Path:
   if not f32_weights.exists(): convert_f16_safetensor_to_f32(weights_location, f32_weights)
   return f32_weights
 
+import socket
+import select
+import struct
+from time import monotonic
+
 @TinyJit
 def do_inf(image):
-  image = image.reshape(1,640,640,3)
-  image = image[..., ::-1].permute(0, 3, 1, 2)
-  image = image / 255.0
-  predictions = yolo_infer(image)
-  return predictions.flatten()
+    image = image.reshape(1, 640, 640, 3)
+    image = image[..., ::-1].permute(0, 3, 1, 2)
+    image = image / 255.0
+    predictions = yolo_infer(image)
+    return predictions.flatten()
 
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
-import struct
-
-app = FastAPI()
-
-# Load model (should not be inside if __name__ == '__main__')
+# Model initialization (same as before)
 yolo_variant = 'n'
 depth, width, ratio = get_variant_multiples(yolo_variant)
 yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
 load_state_dict(yolo_infer, state_dict)
 
-@app.post("/yolo")
-async def run_yolo(request: Request):
-    img = await request.body()
-    im = Tensor(img, dtype=dtypes.int8)
-    pred = do_inf(im).numpy()
-    response_data = struct.pack('<1800f', *pred)
-    return Response(content=response_data, media_type='application/octet-stream')
+from uvicorn import Server, Config
+import asyncio
+from starlette.types import Receive, Send, Scope
+from starlette.responses import Response
+import struct
+
+class ASGIApp:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["path"] != "/yolo" or scope["method"] != "POST":
+            await send({
+                "type": "http.response.start",
+                "status": 404,
+                "headers": [(b"content-type", b"text/plain")],
+            })
+            await send({"type": "http.response.body", "body": b"Not Found"})
+            return
+
+        # Accumulate request body
+        body = b""
+        more_body = True
+        while more_body:
+            message = await receive()
+            body += message.get("body", b"")
+            more_body = message.get("more_body", False)
+
+        # Inference
+        im = Tensor(body, dtype=dtypes.int8)
+        pred = do_inf(im).numpy()
+        response_data = struct.pack('<1800f', *pred)
+
+        # Send response
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [
+                (b"content-type", b"application/octet-stream"),
+                (b"content-length", str(len(response_data)).encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": response_data})
+
+if __name__ == "__main__":
+    app = ASGIApp()
+    config = Config(app=app, host="0.0.0.0", port=6667, workers=1)
+    server = Server(config)
+    asyncio.run(server.serve())
