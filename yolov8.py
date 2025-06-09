@@ -43,43 +43,6 @@ def preprocess(im, imgsz=640, model_stride=32, model_pt=True):
   im = im / 255.0  # 0 - 255 to 0.0 - 1.0
   return im
 
-
-def draw_bounding_boxes_and_save(orig_img_path, output_img_path, predictions, class_labels):
-  color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
-  font = cv2.FONT_HERSHEY_SIMPLEX
-
-  def is_bright_color(color):
-    r, g, b = color
-    brightness = (r * 299 + g * 587 + b * 114) / 1000
-    return brightness > 127
-
-  orig_img = cv2.imread(orig_img_path) if not isinstance(orig_img_path, np.ndarray) else cv2.imdecode(orig_img_path, 1)
-  height, width, _ = orig_img.shape
-  box_thickness = int((height + width) / 400)
-  font_scale = (height + width) / 2500
-  object_count = defaultdict(int)
-
-  for pred in predictions:
-    x1, y1, x2, y2, conf, class_id = pred
-    if conf == 0: continue
-    x1, y1, x2, y2, class_id = map(int, (x1, y1, x2, y2, class_id))
-    color = color_dict[class_labels[class_id]]
-    cv2.rectangle(orig_img, (x1, y1), (x2, y2), color, box_thickness)
-    label = f"{class_labels[class_id]} {conf:.2f}"
-    text_size, _ = cv2.getTextSize(label, font, font_scale, 1)
-    label_y, bg_y = (y1 - 4, y1 - text_size[1] - 4) if y1 - text_size[1] - 4 > 0 else (y1 + text_size[1], y1)
-    cv2.rectangle(orig_img, (x1, bg_y), (x1 + text_size[0], bg_y + text_size[1]), color, -1)
-    font_color = (0, 0, 0) if is_bright_color(color) else (255, 255, 255)
-    cv2.putText(orig_img, label, (x1, label_y), font, font_scale, font_color, 1, cv2.LINE_AA)
-    object_count[class_labels[class_id]] += 1
-
-  print("Objects detected:")
-  for obj, count in object_count.items():
-    print(f"- {obj}: {count}")
-
-  cv2.imwrite(output_img_path, orig_img)
-  print(f'saved detections at {output_img_path}')
-
 # utility functions for forward pass.
 def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
   lt, rb = distance.chunk(2, dim)
@@ -353,9 +316,14 @@ def postprocess(output, max_det=300, conf_threshold=0.25, iou_threshold=0.45):
 def get_weights_location(yolo_variant: str) -> Path:
   weights_location = Path(__file__).parents[1] / "weights" / f'yolov8{yolo_variant}.safetensors'
   fetch(f'https://gitlab.com/r3sist/yolov8_weights/-/raw/master/yolov8{yolo_variant}.safetensors', weights_location)
+  #f16
+  return weights_location.with_name(f"{weights_location.stem}.safetensors")
   f32_weights = weights_location.with_name(f"{weights_location.stem}_f32.safetensors")
   if not f32_weights.exists(): convert_f16_safetensor_to_f32(weights_location, f32_weights)
   return f32_weights
+
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import struct
 
 @TinyJit
 def do_inf(image):
@@ -370,9 +338,6 @@ depth, width, ratio = get_variant_multiples(yolo_variant)
 yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
 load_state_dict(yolo_infer, state_dict)
-
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import struct
 
 class YOLORequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
