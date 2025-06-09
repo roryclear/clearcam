@@ -105,7 +105,7 @@
         [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
     }
     
-    self.deviceName = [defaults stringForKey:@"device_name"] ?: @"My Device";
+    self.deviceName = [defaults stringForKey:@"device_name"] ?: NSLocalizedString(@"default_device_name", @"Default device name");
     [defaults setObject:self.deviceName forKey:@"device_name"];
     
     self.notificationSchedules = [[defaults arrayForKey:@"notification_schedules"] mutableCopy];
@@ -179,7 +179,7 @@
     if (ipAddress && ipAddress.length > 0) {
         self.notificationServerAddress = [NSString stringWithFormat:@"http://%@", ipAddress];
     } else {
-        self.notificationServerAddress = @"Waiting for IP...";
+        self.notificationServerAddress = NSLocalizedString(@"waiting_for_ip", @"Placeholder when IP address is not available");
     }
 }
 
@@ -279,10 +279,10 @@
                                 [defaults synchronize];
                                 sender.on = NO;
                                 
-                                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Permission Denied"
-                                                                                              message:@"Notification permission was denied. You can enable it in Settings."
+                                UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"permission_denied", @"Title for permission denied alert")
+                                                                                              message:NSLocalizedString(@"notification_permission_denied", @"Message when notification permission is denied")
                                                                                        preferredStyle:UIAlertControllerStyleAlert];
-                                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                                [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
                                 [self presentViewController:alert animated:YES completion:nil];
                             }
                         });
@@ -293,10 +293,10 @@
                     [defaults synchronize];
                     sender.on = NO;
                     
-                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enable in Settings"
-                                                                                  message:@"Notifications are disabled. Please enable them in the Settings app."
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"enable_in_settings", @"Title for enabling notifications in settings")
+                                                                                  message:NSLocalizedString(@"notifications_disabled", @"Message when notifications are disabled")
                                                                            preferredStyle:UIAlertControllerStyleAlert];
-                    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                    [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
                     [self presentViewController:alert animated:YES completion:nil];
                 }
             });
@@ -370,14 +370,14 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (section == 0) {
-        return @"Camera Settings";
+        return NSLocalizedString(@"camera_settings", @"Header for camera settings section");
     } else if (section == 1) {
-        return @"Live Stream Settings";
+        return NSLocalizedString(@"live_stream_settings", @"Header for live stream settings section");
     } else if (section == 2) {
-        return @"Viewer Settings";
+        return NSLocalizedString(@"viewer_settings", @"Header for viewer settings section");
     } else if (section == 3) {
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-        return isSubscribed ? @"Subscription" : @"Upgrade to Premium";
+        return isSubscribed ? NSLocalizedString(@"subscription", @"Header for subscription section when subscribed") : NSLocalizedString(@"upgrade_to_premium", @"Header for subscription section when not subscribed");
     } else if (section == 4) {
         return nil; // No header for Terms and Privacy section
     }
@@ -404,11 +404,11 @@
 
     if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Stream via Wi-Fi";
+            cell.textLabel.text = NSLocalizedString(@"stream_via_wifi", @"Label for stream via Wi-Fi setting");
             NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
             cell.detailTextLabel.text = ipAddress && ipAddress.length > 0 ?
                                        [NSString stringWithFormat:@"http://%@", ipAddress] :
-                                       @"Waiting for IP...";
+                                       NSLocalizedString(@"waiting_for_ip", @"Placeholder when IP address is not available");
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *wifiSwitch = [[UISwitch alloc] init];
             wifiSwitch.on = self.streamViaWiFiEnabled;
@@ -416,20 +416,20 @@
             cell.accessoryView = wifiSwitch;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 1) {
-            cell.textLabel.text = @"Resolution";
+            cell.textLabel.text = NSLocalizedString(@"resolution", @"Label for resolution setting");
             cell.detailTextLabel.text = self.selectedResolution;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 2) {
-            cell.textLabel.text = @"Detect Objects";
+            cell.textLabel.text = NSLocalizedString(@"detect_objects", @"Label for detect objects setting");
             cell.detailTextLabel.text = self.selectedPresetKey;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 3) {
-            cell.textLabel.text = @"Manage Detection Presets";
+            cell.textLabel.text = NSLocalizedString(@"manage_detection_presets", @"Label for manage detection presets setting");
             cell.detailTextLabel.text = nil;
             cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 4 && !self.isPresetsSectionExpanded) {
-            cell.textLabel.text = @"Detection Certainty Threshold";
+            cell.textLabel.text = NSLocalizedString(@"detection_certainty_threshold", @"Label for detection certainty threshold setting");
             cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
             cell.userInteractionEnabled = YES;
         } else if (self.isPresetsSectionExpanded && indexPath.row >= 4 && indexPath.row < 4 + [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1) {
@@ -451,12 +451,12 @@
         } else {
             NSInteger presetOffset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
             if (indexPath.row == 4 + presetOffset) {
-                cell.textLabel.text = @"Detection Certainty Threshold";
+                cell.textLabel.text = NSLocalizedString(@"detection_certainty_threshold", @"Label for detection certainty threshold setting");
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 5 + presetOffset) {
-                cell.textLabel.text = @"Send Videos on Detection";
-                cell.detailTextLabel.text = @"Enable to view events on other devices from anywhere.";
+                cell.textLabel.text = NSLocalizedString(@"send_videos_on_detection", @"Label for send videos on detection setting");
+                cell.detailTextLabel.text = NSLocalizedString(@"send_videos_description", @"Description for send videos on detection setting");
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
                 sendNotifSwitch.on = self.sendNotifEnabled;
@@ -467,19 +467,19 @@
                 cell.textLabel.textColor = isEnabled ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 6 + presetOffset) {
-                cell.textLabel.text = @"Change Encryption Password";
+                cell.textLabel.text = NSLocalizedString(@"change_encryption_password", @"Label for change encryption password setting");
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 7 + presetOffset) {
-                cell.textLabel.text = @"Manage Detection Schedules";
-                cell.detailTextLabel.text = @"Choose when to detect objects.";
+                cell.textLabel.text = NSLocalizedString(@"manage_detection_schedules", @"Label for manage detection schedules setting");
+                cell.detailTextLabel.text = NSLocalizedString(@"manage_detection_schedules_description", @"Description for manage detection schedules setting");
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == 8 + presetOffset) {
-                cell.textLabel.text = @"Use Own Notification Server";
-                cell.detailTextLabel.text = @"Send videos to a server that you own.";
+                cell.textLabel.text = NSLocalizedString(@"use_own_notification_server", @"Label for use own notification server setting");
+                cell.detailTextLabel.text = NSLocalizedString(@"use_own_notification_server_description", @"Description for use own notification server setting");
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *useOwnnotificationServerSwitch = [[UISwitch alloc] init];
                 useOwnnotificationServerSwitch.on = self.useOwnServerEnabled;
@@ -487,19 +487,19 @@
                 cell.accessoryView = useOwnnotificationServerSwitch;
                 cell.userInteractionEnabled = YES;
             } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + presetOffset) {
-                cell.textLabel.text = @"Server Address";
+                cell.textLabel.text = NSLocalizedString(@"server_address", @"Label for server address setting");
                 cell.detailTextLabel.text = self.notificationServerAddress;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
             } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + presetOffset) {
-                cell.textLabel.text = @"Test own server";
+                cell.textLabel.text = NSLocalizedString(@"test_own_server", @"Label for test own server button");
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 cell.userInteractionEnabled = YES;
             } else if (indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 11 : 9) + presetOffset) {
-                cell.textLabel.text = @"Use Own Inference Server";
-                cell.detailTextLabel.text = @"Use a custom server for object detection.";
+                cell.textLabel.text = NSLocalizedString(@"use_own_inference_server", @"Label for use own inference server setting");
+                cell.detailTextLabel.text = NSLocalizedString(@"use_own_inference_server_description", @"Description for use own inference server setting");
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 UISwitch *useOwnInferenceServerSwitch = [[UISwitch alloc] init];
                 useOwnInferenceServerSwitch.on = self.useOwnInferenceServerEnabled;
@@ -507,15 +507,15 @@
                 cell.accessoryView = useOwnInferenceServerSwitch;
                 cell.userInteractionEnabled = YES;
             } else if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded && indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 12 : 10) + presetOffset) {
-                cell.textLabel.text = @"Server Address";
-                cell.detailTextLabel.text = self.inferenceServerAddress ?: @"Enter server address: e.g http://192.168.1.1:6667";
+                cell.textLabel.text = NSLocalizedString(@"server_address", @"Label for server address setting");
+                cell.detailTextLabel.text = self.inferenceServerAddress ?: NSLocalizedString(@"enter_inference_server_address", @"Placeholder for inference server address");
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
             }
         }
     } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Live Stream over Network";
+            cell.textLabel.text = NSLocalizedString(@"live_stream_network", @"Label for live stream over network setting");
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *liveStreamSwitch = [[UISwitch alloc] init];
             liveStreamSwitch.on = isPremium ? self.liveStreamInternetEnabled : NO;
@@ -525,7 +525,7 @@
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 1) {
-            cell.textLabel.text = @"Device Name";
+            cell.textLabel.text = NSLocalizedString(@"device_name", @"Label for device name setting");
             cell.detailTextLabel.text = self.deviceName;
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
@@ -533,8 +533,8 @@
         }
     } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Receive Notifications";
-            cell.detailTextLabel.text = @"Get notified when a camera catches an event.";
+            cell.textLabel.text = NSLocalizedString(@"receive_notifications", @"Label for receive notifications setting");
+            cell.detailTextLabel.text = NSLocalizedString(@"receive_notifications_description", @"Description for receive notifications setting");
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *receiveNotifSwitch = [[UISwitch alloc] init];
             receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
@@ -546,13 +546,13 @@
         }
     } else if (indexPath.section == 3) { // Upgrade to Premium / Subscription
         if (!isPremium && indexPath.row == 0) {
-            cell.textLabel.text = @"Upgrade to Premium";
+            cell.textLabel.text = NSLocalizedString(@"upgrade_to_premium", @"Label for upgrade to premium button");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
-            cell.textLabel.text = @"Restore Purchases";
+            cell.textLabel.text = NSLocalizedString(@"restore_purchases", @"Label for restore purchases button");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -560,19 +560,19 @@
         }
     } else if (indexPath.section == 4) { // Terms and Privacy
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Terms of Use";
+            cell.textLabel.text = NSLocalizedString(@"terms_of_use", @"Label for terms of use link");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 1) {
-            cell.textLabel.text = @"Privacy Policy";
+            cell.textLabel.text = NSLocalizedString(@"privacy_policy", @"Label for privacy policy link");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 2) {
-            cell.textLabel.text = @"Delete Encryption Keys";
+            cell.textLabel.text = NSLocalizedString(@"delete_encryption_keys", @"Label for delete encryption keys button");
             cell.textLabel.textColor = [UIColor systemRedColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -612,16 +612,16 @@
 }
 
 - (void)showInferenceServerAddressInputDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Inference Server Address"
-                                                                   message:@"Please enter the address of your inference server."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"enter_inference_server_address_title", @"Title for inference server address input dialog")
+                                                                   message:NSLocalizedString(@"enter_inference_server_address_message", @"Message for inference server address input dialog")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Server Address";
+        textField.placeholder = NSLocalizedString(@"server_address_label", @"Placeholder for server address input");
         textField.text = self.inferenceServerAddress;
     }];
     
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"save", @"Save button")
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *address = alert.textFields.firstObject.text;
@@ -634,7 +634,7 @@
         }
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     
@@ -645,17 +645,17 @@
 }
 
 - (void)showThresholdInputDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Threshold"
-                                                                   message:@"Enter a % value between 1 and 100 (default is 25)."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"set_threshold_title", @"Title for threshold input dialog")
+                                                                   message:NSLocalizedString(@"set_threshold_message", @"Message for threshold input dialog")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Threshold (1-100)";
+        textField.placeholder = NSLocalizedString(@"threshold_placeholder", @"Placeholder for threshold input");
         textField.keyboardType = UIKeyboardTypeNumberPad;
         textField.text = [NSString stringWithFormat:@"%ld", (long)self.threshold];
     }];
     
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"save", @"Save button")
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *thresholdText = alert.textFields.firstObject.text;
@@ -667,15 +667,15 @@
             [defaults synchronize];
             [self.tableView reloadData];
         } else {
-            UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"Invalid Threshold"
-                                                                               message:@"Please enter a valid value between 1 and 100"
+            UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"invalid_threshold_title", @"Title for invalid threshold error")
+                                                                               message:NSLocalizedString(@"invalid_threshold_message", @"Message for invalid threshold error")
                                                                         preferredStyle:UIAlertControllerStyleAlert];
-            [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [errorAlert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:errorAlert animated:YES completion:nil];
         }
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     
@@ -686,16 +686,16 @@
 }
 
 - (void)showDeviceNameInputDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Device Name"
-                                                                   message:@"Enter a name for this device."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"set_device_name_title", @"Title for device name input dialog")
+                                                                   message:NSLocalizedString(@"set_device_name_message", @"Message for device name input dialog")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Device Name";
+        textField.placeholder = NSLocalizedString(@"device_name_placeholder", @"Placeholder for device name input");
         textField.text = self.deviceName;
     }];
     
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"save", @"Save button")
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *name = alert.textFields.firstObject.text;
@@ -708,7 +708,7 @@
         }
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     
@@ -719,11 +719,11 @@
 }
 
 - (void)showDeleteEncryptionKeysPrompt {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete Encryption Keys"
-                                                                   message:@"Are you sure you want to delete all keys from this device?"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"delete_encryption_keys_title", @"Title for delete encryption keys confirmation")
+                                                                   message:NSLocalizedString(@"delete_encryption_keys_message", @"Message for delete encryption keys confirmation")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
-    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"Yes"
+    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"delete", @"Delete button")
                                                            style:UIAlertActionStyleDestructive
                                                          handler:^(UIAlertAction * _Nonnull action) {
         // Delete encryption keys
@@ -745,7 +745,7 @@
         [self.tableView reloadData];
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     
@@ -835,8 +835,8 @@
         if (!isPremium && indexPath.row == 0) {
             [self showUpgradePopup];
         } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restoring Purchases"
-                                                                          message:@"Please wait while we restore your previous purchases..."
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"restoring_purchases_title", @"Title for restoring purchases alert")
+                                                                          message:NSLocalizedString(@"restoring_purchases_message", @"Message for restoring purchases alert")
                                                                    preferredStyle:UIAlertControllerStyleAlert];
             [self presentViewController:alert animated:YES completion:nil];
             
@@ -868,9 +868,9 @@
 
             // Format price
             NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
-            formatter.numberStyle = NSNumberFormatterCurrencyStyle;
-            formatter.locale = product.priceLocale;
-            NSString *localizedPrice = [formatter stringFromNumber:product.price] ?: @"Price";
+            [formatter setNumberStyle:NSNumberFormatterCurrencyStyle];
+            [formatter setLocale:product.priceLocale];
+            NSString *localizedPrice = [formatter stringFromNumber:product.price] ?: NSLocalizedString(@"price_unknown", @"Fallback for unknown price");
 
             // Detect dark mode
             BOOL isDarkMode = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
@@ -894,7 +894,7 @@
             // Title
             UILabel *title = [[UILabel alloc] init];
             title.translatesAutoresizingMaskIntoConstraints = NO;
-            title.text = @"Get Clearcam Premium";
+            title.text = NSLocalizedString(@"get_premium_title", @"Title for premium upgrade popup");
             title.textColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0]; // gold
             title.font = [UIFont boldSystemFontOfSize:24];
             title.textAlignment = NSTextAlignmentCenter;
@@ -906,10 +906,10 @@
             featureStack.spacing = 8;
 
             NSArray *features = @[
-                @"View captured events from anywhere",
-                @"Receive real-time event notifications",
-                @"Live stream from anywhere",
-                @"End-to-end encryption on all camera data sent from your phone."
+                NSLocalizedString(@"premium_feature_1", @"Feature 1 description for premium"),
+                NSLocalizedString(@"premium_feature_2", @"Feature 2 description for premium"),
+                NSLocalizedString(@"premium_feature_3", @"Feature 3 description for premium"),
+                NSLocalizedString(@"premium_feature_4", @"Feature 4 description for premium")
             ];
 
             for (NSString *item in features) {
@@ -924,7 +924,7 @@
             // Upgrade button
             UIButton *upgradeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
             upgradeBtn.translatesAutoresizingMaskIntoConstraints = NO;
-            NSString *upgradeTitle = [NSString stringWithFormat:@"Upgrade for %@ per month", localizedPrice];
+            NSString *upgradeTitle = [NSString stringWithFormat:NSLocalizedString(@"upgrade_button", @"Upgrade button text with price"), localizedPrice];
             [upgradeBtn setTitle:upgradeTitle forState:UIControlStateNormal];
             [upgradeBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
             upgradeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0];
@@ -935,7 +935,7 @@
             // Cancel button
             UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
             cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
-            [cancelBtn setTitle:@"Not now" forState:UIControlStateNormal];
+            [cancelBtn setTitle:NSLocalizedString(@"not_now", @"Not now button") forState:UIControlStateNormal];
             [cancelBtn setTitleColor:textColor forState:UIControlStateNormal];
             cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15];
             [cancelBtn addTarget:self action:@selector(dismissUpgradePopup) forControlEvents:UIControlEventTouchUpInside];
@@ -943,7 +943,7 @@
             // Disclaimer label
             UILabel *disclaimer = [[UILabel alloc] init];
             disclaimer.translatesAutoresizingMaskIntoConstraints = NO;
-            disclaimer.text = @"Monthly limit of 5000 clip uploads and 1000 minutes or sessions of live stream viewing.";
+            disclaimer.text = NSLocalizedString(@"premium_disclaimer", @"Disclaimer for premium subscription limits");
             disclaimer.font = [UIFont systemFontOfSize:13];
             disclaimer.textColor = [textColor colorWithAlphaComponent:0.6];
             disclaimer.numberOfLines = 0;
@@ -987,12 +987,11 @@
     }];
 }
 
-
 - (void)handleUpgradeTap {
     // Create and show a loading spinner
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     spinner.translatesAutoresizingMaskIntoConstraints = NO;
-    spinner.color = [UIColor whiteColor];
+    spinner.color = UIColor.whiteColor;
     UIView *overlay = [self.view viewWithTag:999];
     [overlay addSubview:spinner];
     
@@ -1020,10 +1019,10 @@
             
             if (!success && error) {
                 // Show error alert if purchase failed
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchase Failed"
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"purchase_failed", @"Title for purchase failed alert")
                                                                                message:error.localizedDescription
                                                                         preferredStyle:UIAlertControllerStyleAlert];
-                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:alert animated:YES completion:nil];
             }
             
@@ -1037,7 +1036,6 @@
     UIView *overlay = [self.view viewWithTag:999];
     [overlay removeFromSuperview];
 }
-
 
 - (void)useOwnnotificationServerSwitchToggled:(UISwitch *)sender {
     self.useOwnServerEnabled = sender.on;
@@ -1060,16 +1058,16 @@
 }
 
 - (void)shownotificationServerAddressInputDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Server Address"
-                                                                   message:@"Please enter the address of your notification server."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"enter_notification_server_address_title", @"Title for notification server address input dialog")
+                                                                   message:NSLocalizedString(@"enter_notification_server_address_message", @"Message for notification server address input dialog")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Server Address";
+        textField.placeholder = NSLocalizedString(@"server_address_label", @"Placeholder for server address input");
         textField.text = self.notificationServerAddress;
     }];
     
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"save", @"Save button")
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *address = alert.textFields.firstObject.text;
@@ -1082,7 +1080,7 @@
         }
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     
@@ -1094,10 +1092,10 @@
 
 - (void)testnotificationServer {
     [[notification sharedInstance] sendNotification];
-    UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"Sent"
-                                                                        message:@"Test notification sent. Check your server."
+    UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"test_notification_sent_title", @"Title for test notification sent alert")
+                                                                        message:NSLocalizedString(@"test_notification_sent_message", @"Message for test notification sent alert")
                                                                  preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button")
                                                        style:UIAlertActionStyleDefault
                                                      handler:nil];
     [resultAlert addAction:okAction];
@@ -1146,21 +1144,21 @@
 }
 
 - (void)promptForPasswordWithCompletion:(void (^)(BOOL success))completion {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Set Password"
-                                                                   message:@"Enter a password to encrypt your data"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"set_password_title", @"Title for password input dialog")
+                                                                   message:NSLocalizedString(@"set_password_message", @"Message for password input dialog")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Password";
+        textField.placeholder = NSLocalizedString(@"password_placeholder", @"Placeholder for password input");
         textField.secureTextEntry = YES;
     }];
     
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Confirm Password";
+        textField.placeholder = NSLocalizedString(@"confirm_password_placeholder", @"Placeholder for confirm password input");
         textField.secureTextEntry = YES;
     }];
     
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"save", @"Save button")
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *password = alert.textFields[0].text;
@@ -1175,7 +1173,7 @@
         }
     }];
     
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:^(UIAlertAction * _Nonnull action) {
         completion(NO);
@@ -1203,11 +1201,11 @@
 }
 
 - (void)showInvalidPasswordAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Invalid Password"
-                                                                   message:@"Passwords do not match or are empty."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"invalid_password_title", @"Title for invalid password alert")
+                                                                   message:NSLocalizedString(@"invalid_password_message", @"Message for invalid password alert")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK"
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button")
                                                        style:UIAlertActionStyleDefault
                                                      handler:nil];
     
@@ -1262,7 +1260,7 @@
 #pragma mark - Resolution Picker
 
 - (void)showResolutionPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select Resolution"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"select_resolution_title", @"Title for resolution picker")
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -1286,7 +1284,7 @@
         [alert addAction:action];
     }
 
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     [alert addAction:cancelAction];
@@ -1299,7 +1297,7 @@
 #pragma mark - YOLO Indexes Picker
 
 - (void)showYoloIndexesPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select objects preset"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"select_objects_preset_title", @"Title for YOLO preset picker")
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     SettingsManager *settingsManager = [SettingsManager sharedManager];
@@ -1315,7 +1313,7 @@
         [alert addAction:action];
     }
 
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
                                                            style:UIAlertActionStyleCancel
                                                          handler:nil];
     [alert addAction:cancelAction];
@@ -1326,13 +1324,13 @@
 #pragma mark - Preset Management
 
 - (void)showAddPresetDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Preset"
-                                                                   message:@"Enter a name for the new preset"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"add_preset_title", @"Title for add preset dialog")
+                                                                   message:NSLocalizedString(@"add_preset_message", @"Message for add preset name input")
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"Preset Name";
+        textField.placeholder = NSLocalizedString(@"preset_name_placeholder", @"Placeholder for preset name input");
     }];
-    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"save", @"Save button")
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         NSString *presetName = alert.textFields.firstObject.text;
