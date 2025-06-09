@@ -62,7 +62,7 @@
         };
 
         NSMutableAttributedString *message = [[NSMutableAttributedString alloc] init];
-        [message appendAttributedString:[[NSAttributedString alloc] initWithString:@"No Live Devices\n\n" attributes:titleAttrs]];
+        [message appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@"no_live_devices", "no live devices") attributes:titleAttrs]];
 
         // Steps with hanging indent, left-aligned
         NSMutableParagraphStyle *stepsStyle = [[NSMutableParagraphStyle alloc] init];
@@ -77,11 +77,7 @@
             NSParagraphStyleAttributeName: stepsStyle
         };
 
-        NSString *stepsText =
-        @"1. Install Clearcam on another phone.\n"
-        "2. Upgrade to Clearcam Premium (must be using the same Apple account on both phones).\n"
-        "3. Turn on \"Live Stream over Network\" on your other phone and choose a secure password and device name.\n"
-        "4. Start recording.";
+        NSString *stepsText = NSLocalizedString(@"steps_text_live","steps on how to make live work.");
 
         [message appendAttributedString:[[NSAttributedString alloc] initWithString:stepsText attributes:stepsAttrs]];
 
