@@ -219,7 +219,10 @@ UInt8 *rgbData;
 
     CFRelease(rawData);
     
-    if([[NSUserDefaults standardUserDefaults] boolForKey:@"useOwnInferenceServerEnabled"]) return [self sendYOLORequest];
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"useOwnInferenceServerEnabled"]) {
+        NSArray *yoloResults = [self sendYOLORequest];
+        if (yoloResults.count > 0) return yoloResults;
+    }
 
     id<MTLBuffer> buffer = self.buffers[self.input_buffer];
     if (!buffer || !buffer.contents) return nil;
