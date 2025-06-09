@@ -1,6 +1,6 @@
 "settings" = "设置";
 "events" = "事件";
-"live" = "直播"; 
+"live" = "直播";
 "default_device_name" = "我的设备";
 "waiting_for_ip" = "正在获取IP...";
 "permission_denied" = "权限被拒绝";
@@ -85,3 +85,7 @@
 "steps_text_clips" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“检测时发送视频”并设置安全密码。\n4. （可选）配置检测设置和计划。\n5. 开始录制。";
 "no_live_devices" = "无在线设备\n";
 "no_video_available" = "无可用视频\n";
+"share" = "分享";
+"delete" = "删除";
+"cancel" = "取消";
+"online" = "在线";
