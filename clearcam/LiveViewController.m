@@ -203,7 +203,7 @@
     greenDot.layer.cornerRadius = 5;
 
     UILabel *onlineLabel = [[UILabel alloc] initWithFrame:CGRectMake(165, 57, 100, 15)];
-    onlineLabel.text = @"Online";
+    onlineLabel.text = NSLocalizedString(@"online", "online");
     onlineLabel.font = [UIFont systemFontOfSize:13];
     onlineLabel.textColor = [UIColor secondaryLabelColor];
 

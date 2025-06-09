@@ -693,7 +693,7 @@
                                                                          message:nil
                                                                   preferredStyle:UIAlertControllerStyleActionSheet];
     
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Share"
+    [actionSheet addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"share", "share")
                                                     style:UIAlertActionStyleDefault
                                                   handler:^(UIAlertAction * _Nonnull action) {
         NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
@@ -702,7 +702,7 @@
         [self presentViewController:activityVC animated:YES completion:nil];
     }]];
     
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete"
+    [actionSheet addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"delete", "delete")
                                                     style:UIAlertActionStyleDestructive
                                                   handler:^(UIAlertAction * _Nonnull action) {
         NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
@@ -751,7 +751,7 @@
         }
     }]];
     
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel"
+    [actionSheet addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", "cancel")
                                                     style:UIAlertActionStyleCancel
                                                   handler:nil]];
     
