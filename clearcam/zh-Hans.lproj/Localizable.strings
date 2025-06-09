@@ -1,43 +1,36 @@
-//
-//  Localizable.strings
-//  clearcam
-//
-//  Created by Rory Clear on 09/06/2025.
-//
-
 "settings" = "设置";
 "events" = "事件";
-"live" = "直播";
+"live" = "直播"; 
 "default_device_name" = "我的设备";
-"waiting_for_ip" = "等待IP分配...";
+"waiting_for_ip" = "正在获取IP...";
 "permission_denied" = "权限被拒绝";
-"notification_permission_denied" = "通知权限被拒绝。您可以在设置中启用。";
+"notification_permission_denied" = "通知权限被拒绝。您可以在设置中启用它。";
 "ok" = "确定";
 "enable_in_settings" = "在设置中启用";
-"notifications_disabled" = "通知功能已禁用。请在系统设置中启用。";
+"notifications_disabled" = "通知已禁用。请在设置应用中启用它们。";
 "camera_settings" = "摄像头设置";
 "live_stream_settings" = "直播设置";
-"viewer_settings" = "查看设置";
+"viewer_settings" = "查看器设置";
 "subscription" = "订阅";
 "upgrade_to_premium" = "升级至高级版";
 "stream_via_wifi" = "通过Wi-Fi传输";
 "resolution" = "分辨率";
-"detect_objects" = "物体检测";
+"detect_objects" = "检测物体";
 "manage_detection_presets" = "管理检测预设";
 "detection_certainty_threshold" = "检测置信度阈值";
 "send_videos_on_detection" = "检测时发送视频";
-"send_videos_description" = "启用后可在任意设备上查看事件。";
+"send_videos_description" = "启用后可在任何设备上查看事件。";
 "change_encryption_password" = "更改加密密码";
 "manage_detection_schedules" = "管理检测计划";
-"manage_detection_schedules_description" = "选择何时进行物体检测。";
-"use_own_notification_server" = "使用自有通知服务器";
+"manage_detection_schedules_description" = "选择何时检测物体。";
+"use_own_notification_server" = "使用自建通知服务器";
 "use_own_notification_server_description" = "将视频发送到您自己的服务器。";
 "server_address" = "服务器地址";
-"test_own_server" = "测试服务器";
-"use_own_inference_server" = "使用自有推理服务器";
+"test_own_server" = "测试自建服务器";
+"use_own_inference_server" = "使用自建推理服务器";
 "use_own_inference_server_description" = "使用自定义服务器进行物体检测。";
 "enter_inference_server_address" = "输入服务器地址：例如 http://192.168.1.1:6667";
-"live_stream_network" = "网络直播";
+"live_stream_network" = "通过网络直播";
 "device_name" = "设备名称";
 "receive_notifications" = "接收通知";
 "receive_notifications_description" = "当摄像头捕捉到事件时接收通知。";
@@ -52,11 +45,11 @@
 "cancel" = "取消";
 "set_threshold_title" = "设置阈值";
 "set_threshold_message" = "输入1到100之间的百分比值（默认为25）。";
-"threshold_placeholder" = "阈值(1-100)";
+"threshold_placeholder" = "阈值 (1-100)";
 "invalid_threshold_title" = "无效阈值";
 "invalid_threshold_message" = "请输入1到100之间的有效值";
 "set_device_name_title" = "设置设备名称";
-"set_device_name_message" = "请输入此设备的名称。";
+"set_device_name_message" = "输入此设备的名称。";
 "device_name_placeholder" = "设备名称";
 "delete_encryption_keys_title" = "删除加密密钥";
 "delete_encryption_keys_message" = "确定要删除此设备上的所有密钥吗？";
@@ -65,9 +58,9 @@
 "get_premium_title" = "获取Clearcam高级版";
 "premium_feature_1" = "随时随地查看捕获的事件";
 "premium_feature_2" = "接收实时事件通知";
-"premium_feature_3" = "随时随地直播观看";
-"premium_feature_4" = "手机发送的所有摄像头数据端到端加密";
-"upgrade_button" = "升级至%@/月";
+"premium_feature_3" = "随时随地直播";
+"premium_feature_4" = "手机发送的所有摄像头数据均采用端到端加密。";
+"upgrade_button" = "升级至每月%@";
 "not_now" = "暂不";
 "premium_disclaimer" = "每月限制5000个片段上传和1000分钟或次数的直播观看。";
 "purchase_failed" = "购买失败";
@@ -79,7 +72,7 @@
 "set_password_message" = "输入密码以加密您的数据";
 "password_placeholder" = "密码";
 "confirm_password_placeholder" = "确认密码";
-"invalid_password_title" = "无效密码";
+"invalid_password_title" = "密码无效";
 "invalid_password_message" = "密码不匹配或为空。";
 "select_resolution_title" = "选择分辨率";
 "select_objects_preset_title" = "选择物体预设";
@@ -87,4 +80,8 @@
 "add_preset_message" = "输入新预设的名称";
 "preset_name_placeholder" = "预设名称";
 "restoring_purchases_title" = "正在恢复购买";
-"restoring_purchases_message" = "正在恢复您的购买记录，请稍候...";
+"restoring_purchases_message" = "请稍候，我们正在恢复您之前的购买...";
+"steps_text_live" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“通过网络直播”并设置安全密码和设备名称。\n4. 开始录制。";
+"steps_text_clips" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“检测时发送视频”并设置安全密码。\n4. （可选）配置检测设置和计划。\n5. 开始录制。";
+"no_live_devices" = "无在线设备\n";
+"no_video_available" = "无可用视频\n";

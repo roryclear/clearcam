@@ -171,7 +171,7 @@
             NSForegroundColorAttributeName: [UIColor labelColor],
             NSParagraphStyleAttributeName: centeredStyle
         };
-        [message appendAttributedString:[[NSAttributedString alloc] initWithString:@"No Videos Available\n\n" attributes:titleAttrs]];
+        [message appendAttributedString:[[NSAttributedString alloc] initWithString:NSLocalizedString(@"no_videos_available", "no videos available") attributes:titleAttrs]];
 
         // Left-aligned steps with hanging indent
         NSMutableParagraphStyle *stepsStyle = [[NSMutableParagraphStyle alloc] init];
@@ -187,12 +187,7 @@
             NSParagraphStyleAttributeName: stepsStyle
         };
 
-        NSString *stepsText =
-        @"1. Install Clearcam on another phone.\n"
-        "2. Upgrade to Clearcam Premium (must be using the same Apple account on both phones).\n"
-        "3. Turn on \"Send Videos on Detection\" on your other phone and choose a secure password.\n"
-        "4. (Optional) Configure your detection settings and schedule.\n"
-        "5. Start recording.\n";
+        NSString *stepsText = NSLocalizedString(@"steps_text_clips", "steps to setup clips");
 
         [message appendAttributedString:[[NSAttributedString alloc] initWithString:stepsText attributes:stepAttrs]];
 
