@@ -26,6 +26,9 @@
 @property (nonatomic, assign) NSInteger threshold; // New property for threshold
 @property (nonatomic, assign) BOOL liveStreamInternetEnabled; // New property for live stream toggle
 @property (nonatomic, strong) NSString *deviceName; // New property for device name
+@property (nonatomic, assign) BOOL useOwnInferenceServerEnabled;
+@property (nonatomic, assign) BOOL isInferenceServerSectionExpanded;
+@property (nonatomic, strong) NSString *inferenceServerAddress;
 
 @end
 
@@ -118,8 +121,19 @@
         [defaults setObject:self.notificationSchedules forKey:@"notification_schedules"];
     }
     
+    // Initialize notification server settings
     self.isnotificationServerSectionExpanded = self.useOwnServerEnabled;
     self.notificationServerAddress = [defaults stringForKey:@"own_notification_server_address"] ?: @"http://192.168.1.1:8080";
+    
+    // Initialize inference server settings
+    if ([defaults objectForKey:@"useOwnInferenceServerEnabled"] != nil) {
+        self.useOwnInferenceServerEnabled = [defaults boolForKey:@"useOwnInferenceServerEnabled"];
+    } else {
+        self.useOwnInferenceServerEnabled = NO;
+        [defaults setBool:NO forKey:@"useOwnInferenceServerEnabled"];
+    }
+    self.isInferenceServerSectionExpanded = self.useOwnInferenceServerEnabled;
+    self.inferenceServerAddress = [defaults stringForKey:@"own_inference_server_address"] ?: @"http://192.168.1.1:6667";
     
     [defaults synchronize];
     
@@ -225,6 +239,14 @@
         [defaults synchronize];
         [self showUpgradePopup];
     }
+}
+
+- (void)useOwnInferenceServerSwitchToggled:(UISwitch *)sender {
+    self.useOwnInferenceServerEnabled = sender.isOn;
+    self.isInferenceServerSectionExpanded = sender.isOn;
+    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:@"useOwnInferenceServerEnabled"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
 - (void)receiveNotifSwitchToggled:(UISwitch *)sender {
@@ -362,30 +384,6 @@
     return nil;
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (section == 0) { // Camera Settings
-        NSInteger baseRows = 9; // All settings except Receive Notifications
-        if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded) {
-            baseRows += 2;
-        }
-        if (self.isPresetsSectionExpanded) {
-            NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-            baseRows += presetKeys.count + 1;
-        }
-        return baseRows;
-    } else if (section == 1) { // Live Stream Settings
-        return 2; // Live Stream over the internet and Device name
-    } else if (section == 2) { // Viewer Settings
-        return 1; // Just Receive Notifications
-    } else if (section == 3) { // Upgrade to Premium / Subscription
-        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-        return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
-    } else if (section == 4) { // Terms and Privacy
-        return 3; // Terms of Use, Privacy Policy, Delete Encryption Keys
-    }
-    return 0;
-}
-
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"SettingsCell"];
     if (!cell) {
@@ -451,12 +449,12 @@
                 cell.userInteractionEnabled = YES;
             }
         } else {
-            NSInteger offset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
-            if (indexPath.row == 4 + offset) {
+            NSInteger presetOffset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
+            if (indexPath.row == 4 + presetOffset) {
                 cell.textLabel.text = @"Detection Certainty Threshold";
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 5 + offset) {
+            } else if (indexPath.row == 5 + presetOffset) {
                 cell.textLabel.text = @"Send Videos on Detection";
                 cell.detailTextLabel.text = @"Enable to view events on other devices from anywhere.";
                 cell.accessoryType = UITableViewCellAccessoryNone;
@@ -464,25 +462,22 @@
                 sendNotifSwitch.on = self.sendNotifEnabled;
                 [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = sendNotifSwitch;
-                
-                // Enable switch and set text color only if premium OR using own server
                 BOOL isEnabled = isPremium || self.useOwnServerEnabled;
                 sendNotifSwitch.enabled = isEnabled;
                 cell.textLabel.textColor = isEnabled ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES; // Still tappable for popup
-            } else if (indexPath.row == 6 + offset) {
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 6 + presetOffset) {
                 cell.textLabel.text = @"Change Encryption Password";
-                cell.detailTextLabel.text = @"All clips and live video will be encrypted before leaving this device.";
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 7 + offset) {
+            } else if (indexPath.row == 7 + presetOffset) {
                 cell.textLabel.text = @"Manage Detection Schedules";
                 cell.detailTextLabel.text = @"Choose when to detect objects.";
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 8 + offset) {
+            } else if (indexPath.row == 8 + presetOffset) {
                 cell.textLabel.text = @"Use Own Notification Server";
                 cell.detailTextLabel.text = @"Send videos to a server that you own.";
                 cell.accessoryType = UITableViewCellAccessoryNone;
@@ -491,15 +486,30 @@
                 [useOwnnotificationServerSwitch addTarget:self action:@selector(useOwnnotificationServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
                 cell.accessoryView = useOwnnotificationServerSwitch;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + offset) {
+            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + presetOffset) {
                 cell.textLabel.text = @"Server Address";
                 cell.detailTextLabel.text = self.notificationServerAddress;
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + offset) {
+            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + presetOffset) {
                 cell.textLabel.text = @"Test own server";
                 cell.textLabel.textColor = [UIColor systemBlueColor];
                 cell.detailTextLabel.text = nil;
                 cell.accessoryType = UITableViewCellAccessoryNone;
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 11 : 9) + presetOffset) {
+                cell.textLabel.text = @"Use Own Inference Server";
+                cell.detailTextLabel.text = @"Use a custom server for object detection.";
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *useOwnInferenceServerSwitch = [[UISwitch alloc] init];
+                useOwnInferenceServerSwitch.on = self.useOwnInferenceServerEnabled;
+                [useOwnInferenceServerSwitch addTarget:self action:@selector(useOwnInferenceServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = useOwnInferenceServerSwitch;
+                cell.userInteractionEnabled = YES;
+            } else if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded && indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 12 : 10) + presetOffset) {
+                cell.textLabel.text = @"Server Address";
+                cell.detailTextLabel.text = self.inferenceServerAddress ?: @"Enter server address: e.g http://192.168.1.1:6667";
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.userInteractionEnabled = YES;
             }
         }
@@ -530,9 +540,9 @@
             receiveNotifSwitch.on = isPremium ? self.receiveNotifEnabled : NO;
             [receiveNotifSwitch addTarget:self action:@selector(receiveNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = receiveNotifSwitch;
-            receiveNotifSwitch.enabled = isPremium; // Switch disabled for non-premium
+            receiveNotifSwitch.enabled = isPremium;
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
-            cell.userInteractionEnabled = YES; // Cell remains tappable regardless of premium status
+            cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 3) { // Upgrade to Premium / Subscription
         if (!isPremium && indexPath.row == 0) {
@@ -571,6 +581,67 @@
     }
 
     return cell;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    if (section == 0) { // Camera Settings
+        NSInteger baseRows = 9; // Up to "Use Own Notification Server"
+        if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded) {
+            baseRows += 2; // Notification server address and test button
+        }
+        if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded) {
+            baseRows += 1; // Inference server address
+        }
+        baseRows += 1; // "Use Own Inference Server" toggle
+        if (self.isPresetsSectionExpanded) {
+            NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
+            baseRows += presetKeys.count + 1;
+        }
+        return baseRows;
+    } else if (section == 1) { // Live Stream Settings
+        return 2; // Live Stream over the internet and Device name
+    } else if (section == 2) { // Viewer Settings
+        return 1; // Just Receive Notifications
+    } else if (section == 3) { // Upgrade to Premium / Subscription
+        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+        return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
+    } else if (section == 4) { // Terms and Privacy
+        return 3; // Terms of Use, Privacy Policy, Delete Encryption Keys
+    }
+    return 0;
+}
+
+- (void)showInferenceServerAddressInputDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Enter Inference Server Address"
+                                                                   message:@"Please enter the address of your inference server."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Server Address";
+        textField.text = self.inferenceServerAddress;
+    }];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"Save"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *address = alert.textFields.firstObject.text;
+        if (address.length > 0) {
+            self.inferenceServerAddress = address;
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setObject:address forKey:@"own_inference_server_address"];
+            [defaults synchronize];
+            [self.tableView reloadData];
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Cancel"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:saveAction];
+    [alert addAction:cancelAction];
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showThresholdInputDialog {
@@ -738,6 +809,8 @@
                 [self shownotificationServerAddressInputDialog];
             } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + offset) {
                 [self testnotificationServer];
+            } else if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded && indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 12 : 10) + offset) {
+                [self showInferenceServerAddressInputDialog];
             }
         }
     } else if (indexPath.section == 1) { // Live Stream Settings
