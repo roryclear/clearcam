@@ -91,14 +91,14 @@
     
     // Initialize view controllers for tabs
     self.eventsViewController = [[UIViewController alloc] init];
-    self.eventsViewController.title = @"Events";
-    self.eventsViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Events"
+    self.eventsViewController.title =  NSLocalizedString(@"events", @"Title for events screen");
+    self.eventsViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:NSLocalizedString(@"events", @"Title for events screen")
                                                                           image:[UIImage systemImageNamed:@"photo.on.rectangle"]
                                                                             tag:0];
 
     self.liveViewController = [[LiveViewController alloc] init];
     self.liveViewController.title = @"Live Cameras";
-    self.liveViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Live"
+    self.liveViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:NSLocalizedString(@"live", @"Title for live screen")
                                                                         image:[UIImage systemImageNamed:@"video"]
                                                                           tag:1];
 
