@@ -37,7 +37,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.title = @"Settings";
+    self.title = NSLocalizedString(@"settings", @"Title for settings screen");
     [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.tableView reloadData];
