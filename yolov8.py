@@ -322,6 +322,70 @@ def get_weights_location(yolo_variant: str) -> Path:
   if not f32_weights.exists(): convert_f16_safetensor_to_f32(weights_location, f32_weights)
   return f32_weights
 
+import struct
+from time import monotonic
+from uvicorn import Server, Config
+import asyncio
+from starlette.types import Receive, Send, Scope
+from starlette.responses import Response
+
+@TinyJit
+def do_inf(image):
+    image = image.reshape(1, 640, 640, 3)
+    image = image[..., ::-1].permute(0, 3, 1, 2)
+    image = image / 255.0
+    predictions = yolo_infer(image)
+    return predictions.flatten()
+
+# Model initialization (same as before)
+yolo_variant = 'n'
+depth, width, ratio = get_variant_multiples(yolo_variant)
+yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+state_dict = safe_load(get_weights_location(yolo_variant))
+load_state_dict(yolo_infer, state_dict)
+
+class ASGIApp:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["path"] != "/yolo" or scope["method"] != "POST":
+            await send({
+                "type": "http.response.start",
+                "status": 404,
+                "headers": [(b"content-type", b"text/plain")],
+            })
+            await send({"type": "http.response.body", "body": b"Not Found"})
+            return
+
+        # Accumulate request body
+        body = b""
+        more_body = True
+        while more_body:
+            message = await receive()
+            body += message.get("body", b"")
+            more_body = message.get("more_body", False)
+
+        # Inference
+        im = Tensor(body, dtype=dtypes.uint8)
+        pred = do_inf(im).numpy()
+        response_data = struct.pack('<1800f', *pred)
+
+        # Send response
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [
+                (b"content-type", b"application/octet-stream"),
+                (b"content-length", str(len(response_data)).encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": response_data})
+
+if __name__ == "__main__":
+    app = ASGIApp()
+    config = Config(app=app, host="0.0.0.0", port=6667, workers=1)
+    server = Server(config)
+    asyncio.run(server.serve())
+
+''' todo, slow with no external deps for now
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import struct
 
@@ -365,3 +429,4 @@ if __name__ == '__main__':
     httpd = HTTPServer(server_address, YOLORequestHandler)
     print("Serving YOLO on http://0.0.0.0:6667")
     httpd.serve_forever()
+'''
