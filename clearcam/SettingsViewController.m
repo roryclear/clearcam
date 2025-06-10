@@ -18,7 +18,6 @@
 @property (nonatomic, assign) BOOL sendNotifEnabled;
 @property (nonatomic, assign) BOOL receiveNotifEnabled; // New property for receiving notifications
 @property (nonatomic, assign) BOOL useOwnServerEnabled;
-@property (nonatomic, assign) BOOL isnotificationServerSectionExpanded; // Track if notification server section is expanded
 @property (nonatomic, strong) NSString *notificationServerAddress; // Store the notification server address
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *notificationSchedules; // Array to store notification schedules
 @property (nonatomic, assign) BOOL streamViaWiFiEnabled;
@@ -27,7 +26,6 @@
 @property (nonatomic, assign) BOOL liveStreamInternetEnabled; // New property for live stream toggle
 @property (nonatomic, strong) NSString *deviceName; // New property for device name
 @property (nonatomic, assign) BOOL useOwnInferenceServerEnabled;
-@property (nonatomic, assign) BOOL isInferenceServerSectionExpanded;
 @property (nonatomic, strong) NSString *inferenceServerAddress;
 
 @end
@@ -122,7 +120,6 @@
     }
     
     // Initialize notification server settings
-    self.isnotificationServerSectionExpanded = self.useOwnServerEnabled;
     self.notificationServerAddress = [defaults stringForKey:@"own_notification_server_address"] ?: @"http://192.168.1.1:8080";
     
     // Initialize inference server settings
@@ -132,9 +129,7 @@
         self.useOwnInferenceServerEnabled = NO;
         [defaults setBool:NO forKey:@"useOwnInferenceServerEnabled"];
     }
-    self.isInferenceServerSectionExpanded = self.useOwnInferenceServerEnabled;
     self.inferenceServerAddress = [defaults stringForKey:@"own_inference_server_address"] ?: @"http://192.168.1.1:6667";
-    
     [defaults synchronize];
     
     // Create table view
@@ -243,9 +238,13 @@
 
 - (void)useOwnInferenceServerSwitchToggled:(UISwitch *)sender {
     self.useOwnInferenceServerEnabled = sender.isOn;
-    self.isInferenceServerSectionExpanded = sender.isOn;
     [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:@"useOwnInferenceServerEnabled"];
     [[NSUserDefaults standardUserDefaults] synchronize];
+    
+    if (sender.isOn) {
+        [self showInferenceServerAddressInputDialog];
+    }
+    
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
@@ -403,117 +402,101 @@
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
     if (indexPath.section == 0) { // Camera Settings
-        if (indexPath.row == 0) {
-            cell.textLabel.text = NSLocalizedString(@"stream_via_wifi", @"Label for stream via Wi-Fi setting");
-            NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
-            cell.detailTextLabel.text = ipAddress && ipAddress.length > 0 ?
-                                       [NSString stringWithFormat:@"http://%@", ipAddress] :
-                                       NSLocalizedString(@"waiting_for_ip", @"Placeholder when IP address is not available");
-            cell.accessoryType = UITableViewCellAccessoryNone;
-            UISwitch *wifiSwitch = [[UISwitch alloc] init];
-            wifiSwitch.on = self.streamViaWiFiEnabled;
-            [wifiSwitch addTarget:self action:@selector(streamViaWiFiSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-            cell.accessoryView = wifiSwitch;
-            cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 1) {
-            cell.textLabel.text = NSLocalizedString(@"resolution", @"Label for resolution setting");
-            cell.detailTextLabel.text = self.selectedResolution;
-            cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 2) {
-            cell.textLabel.text = NSLocalizedString(@"detect_objects", @"Label for detect objects setting");
-            cell.detailTextLabel.text = self.selectedPresetKey;
-            cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 3) {
-            cell.textLabel.text = NSLocalizedString(@"manage_detection_presets", @"Label for manage detection presets setting");
-            cell.detailTextLabel.text = nil;
-            cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
-            cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 4 && !self.isPresetsSectionExpanded) {
-            cell.textLabel.text = NSLocalizedString(@"detection_certainty_threshold", @"Label for detection certainty threshold setting");
-            cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
-            cell.userInteractionEnabled = YES;
-        } else if (self.isPresetsSectionExpanded && indexPath.row >= 4 && indexPath.row < 4 + [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1) {
-            NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-            if (indexPath.row - 4 < presetKeys.count) {
-                NSString *presetKey = presetKeys[indexPath.row - 4];
-                cell.textLabel.text = presetKey;
-                cell.detailTextLabel.text = nil;
-                cell.imageView.image = nil;
+            if (indexPath.row == 0) {
+                cell.textLabel.text = NSLocalizedString(@"stream_via_wifi", @"Label for stream via Wi-Fi setting");
+                NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
+                cell.detailTextLabel.text = ipAddress && ipAddress.length > 0 ?
+                                           [NSString stringWithFormat:@"http://%@", ipAddress] :
+                                           NSLocalizedString(@"waiting_for_ip", @"Placeholder when IP address is not available");
+                cell.accessoryType = UITableViewCellAccessoryNone;
+                UISwitch *wifiSwitch = [[UISwitch alloc] init];
+                wifiSwitch.on = self.streamViaWiFiEnabled;
+                [wifiSwitch addTarget:self action:@selector(streamViaWiFiSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                cell.accessoryView = wifiSwitch;
                 cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 1) {
+                cell.textLabel.text = NSLocalizedString(@"resolution", @"Label for resolution setting");
+                cell.detailTextLabel.text = self.selectedResolution;
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 2) {
+                cell.textLabel.text = NSLocalizedString(@"detect_objects", @"Label for detect objects setting");
+                cell.detailTextLabel.text = self.selectedPresetKey;
+                cell.userInteractionEnabled = YES;
+            } else if (indexPath.row == 3) {
+                cell.textLabel.text = NSLocalizedString(@"manage_detection_presets", @"Label for manage detection presets setting");
+                cell.detailTextLabel.text = nil;
+                cell.accessoryType = self.isPresetsSectionExpanded ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
+                cell.userInteractionEnabled = YES;
+            } else if (self.isPresetsSectionExpanded && indexPath.row >= 4 && indexPath.row < 4 + [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1) {
+                NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
+                if (indexPath.row - 4 < presetKeys.count) {
+                    NSString *presetKey = presetKeys[indexPath.row - 4];
+                    cell.textLabel.text = presetKey;
+                    cell.detailTextLabel.text = nil;
+                    cell.imageView.image = nil;
+                    cell.userInteractionEnabled = YES;
+                } else {
+                    cell.textLabel.text = nil;
+                    cell.detailTextLabel.text = nil;
+                    cell.imageView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
+                    cell.imageView.tintColor = [UIColor systemGreenColor];
+                    cell.accessoryType = UITableViewCellAccessoryNone;
+                    cell.userInteractionEnabled = YES;
+                }
             } else {
-                cell.textLabel.text = nil;
-                cell.detailTextLabel.text = nil;
-                cell.imageView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
-                cell.imageView.tintColor = [UIColor systemGreenColor];
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                cell.userInteractionEnabled = YES;
+                NSInteger presetOffset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
+                if (indexPath.row == 4 + presetOffset) {
+                    cell.textLabel.text = NSLocalizedString(@"detection_certainty_threshold", @"Label for detection certainty threshold setting");
+                    cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
+                    cell.userInteractionEnabled = YES;
+                } else if (indexPath.row == 5 + presetOffset) {
+                    cell.textLabel.text = NSLocalizedString(@"send_videos_on_detection", @"Label for send videos on detection setting");
+                    cell.detailTextLabel.text = NSLocalizedString(@"send_videos_description", @"Description for send videos on detection setting");
+                    cell.accessoryType = UITableViewCellAccessoryNone;
+                    UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
+                    sendNotifSwitch.on = self.sendNotifEnabled;
+                    [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                    cell.accessoryView = sendNotifSwitch;
+                    BOOL isEnabled = isPremium || self.useOwnServerEnabled;
+                    sendNotifSwitch.enabled = isEnabled;
+                    cell.textLabel.textColor = isEnabled ? [UIColor labelColor] : [UIColor grayColor];
+                    cell.userInteractionEnabled = YES;
+                } else if (indexPath.row == 6 + presetOffset) {
+                    cell.textLabel.text = NSLocalizedString(@"change_encryption_password", @"Label for change encryption password setting");
+                    cell.detailTextLabel.text = nil;
+                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                    cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
+                    cell.userInteractionEnabled = YES;
+                } else if (indexPath.row == 7 + presetOffset) {
+                    cell.textLabel.text = NSLocalizedString(@"manage_detection_schedules", @"Label for manage detection schedules setting");
+                    cell.detailTextLabel.text = NSLocalizedString(@"manage_detection_schedules_description", @"Description for manage detection schedules setting");
+                    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                    cell.userInteractionEnabled = YES;
+                } else if (indexPath.row == 8 + presetOffset) {
+                    cell.textLabel.text = NSLocalizedString(@"use_own_notification_server", @"Label for use own notification server setting");
+                    cell.detailTextLabel.text = self.useOwnServerEnabled ?
+                        (self.notificationServerAddress ?: NSLocalizedString(@"enter_notification_server_address", @"Placeholder for notification server address")) :
+                        NSLocalizedString(@"use_own_notification_server_description", @"Description for use own notification server setting");
+                    cell.accessoryType = UITableViewCellAccessoryNone;
+                    UISwitch *useOwnnotificationServerSwitch = [[UISwitch alloc] init];
+                    useOwnnotificationServerSwitch.on = self.useOwnServerEnabled;
+                    [useOwnnotificationServerSwitch addTarget:self action:@selector(useOwnnotificationServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                    cell.accessoryView = useOwnnotificationServerSwitch;
+                    cell.userInteractionEnabled = YES;
+                } else if (indexPath.row == 9 + presetOffset) {
+                    cell.textLabel.text = NSLocalizedString(@"use_own_inference_server", @"Label for use own inference server setting");
+                    cell.detailTextLabel.text = self.useOwnInferenceServerEnabled ?
+                        (self.inferenceServerAddress ?: NSLocalizedString(@"enter_inference_server_address", @"Placeholder for inference server address")) :
+                        NSLocalizedString(@"use_own_inference_server_description", @"Description for use own inference server setting");
+                    cell.accessoryType = UITableViewCellAccessoryNone;
+                    UISwitch *useOwnInferenceServerSwitch = [[UISwitch alloc] init];
+                    useOwnInferenceServerSwitch.on = self.useOwnInferenceServerEnabled;
+                    [useOwnInferenceServerSwitch addTarget:self action:@selector(useOwnInferenceServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+                    cell.accessoryView = useOwnInferenceServerSwitch;
+                    cell.userInteractionEnabled = YES;
+                }
             }
-        } else {
-            NSInteger presetOffset = self.isPresetsSectionExpanded ? [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys].count + 1 : 0;
-            if (indexPath.row == 4 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"detection_certainty_threshold", @"Label for detection certainty threshold setting");
-                cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%%", (long)self.threshold];
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 5 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"send_videos_on_detection", @"Label for send videos on detection setting");
-                cell.detailTextLabel.text = NSLocalizedString(@"send_videos_description", @"Description for send videos on detection setting");
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *sendNotifSwitch = [[UISwitch alloc] init];
-                sendNotifSwitch.on = self.sendNotifEnabled;
-                [sendNotifSwitch addTarget:self action:@selector(sendNotifSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = sendNotifSwitch;
-                BOOL isEnabled = isPremium || self.useOwnServerEnabled;
-                sendNotifSwitch.enabled = isEnabled;
-                cell.textLabel.textColor = isEnabled ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 6 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"change_encryption_password", @"Label for change encryption password setting");
-                cell.detailTextLabel.text = nil;
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 7 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"manage_detection_schedules", @"Label for manage detection schedules setting");
-                cell.detailTextLabel.text = NSLocalizedString(@"manage_detection_schedules_description", @"Description for manage detection schedules setting");
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == 8 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"use_own_notification_server", @"Label for use own notification server setting");
-                cell.detailTextLabel.text = NSLocalizedString(@"use_own_notification_server_description", @"Description for use own notification server setting");
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *useOwnnotificationServerSwitch = [[UISwitch alloc] init];
-                useOwnnotificationServerSwitch.on = self.useOwnServerEnabled;
-                [useOwnnotificationServerSwitch addTarget:self action:@selector(useOwnnotificationServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = useOwnnotificationServerSwitch;
-                cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"server_address", @"Label for server address setting");
-                cell.detailTextLabel.text = self.notificationServerAddress;
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.userInteractionEnabled = YES;
-            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"test_own_server", @"Label for test own server button");
-                cell.textLabel.textColor = [UIColor systemBlueColor];
-                cell.detailTextLabel.text = nil;
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                cell.userInteractionEnabled = YES;
-            } else if (indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 11 : 9) + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"use_own_inference_server", @"Label for use own inference server setting");
-                cell.detailTextLabel.text = NSLocalizedString(@"use_own_inference_server_description", @"Description for use own inference server setting");
-                cell.accessoryType = UITableViewCellAccessoryNone;
-                UISwitch *useOwnInferenceServerSwitch = [[UISwitch alloc] init];
-                useOwnInferenceServerSwitch.on = self.useOwnInferenceServerEnabled;
-                [useOwnInferenceServerSwitch addTarget:self action:@selector(useOwnInferenceServerSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-                cell.accessoryView = useOwnInferenceServerSwitch;
-                cell.userInteractionEnabled = YES;
-            } else if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded && indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 12 : 10) + presetOffset) {
-                cell.textLabel.text = NSLocalizedString(@"server_address", @"Label for server address setting");
-                cell.detailTextLabel.text = self.inferenceServerAddress ?: NSLocalizedString(@"enter_inference_server_address", @"Placeholder for inference server address");
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.userInteractionEnabled = YES;
-            }
-        }
-    } else if (indexPath.section == 1) { // Live Stream Settings
+        } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = NSLocalizedString(@"live_stream_network", @"Label for live stream over network setting");
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -585,17 +568,11 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) { // Camera Settings
-        NSInteger baseRows = 9; // Up to "Use Own Notification Server"
-        if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded) {
-            baseRows += 2; // Notification server address and test button
-        }
-        if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded) {
-            baseRows += 1; // Inference server address
-        }
-        baseRows += 1; // "Use Own Inference Server" toggle
+        NSInteger baseRows = 10; // Up to "Use Own Inference Server"
+        // Removed notification and inference server address rows
         if (self.isPresetsSectionExpanded) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
-            baseRows += presetKeys.count + 1;
+            baseRows += presetKeys.count + 1; // Preset rows + "Add Preset"
         }
         return baseRows;
     } else if (section == 1) { // Live Stream Settings
@@ -805,12 +782,8 @@
                 [self.navigationController pushViewController:scheduleVC animated:YES];
             } else if (indexPath.row == 8 + offset) {
                 // Use Own Notification Server - handled by switch
-            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 9 + offset) {
-                [self shownotificationServerAddressInputDialog];
-            } else if (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded && indexPath.row == 10 + offset) {
-                [self testnotificationServer];
-            } else if (self.useOwnInferenceServerEnabled && self.isInferenceServerSectionExpanded && indexPath.row == (self.useOwnServerEnabled && self.isnotificationServerSectionExpanded ? 12 : 10) + offset) {
-                [self showInferenceServerAddressInputDialog];
+            } else if (indexPath.row == 9 + offset) {
+                // Use Own Inference Server - handled by switch
             }
         }
     } else if (indexPath.section == 1) { // Live Stream Settings
@@ -1039,7 +1012,6 @@
 
 - (void)useOwnnotificationServerSwitchToggled:(UISwitch *)sender {
     self.useOwnServerEnabled = sender.on;
-    self.isnotificationServerSectionExpanded = sender.on;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.useOwnServerEnabled forKey:@"use_own_server_enabled"];
     [defaults synchronize];
@@ -1052,6 +1024,10 @@
         self.sendNotifEnabled = NO;
         [defaults setBool:NO forKey:@"send_notif_enabled"];
         [defaults synchronize];
+    }
+    
+    if (sender.on) {
+        [self shownotificationServerAddressInputDialog];
     }
     
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationAutomatic];
