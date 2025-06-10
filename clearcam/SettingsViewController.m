@@ -42,7 +42,7 @@
         });
     }];
     
-    UIBarButtonItem *helpButton = [[UIBarButtonItem alloc] initWithTitle:@"Docs" style:UIBarButtonItemStylePlain target:self action:@selector(helpButtonTapped)];
+    UIBarButtonItem *helpButton = [[UIBarButtonItem alloc] initWithTitle:NSLocalizedString(@"docs", nil) style:UIBarButtonItemStylePlain target:self action:@selector(helpButtonTapped)];
     [helpButton setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor systemBlueColor]}
                               forState:UIControlStateNormal];
     self.navigationItem.rightBarButtonItem = helpButton;
@@ -392,7 +392,7 @@
     } else if (section == 2) {
         return NSLocalizedString(@"viewer_settings", @"Header for viewer settings section");
     } else if (section == 3) {
-        return NSLocalizedString(@"advanced_settings", @"Header for advanced settings section");
+        return NSLocalizedString(@"experimental_features", @"Header for advanced settings section");
     } else if (section == 4) {
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         return isSubscribed ? NSLocalizedString(@"subscription", @"Header for subscription section when subscribed") : NSLocalizedString(@"upgrade_to_premium", @"Header for subscription section when not subscribed");

@@ -89,7 +89,8 @@
 "delete" = "删除";
 "cancel" = "取消";
 "online" = "在线";
-"advanced_settings" = "高级设置";
+"experimental_features" = "实验性功能";
+"docs" = "文档";
 
 "person" = "人";
 "bicycle" = "自行车";
