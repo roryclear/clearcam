@@ -30,7 +30,7 @@ Use an external computer to perform object detection over Wi-Fi.
 - tinygrad
 - uvicorn
 - Shared Wi-Fi network between your phone and computer
-1. run yolov8.py on your computer
+1. run [yolov8.py](https://github.com/roryclear/clearcam/blob/main/yolov8.py) on your computer
 2. optional: use "nohup python yolo.py &" to prevent sleeping)
 3. optional: add s, m, l, x to command to change yolov8 model size from nano.
 4. on your phone, turn on "Use Own Inference Server"
