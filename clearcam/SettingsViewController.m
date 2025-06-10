@@ -41,6 +41,12 @@
             [self.tableView reloadData];
         });
     }];
+    
+    UIBarButtonItem *helpButton = [[UIBarButtonItem alloc] initWithTitle:@"Docs" style:UIBarButtonItemStylePlain target:self action:@selector(helpButtonTapped)];
+    [helpButton setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor systemBlueColor]}
+                              forState:UIControlStateNormal];
+    self.navigationItem.rightBarButtonItem = helpButton;
+    
     // Register for subscription status change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(subscriptionStatusDidChange:)
@@ -166,6 +172,17 @@
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [[NSUserDefaults standardUserDefaults] removeObserver:self forKeyPath:@"DeviceIPAddress"];
+}
+
+- (void)helpButtonTapped {
+    NSURL *helpURL = [NSURL URLWithString:@"https://github.com/roryclear/clearcam/?tab=readme-ov-file#clearcam"];
+    if ([[UIApplication sharedApplication] canOpenURL:helpURL]) {
+        if (@available(iOS 10.0, *)) {
+            [[UIApplication sharedApplication] openURL:helpURL options:@{} completionHandler:nil];
+        } else {
+            [[UIApplication sharedApplication] openURL:helpURL];
+        }
+    }
 }
 
 - (void)updateIPAddressDisplay {
