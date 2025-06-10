@@ -589,7 +589,7 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) { // Camera Settings
-        NSInteger baseRows = 7; // Up to "Manage Detection Schedules"
+        NSInteger baseRows = 8; // Up to "Manage Detection Schedules"
         if (self.isPresetsSectionExpanded) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
             baseRows += presetKeys.count + 1; // Preset rows + "Add Preset"
