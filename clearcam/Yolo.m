@@ -326,7 +326,7 @@ UInt8 *rgbData;
 }
 
 - (NSArray *)sendYOLORequest {
-    NSURL *url = [NSURL URLWithString:[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"]];
+    NSURL *url = [NSURL URLWithString: [[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:@"yolo"]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"POST"];
     [request setHTTPBody:[NSData dataWithBytesNoCopy:self.rgbData length:self.yolo_res * self.yolo_res * 3 freeWhenDone:NO]];

@@ -338,7 +338,7 @@ def do_inf(image):
     return predictions.flatten()
 
 # Model initialization (same as before)
-yolo_variant = 'n'
+yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
 depth, width, ratio = get_variant_multiples(yolo_variant)
 yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
