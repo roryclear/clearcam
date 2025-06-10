@@ -84,8 +84,9 @@
 "steps_text_live" = "1. Install Clearcam on another phone.\n2. Upgrade to Clearcam Premium (must be using the same Apple account on both phones).\n3. Turn on \"Live Stream over Network\" on your other phone and choose a secure password and device name.\n4. Start recording.";
 "steps_text_clips" = "1. Install Clearcam on another phone.\n2. Upgrade to Clearcam Premium (must be using the same Apple account on both phones).\n3. Turn on \"Send Videos on Detection\" on your other phone and choose a secure password.\n4. (Optional) Configure your detection settings and schedule.\n5. Start recording.\n";
 "no_live_devices" = "No Live Devices\n";
-"no_video_available" = "No Videos Available\n";
+"no_videos_available" = "No Videos Available\n";
 "share" = "Share";
 "delete" = "Delete";
 "cancel" = "Cancel";
 "online" = "Online";
+"advanced_settings" = "Advanced Settings";

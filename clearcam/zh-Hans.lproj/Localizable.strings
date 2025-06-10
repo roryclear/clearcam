@@ -84,11 +84,12 @@
 "steps_text_live" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“通过网络直播”并设置安全密码和设备名称。\n4. 开始录制。";
 "steps_text_clips" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“检测时发送视频”并设置安全密码。\n4. （可选）配置检测设置和计划。\n5. 开始录制。";
 "no_live_devices" = "无在线设备\n";
-"no_video_available" = "无可用视频\n";
+"no_videos_available" = "无可用视频\n";
 "share" = "分享";
 "delete" = "删除";
 "cancel" = "取消";
 "online" = "在线";
+"advanced_settings" = "高级设置";
 
 "person" = "人";
 "bicycle" = "自行车";
