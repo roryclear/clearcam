@@ -331,11 +331,11 @@ from starlette.responses import Response
 
 @TinyJit
 def do_inf(image):
-    image = image.reshape(1, 640, 640, 3)
-    image = image[..., ::-1].permute(0, 3, 1, 2)
-    image = image / 255.0
-    predictions = yolo_infer(image)
-    return predictions.flatten()
+  image = image.reshape(1, 640, 640, 3)
+  image = image[..., ::-1].permute(0, 3, 1, 2)
+  image = image / 255.0
+  predictions = yolo_infer(image)
+  return predictions.flatten()
 
 # Model initialization (same as before)
 yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
@@ -387,18 +387,18 @@ class ASGIApp:
 
     async def handle_diff(self, body: bytes, send: Send):
       if self.prev_image is None:
-          await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"No base image")
-          return
+        await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"No base image")
+        return
 
       img = bytearray(self.prev_image)  # Copy previous image
 
       i = 0
       while i + 5 <= len(body):
-          index = struct.unpack_from("<i", body, i)[0]
-          value = body[i + 4]
-          if 0 <= index < len(img):
-              img[index] = value
-          i += 5
+        index = struct.unpack_from("<i", body, i)[0]
+        value = body[i + 4]
+        if 0 <= index < len(img):
+            img[index] = value
+        i += 5
 
       # Run YOLO on reconstructed image
       im = Tensor(bytes(img), dtype=dtypes.uint8)
