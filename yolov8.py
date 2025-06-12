@@ -376,60 +376,60 @@ class ASGIApp:
     else:
         await self.send_not_found(send)
 
-    async def handle_yolo(self, body: bytes, send: Send):
-      im = Tensor(body, dtype=dtypes.uint8)
-      pred = do_inf(im).numpy()
-      response_data = struct.pack('<1800f', *pred)
-      await self.send_response(send, response_data)
+  async def handle_yolo(self, body: bytes, send: Send):
+    im = Tensor(body, dtype=dtypes.uint8)
+    pred = do_inf(im).numpy()
+    response_data = struct.pack('<1800f', *pred)
+    await self.send_response(send, response_data)
 
-      # Save this full image for future diffs
-      self.prev_image = bytearray(body)
+    # Save this full image for future diffs
+    self.prev_image = bytearray(body)
 
-    async def handle_diff(self, body: bytes, send: Send):
-      if self.prev_image is None:
-        await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"No base image")
-        return
+  async def handle_diff(self, body: bytes, send: Send):
+    if self.prev_image is None:
+      await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"No base image")
+      return
 
-      img = bytearray(self.prev_image)  # Copy previous image
+    img = bytearray(self.prev_image)  # Copy previous image
 
-      i = 0
-      while i + 5 <= len(body):
-        index = struct.unpack_from("<i", body, i)[0]
-        value = body[i + 4]
-        if 0 <= index < len(img):
-            img[index] = value
-        i += 5
+    i = 0
+    while i + 5 <= len(body):
+      index = struct.unpack_from("<i", body, i)[0]
+      value = body[i + 4]
+      if 0 <= index < len(img):
+          img[index] = value
+      i += 5
 
-      # Run YOLO on reconstructed image
-      im = Tensor(bytes(img), dtype=dtypes.uint8)
-      pred = do_inf(im).numpy()
-      response_data = struct.pack('<1800f', *pred)
-      await self.send_response(send, response_data)
+    # Run YOLO on reconstructed image
+    im = Tensor(bytes(img), dtype=dtypes.uint8)
+    pred = do_inf(im).numpy()
+    response_data = struct.pack('<1800f', *pred)
+    await self.send_response(send, response_data)
 
-      # Update stored image
-      self.prev_image = img
+    # Update stored image
+    self.prev_image = img
 
-    async def send_response(self, send: Send, body: bytes, status: int = 200,
-                          content_type: bytes = b"application/octet-stream",
-                          message: Optional[bytes] = None):
-      headers = [
-          (b"content-type", content_type),
-          (b"content-length", str(len(body)).encode())
-      ]
-      await send({
-          "type": "http.response.start",
-          "status": status,
-          "headers": headers,
-      })
-      await send({"type": "http.response.body", "body": message or body})
+  async def send_response(self, send: Send, body: bytes, status: int = 200,
+                        content_type: bytes = b"application/octet-stream",
+                        message: Optional[bytes] = None):
+    headers = [
+        (b"content-type", content_type),
+        (b"content-length", str(len(body)).encode())
+    ]
+    await send({
+        "type": "http.response.start",
+        "status": status,
+        "headers": headers,
+    })
+    await send({"type": "http.response.body", "body": message or body})
 
-    async def send_not_found(self, send: Send):
-      await send({
-          "type": "http.response.start",
-          "status": 404,
-          "headers": [(b"content-type", b"text/plain")],
-      })
-      await send({"type": "http.response.body", "body": b"Not Found"})
+  async def send_not_found(self, send: Send):
+    await send({
+        "type": "http.response.start",
+        "status": 404,
+        "headers": [(b"content-type", b"text/plain")],
+    })
+    await send({"type": "http.response.body", "body": b"Not Found"})
 
 if __name__ == "__main__":
     app = ASGIApp()
