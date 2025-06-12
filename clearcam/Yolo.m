@@ -277,16 +277,15 @@ UInt8 *last_rgbData; //for diff
         for (int i = 0; i < total_bytes; i++) {
             int delta = (int)curr[i] - (int)prev[i];
             if (delta > 10 || delta < -10) {
-                prev[i] = curr[i];  // Update reference
+                prev[i] = curr[i];
                 diff_count++;
                 int32_t index = i;
                 *(int32_t *)(diff_buffer + diff_offset) = index;
                 diff_offset += 4;
                 diff_buffer[diff_offset++] = curr[i];
 
-                if (diff_count > diff_limit) {
-                    // Abort early: too much change
-                    memcpy(prev, curr, total_bytes);  // full update
+                if (diff_count >= diff_limit) {
+                    memcpy(prev, curr, total_bytes);
                     NSArray *yoloResults = [self sendYOLORequest];
                     if (yoloResults.count > 0) {
                         free(diff_buffer);
@@ -296,13 +295,9 @@ UInt8 *last_rgbData; //for diff
                 }
             }
         }
-        if (diff_count <= diff_limit) {
-            NSArray *yoloResults = [self sendYOLODiffRequestWithData:diff_buffer length:diff_offset];
-            free(diff_buffer);
-            if (yoloResults.count > 0) return yoloResults;
-        } else {
-            free(diff_buffer);  // always free!
-        }
+        NSArray *yoloResults = [self sendYOLODiffRequestWithData:diff_buffer length:diff_offset];
+        free(diff_buffer);
+        if (yoloResults.count > 0) return yoloResults;
     }
 
     id<MTLBuffer> buffer = self.buffers[self.input_buffer];
