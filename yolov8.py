@@ -347,34 +347,34 @@ load_state_dict(yolo_infer, state_dict)
 from typing import Optional
 
 class ASGIApp:
-    def __init__(self, yolo_res=640):
-        self.yolo_res = yolo_res
-        self.prev_image: Optional[bytearray] = None  # Mutable buffer to hold previous image
+  def __init__(self, yolo_res=640):
+    self.yolo_res = yolo_res
+    self.prev_image: Optional[bytearray] = None  # Mutable buffer to hold previous image
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        path = scope.get("path")
-        method = scope.get("method")
+  async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    path = scope.get("path")
+    method = scope.get("method")
 
-        if method != "POST":
-            await self.send_not_found(send)
-            return
+    if method != "POST":
+        await self.send_not_found(send)
+        return
 
-        # Read full request body
-        body = b""
-        more_body = True
-        while more_body:
-            message = await receive()
-            body += message.get("body", b"")
-            more_body = message.get("more_body", False)
+    # Read full request body
+    body = b""
+    more_body = True
+    while more_body:
+        message = await receive()
+        body += message.get("body", b"")
+        more_body = message.get("more_body", False)
 
-        if path == "/yolo":
-            await self.handle_yolo(body, send)
+    if path == "/yolo":
+        await self.handle_yolo(body, send)
 
-        elif path == "/diff":
-            await self.handle_diff(body, send)
+    elif path == "/diff":
+        await self.handle_diff(body, send)
 
-        else:
-            await self.send_not_found(send)
+    else:
+        await self.send_not_found(send)
 
     async def handle_yolo(self, body: bytes, send: Send):
       im = Tensor(body, dtype=dtypes.uint8)
