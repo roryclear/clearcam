@@ -266,14 +266,11 @@ UInt8 *last_rgbData; //for diff
     CFRelease(rawData);
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"useOwnInferenceServerEnabled"]) {
-        //find diff with last and current? todo
         int total_bytes = self.yolo_res * self.yolo_res * 3;
         int diff_count = 0;
         int diff_limit = total_bytes / 10;  // 10%
-
-        uint8_t *diff_buffer = malloc(total_bytes * 5); // worst case
+        uint8_t *diff_buffer = malloc(total_bytes);
         int diff_offset = 0;
-
         uint8_t *curr = self.rgbData;
         uint8_t *prev = self.last_rgbData;
 
@@ -291,18 +288,21 @@ UInt8 *last_rgbData; //for diff
                     // Abort early: too much change
                     memcpy(prev, curr, total_bytes);  // full update
                     NSArray *yoloResults = [self sendYOLORequest];
-                    free(diff_buffer);
-                    if (yoloResults.count > 0) return yoloResults;
-                    return nil;
+                    if (yoloResults.count > 0) {
+                        free(diff_buffer);
+                        return yoloResults;
+                    }
+                    break;
                 }
             }
         }
-
-        float diff_percent = 100.0f * diff_count / total_bytes;
-        NSArray *yoloResults = [self sendYOLODiffRequestWithData:diff_buffer length:diff_offset];
-
-        free(diff_buffer);
-        if (yoloResults.count > 0) return yoloResults;
+        if (diff_count <= diff_limit) {
+            NSArray *yoloResults = [self sendYOLODiffRequestWithData:diff_buffer length:diff_offset];
+            free(diff_buffer);
+            if (yoloResults.count > 0) return yoloResults;
+        } else {
+            free(diff_buffer);  // always free!
+        }
     }
 
     id<MTLBuffer> buffer = self.buffers[self.input_buffer];
@@ -398,9 +398,7 @@ UInt8 *last_rgbData; //for diff
 }
 
 - (NSArray *)sendYOLODiffRequestWithData:(uint8_t *)diffData length:(NSInteger)length {
-    NSString *baseURL = [[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"];
-    NSURL *url = [NSURL URLWithString:[baseURL stringByAppendingPathComponent:@"diff"]];
-    
+    NSURL *url = [NSURL URLWithString: [[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:@"diff"]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"POST"];
     [request setHTTPBody:[NSData dataWithBytesNoCopy:diffData length:length freeWhenDone:NO]];

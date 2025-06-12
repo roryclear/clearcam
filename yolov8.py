@@ -390,7 +390,6 @@ class ASGIApp:
           await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"No base image")
           return
 
-      st = time.time()
       img = bytearray(self.prev_image)  # Copy previous image
 
       i = 0
@@ -401,7 +400,6 @@ class ASGIApp:
               img[index] = value
           i += 5
 
-      print("rory got diff in ",(time.time() - st))
       # Run YOLO on reconstructed image
       im = Tensor(bytes(img), dtype=dtypes.uint8)
       pred = do_inf(im).numpy()
