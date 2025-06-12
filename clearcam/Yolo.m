@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 #import <sys/utsname.h>
 #import "SettingsManager.h"
+#include <arm_neon.h>
 
 @implementation Yolo
 
@@ -19,6 +20,8 @@ NSMutableArray *_q;
 NSString *input_buffer;
 NSString *output_buffer;
 UInt8 *rgbData;
+UInt8 *last_rgbData; //for diff
+NSString *sessionID;
 
 - (instancetype)init {
     self = [super init];
@@ -29,6 +32,8 @@ UInt8 *rgbData;
     self.mtl_buffers_in_flight = [[NSMutableArray alloc] init];
     self.yolo_res = 640;
     self.rgbData = (UInt8 *)malloc(self.yolo_res * self.yolo_res * 3);
+    self.last_rgbData = (UInt8 *)malloc(self.yolo_res * self.yolo_res * 3);
+
     
     self.yolo_classes = @[
         @[NSLocalizedString(@"person", nil), [UIColor redColor]],
@@ -262,7 +267,37 @@ UInt8 *rgbData;
     CFRelease(rawData);
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"useOwnInferenceServerEnabled"]) {
-        NSArray *yoloResults = [self sendYOLORequest];
+        int total_bytes = self.yolo_res * self.yolo_res * 3;
+        int diff_count = 0;
+        int diff_limit = total_bytes / 10;  // 10%
+        uint8_t *diff_buffer = malloc(total_bytes);
+        int diff_offset = 0;
+        uint8_t *curr = self.rgbData;
+        uint8_t *prev = self.last_rgbData;
+
+        for (int i = 0; i < total_bytes; i++) {
+            int delta = (int)curr[i] - (int)prev[i];
+            if (delta > 10 || delta < -10) {
+                prev[i] = curr[i];
+                diff_count++;
+                int32_t index = i;
+                *(int32_t *)(diff_buffer + diff_offset) = index;
+                diff_offset += 4;
+                diff_buffer[diff_offset++] = curr[i];
+
+                if (diff_count >= diff_limit) {
+                    memcpy(prev, curr, total_bytes);
+                    NSArray *yoloResults = [self sendYOLORequestWithDiffData:nil length:0];
+                    if (yoloResults.count > 0) {
+                        free(diff_buffer);
+                        return yoloResults;
+                    }
+                    break;
+                }
+            }
+        }
+        NSArray *yoloResults = [self sendYOLORequestWithDiffData:diff_buffer length:diff_offset];
+        free(diff_buffer);
         if (yoloResults.count > 0) return yoloResults;
     }
 
@@ -325,37 +360,48 @@ UInt8 *rgbData;
     return output;
 }
 
-- (NSArray *)sendYOLORequest {
-    NSURL *url = [NSURL URLWithString: [[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:@"yolo"]];
+- (NSArray *)sendYOLORequestWithDiffData:(uint8_t *)diffData length:(NSInteger)length {
+    BOOL isDiff = (diffData != nil && length > 0);
+    NSString *endpoint = isDiff ? @"diff" : @"yolo";
+    NSURL *url = [NSURL URLWithString:[[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:endpoint]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"POST"];
-    [request setHTTPBody:[NSData dataWithBytesNoCopy:self.rgbData length:self.yolo_res * self.yolo_res * 3 freeWhenDone:NO]];
+    if (isDiff) {
+        [request setHTTPBody:[NSData dataWithBytesNoCopy:diffData length:length freeWhenDone:NO]];
+    } else {
+        [request setHTTPBody:[NSData dataWithBytesNoCopy:self.rgbData length:self.yolo_res * self.yolo_res * 3 freeWhenDone:NO]];
+    }
+    if (self.sessionID) [request setValue:self.sessionID forHTTPHeaderField:@"x-session-id"];
     NSURLResponse *response = nil;
     NSError *error = nil;
     NSData *responseData = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
     if (error || !responseData) {
-        NSLog(@"YOLO request failed: %@", error);
         return @[];
+    }
+    if (!self.sessionID && [response isKindOfClass:[NSHTTPURLResponse class]]) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSString *newSessionID = httpResponse.allHeaderFields[@"x-session-id"];
+        if (newSessionID) self.sessionID = newSessionID;
     }
     float *floatArray = (float *)responseData.bytes;
     NSUInteger floatCount = responseData.length / sizeof(float);
     NSMutableArray *output = [NSMutableArray new];
-    for (NSUInteger i = 0; i < floatCount; i += 6) { // 4 coords + class + conf
+    float threshold = [[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0;
+
+    for (NSUInteger i = 0; i < floatCount; i += 6) {
         float confidence = floatArray[i + 4];
         NSNumber *classId = @(floatArray[i + 5]);
-        
-        if ([self.yoloIndexSet containsObject:classId] && confidence > ([[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0)) {
+        if ([self.yoloIndexSet containsObject:classId] && confidence > threshold) {
             [output addObject:@[
-                @(floatArray[i]),     // x1
-                @(floatArray[i+1]),   // y1
-                @(floatArray[i+2]),   // x2
-                @(floatArray[i+3]),   // y2
-                classId,              // class
-                @(confidence)         // confidence
+                @(floatArray[i]), @(floatArray[i+1]),
+                @(floatArray[i+2]), @(floatArray[i+3]),
+                classId, @(confidence)
             ]];
         }
     }
     return output;
 }
+
 @end
+
 

@@ -331,11 +331,11 @@ from starlette.responses import Response
 
 @TinyJit
 def do_inf(image):
-    image = image.reshape(1, 640, 640, 3)
-    image = image[..., ::-1].permute(0, 3, 1, 2)
-    image = image / 255.0
-    predictions = yolo_infer(image)
-    return predictions.flatten()
+  image = image.reshape(1, 640, 640, 3)
+  image = image[..., ::-1].permute(0, 3, 1, 2)
+  image = image / 255.0
+  predictions = yolo_infer(image)
+  return predictions.flatten()
 
 # Model initialization (same as before)
 yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
@@ -344,40 +344,114 @@ yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
 load_state_dict(yolo_infer, state_dict)
 
+import uuid
+from typing import Optional, Dict
+import struct
+
 class ASGIApp:
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["path"] != "/yolo" or scope["method"] != "POST":
-            await send({
-                "type": "http.response.start",
-                "status": 404,
-                "headers": [(b"content-type", b"text/plain")],
-            })
-            await send({"type": "http.response.body", "body": b"Not Found"})
-            return
+  def __init__(self, yolo_res=640):
+    self.yolo_res = yolo_res
+    self.session_images: Dict[str, bytearray] = {}
 
-        # Accumulate request body
-        body = b""
-        more_body = True
-        while more_body:
-            message = await receive()
-            body += message.get("body", b"")
-            more_body = message.get("more_body", False)
+  async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    path = scope.get("path")
+    method = scope.get("method")
 
-        # Inference
-        im = Tensor(body, dtype=dtypes.uint8)
-        pred = do_inf(im).numpy()
-        response_data = struct.pack('<1800f', *pred)
+    if method != "POST":
+      await self.send_not_found(send)
+      return
 
-        # Send response
-        await send({
-            "type": "http.response.start",
-            "status": 200,
-            "headers": [
-                (b"content-type", b"application/octet-stream"),
-                (b"content-length", str(len(response_data)).encode()),
-            ],
-        })
-        await send({"type": "http.response.body", "body": response_data})
+    # Read full request body
+    body = b""
+    more_body = True
+    while more_body:
+      message = await receive()
+      body += message.get("body", b"")
+      more_body = message.get("more_body", False)
+
+    headers = dict(scope.get("headers", []))  # List of (key, value) tuples
+
+    if path == "/yolo":
+      session_id = headers.get(b"x-session-id")
+      await self.handle_yolo(body, send, session_id)
+
+    elif path == "/diff":
+      session_id = headers.get(b"x-session-id")
+      await self.handle_diff(body, send, session_id)
+
+    else:
+      await self.send_not_found(send)
+
+  async def handle_yolo(self, body: bytes, send: Send, session_id: Optional[bytes]):
+      if session_id is None:
+        # Create new session
+        session_id = str(uuid.uuid4()).encode()
+        self.session_images[session_id] = bytearray(body)
+      else:
+        self.session_images[session_id] = bytearray(body)
+
+      im = Tensor(body, dtype=dtypes.uint8)
+      pred = do_inf(im).numpy()
+      response_data = struct.pack('<1800f', *pred)
+
+      headers = [
+          (b"content-type", b"application/octet-stream"),
+          (b"content-length", str(len(response_data)).encode()),
+          (b"x-session-id", session_id)
+      ]
+      await self.send_with_headers(send, response_data, headers)
+
+  async def handle_diff(self, body: bytes, send: Send, session_id: Optional[bytes]):
+      if session_id is None or session_id not in self.session_images:
+          await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"Invalid or missing session ID")
+          return
+
+      img = bytearray(self.session_images[session_id])  # Copy previous image
+
+      i = 0
+      while i + 5 <= len(body):
+        index = struct.unpack_from("<i", body, i)[0]
+        value = body[i + 4]
+        if 0 <= index < len(img):
+            img[index] = value
+        i += 5
+
+      im = Tensor(bytes(img), dtype=dtypes.uint8)
+      pred = do_inf(im).numpy()
+      response_data = struct.pack('<1800f', *pred)
+
+      self.session_images[session_id] = img
+      await self.send_response(send, response_data)
+
+  async def send_response(self, send: Send, body: bytes, status: int = 200,
+                          content_type: bytes = b"application/octet-stream",
+                          message: Optional[bytes] = None):
+      headers = [
+          (b"content-type", content_type),
+          (b"content-length", str(len(body)).encode())
+      ]
+      await send({
+          "type": "http.response.start",
+          "status": status,
+          "headers": headers,
+      })
+      await send({"type": "http.response.body", "body": message or body})
+
+  async def send_with_headers(self, send: Send, body: bytes, headers: list):
+      await send({
+          "type": "http.response.start",
+          "status": 200,
+          "headers": headers,
+      })
+      await send({"type": "http.response.body", "body": body})
+
+  async def send_not_found(self, send: Send):
+    await send({
+        "type": "http.response.start",
+        "status": 404,
+        "headers": [(b"content-type", b"text/plain")],
+    })
+    await send({"type": "http.response.body", "body": b"Not Found"})
 
 if __name__ == "__main__":
     app = ASGIApp()
