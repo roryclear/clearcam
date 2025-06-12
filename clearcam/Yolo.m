@@ -287,7 +287,7 @@ NSString *sessionID;
 
                 if (diff_count >= diff_limit) {
                     memcpy(prev, curr, total_bytes);
-                    NSArray *yoloResults = [self sendYOLORequest];
+                    NSArray *yoloResults = [self sendYOLORequestWithDiffData:nil length:0];
                     if (yoloResults.count > 0) {
                         free(diff_buffer);
                         return yoloResults;
@@ -296,7 +296,7 @@ NSString *sessionID;
                 }
             }
         }
-        NSArray *yoloResults = [self sendYOLODiffRequestWithData:diff_buffer length:diff_offset];
+        NSArray *yoloResults = [self sendYOLORequestWithDiffData:diff_buffer length:diff_offset];
         free(diff_buffer);
         if (yoloResults.count > 0) return yoloResults;
     }
@@ -360,83 +360,37 @@ NSString *sessionID;
     return output;
 }
 
-- (NSArray *)sendYOLORequest {
-    NSURL *url = [NSURL URLWithString: [[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:@"yolo"]];
+- (NSArray *)sendYOLORequestWithDiffData:(uint8_t *)diffData length:(NSInteger)length {
+    BOOL isDiff = (diffData != nil && length > 0);
+    NSString *endpoint = isDiff ? @"diff" : @"yolo";
+    NSURL *url = [NSURL URLWithString:[[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:endpoint]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"POST"];
-    [request setHTTPBody:[NSData dataWithBytesNoCopy:self.rgbData length:self.yolo_res * self.yolo_res * 3 freeWhenDone:NO]];
-
-    if (self.sessionID) {
-        [request setValue:self.sessionID forHTTPHeaderField:@"x-session-id"];
+    if (isDiff) {
+        [request setHTTPBody:[NSData dataWithBytesNoCopy:diffData length:length freeWhenDone:NO]];
+    } else {
+        [request setHTTPBody:[NSData dataWithBytesNoCopy:self.rgbData length:self.yolo_res * self.yolo_res * 3 freeWhenDone:NO]];
     }
+    if (self.sessionID) [request setValue:self.sessionID forHTTPHeaderField:@"x-session-id"];
     NSURLResponse *response = nil;
     NSError *error = nil;
     NSData *responseData = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
-
     if (error || !responseData) {
-        NSLog(@"YOLO request failed: %@", error);
         return @[];
     }
-
-    // Extract and store session ID from response headers
-    if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+    if (!self.sessionID && [response isKindOfClass:[NSHTTPURLResponse class]]) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         NSString *newSessionID = httpResponse.allHeaderFields[@"x-session-id"];
-        if (newSessionID && !self.sessionID) {
-            self.sessionID = newSessionID;
-            NSLog(@"Stored new session ID: %@", self.sessionID);
-        }
+        if (newSessionID) self.sessionID = newSessionID;
     }
-
     float *floatArray = (float *)responseData.bytes;
     NSUInteger floatCount = responseData.length / sizeof(float);
     NSMutableArray *output = [NSMutableArray new];
+    float threshold = [[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0;
+
     for (NSUInteger i = 0; i < floatCount; i += 6) {
         float confidence = floatArray[i + 4];
         NSNumber *classId = @(floatArray[i + 5]);
-
-        if ([self.yoloIndexSet containsObject:classId] &&
-            confidence > ([[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0)) {
-            [output addObject:@[
-                @(floatArray[i]), @(floatArray[i+1]),
-                @(floatArray[i+2]), @(floatArray[i+3]),
-                classId, @(confidence)
-            ]];
-        }
-    }
-    return output;
-}
-
-- (NSArray *)sendYOLODiffRequestWithData:(uint8_t *)diffData length:(NSInteger)length {
-    if (!self.sessionID) {
-        NSLog(@"No session ID — can't send diff request");
-        return @[];
-    }
-
-    NSURL *url = [NSURL URLWithString: [[[NSUserDefaults standardUserDefaults] stringForKey:@"own_inference_server_address"] stringByAppendingPathComponent:@"diff"]];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    [request setHTTPMethod:@"POST"];
-    [request setHTTPBody:[NSData dataWithBytesNoCopy:diffData length:length freeWhenDone:NO]];
-    [request setValue:self.sessionID forHTTPHeaderField:@"x-session-id"];
-
-    NSURLResponse *response = nil;
-    NSError *error = nil;
-    NSData *responseData = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
-
-    if (error || !responseData) {
-        NSLog(@"YOLO diff request failed: %@", error);
-        return @[];
-    }
-
-    float *floatArray = (float *)responseData.bytes;
-    NSUInteger floatCount = responseData.length / sizeof(float);
-    NSMutableArray *output = [NSMutableArray new];
-    
-    for (NSUInteger i = 0; i < floatCount; i += 6) {
-        float confidence = floatArray[i + 4];
-        NSNumber *classId = @(floatArray[i + 5]);
-        float threshold = [[[NSUserDefaults standardUserDefaults] objectForKey:@"threshold"] ?: @(25) floatValue] / 100.0;
-
         if ([self.yoloIndexSet containsObject:classId] && confidence > threshold) {
             [output addObject:@[
                 @(floatArray[i]), @(floatArray[i+1]),
