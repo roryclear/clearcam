@@ -344,84 +344,106 @@ yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
 load_state_dict(yolo_infer, state_dict)
 
-from typing import Optional
+import uuid
+from typing import Optional, Dict
+import struct
 
 class ASGIApp:
   def __init__(self, yolo_res=640):
     self.yolo_res = yolo_res
-    self.prev_image: Optional[bytearray] = None  # Mutable buffer to hold previous image
+    self.session_images: Dict[str, bytearray] = {}
 
   async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
     path = scope.get("path")
     method = scope.get("method")
 
     if method != "POST":
-        await self.send_not_found(send)
-        return
+      await self.send_not_found(send)
+      return
 
     # Read full request body
     body = b""
     more_body = True
     while more_body:
-        message = await receive()
-        body += message.get("body", b"")
-        more_body = message.get("more_body", False)
+      message = await receive()
+      body += message.get("body", b"")
+      more_body = message.get("more_body", False)
+
+    headers = dict(scope.get("headers", []))  # List of (key, value) tuples
 
     if path == "/yolo":
-        await self.handle_yolo(body, send)
+      session_id = headers.get(b"x-session-id")
+      await self.handle_yolo(body, send, session_id)
 
     elif path == "/diff":
-        await self.handle_diff(body, send)
+      session_id = headers.get(b"x-session-id")
+      await self.handle_diff(body, send, session_id)
 
     else:
-        await self.send_not_found(send)
+      await self.send_not_found(send)
 
-  async def handle_yolo(self, body: bytes, send: Send):
-    im = Tensor(body, dtype=dtypes.uint8)
-    pred = do_inf(im).numpy()
-    response_data = struct.pack('<1800f', *pred)
-    await self.send_response(send, response_data)
+  async def handle_yolo(self, body: bytes, send: Send, session_id: Optional[bytes]):
+      if session_id is None:
+        # Create new session
+        session_id = str(uuid.uuid4()).encode()
+        self.session_images[session_id] = bytearray(body)
+      else:
+        self.session_images[session_id] = bytearray(body)
 
-    # Save this full image for future diffs
-    self.prev_image = bytearray(body)
+      im = Tensor(body, dtype=dtypes.uint8)
+      pred = do_inf(im).numpy()
+      response_data = struct.pack('<1800f', *pred)
 
-  async def handle_diff(self, body: bytes, send: Send):
-    if self.prev_image is None:
-      await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"No base image")
-      return
+      headers = [
+          (b"content-type", b"application/octet-stream"),
+          (b"content-length", str(len(response_data)).encode()),
+          (b"x-session-id", session_id)
+      ]
+      await self.send_with_headers(send, response_data, headers)
 
-    img = bytearray(self.prev_image)  # Copy previous image
+  async def handle_diff(self, body: bytes, send: Send, session_id: Optional[bytes]):
+      if session_id is None or session_id not in self.session_images:
+          await self.send_response(send, b"", status=400, content_type=b"text/plain", message=b"Invalid or missing session ID")
+          return
 
-    i = 0
-    while i + 5 <= len(body):
-      index = struct.unpack_from("<i", body, i)[0]
-      value = body[i + 4]
-      if 0 <= index < len(img):
-          img[index] = value
-      i += 5
+      img = bytearray(self.session_images[session_id])  # Copy previous image
 
-    # Run YOLO on reconstructed image
-    im = Tensor(bytes(img), dtype=dtypes.uint8)
-    pred = do_inf(im).numpy()
-    response_data = struct.pack('<1800f', *pred)
-    await self.send_response(send, response_data)
+      i = 0
+      while i + 5 <= len(body):
+        index = struct.unpack_from("<i", body, i)[0]
+        value = body[i + 4]
+        if 0 <= index < len(img):
+            img[index] = value
+        i += 5
 
-    # Update stored image
-    self.prev_image = img
+      im = Tensor(bytes(img), dtype=dtypes.uint8)
+      pred = do_inf(im).numpy()
+      response_data = struct.pack('<1800f', *pred)
+
+      self.session_images[session_id] = img
+      await self.send_response(send, response_data)
 
   async def send_response(self, send: Send, body: bytes, status: int = 200,
-                        content_type: bytes = b"application/octet-stream",
-                        message: Optional[bytes] = None):
-    headers = [
-        (b"content-type", content_type),
-        (b"content-length", str(len(body)).encode())
-    ]
-    await send({
-        "type": "http.response.start",
-        "status": status,
-        "headers": headers,
-    })
-    await send({"type": "http.response.body", "body": message or body})
+                          content_type: bytes = b"application/octet-stream",
+                          message: Optional[bytes] = None):
+      headers = [
+          (b"content-type", content_type),
+          (b"content-length", str(len(body)).encode())
+      ]
+      await send({
+          "type": "http.response.start",
+          "status": status,
+          "headers": headers,
+      })
+      await send({"type": "http.response.body", "body": message or body})
+
+  async def send_with_headers(self, send: Send, body: bytes, headers: list):
+      await send({
+          "type": "http.response.start",
+          "status": 200,
+          "headers": headers,
+      })
+      await send({"type": "http.response.body", "body": body})
 
   async def send_not_found(self, send: Send):
     await send({

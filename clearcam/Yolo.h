@@ -21,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) UInt8 *rgbData;
 @property (nonatomic, assign) UInt8 *last_rgbData;
 @property (nonatomic, strong) NSSet<NSNumber *> *yoloIndexSet;
+@property (nonatomic, strong) NSString *sessionID;
 - (NSArray *)yolo_infer:(CGImageRef)cgImage withOrientation:(AVCaptureVideoOrientation)orientation;
 
 // Initializer
