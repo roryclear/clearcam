@@ -7,8 +7,6 @@
 #import "StoreManager.h"
 #import "SecretManager.h"
 #import "SceneState.h"
-#import "SettingsViewController.h"
-#import "GalleryViewController.h"
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCryptor.h>
 
@@ -18,8 +16,6 @@
 @property (nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
 @property (nonatomic, strong) UILabel *fpsLabel;
 @property (nonatomic, strong) UIButton *recordButton;
-@property (nonatomic, strong) UIButton *settingsButton;
-@property (nonatomic, strong) UIButton *galleryButton;
 @property (nonatomic, assign) CFTimeInterval lastFrameTime;
 @property (nonatomic, assign) NSUInteger frameCount;
 @property (nonatomic, strong) Yolo *yolo;
@@ -152,7 +148,6 @@ NSMutableDictionary *classColorMap;
         [self.previewLayer removeFromSuperlayer];
         self.previewLayer = nil;
         
-
         self.isProcessing = NO;
         self.isProcessingCoreData = NO;
         self.recordPressed = wasRecording;
@@ -167,7 +162,6 @@ NSMutableDictionary *classColorMap;
         
         [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
         
-
         SettingsManager *settings = [SettingsManager sharedManager];
         [self setupCameraWithWidth:settings.width height:settings.height];
         
@@ -231,7 +225,6 @@ NSMutableDictionary *classColorMap;
     self.previewLayer.frame = self.view.bounds;
     [self updateButtonFrames];
 }
-
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
@@ -450,7 +443,6 @@ NSMutableDictionary *classColorMap;
     if(![self ensureFreeDiskSpace]) [self stopRecording];
 }
 
-
 - (void)drawSquareWithTopLeftX:(CGFloat)xOrigin topLeftY:(CGFloat)yOrigin bottomRightX:(CGFloat)bottomRightX bottomRightY:(CGFloat)bottomRightY classIndex:(int)classIndex aspectRatio:(float)aspectRatio {
     CGFloat leftEdgeX = (self.view.bounds.size.width - (self.view.bounds.size.height * aspectRatio)) / 2;
     CGFloat scaledXOrigin, scaledYOrigin, scaledWidth, scaledHeight;
@@ -570,37 +562,11 @@ NSMutableDictionary *classColorMap;
     [self.recordButton addTarget:self action:@selector(toggleRecording) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.recordButton];
 
-    self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImage *gearIcon = [UIImage systemImageNamed:@"gear"];
-    [self.settingsButton setImage:gearIcon forState:UIControlStateNormal];
-    CGFloat gearButtonSize = 50;
-    self.settingsButton.frame = CGRectMake(0, 0, gearButtonSize, gearButtonSize);
-    self.settingsButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3];
-    self.settingsButton.layer.cornerRadius = gearButtonSize / 2;
-    self.settingsButton.clipsToBounds = YES;
-    self.settingsButton.tintColor = [UIColor whiteColor];
-    [self.settingsButton addTarget:self action:@selector(openSettings) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.settingsButton];
-
-    self.galleryButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImage *galleryIcon = [UIImage systemImageNamed:@"photo.on.rectangle"];
-    [self.galleryButton setImage:galleryIcon forState:UIControlStateNormal];
-    CGFloat galleryButtonSize = 50;
-    self.galleryButton.frame = CGRectMake(0, 0, galleryButtonSize, galleryButtonSize);
-    self.galleryButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3];
-    self.galleryButton.layer.cornerRadius = galleryButtonSize / 2;
-    self.galleryButton.clipsToBounds = YES;
-    self.galleryButton.tintColor = [UIColor whiteColor];
-    [self.galleryButton addTarget:self action:@selector(galleryButtonPressed) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.galleryButton];
-
     [self updateButtonFrames]; // Just call it once
 }
 
 - (void)updateButtonFrames {
     CGFloat recordButtonSize = 80;
-    CGFloat settingsButtonSize = 50;
-    CGFloat galleryButtonSize = 50;
     CGFloat spacing = 60;
 
     UIEdgeInsets safeAreaInsets = self.view.safeAreaInsets;
@@ -608,8 +574,6 @@ NSMutableDictionary *classColorMap;
     CGFloat screenHeight = self.view.bounds.size.height;
 
     self.recordButton.layer.cornerRadius = recordButtonSize / 2;
-    self.settingsButton.layer.cornerRadius = settingsButtonSize / 2;
-    self.galleryButton.layer.cornerRadius = galleryButtonSize / 2;
 
     UIDeviceOrientation orientation = [self getCurrentOrientation];
 
@@ -621,47 +585,26 @@ NSMutableDictionary *classColorMap;
     if (orientation == UIDeviceOrientationLandscapeRight) {
         CGFloat leftMargin = MAX(20, safeAreaInsets.left + 10);
         self.recordButton.frame = CGRectMake(leftMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
-        self.settingsButton.frame = CGRectMake(leftMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
-                                               screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing,
-                                               settingsButtonSize, settingsButtonSize);
-        self.galleryButton.frame = CGRectMake(leftMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
-                                              screenHeight / 2 + recordButtonSize / 2 + spacing,
-                                              galleryButtonSize, galleryButtonSize);
         self.fpsLabel.frame = CGRectMake(screenWidth - self.fpsLabel.frame.size.width - MAX(20, safeAreaInsets.right + 10),
-                                        30,
-                                        self.fpsLabel.frame.size.width,
-                                        self.fpsLabel.frame.size.height);
+                                         safeAreaInsets.top + 10,
+                                         self.fpsLabel.frame.size.width,
+                                         self.fpsLabel.frame.size.height);
     } else if (orientation == UIDeviceOrientationLandscapeLeft) {
         CGFloat rightMargin = MAX(20, safeAreaInsets.right + 10);
         self.recordButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin, screenHeight / 2 - recordButtonSize / 2, recordButtonSize, recordButtonSize);
-        self.settingsButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (settingsButtonSize / 2),
-                                               screenHeight / 2 - recordButtonSize / 2 - settingsButtonSize - spacing,
-                                               settingsButtonSize, settingsButtonSize);
-        self.galleryButton.frame = CGRectMake(screenWidth - recordButtonSize - rightMargin + (recordButtonSize / 2) - (galleryButtonSize / 2),
-                                              screenHeight / 2 + recordButtonSize / 2 + spacing,
-                                              galleryButtonSize, galleryButtonSize);
         self.fpsLabel.frame = CGRectMake(MAX(10, safeAreaInsets.left + 5),
-                                        30,
-                                        self.fpsLabel.frame.size.width,
-                                        self.fpsLabel.frame.size.height);
+                                         safeAreaInsets.top + 10,
+                                         self.fpsLabel.frame.size.width,
+                                         self.fpsLabel.frame.size.height);
     } else {
         CGFloat bottomMargin = MAX(20, safeAreaInsets.bottom + 10);
         CGFloat recordX = (screenWidth - recordButtonSize) / 2;
         self.recordButton.frame = CGRectMake(recordX, screenHeight - recordButtonSize - bottomMargin, recordButtonSize, recordButtonSize);
-        self.settingsButton.frame = CGRectMake(recordX + recordButtonSize + spacing,
-                                               screenHeight - bottomMargin - recordButtonSize / 2 - settingsButtonSize / 2,
-                                               settingsButtonSize, settingsButtonSize);
-        self.galleryButton.frame = CGRectMake(recordX - galleryButtonSize - spacing,
-                                              screenHeight - bottomMargin - recordButtonSize / 2 - galleryButtonSize / 2,
-                                              galleryButtonSize, galleryButtonSize);
-        self.fpsLabel.frame = CGRectMake(10, 50, self.fpsLabel.frame.size.width, self.fpsLabel.frame.size.height);
+        self.fpsLabel.frame = CGRectMake(screenWidth - self.fpsLabel.frame.size.width - 20,
+                                         safeAreaInsets.top + 10,
+                                         self.fpsLabel.frame.size.width,
+                                         self.fpsLabel.frame.size.height);
     }
-}
-
-- (void)galleryButtonPressed {
-    [self.captureSession stopRunning];
-    GalleryViewController *galleryVC = [[GalleryViewController alloc] init];
-    [self.navigationController pushViewController:galleryVC animated:YES];
 }
 
 - (void)toggleRecording {
@@ -700,13 +643,6 @@ NSMutableDictionary *classColorMap;
     [super viewDidLayoutSubviews];
     self.previewLayer.frame = self.view.bounds;
     [self updateButtonFrames];
-}
-
-- (void)openSettings {
-    if(self.recordPressed) [self toggleRecording];
-    [self.captureSession stopRunning];
-    SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
-    [self.navigationController pushViewController:settingsVC animated:YES];
 }
 
 - (void)viewWillLayoutSubviews {
@@ -751,7 +687,6 @@ NSMutableDictionary *classColorMap;
     self.isRecording = NO;
     [self.videoWriterInput markAsFinished];
 }
-
 
 - (void)finishRecording {
     if (!(self.isRecording && self.assetWriter.status == AVAssetWriterStatusWriting)) return;
