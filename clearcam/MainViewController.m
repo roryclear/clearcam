@@ -3,14 +3,18 @@
 #import "ViewController.h"
 #import "GalleryViewController.h"
 #import "SettingsViewController.h"
+#import "FileServer.h"
 
 @interface MainViewController ()
+@property (nonatomic, strong) FileServer *fileServer;
 @end
 
 @implementation MainViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.fileServer = [FileServer sharedInstance];
+    [self.fileServer start];
     if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
         self.view.backgroundColor = [UIColor blackColor];
     } else {
