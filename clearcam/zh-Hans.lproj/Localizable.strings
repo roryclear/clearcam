@@ -96,6 +96,8 @@
 "camera_desc" = "录制并直播画面，支持AI目标识别";
 "gallery_desc" = "查看捕捉事件和实时画面（需订阅高级版）";
 "settings_desc" = "配置摄像头和识别功能";
+"all" = "全部";
+"people+vehicles" = "人+车辆";
 
 "person" = "人";
 "bicycle" = "自行车";

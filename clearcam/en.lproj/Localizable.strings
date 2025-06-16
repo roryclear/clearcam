@@ -96,3 +96,5 @@
 "camera_desc" = "Record and broadcast footage, with AI object detection";
 "gallery_desc" = "View captured events and live camera feeds (Premium required)";
 "settings_desc" = "Configure cameras and detection";
+"all" = "all";
+"people+vehicles" = "people+vehicles";
