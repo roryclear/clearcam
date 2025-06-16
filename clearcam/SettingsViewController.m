@@ -70,8 +70,8 @@
     if ([defaults objectForKey:@"stream_via_wifi_enabled"] != nil) {
         self.streamViaWiFiEnabled = [defaults boolForKey:@"stream_via_wifi_enabled"];
     } else {
-        self.streamViaWiFiEnabled = NO;
-        [defaults setBool:NO forKey:@"stream_via_wifi_enabled"];
+        self.streamViaWiFiEnabled = YES;
+        [defaults setBool:YES forKey:@"stream_via_wifi_enabled"];
     }
     
     if ([defaults objectForKey:@"send_notif_enabled"] != nil) {

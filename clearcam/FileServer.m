@@ -56,6 +56,9 @@
     self.basePath = [self getDocumentsDirectory];
     self.durationCache = [[NSMutableDictionary alloc] init];
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"stream_via_wifi_enabled"]) [self startServer];
+    if ([[NSUserDefaults standardUserDefaults] objectForKey:@"stream_via_wifi_enabled"] == nil) {
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"stream_via_wifi_enabled"];
+    }
 }
 
 - (void)dealloc {
