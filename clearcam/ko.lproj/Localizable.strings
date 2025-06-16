@@ -91,6 +91,11 @@
 "online" = "온라인";
 "experimental_features" = "실험적 기능";
 "docs" = "문서";
+"app_name" = "Clearcam";
+"home" = "홈";
+"camera_desc" = "AI 객체 감지 기능으로 영상을 녹화하고 방송합니다";
+"gallery_desc" = "캡처된 이벤트와 실시간 영상을 확인하세요 (프리미엄 필요)";
+"settings_desc" = "카메라 및 감지 설정";
 
 "person" = "사람";
 "bicycle" = "자전거";

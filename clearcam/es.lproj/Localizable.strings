@@ -91,6 +91,11 @@
 "online" = "En línea";
 "experimental_features" = "Funciones experimentales";
 "docs" = "Documentación";
+"app_name" = "Clearcam";
+"home" = "Inicio";
+"camera_desc" = "Graba y transmite imágenes con detección de objetos por IA";
+"gallery_desc" = "Ve eventos capturados y transmisiones en vivo (se requiere Premium)";
+"settings_desc" = "Configura cámaras y detección";
 
 "person" = "persona";
 "bicycle" = "bicicleta";

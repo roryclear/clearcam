@@ -91,3 +91,8 @@
 "online" = "Online";
 "experimental_features" = "Experimental Features";
 "docs" = "Docs";
+"app_name" = "Clearcam";
+"home" = "Home";
+"camera_desc" = "Record and broadcast footage, with AI object detection";
+"gallery_desc" = "View captured events and live camera feeds (Premium required)";
+"settings_desc" = "Configure cameras and detection";

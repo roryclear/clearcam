@@ -18,7 +18,7 @@
     }
     
     self.title = @"Clearcam";
-    self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Home"
+    self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:NSLocalizedString(@"home", nil)
                                                                                  style:UIBarButtonItemStylePlain
                                                                                 target:nil
                                                                                 action:nil];
@@ -41,15 +41,15 @@
 
     // Create the three items
     [self addItemToStackView:stackView
-                       title:@"Record and broadcast footage, with AI object detection"
+                       title:NSLocalizedString(@"camera_desc", nil)
                        image:[UIImage systemImageNamed:@"camera.fill"]
                       action:@selector(cameraTapped)];
     [self addItemToStackView:stackView
-                       title:@"View captured events and live camera feeds (Premium required)"
+                       title:NSLocalizedString(@"gallery_desc", nil)
                        image:[UIImage systemImageNamed:@"photo.on.rectangle"]
                       action:@selector(galleryTapped)];
     [self addItemToStackView:stackView
-                       title:@"Configure cameras and detection"
+                       title:NSLocalizedString(@"settings_desc", nil)
                        image:[UIImage systemImageNamed:@"gear"]
                       action:@selector(settingsTapped)];
 }
