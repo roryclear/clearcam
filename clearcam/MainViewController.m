@@ -7,6 +7,7 @@
 
 @interface MainViewController ()
 @property (nonatomic, strong) FileServer *fileServer;
+@property (nonatomic, strong) UILabel *ipLabel;
 @end
 
 @implementation MainViewController
@@ -26,6 +27,31 @@
                                                                                  style:UIBarButtonItemStylePlain
                                                                                 target:nil
                                                                                 action:nil];
+    
+    NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
+    NSLayoutYAxisAnchor *stackTopAnchor;
+
+    if (ipAddress && ipAddress.length > 0) {
+        self.ipLabel = [[UILabel alloc] init];
+        self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.ipLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        self.ipLabel.textColor = [UIColor secondaryLabelColor];
+        self.ipLabel.textAlignment = NSTextAlignmentCenter;
+        self.ipLabel.numberOfLines = 1;
+        self.ipLabel.text = [NSString stringWithFormat:@"Streaming over local Wi-Fi at: http://%@", ipAddress];
+        [self.view addSubview:self.ipLabel];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.ipLabel.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10],
+            [self.ipLabel.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
+            [self.ipLabel.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20]
+        ]];
+
+        stackTopAnchor = self.ipLabel.bottomAnchor;
+    } else {
+        stackTopAnchor = self.view.safeAreaLayoutGuide.topAnchor;
+    }
+
 
     UIStackView *stackView = [[UIStackView alloc] init];
     stackView.axis = UILayoutConstraintAxisVertical;
@@ -37,7 +63,7 @@
 
     // Add constraints for stack view
     [NSLayoutConstraint activateConstraints:@[
-        [stackView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20],
+        [stackView.topAnchor constraintEqualToAnchor:stackTopAnchor constant:20],
         [stackView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
         [stackView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20],
         [stackView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-20]
