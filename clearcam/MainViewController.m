@@ -73,7 +73,7 @@
 
 - (void)updateIPAddressLabel {
     NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
-    if (ipAddress && ipAddress.length > 0) {
+    if (ipAddress) {
         if (!self.ipLabel) {
             self.ipLabel = [[UILabel alloc] init];
             self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -89,7 +89,7 @@
                 [self.ipLabel.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20]
             ]];
         }
-        self.ipLabel.text = [NSString stringWithFormat:@"Streaming over local Wi-Fi at: %@", ipAddress];
+        self.ipLabel.text = (ipAddress.length > 0) ? [NSString stringWithFormat:@"Streaming over local Wi-Fi at: %@", ipAddress] : @"Waiting for Wi-Fi...";
         self.ipLabel.hidden = NO;
     } else {
         if (self.ipLabel) {

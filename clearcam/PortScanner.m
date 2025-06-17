@@ -62,7 +62,7 @@
     if (ipAddress && ipAddress.length > 0) {
         return [NSString stringWithFormat:@"http://%@", ipAddress];
     } else {
-        return @"Waiting for Wi-Fi";
+        return @"";
     }
 }
 
