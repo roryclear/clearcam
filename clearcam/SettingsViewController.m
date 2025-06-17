@@ -189,7 +189,7 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *ipAddress = [defaults stringForKey:@"DeviceIPAddress"];
     if (ipAddress && ipAddress.length > 0) {
-        self.notificationServerAddress = [NSString stringWithFormat:@"http://%@", ipAddress];
+        self.notificationServerAddress = ipAddress;
     } else {
         self.notificationServerAddress = NSLocalizedString(@"waiting_for_ip", @"Placeholder when IP address is not available");
     }
@@ -425,7 +425,7 @@
             cell.textLabel.text = NSLocalizedString(@"stream_via_wifi", @"Label for stream via Wi-Fi setting");
             NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
             cell.detailTextLabel.text = ipAddress && ipAddress.length > 0 ?
-                                       [NSString stringWithFormat:@"http://%@", ipAddress] :
+                                       ipAddress :
                                        NSLocalizedString(@"waiting_for_ip", @"Placeholder when IP address is not available");
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *wifiSwitch = [[UISwitch alloc] init];

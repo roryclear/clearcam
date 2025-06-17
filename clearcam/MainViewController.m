@@ -14,45 +14,26 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+
     self.fileServer = [FileServer sharedInstance];
     [self.fileServer start];
-    if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-        self.view.backgroundColor = [UIColor blackColor];
-    } else {
-        self.view.backgroundColor = [UIColor whiteColor];
-    }
-    
+
+    self.view.backgroundColor = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark)
+        ? [UIColor blackColor]
+        : [UIColor whiteColor];
+
     self.title = @"Clearcam";
     self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:NSLocalizedString(@"home", nil)
-                                                                                 style:UIBarButtonItemStylePlain
-                                                                                target:nil
-                                                                                action:nil];
-    
-    NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
-    NSLayoutYAxisAnchor *stackTopAnchor;
+                                                                             style:UIBarButtonItemStylePlain
+                                                                            target:nil
+                                                                            action:nil];
 
-    if (ipAddress && ipAddress.length > 0) {
-        self.ipLabel = [[UILabel alloc] init];
-        self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.ipLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-        self.ipLabel.textColor = [UIColor secondaryLabelColor];
-        self.ipLabel.textAlignment = NSTextAlignmentCenter;
-        self.ipLabel.numberOfLines = 1;
-        self.ipLabel.text = [NSString stringWithFormat:@"Streaming over local Wi-Fi at: http://%@", ipAddress];
-        [self.view addSubview:self.ipLabel];
+    // Setup IP label
+    [self updateIPAddressLabel];
 
-        [NSLayoutConstraint activateConstraints:@[
-            [self.ipLabel.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10],
-            [self.ipLabel.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
-            [self.ipLabel.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20]
-        ]];
+    NSLayoutYAxisAnchor *stackTopAnchor = self.ipLabel ? self.ipLabel.bottomAnchor : self.view.safeAreaLayoutGuide.topAnchor;
 
-        stackTopAnchor = self.ipLabel.bottomAnchor;
-    } else {
-        stackTopAnchor = self.view.safeAreaLayoutGuide.topAnchor;
-    }
-
-
+    // Stack View setup
     UIStackView *stackView = [[UIStackView alloc] init];
     stackView.axis = UILayoutConstraintAxisVertical;
     stackView.distribution = UIStackViewDistributionFillEqually;
@@ -61,7 +42,6 @@
     stackView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:stackView];
 
-    // Add constraints for stack view
     [NSLayoutConstraint activateConstraints:@[
         [stackView.topAnchor constraintEqualToAnchor:stackTopAnchor constant:20],
         [stackView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
@@ -69,19 +49,53 @@
         [stackView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-20]
     ]];
 
-    // Create the three items
     [self addItemToStackView:stackView
                        title:NSLocalizedString(@"camera_desc", nil)
                        image:[UIImage systemImageNamed:@"camera.fill"]
                       action:@selector(cameraTapped)];
+    
     [self addItemToStackView:stackView
                        title:NSLocalizedString(@"gallery_desc", nil)
                        image:[UIImage systemImageNamed:@"photo.on.rectangle"]
                       action:@selector(galleryTapped)];
+    
     [self addItemToStackView:stackView
                        title:NSLocalizedString(@"settings_desc", nil)
                        image:[UIImage systemImageNamed:@"gear"]
                       action:@selector(settingsTapped)];
+
+    // Observe IP address changes
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateIPAddressLabel)
+                                                 name:@"DeviceIPAddressDidChangeNotification"
+                                               object:nil];
+}
+
+- (void)updateIPAddressLabel {
+    NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
+    if (ipAddress && ipAddress.length > 0) {
+        if (!self.ipLabel) {
+            self.ipLabel = [[UILabel alloc] init];
+            self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
+            self.ipLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+            self.ipLabel.textColor = [UIColor secondaryLabelColor];
+            self.ipLabel.textAlignment = NSTextAlignmentCenter;
+            self.ipLabel.numberOfLines = 1;
+            [self.view addSubview:self.ipLabel];
+
+            [NSLayoutConstraint activateConstraints:@[
+                [self.ipLabel.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10],
+                [self.ipLabel.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
+                [self.ipLabel.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20]
+            ]];
+        }
+        self.ipLabel.text = [NSString stringWithFormat:@"Streaming over local Wi-Fi at: %@", ipAddress];
+        self.ipLabel.hidden = NO;
+    } else {
+        if (self.ipLabel) {
+            self.ipLabel.hidden = YES;
+        }
+    }
 }
 
 - (void)addItemToStackView:(UIStackView *)stackView title:(NSString *)title image:(UIImage *)image action:(SEL)action {
@@ -148,6 +162,10 @@
 - (void)settingsTapped {
     SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
     [self.navigationController pushViewController:settingsVC animated:YES];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"DeviceIPAddressDidChangeNotification" object:nil];
 }
 
 @end
