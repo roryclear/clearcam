@@ -2,7 +2,8 @@
 "events" = "Eventos";
 "live" = "En vivo";
 "default_device_name" = "Mi dispositivo";
-"waiting_for_ip" = "Esperando IP...";
+"waiting_for_ip" = "Esperando Wi-Fi...";
+"streaming_over_wifi" = "Transmitiendo por Wi-Fi local en: %@";
 "permission_denied" = "Permiso denegado";
 "notification_permission_denied" = "Permiso de notificaciones denegado. Actívalo en Ajustes.";
 "ok" = "Aceptar";

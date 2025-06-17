@@ -100,7 +100,7 @@
     if (streamViaWifiEnabled) {
         // If streaming is enabled, IP label should be visible
         self.ipLabel.hidden = NO;
-        self.ipLabel.text = (ipAddress.length > 0) ? [NSString stringWithFormat:@"Streaming over local Wi-Fi at: %@", ipAddress] : @"Waiting for Wi-Fi...";
+        self.ipLabel.text = (ipAddress.length > 0) ? [NSString stringWithFormat:NSLocalizedString(@"streaming_over_wifi", nil), ipAddress] : NSLocalizedString(@"waiting_for_ip", nil);
 
         // Activate constraint to IP label, deactivate constraint to safe area
         self.mainStackViewTopToSafeAreaConstraint.active = NO;

@@ -2,7 +2,8 @@
 "events" = "イベント";
 "live" = "ライブ";
 "default_device_name" = "マイデバイス";
-"waiting_for_ip" = "IPアドレス待機中...";
+"waiting_for_ip" = "Wi-Fiを待機中...";
+"streaming_over_wifi" = "ローカルWi-Fiでストリーミング中: %@";
 "permission_denied" = "アクセス拒否されました";
 "notification_permission_denied" = "通知許可が拒否されました。設定から有効にできます。";
 "ok" = "OK";

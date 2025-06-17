@@ -2,7 +2,8 @@
 "events" = "ईवेंट्स";
 "live" = "लाइव";
 "default_device_name" = "मेरा डिवाइस";
-"waiting_for_ip" = "आईपी का इंतजार कर रहे हैं...";
+"waiting_for_ip" = "Wi-Fi का इंतज़ार कर रहे...";
+"streaming_over_wifi" = "स्थानीय Wi-Fi पर स्ट्रीमिंग: %@";
 "permission_denied" = "अनुमति अस्वीकृत";
 "notification_permission_denied" = "सूचना की अनुमति अस्वीकृत कर दी गई है। आप इसे सेटिंग्स में सक्षम कर सकते हैं।";
 "ok" = "ठीक है";
