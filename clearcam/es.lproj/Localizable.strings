@@ -2,7 +2,8 @@
 "events" = "Eventos";
 "live" = "En vivo";
 "default_device_name" = "Mi dispositivo";
-"waiting_for_ip" = "Esperando IP...";
+"waiting_for_ip" = "Esperando Wi-Fi...";
+"streaming_over_wifi" = "Transmitiendo por Wi-Fi local en: %@";
 "permission_denied" = "Permiso denegado";
 "notification_permission_denied" = "Permiso de notificaciones denegado. Actívalo en Ajustes.";
 "ok" = "Aceptar";
@@ -91,6 +92,13 @@
 "online" = "En línea";
 "experimental_features" = "Funciones experimentales";
 "docs" = "Documentación";
+"app_name" = "Clearcam";
+"home" = "Inicio";
+"camera_desc" = "Graba y transmite imágenes con detección de objetos por IA";
+"gallery_desc" = "Ve eventos capturados y transmisiones en vivo (se requiere Premium)";
+"settings_desc" = "Configura cámaras y detección";
+"all" = "todos";
+"people+vehicles" = "personas+vehículos";
 
 "person" = "persona";
 "bicycle" = "bicicleta";

@@ -2,7 +2,8 @@
 "events" = "Events";
 "live"="Live";
 "default_device_name" = "My Device";
-"waiting_for_ip" = "Waiting for IP...";
+"waiting_for_ip" = "Waiting for Wi-Fi...";
+"streaming_over_wifi" = "Streaming over local Wi-Fi at: %@";
 "permission_denied" = "Permission Denied";
 "notification_permission_denied" = "Notification permission was denied. You can enable it in Settings.";
 "ok" = "OK";
@@ -91,3 +92,10 @@
 "online" = "Online";
 "experimental_features" = "Experimental Features";
 "docs" = "Docs";
+"app_name" = "Clearcam";
+"home" = "Home";
+"camera_desc" = "Record and broadcast footage, with AI object detection";
+"gallery_desc" = "View captured events and live camera feeds (Premium required)";
+"settings_desc" = "Configure cameras and detection";
+"all" = "all";
+"people+vehicles" = "people+vehicles";
