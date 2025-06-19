@@ -17,7 +17,7 @@ import json
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
 
 #Pre processing image functions.
-def compute_transform(image, new_shape=(640, 640), auto=False, scaleFill=False, scaleup=True, stride=32) -> Tensor:
+def compute_transform(image, new_shape=(1280, 1280), auto=False, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
   new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
   r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
@@ -34,7 +34,7 @@ def compute_transform(image, new_shape=(640, 640), auto=False, scaleFill=False, 
   image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
   return Tensor(image)
 
-def preprocess(im, imgsz=640, model_stride=32, model_pt=True): return compute_transform(im, new_shape=imgsz, auto=True, stride=model_stride)
+def preprocess(im, imgsz=1280, model_stride=32, model_pt=True): return compute_transform(im, new_shape=imgsz, auto=True, stride=model_stride)
 
 # utility functions for forward pass.
 def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
@@ -315,13 +315,6 @@ def get_weights_location(yolo_variant: str) -> Path:
   if not f32_weights.exists(): convert_f16_safetensor_to_f32(weights_location, f32_weights)
   return f32_weights
 
-import struct
-from time import monotonic
-from uvicorn import Server, Config
-import asyncio
-from starlette.types import Receive, Send, Scope
-from starlette.responses import Response
-
 @TinyJit
 def do_inf(im):
   im = im.unsqueeze(0)
@@ -331,7 +324,7 @@ def do_inf(im):
   return predictions
 
 # Model initialization (same as before)
-yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
+yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 's')
 depth, width, ratio = get_variant_multiples(yolo_variant)
 yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
@@ -343,46 +336,80 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
 
-# RTSP URL
-rtsp_url = "rtsp://user:password@192.168.1.30:554/live/ch0"
+class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
+color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
+# RTSP URL
+rtsp_url = ""
 # Video capture thread
 class VideoCapture:
     def __init__(self, src):
         self.cap = cv2.VideoCapture(src)
-        self.frame = None
-        self.running = True
-        threading.Thread(target=self.update, daemon=True).start()
+        #self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        #self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-    def update(self):
+        self.raw_frame = None
+        self.annotated_frame = None
+        self.last_preds = []
+        self.running = True
+
+        self.lock = threading.Lock()
+
+        # Start threads
+        threading.Thread(target=self.capture_loop, daemon=True).start()
+        threading.Thread(target=self.inference_loop, daemon=True).start()
+
+    def capture_loop(self):
         while self.running:
             self.cap.grab()
             ret, frame = self.cap.read()
             if ret:
-                frame = preprocess(frame)
-                preds = do_inf(frame).numpy()
-                frame = frame.numpy()
-                for x1, y1, x2, y2, conf, cls in preds:
-                    if conf < 0.25:
-                        continue
-                    x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-                    label = f"{int(cls)}:{conf:.2f}"
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-                self.frame = frame
-            time.sleep(0.01)
+                with self.lock:
+                    self.raw_frame = frame.copy()
+                    self.annotated_frame = self.draw_predictions(frame.copy(), self.last_preds)
+            time.sleep(1/30)
+
+    def inference_loop(self):
+        prev_time = time.time()
+        while self.running:
+            with self.lock:
+                frame = self.raw_frame.copy() if self.raw_frame is not None else None
+            if frame is not None:
+                pre = preprocess(frame)
+                preds = do_inf(pre).numpy()
+                preds = scale_boxes(pre.shape[:2], preds, frame.shape)
+                with self.lock:
+                    self.last_preds = preds
+                curr_time = time.time()
+                fps = 1 / (curr_time - prev_time)
+                prev_time = curr_time
+                print(f"\rFPS: {fps:.2f}", end="", flush=True)
+
+    def draw_predictions(self, frame, preds):
+      for x1, y1, x2, y2, conf, cls in preds:
+        if conf < 0.5:
+          continue
+        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+        label = f"{class_labels[int(cls)]}:{conf:.2f}"
+        color = color_dict[class_labels[int(cls)]]
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1,)
+        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA,)
+      return frame
 
     def get_jpeg(self):
-        if self.frame is not None:
-            ret, jpeg = cv2.imencode('.jpg', self.frame)
-            return jpeg.tobytes()
+        with self.lock:
+            if self.annotated_frame is not None:
+                ret, jpeg = cv2.imencode('.jpg', self.annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+                return jpeg.tobytes()
         return None
 
     def release(self):
         self.running = False
         self.cap.release()
 
-# HTTP handler for MJPEG
+# MJPEG Server
 class MJPEGHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != '/':
@@ -402,13 +429,15 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             pass
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
+    """Serve HTTP requests in separate threads."""
 
-# Initialize camera and run server
+# --- Start server ---
+rtsp_url = ""
 cam = VideoCapture(rtsp_url)
+
 try:
     server = ThreadedHTTPServer(('0.0.0.0', 8080), MJPEGHandler)
-    print("Serving video on http://<this-ip>:8080")
+    print("\nServing video on http://<this-ip>:8080")
     server.serve_forever()
 except KeyboardInterrupt:
     print("\nShutting down...")
