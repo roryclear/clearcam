@@ -339,60 +339,78 @@ load_state_dict(yolo_infer, state_dict)
 
 import cv2
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+import threading
 
-# Replace with your RTSP stream URL
-rtsp_url = ""
+# RTSP URL
+rtsp_url = "rtsp://user:password@192.168.1.30:554/live/ch0"
 
+# Video capture thread
+class VideoCapture:
+    def __init__(self, src):
+        self.cap = cv2.VideoCapture(src)
+        self.frame = None
+        self.running = True
+        threading.Thread(target=self.update, daemon=True).start()
 
-def clear_buffer(cap, frames_to_discard=5):
-    for _ in range(frames_to_discard):
-        cap.grab()  # Grabs the frame but does not decode
-        time.sleep(0.03)  # slight delay to allow new frames to queue
+    def update(self):
+        while self.running:
+            self.cap.grab()
+            ret, frame = self.cap.read()
+            if ret:
+                frame = preprocess(frame)
+                preds = do_inf(frame).numpy()
+                frame = frame.numpy()
+                for x1, y1, x2, y2, conf, cls in preds:
+                    if conf < 0.25:
+                        continue
+                    x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+                    label = f"{int(cls)}:{conf:.2f}"
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                self.frame = frame
+            time.sleep(0.01)
 
-# Open stream
-cap = cv2.VideoCapture(rtsp_url)
+    def get_jpeg(self):
+        if self.frame is not None:
+            ret, jpeg = cv2.imencode('.jpg', self.frame)
+            return jpeg.tobytes()
+        return None
 
-if not cap.isOpened():
-    print("Failed to open RTSP stream.")
-else:
-    for i in range(1000):
-        clear_buffer(cap)  # discard old buffered frames
-        ret, frame = cap.read()
-        if ret:
-            #filename = f"frame_{i}.jpg"
-            #cv2.imwrite(filename, frame)
-            print(i)
-            frame = preprocess(frame)
-            preds = do_inf(frame)
-            print(preds.numpy())
-        else:
-            print(f"Failed to read frame {i}")
+    def release(self):
+        self.running = False
+        self.cap.release()
 
-    # --- Setup video writer for last 10 seconds ---
+# HTTP handler for MJPEG
+class MJPEGHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != '/':
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=frame')
+        self.end_headers()
+        try:
+            while True:
+                jpeg = cam.get_jpeg()
+                if jpeg:
+                    self.wfile.write(b'--frame\r\n')
+                    self.wfile.write(b'Content-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
+                time.sleep(1/25)
+        except BrokenPipeError:
+            pass
 
-    # Output video file
-    video_output = 'last_10s.mp4'
-    fps = 25  # assumed frame rate
-    duration_seconds = 10
-    frame_count = fps * duration_seconds
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in a separate thread."""
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
-    out = cv2.VideoWriter(video_output, fourcc, fps, (width, height))
-
-    print(f"Recording last {duration_seconds} seconds...")
-
-    # --- Record 10 seconds of video ---
-    for i in range(frame_count):
-        ret, frame = cap.read()
-        if not ret:
-            print(f"Frame drop at {i}")
-            continue
-        out.write(frame)
-
-    print(f"Video saved to {video_output}")
-
-    # --- Cleanup ---
-    out.release()
-    cap.release()
+# Initialize camera and run server
+cam = VideoCapture(rtsp_url)
+try:
+    server = ThreadedHTTPServer(('0.0.0.0', 8080), MJPEGHandler)
+    print("Serving video on http://<this-ip>:8080")
+    server.serve_forever()
+except KeyboardInterrupt:
+    print("\nShutting down...")
+    cam.release()
+    server.shutdown()
