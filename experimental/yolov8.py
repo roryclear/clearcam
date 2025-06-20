@@ -12,6 +12,12 @@ import time, sys
 from tinygrad.helpers import fetch
 from tinygrad.nn.state import safe_load, load_state_dict
 import json
+import struct
+from time import monotonic
+from uvicorn import Server, Config
+import asyncio
+from starlette.types import Receive, Send, Scope
+from starlette.responses import Response
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -322,13 +328,6 @@ def get_weights_location(yolo_variant: str) -> Path:
   if not f32_weights.exists(): convert_f16_safetensor_to_f32(weights_location, f32_weights)
   return f32_weights
 
-import struct
-from time import monotonic
-from uvicorn import Server, Config
-import asyncio
-from starlette.types import Receive, Send, Scope
-from starlette.responses import Response
-
 @TinyJit
 def do_inf(image):
   image = image.reshape(1, 640, 640, 3)
@@ -338,12 +337,6 @@ def do_inf(image):
   return predictions.flatten()
 
 # Model initialization (same as before)
-yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
-depth, width, ratio = get_variant_multiples(yolo_variant)
-yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-state_dict = safe_load(get_weights_location(yolo_variant))
-load_state_dict(yolo_infer, state_dict)
-
 import uuid
 from typing import Optional, Dict
 import struct
@@ -454,10 +447,15 @@ class ASGIApp:
     await send({"type": "http.response.body", "body": b"Not Found"})
 
 if __name__ == "__main__":
-    app = ASGIApp()
-    config = Config(app=app, host="0.0.0.0", port=6667, workers=1)
-    server = Server(config)
-    asyncio.run(server.serve())
+  yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
+  depth, width, ratio = get_variant_multiples(yolo_variant)
+  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+  state_dict = safe_load(get_weights_location(yolo_variant))
+  load_state_dict(yolo_infer, state_dict)
+  app = ASGIApp()
+  config = Config(app=app, host="0.0.0.0", port=6667, workers=1)
+  server = Server(config)
+  asyncio.run(server.serve())
 
 ''' todo, slow with no external deps for now
 from http.server import HTTPServer, BaseHTTPRequestHandler
