@@ -12,6 +12,11 @@ import time, sys
 from tinygrad.helpers import fetch
 from tinygrad.nn.state import safe_load, load_state_dict
 import json
+import cv2
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+import threading
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -323,22 +328,6 @@ def do_inf(im):
   predictions = yolo_infer(im)
   return predictions
 
-# Model initialization (same as before)
-yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
-depth, width, ratio = get_variant_multiples(yolo_variant)
-yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-state_dict = safe_load(get_weights_location(yolo_variant))
-load_state_dict(yolo_infer, state_dict)
-
-import cv2
-import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn
-import threading
-
-class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
-
 # RTSP URL
 # Video capture thread
 class VideoCapture:
@@ -432,13 +421,23 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 # --- Start server ---
 rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
-cam = VideoCapture(rtsp_url)
 
-try:
+if __name__ == "__main__":
+  # Model initialization (same as before)
+  yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
+  depth, width, ratio = get_variant_multiples(yolo_variant)
+  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+  state_dict = safe_load(get_weights_location(yolo_variant))
+  load_state_dict(yolo_infer, state_dict)
+  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
+  color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
+  cam = VideoCapture(rtsp_url)
+
+  try:
     server = ThreadedHTTPServer(('0.0.0.0', 8080), MJPEGHandler)
     print("\nServing video on http://<this-ip>:8080")
     server.serve_forever()
-except KeyboardInterrupt:
+  except KeyboardInterrupt:
     print("\nShutting down...")
     cam.release()
     server.shutdown()
