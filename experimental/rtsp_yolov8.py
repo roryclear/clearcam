@@ -324,7 +324,7 @@ def do_inf(im):
   return predictions
 
 # Model initialization (same as before)
-yolo_variant = sys.argv[1] if len(sys.argv) >= 2 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 's')
+yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
 depth, width, ratio = get_variant_multiples(yolo_variant)
 yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
 state_dict = safe_load(get_weights_location(yolo_variant))
@@ -340,7 +340,6 @@ class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/
 color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
 # RTSP URL
-rtsp_url = ""
 # Video capture thread
 class VideoCapture:
     def __init__(self, src):
@@ -432,7 +431,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
 # --- Start server ---
-rtsp_url = ""
+rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
 cam = VideoCapture(rtsp_url)
 
 try:
