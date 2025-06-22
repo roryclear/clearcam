@@ -330,32 +330,76 @@ def do_inf(im):
 
 # RTSP URL
 # Video capture thread
+import subprocess
+import threading
+import time
+import numpy as np
+import cv2
+
 class VideoCapture:
     def __init__(self, src):
-        self.cap = cv2.VideoCapture(src)
-        #self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        #self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.src = src
+        # aoqee c1 res
+        self.width = 2304
+        self.height = 1296
+        self.proc = None
+        self.running = True
 
         self.raw_frame = None
         self.annotated_frame = None
         self.last_preds = []
-        self.running = True
 
         self.lock = threading.Lock()
+
+        self._open_ffmpeg()
 
         # Start threads
         threading.Thread(target=self.capture_loop, daemon=True).start()
         threading.Thread(target=self.inference_loop, daemon=True).start()
 
+    def _open_ffmpeg(self):
+        if self.proc:
+            self.proc.kill()
+        command = [
+            "ffmpeg",
+            "-rtsp_transport", "tcp",
+            "-i", self.src,
+            "-loglevel", "quiet",
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "2",
+            "-an",  # No audio
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-vf", f"scale={self.width}:{self.height}",
+            "-"
+        ]
+        self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
     def capture_loop(self):
+        frame_size = self.width * self.height * 3
+        fail_count = 0
         while self.running:
-            self.cap.grab()
-            ret, frame = self.cap.read()
-            if ret:
+            try:
+                raw_bytes = self.proc.stdout.read(frame_size)
+                if len(raw_bytes) != frame_size:
+                    fail_count += 1
+                    print(f"FFmpeg frame read failed (count={fail_count}), restarting stream...")
+                    if fail_count > 5:
+                        self._open_ffmpeg()
+                        fail_count = 0
+                    time.sleep(0.5)
+                    continue
+                fail_count = 0
+                frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
                 with self.lock:
                     self.raw_frame = frame.copy()
                     self.annotated_frame = self.draw_predictions(frame.copy(), self.last_preds)
-            time.sleep(1/30)
+                time.sleep(1 / 30)
+            except Exception as e:
+                print("Error in capture_loop:", e)
+                self._open_ffmpeg()
+                time.sleep(1)
 
     def inference_loop(self):
         prev_time = time.time()
@@ -374,17 +418,17 @@ class VideoCapture:
                 print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
     def draw_predictions(self, frame, preds):
-      for x1, y1, x2, y2, conf, cls in preds:
-        if conf < 0.5:
-          continue
-        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-        label = f"{class_labels[int(cls)]}:{conf:.2f}"
-        color = color_dict[class_labels[int(cls)]]
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1,)
-        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA,)
-      return frame
+        for x1, y1, x2, y2, conf, cls in preds:
+            if conf < 0.5:
+                continue
+            x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+            label = f"{class_labels[int(cls)]}:{conf:.2f}"
+            color = color_dict[class_labels[int(cls)]]
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
+            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+        return frame
 
     def get_jpeg(self):
         with self.lock:
@@ -395,7 +439,8 @@ class VideoCapture:
 
     def release(self):
         self.running = False
-        self.cap.release()
+        if self.proc:
+            self.proc.kill()
 
 # MJPEG Server
 class MJPEGHandler(BaseHTTPRequestHandler):
@@ -411,8 +456,12 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                 jpeg = cam.get_jpeg()
                 if jpeg:
                     self.wfile.write(b'--frame\r\n')
-                    self.wfile.write(b'Content-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
-                time.sleep(1/25)
+                    self.wfile.write(b'Content-Type: image/jpeg\r\n\r\n')
+                    self.wfile.write(jpeg)
+                    self.wfile.write(b'\r\n')
+                else:
+                    print("Warning: No JPEG frame available.")
+                time.sleep(1 / 25)
         except BrokenPipeError:
             pass
 
