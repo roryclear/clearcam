@@ -17,6 +17,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
+import shutil
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -339,9 +340,8 @@ import cv2
 class VideoCapture:
     def __init__(self, src):
         self.src = src
-        # aoqee c1 res
-        self.width = 2304
-        self.height = 1296
+        self.width = 1280  # Reduced resolution for better performance
+        self.height = 720
         self.proc = None
         self.running = True
 
@@ -430,11 +430,10 @@ class VideoCapture:
             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
         return frame
 
-    def get_jpeg(self):
+    def get_frame(self):
         with self.lock:
             if self.annotated_frame is not None:
-                ret, jpeg = cv2.imencode('.jpg', self.annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-                return jpeg.tobytes()
+                return self.annotated_frame.copy()
         return None
 
     def release(self):
@@ -442,37 +441,132 @@ class VideoCapture:
         if self.proc:
             self.proc.kill()
 
-# MJPEG Server
-class MJPEGHandler(BaseHTTPRequestHandler):
+class HLSStreamer:
+    def __init__(self, video_capture, output_dir="hls_output", segment_time=2):
+        self.cam = video_capture
+        self.output_dir = Path(output_dir)
+        self.segment_time = segment_time
+        self.running = False
+        self.ffmpeg_proc = None
+        
+        # Clean and create output directory
+        if self.output_dir.exists():
+            shutil.rmtree(self.output_dir)
+        self.output_dir.mkdir()
+        
+    def start(self):
+        self.running = True
+        # Start FFmpeg process for HLS streaming to local files
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", f"{self.cam.width}x{self.cam.height}",
+            "-r", "30",  # Frame rate
+            "-i", "-",
+            "-c:v", "libx264",
+            "-crf", "21",
+            "-preset", "veryfast",
+            "-g", str(30 * self.segment_time),  # Keyframe interval
+            "-f", "hls",
+            "-hls_time", str(self.segment_time),
+            "-hls_list_size", "0", #allow full rewind
+            "-hls_flags", "delete_segments",
+            "-hls_allow_cache", "0",
+            str(self.output_dir / "stream.m3u8")
+        ]
+        self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+        
+        # Start the frame feeding thread
+        threading.Thread(target=self._feed_frames, daemon=True).start()
+    
+    def _feed_frames(self):
+        while self.running:
+            frame = self.cam.get_frame()
+            if frame is not None:
+                try:
+                    self.ffmpeg_proc.stdin.write(frame.tobytes())
+                except BrokenPipeError:
+                    print("FFmpeg process died, restarting...")
+                    self.start()
+                    return
+            time.sleep(1/30)  # Match the frame rate
+    
+    def stop(self):
+        self.running = False
+        if self.ffmpeg_proc:
+            self.ffmpeg_proc.terminate()
+            try:
+                self.ffmpeg_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.ffmpeg_proc.kill()
+
+class HLSRequestHandler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        self.hls_dir = Path("hls_output")
+        super().__init__(*args, **kwargs)
+    
     def do_GET(self):
-        if self.path != '/':
-            self.send_error(404)
-            return
+      if self.path == '/':
+        # Serve a simple HTML page with a video player
         self.send_response(200)
-        self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=frame')
+        self.send_header('Content-type', 'text/html')
         self.end_headers()
-        try:
-            while True:
-                jpeg = cam.get_jpeg()
-                if jpeg:
-                    self.wfile.write(b'--frame\r\n')
-                    self.wfile.write(b'Content-Type: image/jpeg\r\n\r\n')
-                    self.wfile.write(jpeg)
-                    self.wfile.write(b'\r\n')
-                else:
-                    print("Warning: No JPEG frame available.")
-                time.sleep(1 / 25)
-        except BrokenPipeError:
-            pass
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+        </head>
+        <body>
+            <video id="video" controls width="{self.server.cam.width}"></video>
+            <script>
+                if(Hls.isSupported()) {{
+                    var video = document.getElementById('video');
+                    var hls = new Hls();
+                    hls.loadSource('stream.m3u8');
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED,function() {{
+                        video.play();
+                    }});
+                }}
+                else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                    video.src = 'stream.m3u8';
+                    video.addEventListener('loadedmetadata',function() {{
+                        video.play();
+                    }});
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        self.wfile.write(html.encode('utf-8'))
+        return
+      
+      file_path = self.hls_dir / self.path.lstrip('/')
+      if not file_path.exists():
+        self.send_error(404)
+        return
+      
+      self.send_response(200)
+      if file_path.suffix == '.m3u8':
+        self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+        self.send_header('Cache-Control', 'no-cache')
+      elif file_path.suffix == '.ts':
+        self.send_header('Content-Type', 'video/MP2T')
+      self.end_headers()
+      
+      with open(file_path, 'rb') as f:
+        shutil.copyfileobj(f, self.wfile)
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
-# --- Start server ---
-rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
-
 if __name__ == "__main__":
-  # Model initialization (same as before)
+  rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
+  
+  # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
   depth, width, ratio = get_variant_multiples(yolo_variant)
   yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
@@ -480,13 +574,24 @@ if __name__ == "__main__":
   load_state_dict(yolo_infer, state_dict)
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
+  
   cam = VideoCapture(rtsp_url)
-
+  hls_streamer = HLSStreamer(cam)
+  
   try:
-    server = ThreadedHTTPServer(('0.0.0.0', 8080), MJPEGHandler)
-    print("\nServing video on http://<this-ip>:8080")
-    server.serve_forever()
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
+      server.cam = cam  # Pass camera reference to server
+      
+      # Start HLS streamer
+      hls_streamer.start()
+      
+      print("\nServing HLS stream on:")
+      print(f"  - Web player: http://localhost:8080/")
+      print(f"  - HLS URL (for VLC): http://localhost:8080/stream.m3u8")
+      print("\nPress Ctrl+C to stop...")
+      server.serve_forever()
   except KeyboardInterrupt:
-    print("\nShutting down...")
-    cam.release()
-    server.shutdown()
+      print("\nShutting down...")
+      hls_streamer.stop()
+      cam.release()
+      server.shutdown()
