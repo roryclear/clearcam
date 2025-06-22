@@ -465,6 +465,7 @@ class HLSStreamer:
             "-r", "30",  # Frame rate
             "-i", "-",
             "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
             "-crf", "21",
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),  # Keyframe interval
