@@ -337,6 +337,23 @@ import time
 import numpy as np
 import cv2
 
+def resolve_youtube_stream_url(youtube_url):
+    import yt_dlp
+    ydl_opts = {
+        'format': 'best',
+        'quiet': True,
+        'noplaylist': True,
+        'force_generic_extractor': False,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(youtube_url, download=False)
+        if 'url' in info:
+            return info['url']
+        elif 'entries' in info and info['entries']:
+            return info['entries'][0]['url']
+        else:
+            raise RuntimeError("Could not resolve YouTube stream URL")
+
 class VideoCapture:
     def __init__(self, src):
         self.src = src
@@ -360,9 +377,11 @@ class VideoCapture:
     def _open_ffmpeg(self):
         if self.proc:
             self.proc.kill()
+        
+        if "youtube.com" in self.src or "youtu.be" in self.src: self.src = resolve_youtube_stream_url(self.src)
+        
         command = [
             "ffmpeg",
-            "-rtsp_transport", "tcp",
             "-i", self.src,
             "-loglevel", "quiet",
             "-reconnect", "1",
@@ -375,6 +394,7 @@ class VideoCapture:
             "-"
         ]
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
 
     def capture_loop(self):
         frame_size = self.width * self.height * 3
