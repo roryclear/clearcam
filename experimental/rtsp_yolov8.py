@@ -462,7 +462,7 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="hls_output", segment_time=2):
+    def __init__(self, video_capture, output_dir="hls_output", segment_time=4):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
@@ -482,20 +482,22 @@ class HLSStreamer:
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.cam.width}x{self.cam.height}",
-            #"-r", "30",  # Frame rate
+            "-use_wallclock_as_timestamps", "1",
+            "-fflags", "+genpts",
             "-i", "-",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             "-crf", "21",
             "-preset", "veryfast",
-            "-g", str(30 * self.segment_time),  # Keyframe interval
+            "-g", str(30 * self.segment_time),
             "-f", "hls",
             "-hls_time", str(self.segment_time),
-            "-hls_list_size", "0", #allow full rewind
+            "-hls_list_size", "0",
             "-hls_flags", "delete_segments",
             "-hls_allow_cache", "0",
             str(self.output_dir / "stream.m3u8")
         ]
+
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
         
         # Start the frame feeding thread
