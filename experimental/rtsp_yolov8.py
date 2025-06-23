@@ -482,7 +482,7 @@ class HLSStreamer:
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.cam.width}x{self.cam.height}",
-            "-r", "30",  # Frame rate
+            #"-r", "30",  # Frame rate
             "-i", "-",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
