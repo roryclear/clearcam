@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
 import shutil
+from datetime import datetime, time as time_obj
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -336,6 +337,9 @@ import threading
 import time
 import numpy as np
 import cv2
+from datetime import datetime
+import os
+import threading
 
 def resolve_youtube_stream_url(youtube_url):
     import yt_dlp
@@ -473,9 +477,16 @@ class HLSStreamer:
         if self.output_dir.exists():
             shutil.rmtree(self.output_dir)
         self.output_dir.mkdir()
+    
+    def _get_new_stream_dir(self):
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # todo ios format
+        stream_dir = self.output_dir / timestamp
+        stream_dir.mkdir(exist_ok=True)
+        return stream_dir
         
     def start(self):
         self.running = True
+        self.current_stream_dir = self._get_new_stream_dir()
         # Start FFmpeg process for HLS streaming to local files
         ffmpeg_cmd = [
             "ffmpeg",
@@ -495,12 +506,10 @@ class HLSStreamer:
             "-hls_list_size", "0",
             "-hls_flags", "delete_segments",
             "-hls_allow_cache", "0",
-            str(self.output_dir / "stream.m3u8")
+            str(self.current_stream_dir / "stream.m3u8")
         ]
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        
-        # Start the frame feeding thread
         threading.Thread(target=self._feed_frames, daemon=True).start()
     
     def _feed_frames(self):
@@ -529,6 +538,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.hls_dir = Path("hls_output")
         super().__init__(*args, **kwargs)
     
+    def _get_latest_stream(self):
+        """Find the most recent stream directory"""
+        stream_dirs = list(self.hls_dir.glob("*"))
+        if not stream_dirs:
+            return None
+        return max(stream_dirs, key=os.path.getmtime)
+
     def do_GET(self):
       if self.path == '/':
         # Serve a simple HTML page with a video player
@@ -567,21 +583,49 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode('utf-8'))
         return
       
-      file_path = self.hls_dir / self.path.lstrip('/')
+
+      latest_dir = self._get_latest_stream()
+      if not latest_dir:
+          self.send_error(404)
+          return
+          
+      file_path = latest_dir / self.path.lstrip('/')
       if not file_path.exists():
-        self.send_error(404)
-        return
-      
+          self.send_error(404)
+          return
+          
       self.send_response(200)
       if file_path.suffix == '.m3u8':
-        self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
-        self.send_header('Cache-Control', 'no-cache')
+          self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+          self.send_header('Cache-Control', 'no-cache')
       elif file_path.suffix == '.ts':
-        self.send_header('Content-Type', 'video/MP2T')
+          self.send_header('Content-Type', 'video/MP2T')
       self.end_headers()
       
       with open(file_path, 'rb') as f:
-        shutil.copyfileobj(f, self.wfile)
+          shutil.copyfileobj(f, self.wfile)
+
+def schedule_daily_restart(hls_streamer, restart_time):
+    """Schedule daily restarts at a specific time"""
+    while True:
+        now = datetime.now().time()
+        target = time_obj(restart_time[0], restart_time[1])  # (hour, minute)
+        
+        # Calculate seconds until next restart
+        if now >= target:
+            # If time already passed today, schedule for tomorrow
+            delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
+        else:
+            delta = ((target.hour * 3600 + target.minute * 60) - 
+                    (now.hour * 3600 + now.minute * 60 + now.second))
+        
+        print(f"Next stream restart scheduled in {delta//3600}h {(delta%3600)//60}m")
+        time.sleep(delta)
+        
+        print("\nPerforming scheduled stream restart...")
+        hls_streamer.stop()
+        time.sleep(10) # todo can get away with none or less?
+        hls_streamer.start()
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
@@ -605,8 +649,15 @@ if __name__ == "__main__":
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
       server.cam = cam  # Pass camera reference to server
       
-      # Start HLS streamer
       hls_streamer.start()
+
+      restart_time = (0, 0)  #midnight
+      scheduler = threading.Thread(
+      target=schedule_daily_restart,
+      args=(hls_streamer, restart_time),
+      daemon=True
+      )
+      scheduler.start()
       
       print("\nServing HLS stream on:")
       print(f"  - Web player: http://localhost:8080/")
