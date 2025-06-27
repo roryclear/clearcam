@@ -440,6 +440,11 @@ class VideoCapture:
                 fps = 1 / (curr_time - prev_time)
                 prev_time = curr_time
                 print(f"\rFPS: {fps:.2f}", end="", flush=True)
+    
+    def is_bright_color(self,color):
+      r, g, b = color
+      brightness = (r * 299 + g * 587 + b * 114) / 1000
+      return brightness > 127
 
     def draw_predictions(self, frame, preds):
         for x1, y1, x2, y2, conf, cls in preds:
@@ -450,8 +455,9 @@ class VideoCapture:
             color = color_dict[class_labels[int(cls)]]
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            font_color = (0, 0, 0) if self.is_bright_color(color) else (255, 255, 255)
             cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
-            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
         return frame
 
     def get_frame(self):
