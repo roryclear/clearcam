@@ -448,7 +448,7 @@ class VideoCapture:
 
     def draw_predictions(self, frame, preds):
         for x1, y1, x2, y2, conf, cls in preds:
-            if conf < 0.5:
+            if conf < 0.5 or (classes is not None and str(int(cls)) not in classes):
                 continue
             x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
             label = f"{class_labels[int(cls)]}:{conf:.2f}"
@@ -638,6 +638,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
+  classes = None
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
