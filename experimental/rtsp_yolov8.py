@@ -386,6 +386,8 @@ class VideoCapture:
         
         command = [
             "ffmpeg",
+            "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "-headers", "Referer: https://www.website.com/\r\n",
             "-i", self.src,
             "-loglevel", "quiet",
             "-reconnect", "1",
@@ -395,6 +397,8 @@ class VideoCapture:
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-vf", f"scale={self.width}:{self.height}",
+            "-timeout", "5000000",
+            "-rw_timeout", "15000000",
             "-"
         ]
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -472,7 +476,7 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="hls_output", segment_time=4):
+    def __init__(self, video_capture, output_dir="hls_output", segment_time=7):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
@@ -658,7 +662,7 @@ if __name__ == "__main__":
       
       hls_streamer.start()
 
-      restart_time = (0, 0)  #midnight
+      restart_time = (0, 0)
       scheduler = threading.Thread(
       target=schedule_daily_restart,
       args=(hls_streamer, restart_time),
