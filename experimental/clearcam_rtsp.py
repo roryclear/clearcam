@@ -361,7 +361,7 @@ def resolve_youtube_stream_url(youtube_url):
 class VideoCapture:
     def __init__(self, src):
         # objects in scene count
-        self.object_dict = dict()
+        self.object_dict = defaultdict(int)
         self.object_queue = []
 
         self.src = src
@@ -425,6 +425,11 @@ class VideoCapture:
 
                 filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
+                self.object_queue.append(objects)
+                for x in objects: self.object_dict[int(x)] += 1
+                if len(self.object_queue) > 10:
+                    for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
+                    del self.object_queue[0]
                 with self.lock:
                     self.raw_frame = frame.copy()
                     self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
