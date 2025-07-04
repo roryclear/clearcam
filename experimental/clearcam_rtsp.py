@@ -360,6 +360,10 @@ def resolve_youtube_stream_url(youtube_url):
 
 class VideoCapture:
     def __init__(self, src):
+        # objects in scene count
+        self.object_dict = dict()
+        self.object_queue = []
+
         self.src = src
         self.width = 1280  # Reduced resolution for better performance
         self.height = 720
@@ -418,9 +422,12 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
+                objects = [int(x[5]) for x in filtered_preds]
                 with self.lock:
                     self.raw_frame = frame.copy()
-                    self.annotated_frame = self.draw_predictions(frame.copy(), self.last_preds)
+                    self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                 time.sleep(1 / 30)
             except Exception as e:
                 print("Error in capture_loop:", e)
@@ -450,8 +457,6 @@ class VideoCapture:
 
     def draw_predictions(self, frame, preds):
         for x1, y1, x2, y2, conf, cls in preds:
-            if conf < 0.5 or (classes is not None and str(int(cls)) not in classes):
-                continue
             x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
             label = f"{class_labels[int(cls)]}:{conf:.2f}"
             color = color_dict[class_labels[int(cls)]]
