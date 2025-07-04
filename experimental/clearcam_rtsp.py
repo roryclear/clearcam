@@ -409,6 +409,7 @@ class VideoCapture:
     def capture_loop(self):
         frame_size = self.width * self.height * 3
         fail_count = 0
+        count = 0
         while self.running:
             try:
                 raw_bytes = self.proc.stdout.read(frame_size)
@@ -426,10 +427,16 @@ class VideoCapture:
                 filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
-                for x in objects: self.object_dict[int(x)] += 1
+                if count % 10 == 0: # todo magic 10s
+                    last_dict = self.object_dict.copy()
+                count = (count + 1) % 10
+                for x in objects:
+                    self.object_dict[int(x)] += 1
                 if len(self.object_queue) > 10:
                     for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                     del self.object_queue[0]
+                    for k in self.object_dict.keys():
+                        if abs(self.object_dict[k] - last_dict[k]) > 5: print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
                 with self.lock:
                     self.raw_frame = frame.copy()
                     self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
@@ -647,7 +654,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
-  classes = None
+  classes = {"0","1","2","7","14"} # person, bike, car, truck, bird
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
