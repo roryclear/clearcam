@@ -410,6 +410,7 @@ class VideoCapture:
         frame_size = self.width * self.height * 3
         fail_count = 0
         count = 0
+        last_det = -1
         while self.running:
             try:
                 raw_bytes = self.proc.stdout.read(frame_size)
@@ -423,7 +424,6 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-
                 filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
@@ -436,12 +436,14 @@ class VideoCapture:
                     for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                     del self.object_queue[0]
                     for k in self.object_dict.keys():
-                        if abs(self.object_dict[k] - last_dict[k]) > 5: 
-                            print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
-                            os.makedirs("event_images", exist_ok=True)
-                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-                            filename = f"event_images/frame_{timestamp}.jpg" # todo, once per min max, like ios
-                            cv2.imwrite(filename, self.annotated_frame)
+                        if abs(self.object_dict[k] - last_dict[k]) > 5:
+                            if time.time() - last_det >= 60: # once per min for now
+                                print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
+                                os.makedirs("event_images", exist_ok=True)
+                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                                filename = f"event_images/frame_{timestamp}.jpg"
+                                cv2.imwrite(filename, self.annotated_frame)
+                                last_det = time.time()
                 with self.lock:
                     self.raw_frame = frame.copy()
                     self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
