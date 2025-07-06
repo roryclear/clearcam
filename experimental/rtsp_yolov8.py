@@ -401,6 +401,30 @@ class VideoCapture:
             "-rw_timeout", "15000000",
             "-"
         ]
+
+        '''
+        stream_url = "rtmp://a.rtmp.youtube.com/live2/aaaaaaaaaaaaa"
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", f"{self.cam.width}x{self.cam.height}",
+            "-r", "30",
+            "-i", "-",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-tune", "zerolatency",
+            "-pix_fmt", "yuv420p",
+            "-crf", "21",
+            "-g", str(30 * self.segment_time),
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "44100",
+            "-f", "flv",
+            stream_url
+        ]
+        '''
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
 
@@ -662,7 +686,7 @@ if __name__ == "__main__":
       
       hls_streamer.start()
 
-      restart_time = (0, 0)
+      restart_time = (25, 0)
       scheduler = threading.Thread(
       target=schedule_daily_restart,
       args=(hls_streamer, restart_time),
