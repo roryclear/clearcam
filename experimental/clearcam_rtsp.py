@@ -694,7 +694,7 @@ if __name__ == "__main__":
   rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
   classes = {"0","1","2","7","14"} # person, bike, car, truck, bird
 
-  userID = None
+  userID = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--userid=")), None)
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
