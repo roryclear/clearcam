@@ -14,11 +14,14 @@ from tinygrad.nn.state import safe_load, load_state_dict
 import json
 import cv2
 import time
+import http
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
 import shutil
+import requests
 from datetime import datetime, time as time_obj
+import uuid
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -443,6 +446,8 @@ class VideoCapture:
                                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                                 filename = f"event_images/frame_{timestamp}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
+                                if userID is not None: send_notif(userID)
+                                   
                                 last_det = time.time()
                 with self.lock:
                     self.raw_frame = frame.copy()
@@ -656,12 +661,40 @@ def schedule_daily_restart(hls_streamer, restart_time):
         time.sleep(10) # todo can get away with none or less?
         hls_streamer.start()
 
+def send_notif(session_token: str):
+    host = "www.rors.ai"
+    endpoint = "/test/send"
+    boundary = f"Boundary-{uuid.uuid4()}"
+    content_type = f"multipart/form-data; boundary={boundary}"
+    lines = [
+        f"--{boundary}",
+        'Content-Disposition: form-data; name="session_token"',
+        "",
+        session_token,
+        f"--{boundary}--",
+        ""
+    ]
+    body = "\r\n".join(lines).encode("utf-8")
+    conn = http.client.HTTPSConnection(host)
+    headers = { "Content-Type": content_type, "Content-Length": str(len(body))}
+    try:
+        conn.request("POST", endpoint, body, headers)
+        response = conn.getresponse()
+        print(f"Status: {response.status} {response.reason}")
+        print(response.read().decode())
+    except Exception as e:
+        print(f"Error sending session token: {e}")
+    finally:
+        conn.close()
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
 if __name__ == "__main__":
   rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
   classes = {"0","1","2","7","14"} # person, bike, car, truck, bird
+
+  userID = None
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
