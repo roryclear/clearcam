@@ -29,6 +29,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 import secrets
+import struct
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -460,9 +461,10 @@ class VideoCapture:
                                 last_det = time.time()
                         if (send_det and userID is not None) and time.time() - last_det >= 12: #send 15ish second clip after
                             os.makedirs("event_clips", exist_ok=True)
-                            mp4_filename = f"event_clips/{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}.mp4"
+                            mp4_filename = f"event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                             self.streamer.export_last_segments(Path(mp4_filename))
-                            encrypt_file(Path(mp4_filename), Path("{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}.mp4.aes"), "your-32-byte-encryption-key-here")
+                            encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                            upload_file(file_path=Path(f"""{mp4_filename}.aes"""),session_token=userID)
                             send_det = False
                 with self.lock:
                     self.raw_frame = frame.copy()
@@ -739,28 +741,107 @@ def send_notif(session_token: str):
     finally:
         conn.close()
 
-MAGIC_NUMBER = 0x4D41474943 
+MAGIC_NUMBER = 0x4D41474943  # "MAGIC" in hex
 HEADER_SIZE = 8
 AES_BLOCK_SIZE = 16
 AES_KEY_SIZE = 32
+
+def prepare_key(key: str) -> bytes:
+    key_bytes = key.encode('utf-8')[:AES_KEY_SIZE]
+    return key_bytes.ljust(AES_KEY_SIZE, b'\0')
+
 def encrypt_file(input_path: Path, output_path: Path, key: str):
-    key_bytes = key.encode('utf-8')
-    with open(input_path, 'rb') as f: plaintext = f.read()
-    header = MAGIC_NUMBER.to_bytes(HEADER_SIZE, byteorder='big')
-    data_to_encrypt = header + plaintext
-    iv = secrets.token_bytes(AES_BLOCK_SIZE)
-    padder = padding.PKCS7(AES_BLOCK_SIZE * 8).padder()
-    padded_data = padder.update(data_to_encrypt) + padder.finalize()
-    cipher = Cipher(
-        algorithms.AES(key_bytes),
-        modes.CBC(iv),
-        backend=default_backend()
-    )
-    encryptor = cipher.encryptor()
-    ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-    with open(output_path, 'wb') as f:
-        f.write(iv)
-        f.write(ciphertext)
+    try:
+        key_bytes = prepare_key(key)
+        if len(key_bytes) != AES_KEY_SIZE: raise ValueError("Key must be 32 bytes after padding")
+        with open(input_path, 'rb') as f:
+            plaintext = f.read()
+        header = struct.pack('<Q', MAGIC_NUMBER)
+        data_to_encrypt = header + plaintext
+        iv = secrets.token_bytes(AES_BLOCK_SIZE)
+        padder = padding.PKCS7(AES_BLOCK_SIZE * 8).padder()
+        padded_data = padder.update(data_to_encrypt) + padder.finalize()
+        cipher = Cipher(
+            algorithms.AES(key_bytes),
+            modes.CBC(iv),
+            backend=default_backend()
+        )
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+        with open(output_path, 'wb') as f:
+            f.write(iv)
+            f.write(ciphertext)
+        return True
+    
+    except Exception as e:
+        print(f"ENCRYPTION FAILED: {str(e)}")
+        return False
+
+def upload_file(file_path: Path, session_token: str):
+    if not file_path.exists():
+        print(f"File not found: {file_path}")
+        return False
+    try:
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+        
+        file_name = file_path.name
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return False
+    file_size = len(file_data)
+    try:
+        params = {
+            "filename": file_name,
+            "session_token": session_token,
+            "size": str(file_size)
+        }
+        response = requests.get(
+            f"https://rors.ai/test/upload",
+            params=params,
+            timeout=10
+        )
+        if response.status_code != 200:
+            print(f"Failed to get upload URL: {response.status_code}")
+            return False
+        response_data = response.json()
+        if not response_data.get("url"):
+            print("Invalid response - missing upload URL")
+            return False 
+        presigned_url = response_data["url"]
+    except Exception as e:
+        print(f"Error getting upload URL: {e}")
+        return False
+
+    for attempt in range(4):
+        try:
+            headers = {
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(file_size)
+            }
+            
+            upload_response = requests.put(
+                presigned_url,
+                headers=headers,
+                data=file_data,
+                timeout=30
+            )
+            
+            if 200 <= upload_response.status_code < 300:
+                print(f"File uploaded successfully on attempt {attempt + 1}")
+                return True
+            else:
+                print(f"Upload failed with status {upload_response.status_code} on attempt {attempt + 1}")
+        except Exception as e:
+            print(f"Upload error on attempt {attempt + 1}: {e}")
+        
+        # Exponential backoff before retrying
+        if attempt < 4 - 1:
+            delay = 3 * (2 ** attempt)
+            print(f"Waiting {delay:.1f} seconds before retrying...")
+            time.sleep(delay)
+  
+    return False
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
@@ -770,6 +851,10 @@ if __name__ == "__main__":
   classes = {"0","1","2","7","14"} # person, bike, car, truck, bird
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--userid=")), None)
+  key = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
+  if userID is not None and key is None:
+    print("Error: key is required when userID is provided")
+    sys.exit(1)
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
