@@ -8,6 +8,7 @@
 #import "ScheduleManagementViewController.h"
 #import <UserNotifications/UserNotifications.h>
 #import <StoreKit/StoreKit.h>
+#import <LocalAuthentication/LocalAuthentication.h>
 
 @interface SettingsViewController () <UITableViewDelegate, UITableViewDataSource>
 
@@ -27,6 +28,7 @@
 @property (nonatomic, strong) NSString *deviceName; // New property for device name
 @property (nonatomic, assign) BOOL useOwnInferenceServerEnabled;
 @property (nonatomic, strong) NSString *inferenceServerAddress;
+@property (nonatomic, assign) BOOL isUserIDVisible;
 
 @end
 
@@ -34,6 +36,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.isUserIDVisible = NO;
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = NSLocalizedString(@"settings", @"Title for settings screen");
     [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
@@ -549,17 +552,30 @@
             cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 4) { // Upgrade to Premium / Subscription
-        if (!isPremium && indexPath.row == 0) {
+        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+        if (!isSubscribed && indexPath.row == 0) {
             cell.textLabel.text = NSLocalizedString(@"upgrade_to_premium", @"Label for upgrade to premium button");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
-        } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
+        } else if ((isSubscribed && indexPath.row == 0) || (!isSubscribed && indexPath.row == 1)) {
             cell.textLabel.text = NSLocalizedString(@"restore_purchases", @"Label for restore purchases button");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
+        } else if (isSubscribed && indexPath.row == 1) {
+            cell.textLabel.text = @"UserID";
+            cell.textLabel.textColor = [UIColor labelColor];
+            cell.textLabel.textAlignment = NSTextAlignmentLeft;
+            if (self.isUserIDVisible) {
+                NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+                cell.detailTextLabel.text = sessionToken ?: @"UserID";
+            } else {
+                cell.detailTextLabel.text = @"Tap to reveal your user ID, do not share this."; // Masked placeholder
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            }
             cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 5) { // Terms and Privacy
@@ -602,8 +618,7 @@
     } else if (section == 3) { // Advanced Settings
         return 2; // Use Own Notification Server, Use Own Inference Server
     } else if (section == 4) { // Upgrade to Premium / Subscription
-        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-        return isSubscribed ? 1 : 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
+        return 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
     } else if (section == 5) { // Terms and Privacy
         return 3; // Terms of Use, Privacy Policy, Delete Encryption Keys
     }
@@ -825,9 +840,10 @@
     } else if (indexPath.section == 3) { // Advanced Settings
         // Rows 0 and 1 (server switches) are handled by their toggles, so do nothing on tap
     } else if (indexPath.section == 4) { // Upgrade to Premium / Subscription
-        if (!isPremium && indexPath.row == 0) {
+        BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+        if (!isSubscribed && indexPath.row == 0) {
             [self showUpgradePopup];
-        } else if ((isPremium && indexPath.row == 0) || (!isPremium && indexPath.row == 1)) {
+        } else if ((isSubscribed && indexPath.row == 0) || (!isSubscribed && indexPath.row == 1)) {
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"restoring_purchases_title", @"Title for restoring purchases alert")
                                                                           message:NSLocalizedString(@"restoring_purchases_message", @"Message for restoring purchases alert")
                                                                    preferredStyle:UIAlertControllerStyleAlert];
@@ -838,6 +854,8 @@
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [self dismissViewControllerAnimated:YES completion:nil];
             });
+        } else if (isSubscribed && indexPath.row == 1 && !self.isUserIDVisible) {
+            [self authenticateToRevealUserID];
         }
     } else if (indexPath.section == 5) { // Terms and Privacy
         if (indexPath.row == 0) { // Terms of Use
@@ -849,6 +867,69 @@
         }
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)authenticateToRevealUserID {
+    LAContext *context = [[LAContext alloc] init];
+    NSError *authError = nil;
+    NSString *reason = NSLocalizedString(@"authenticate_to_view_user_id", @"Reason for authentication to view user ID");
+
+    // Check if biometric authentication is available
+    if ([context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:&authError]) {
+        [context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+                localizedReason:reason
+                          reply:^(BOOL success, NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (success) {
+                    self.isUserIDVisible = YES;
+                    [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:1 inSection:4]] withRowAnimation:UITableViewRowAnimationFade];
+                } else {
+                    // Fallback to password authentication if biometric fails
+                    [self promptForPasswordToRevealUserID];
+                }
+            });
+        }];
+    } else {
+        // If biometrics are not available, prompt for password
+        [self promptForPasswordToRevealUserID];
+    }
+}
+
+- (void)promptForPasswordToRevealUserID {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"enter_password_title", @"Title for password input to reveal user ID")
+                                                                   message:NSLocalizedString(@"enter_password_message", @"Message for password input to reveal user ID")
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = NSLocalizedString(@"password_placeholder", @"Placeholder for password input");
+        textField.secureTextEntry = YES;
+    }];
+    
+    UIAlertAction *submitAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"submit", @"Submit button")
+                                                           style:UIAlertActionStyleDefault
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        NSString *inputPassword = alert.textFields[0].text;
+        NSString *storedPassword = [self retrievePasswordFromSecretsManager];
+        if ([inputPassword isEqualToString:storedPassword] && inputPassword.length > 0) {
+            self.isUserIDVisible = YES;
+            [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:1 inSection:4]] withRowAnimation:UITableViewRowAnimationFade];
+        } else {
+            UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"invalid_password_title", @"Title for invalid password alert")
+                                                                                message:NSLocalizedString(@"invalid_password_message", @"Message for invalid password alert")
+                                                                         preferredStyle:UIAlertControllerStyleAlert];
+            [errorAlert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:errorAlert animated:YES completion:nil];
+        }
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:submitAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showUpgradePopup {

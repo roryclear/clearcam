@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0.1">
 <dict>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Clearcam needs to use Face ID to securely reveal your user ID in the subscription settings.</string>
     <key>NSCameraUsageDescription</key>
     <string>Clearcam needs access to your camera to record video, stream video and detect objects.</string>
 	<key>CFBundleDocumentTypes</key>
