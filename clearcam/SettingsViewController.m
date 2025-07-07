@@ -572,9 +572,34 @@
             if (self.isUserIDVisible) {
                 NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
                 cell.detailTextLabel.text = sessionToken ?: @"UserID";
+
+                // Add copy button
+                UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+                [copyButton setTitle:@"Copy" forState:UIControlStateNormal];
+                [copyButton sizeToFit];
+                CGRect buttonFrame = copyButton.frame;
+                buttonFrame.origin.x = cell.contentView.frame.size.width - buttonFrame.size.width - 16;
+                buttonFrame.origin.y = (cell.contentView.frame.size.height - buttonFrame.size.height) / 2;
+                copyButton.frame = buttonFrame;
+                copyButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+                [copyButton addTarget:self action:@selector(copyUserIDToClipboard:) forControlEvents:UIControlEventTouchUpInside];
+                for (UIView *subview in cell.contentView.subviews) {
+                    if ([subview isKindOfClass:[UIButton class]] && [((UIButton *)subview).titleLabel.text isEqualToString:@"Copy"]) {
+                        [subview removeFromSuperview];
+                    }
+                }
+
+                [cell.contentView addSubview:copyButton];
             } else {
-                cell.detailTextLabel.text = @"Tap to reveal your user ID, do not share this."; // Masked placeholder
+                cell.detailTextLabel.text = @"Tap to reveal your user ID, do not share this.";
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
+                // Remove copy button if it exists
+                for (UIView *subview in cell.contentView.subviews) {
+                    if ([subview isKindOfClass:[UIButton class]] && [((UIButton *)subview).titleLabel.text isEqualToString:@"Copy"]) {
+                        [subview removeFromSuperview];
+                    }
+                }
             }
             cell.userInteractionEnabled = YES;
         }
@@ -623,6 +648,21 @@
         return 3; // Terms of Use, Privacy Policy, Delete Encryption Keys
     }
     return 0;
+}
+
+- (void)copyUserIDToClipboard:(UIButton *)sender {
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (sessionToken) {
+        UIPasteboard.generalPasteboard.string = sessionToken;
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Copied"
+                                                                       message:@"User ID copied to clipboard."
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [self presentViewController:alert animated:YES completion:^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [alert dismissViewControllerAnimated:YES completion:nil];
+            });
+        }];
+    }
 }
 
 - (void)showInferenceServerAddressInputDialog {
