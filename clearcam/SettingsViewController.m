@@ -915,8 +915,8 @@
     NSString *reason = NSLocalizedString(@"authenticate_to_view_user_id", @"Reason for authentication to view user ID");
 
     // Check if biometric authentication is available
-    if ([context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:&authError]) {
-        [context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+    if ([context canEvaluatePolicy:LAPolicyDeviceOwnerAuthentication error:&authError]) {
+        [context evaluatePolicy:LAPolicyDeviceOwnerAuthentication
                 localizedReason:reason
                           reply:^(BOOL success, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
