@@ -22,6 +22,7 @@ import shutil
 import requests
 from datetime import datetime, time as time_obj
 import uuid
+from collections import deque
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -376,6 +377,7 @@ class VideoCapture:
         self.raw_frame = None
         self.annotated_frame = None
         self.last_preds = []
+        self.dir = None
 
         self.lock = threading.Lock()
 
@@ -414,6 +416,7 @@ class VideoCapture:
         fail_count = 0
         count = 0
         last_det = -1
+        send_det = False
         while self.running:
             try:
                 raw_bytes = self.proc.stdout.read(frame_size)
@@ -441,14 +444,19 @@ class VideoCapture:
                     for k in self.object_dict.keys():
                         if abs(self.object_dict[k] - last_dict[k]) > 5:
                             if time.time() - last_det >= 60: # once per min for now
+                                send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
                                 os.makedirs("event_images", exist_ok=True)
                                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                                 filename = f"event_images/frame_{timestamp}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: send_notif(userID)
-                                   
                                 last_det = time.time()
+                        if (send_det and userID is not None) and time.time() - last_det >= 12: #send 15ish second clip after
+                            print("dir =",self.dir)
+                            mp4_filename = f"event_images/clip_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+                            self.streamer.export_last_segments(Path(mp4_filename))
+                            send_det = False
                 with self.lock:
                     self.raw_frame = frame.copy()
                     self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
@@ -503,24 +511,26 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="hls_output", segment_time=7):
+    def __init__(self, video_capture, output_dir="hls_output", segment_time=5):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
-        
+
         if not self.output_dir.exists(): self.output_dir.mkdir()
     
     def _get_new_stream_dir(self):
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # todo ios format
         stream_dir = self.output_dir / timestamp
+        self.cam.dir = stream_dir
         stream_dir.mkdir(exist_ok=True)
         return stream_dir
         
     def start(self):
         self.running = True
         self.current_stream_dir = self._get_new_stream_dir()
+        self.recent_segments = deque(maxlen=3)
         # Start FFmpeg process for HLS streaming to local files
         ffmpeg_cmd = [
             "ffmpeg",
@@ -545,7 +555,41 @@ class HLSStreamer:
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
         threading.Thread(target=self._feed_frames, daemon=True).start()
+        threading.Thread(target=self._track_segments, daemon=True).start()
+
+
+    def export_last_segments(self, output_path: Path):
+        if not self.recent_segments:
+            print("No segments available to save.")
+            return
+
+        concat_list_path = self.current_stream_dir / "concat_list.txt"
+        with open(concat_list_path, "w") as f:
+            for segment in self.recent_segments:
+                f.write(f"file '{segment.resolve()}'\n")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list_path),
+            "-c", "copy",
+            str(output_path)
+        ]
+        try:
+            subprocess.run(command, check=True)
+            print(f"Saved detection clip to: {output_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to save video: {e}")
     
+    def _track_segments(self):
+        while self.running:
+            segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
+            self.recent_segments.clear()
+            self.recent_segments.extend(segment_files[-3:]) # last 3 for now
+            time.sleep(self.segment_time / 2)
+
     def _feed_frames(self):
         while self.running:
             frame = self.cam.get_frame()
@@ -707,6 +751,7 @@ if __name__ == "__main__":
   
   cam = VideoCapture(rtsp_url)
   hls_streamer = HLSStreamer(cam)
+  cam.streamer = hls_streamer
   
   try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
