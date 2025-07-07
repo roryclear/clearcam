@@ -447,14 +447,14 @@ class VideoCapture:
                                 send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
                                 os.makedirs("event_images", exist_ok=True)
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                                timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
                                 filename = f"event_images/frame_{timestamp}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: send_notif(userID)
                                 last_det = time.time()
                         if (send_det and userID is not None) and time.time() - last_det >= 12: #send 15ish second clip after
-                            print("dir =",self.dir)
-                            mp4_filename = f"event_images/clip_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+                            os.makedirs("event_clips", exist_ok=True)
+                            mp4_filename = f"event_clips/{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}.mp4"
                             self.streamer.export_last_segments(Path(mp4_filename))
                             send_det = False
                 with self.lock:
@@ -521,7 +521,7 @@ class HLSStreamer:
         if not self.output_dir.exists(): self.output_dir.mkdir()
     
     def _get_new_stream_dir(self):
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") # todo ios format
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S") # todo ios format
         stream_dir = self.output_dir / timestamp
         self.cam.dir = stream_dir
         stream_dir.mkdir(exist_ok=True)
