@@ -445,7 +445,7 @@ class VideoCapture:
                     for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                     del self.object_queue[0]
                     for k in self.object_dict.keys():
-                        if abs(self.object_dict[k] - last_dict[k]) > 5:
+                        if abs(self.object_dict[k] - last_dict[k]) > 2:
                             if time.time() - last_det >= 60: # once per min for now
                                 send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
