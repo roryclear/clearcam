@@ -594,10 +594,10 @@ class HLSStreamer:
                 "-f", "concat",
                 "-safe", "0",
                 "-i", str(concat_list_path),
-                "-vf", "scale=-2:360,fps=24",
+                "-vf", "scale=-2:240,fps=24",
                 "-c:v", "libx264",
                 "-preset", "veryslow",
-                "-crf", "36",
+                "-crf", "32",
                 "-an",
                 str(output_path)
             ]
