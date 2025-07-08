@@ -923,14 +923,12 @@
                 if (success) {
                     self.isUserIDVisible = YES;
                     [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:1 inSection:4]] withRowAnimation:UITableViewRowAnimationFade];
-                } else {
-                    // Fallback to password authentication if biometric fails
+                } else if (error.code != LAErrorUserCancel && error.code != LAErrorAuthenticationFailed) {
                     [self promptForPasswordToRevealUserID];
                 }
             });
         }];
     } else {
-        // If biometrics are not available, prompt for password
         [self promptForPasswordToRevealUserID];
     }
 }
