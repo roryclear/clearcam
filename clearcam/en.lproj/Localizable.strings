@@ -99,3 +99,9 @@
 "settings_desc" = "Configure cameras and detection";
 "all" = "all";
 "people+vehicles" = "people+vehicles";
+
+"authenticate_to_view_user_id" = "authenticate to view your userID.";
+"tap_for_userid" = "Tap to reveal your user ID, do not share this.";
+"id_copied" = "UserID copied to clipboard.";
+"copied" = "Copied";
+"userid" = "UserID";

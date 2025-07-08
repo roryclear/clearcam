@@ -100,6 +100,12 @@
 "all" = "全部";
 "people+vehicles" = "人+车辆";
 
+"authenticate_to_view_user_id" = "验证以查看您的用户ID。";
+"tap_for_userid" = "点击显示您的用户ID，请勿分享。";
+"id_copied" = "用户ID已复制到剪贴板。";
+"copied" = "已复制";
+"userid" = "用户ID";
+
 "person" = "人";
 "bicycle" = "自行车";
 "car" = "汽车";

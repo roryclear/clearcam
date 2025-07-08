@@ -566,12 +566,12 @@
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         } else if (isSubscribed && indexPath.row == 1) {
-            cell.textLabel.text = @"UserID";
+            cell.textLabel.text = NSLocalizedString(@"userid", nil);
             cell.textLabel.textColor = [UIColor labelColor];
             cell.textLabel.textAlignment = NSTextAlignmentLeft;
             if (self.isUserIDVisible) {
                 NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-                cell.detailTextLabel.text = sessionToken ?: @"UserID";
+                cell.detailTextLabel.text = sessionToken ?: NSLocalizedString(@"userid", nil);;
 
                 // Add copy button
                 UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -591,7 +591,7 @@
 
                 [cell.contentView addSubview:copyButton];
             } else {
-                cell.detailTextLabel.text = @"Tap to reveal your user ID, do not share this.";
+                cell.detailTextLabel.text = NSLocalizedString(@"tap_for_userid", nil);
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 
                 // Remove copy button if it exists
@@ -654,8 +654,8 @@
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     if (sessionToken) {
         UIPasteboard.generalPasteboard.string = sessionToken;
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Copied"
-                                                                       message:@"User ID copied to clipboard."
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"copied", nil)
+                                                                       message:NSLocalizedString(@"id_copied", nil)
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [self presentViewController:alert animated:YES completion:^{
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{

@@ -100,6 +100,12 @@
 "all" = "すべて";
 "people+vehicles" = "人＋車両";
 
+"authenticate_to_view_user_id" = "ユーザーIDを表示するには認証が必要です。";
+"tap_for_userid" = "タップしてユーザーIDを表示、共有しないでください。";
+"id_copied" = "ユーザーIDがクリップボードにコピーされました。";
+"copied" = "コピーしました";
+"userid" = "ユーザーID";  
+
 "person" = "人";
 "bicycle" = "自転車";
 "car" = "車";
