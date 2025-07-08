@@ -420,6 +420,8 @@ class VideoCapture:
         count = 0
         last_det = -1
         send_det = False
+        last_live_check = time.time()
+        last_live_seg = time.time()
         while self.running:
             try:
                 raw_bytes = self.proc.stdout.read(frame_size)
@@ -433,7 +435,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.4 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -462,6 +464,16 @@ class VideoCapture:
                             encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                             threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
                             send_det = False
+                    if live and (time.time() - last_live_check) >= 5:
+                        last_live_check = time.time()
+                        print("CHECKING FOR LIVE",live_link)
+                        threading.Thread(target=check_upload_link, daemon=True).start()
+                    if live_link and (time.time() - last_live_seg) >= 2:
+                        last_live_seg = time.time()
+                        mp4_filename = f"segment.mp4"
+                        self.streamer.export_last_segments(Path(mp4_filename),last=True)
+                        encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                        threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link), daemon=True).start()
                 with self.lock:
                     self.raw_frame = frame.copy()
                     self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
@@ -564,15 +576,15 @@ class HLSStreamer:
         threading.Thread(target=self._track_segments, daemon=True).start()
 
 
-    def export_last_segments(self, output_path: Path):
+    def export_last_segments(self,output_path: Path,last=False):
         if not self.recent_segments:
             print("No segments available to save.")
             return
 
         concat_list_path = self.current_stream_dir / "concat_list.txt"
+        segments_to_use = [self.recent_segments[-1]] if last else self.recent_segments
         with open(concat_list_path, "w") as f:
-            for segment in self.recent_segments:
-                f.write(f"file '{segment.resolve()}'\n")
+            f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = [
             "ffmpeg",
@@ -856,6 +868,32 @@ def upload_file(file_path: Path, session_token: str):
   
     return False
 
+live_link = False
+is_live_lock = threading.Lock()
+def check_upload_link():
+    global live_link
+    url = f"https://rors.ai/test/get_stream_upload_link?name=clearcampy&session_token={userID}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        json_data = response.json()
+        upload_link = json_data.get("upload_link")
+        with is_live_lock: live_link = upload_link
+    except Exception as e:
+        with is_live_lock:
+            live_link = None
+        print(f"Error checking upload link: {e}")
+
+def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
+    with file_path.open('rb') as f:
+        response = requests.put(
+            signed_url,
+            data=f,
+            headers={'Content-Type': 'application/octet-stream'},
+            timeout=2
+        )
+      
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
@@ -868,6 +906,9 @@ if __name__ == "__main__":
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
+  live = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
+  live_link = None
+  device_name = "clearcam py"
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
