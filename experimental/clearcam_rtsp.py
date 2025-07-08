@@ -25,10 +25,6 @@ import uuid
 from collections import deque
 
 from pathlib import Path
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.backends import default_backend
-import secrets
 import struct
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
@@ -459,7 +455,7 @@ class VideoCapture:
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: send_notif(userID)
                                 last_det = time.time()
-                        if (send_det and userID is not None) and time.time() - last_det >= 10: #send 15ish second clip after
+                        if (send_det and userID is not None) and time.time() - last_det >= 8: #send 15ish second clip after
                             os.makedirs("event_clips", exist_ok=True)
                             mp4_filename = f"event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                             self.streamer.export_last_segments(Path(mp4_filename))
@@ -741,7 +737,8 @@ def send_notif(session_token: str):
     finally:
         conn.close()
 
-MAGIC_NUMBER = 0x4D41474943  # "MAGIC" in hex
+import aes
+MAGIC_NUMBER = 0x4D41474943
 HEADER_SIZE = 8
 AES_BLOCK_SIZE = 16
 AES_KEY_SIZE = 32
@@ -750,31 +747,44 @@ def prepare_key(key: str) -> bytes:
     key_bytes = key.encode('utf-8')[:AES_KEY_SIZE]
     return key_bytes.ljust(AES_KEY_SIZE, b'\0')
 
+def pkcs7_pad(data: bytes, block_size: int) -> bytes:
+    pad_len = block_size - (len(data) % block_size)
+    return data + bytes([pad_len] * pad_len)
+
+def encrypt_cbc(data: bytes, key: bytes, iv: bytes) -> bytes:
+    aes_cipher = aes.AES(key)
+    encrypted = bytearray()
+    prev_block = iv
+
+    for i in range(0, len(data), AES_BLOCK_SIZE):
+        block = data[i:i + AES_BLOCK_SIZE]
+        xored = bytes([b ^ p for b, p in zip(block, prev_block)])
+        encrypted_block = bytes(aes_cipher.encrypt(xored))
+        encrypted += encrypted_block
+        prev_block = encrypted_block
+    return bytes(encrypted)
+
 def encrypt_file(input_path: Path, output_path: Path, key: str):
     try:
         key_bytes = prepare_key(key)
-        if len(key_bytes) != AES_KEY_SIZE: raise ValueError("Key must be 32 bytes after padding")
+        iv = os.urandom(AES_BLOCK_SIZE)
+
         with open(input_path, 'rb') as f:
             plaintext = f.read()
-        header = struct.pack('<Q', MAGIC_NUMBER)
-        data_to_encrypt = header + plaintext
-        iv = secrets.token_bytes(AES_BLOCK_SIZE)
-        padder = padding.PKCS7(AES_BLOCK_SIZE * 8).padder()
-        padded_data = padder.update(data_to_encrypt) + padder.finalize()
-        cipher = Cipher(
-            algorithms.AES(key_bytes),
-            modes.CBC(iv),
-            backend=default_backend()
-        )
-        encryptor = cipher.encryptor()
-        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+
+        # Add MAGIC header and pad
+        data = struct.pack('<Q', MAGIC_NUMBER) + plaintext
+        padded = pkcs7_pad(data, AES_BLOCK_SIZE)
+
+        ciphertext = encrypt_cbc(padded, key_bytes, iv)
+
         with open(output_path, 'wb') as f:
-            f.write(iv)
-            f.write(ciphertext)
+            f.write(iv + ciphertext)  # ObjC expects IV prepended
+
         return True
-    
+
     except Exception as e:
-        print(f"ENCRYPTION FAILED: {str(e)}")
+        print(f"ENCRYPTION FAILED: {e}")
         return False
 
 def upload_file(file_path: Path, session_token: str):
