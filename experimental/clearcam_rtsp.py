@@ -455,7 +455,7 @@ class VideoCapture:
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: send_notif(userID)
                                 last_det = time.time()
-                        if (send_det and userID is not None) and time.time() - last_det >= 8: #send 15ish second clip after
+                        if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                             os.makedirs("event_clips", exist_ok=True)
                             mp4_filename = f"event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                             self.streamer.export_last_segments(Path(mp4_filename))
