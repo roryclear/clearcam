@@ -586,15 +586,32 @@ class HLSStreamer:
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        command = [
-            "ffmpeg",
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list_path),
-            "-c", "copy",
-            str(output_path)
-        ]
+        if last:
+            # Re-encode with scaling and compression
+            command = [
+                "ffmpeg",
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", str(concat_list_path),
+                "-vf", "scale=-2:360,fps=24",
+                "-c:v", "libx264",
+                "-preset", "veryslow",
+                "-crf", "36",
+                "-an",
+                str(output_path)
+            ]
+        else:
+            # Just copy original
+            command = [
+                "ffmpeg",
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", str(concat_list_path),
+                "-c", "copy",
+                str(output_path)
+            ]
         try:
             subprocess.run(command, check=True)
             print(f"Saved detection clip to: {output_path}")
@@ -886,7 +903,7 @@ def check_upload_link():
 
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
     with file_path.open('rb') as f:
-        response = requests.put(
+        _ = requests.put(
             signed_url,
             data=f,
             headers={'Content-Type': 'application/octet-stream'},
