@@ -449,11 +449,6 @@ class VideoCapture:
                             if time.time() - last_det >= 60: # once per min for now
                                 send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
-                                os.makedirs("event_images", exist_ok=True)
-                                timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-                                filename = f"event_images/frame_{timestamp}.jpg"
-                                cv2.imwrite(filename, self.annotated_frame)
-                                if userID is not None: send_notif(userID)
                                 last_det = time.time()
                         if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                             os.makedirs("event_clips", exist_ok=True)
@@ -517,7 +512,7 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="hls_output", segment_time=5):
+    def __init__(self, video_capture, output_dir="hls_output", segment_time=2):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
@@ -536,7 +531,7 @@ class HLSStreamer:
     def start(self):
         self.running = True
         self.current_stream_dir = self._get_new_stream_dir()
-        self.recent_segments = deque(maxlen=3)
+        self.recent_segments = deque(maxlen=8)
         # Start FFmpeg process for HLS streaming to local files
         ffmpeg_cmd = [
             "ffmpeg",
@@ -593,7 +588,7 @@ class HLSStreamer:
         while self.running:
             segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
             self.recent_segments.clear()
-            self.recent_segments.extend(segment_files[-3:]) # last 3 for now
+            self.recent_segments.extend(segment_files[-8:]) # last 3 for now
             time.sleep(self.segment_time / 2)
 
     def _feed_frames(self):
