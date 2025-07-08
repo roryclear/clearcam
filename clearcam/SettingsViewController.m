@@ -912,7 +912,7 @@
 - (void)authenticateToRevealUserID {
     LAContext *context = [[LAContext alloc] init];
     NSError *authError = nil;
-    NSString *reason = NSLocalizedString(@"authenticate_to_view_user_id", @"Reason for authentication to view user ID");
+    NSString *reason = NSLocalizedString(@"authenticate_to_view_user_id", nil);
 
     // Check if biometric authentication is available
     if ([context canEvaluatePolicy:LAPolicyDeviceOwnerAuthentication error:&authError]) {
@@ -923,51 +923,10 @@
                 if (success) {
                     self.isUserIDVisible = YES;
                     [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:1 inSection:4]] withRowAnimation:UITableViewRowAnimationFade];
-                } else if (error.code != LAErrorUserCancel && error.code != LAErrorAuthenticationFailed) {
-                    [self promptForPasswordToRevealUserID];
                 }
             });
         }];
-    } else {
-        [self promptForPasswordToRevealUserID];
     }
-}
-
-- (void)promptForPasswordToRevealUserID {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"enter_password_title", @"Title for password input to reveal user ID")
-                                                                   message:NSLocalizedString(@"enter_password_message", @"Message for password input to reveal user ID")
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = NSLocalizedString(@"password_placeholder", @"Placeholder for password input");
-        textField.secureTextEntry = YES;
-    }];
-    
-    UIAlertAction *submitAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"submit", @"Submit button")
-                                                           style:UIAlertActionStyleDefault
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        NSString *inputPassword = alert.textFields[0].text;
-        NSString *storedPassword = [self retrievePasswordFromSecretsManager];
-        if ([inputPassword isEqualToString:storedPassword] && inputPassword.length > 0) {
-            self.isUserIDVisible = YES;
-            [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:1 inSection:4]] withRowAnimation:UITableViewRowAnimationFade];
-        } else {
-            UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"invalid_password_title", @"Title for invalid password alert")
-                                                                                message:NSLocalizedString(@"invalid_password_message", @"Message for invalid password alert")
-                                                                         preferredStyle:UIAlertControllerStyleAlert];
-            [errorAlert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:errorAlert animated:YES completion:nil];
-        }
-    }];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
-                                                           style:UIAlertActionStyleCancel
-                                                         handler:nil];
-    
-    [alert addAction:submitAction];
-    [alert addAction:cancelAction];
-    
-    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showUpgradePopup {
