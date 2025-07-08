@@ -82,8 +82,8 @@
 "preset_name_placeholder" = "Nombre del preset";
 "restoring_purchases_title" = "Restaurando compras";
 "restoring_purchases_message" = "Restaurando tus compras...";
-"steps_text_live" = "1. Instala Clearcam en otro teléfono.\n2. Mejora a Premium (misma cuenta de Apple).\n3. Activa \"Transmisión en red\" y elige una contraseña.\n4. Comienza a grabar.";
-"steps_text_clips" = "1. Instala Clearcam en otro teléfono.\n2. Mejora a Premium (misma cuenta de Apple).\n3. Activa \"Enviar videos al detectar\".\n4. Configura detección y horarios.\n5. Comienza a grabar.";
+"steps_text_live" = "1. Instala Clearcam en otro teléfono o cámara compatible con RTSP.\n2. Actualiza a Clearcam Premium.\n3. Activa \"Transmisión en vivo por red\" en tu otro teléfono (o en la computadora) y elige una contraseña segura y nombre del dispositivo.\n4. Comienza a grabar.";
+"steps_text_clips" = "1. Instala Clearcam en otro teléfono o cámara compatible con RTSP.\n2. Actualiza a Clearcam Premium.\n3. Activa \"Enviar videos al detectar movimiento\" (o notificaciones en tu computadora) y elige una contraseña segura.\n4. (Opcional) Configura los ajustes de detección y horario.\n5. Comienza a grabar.";
 "no_live_devices" = "No hay dispositivos en vivo\n";
 "no_videos_available" = "No hay videos disponibles\n";
 "share" = "Compartir";

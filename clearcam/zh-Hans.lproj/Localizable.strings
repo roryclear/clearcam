@@ -82,8 +82,8 @@
 "preset_name_placeholder" = "预设名称";
 "restoring_purchases_title" = "正在恢复购买";
 "restoring_purchases_message" = "请稍候，我们正在恢复您之前的购买...";
-"steps_text_live" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“通过网络直播”并设置安全密码和设备名称。\n4. 开始录制。";
-"steps_text_clips" = "1. 在另一台手机上安装Clearcam。\n2. 升级至Clearcam高级版（必须在两台手机上使用相同的Apple账号）。\n3. 在另一台手机上启用“检测时发送视频”并设置安全密码。\n4. （可选）配置检测设置和计划。\n5. 开始录制。";
+"steps_text_live" = "1. 在另一部手机或支持RTSP的摄像头上安装Clearcam。\n2. 升级至Clearcam高级版。\n3. 在另一部手机（或电脑）上开启“网络直播”功能，并设置安全密码和设备名称。\n4. 开始录制。";
+"steps_text_clips" = "1. 在另一部手机或支持RTSP的摄像头上安装Clearcam。\n2. 升级至Clearcam高级版。\n3. 开启“检测到运动时发送视频”（或在电脑上接收通知）并设置安全密码。\n4. （可选）配置检测设置和时间表。\n5. 开始录制。";
 "no_live_devices" = "无在线设备\n";
 "no_videos_available" = "无可用视频\n";
 "share" = "分享";
