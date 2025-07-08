@@ -412,14 +412,23 @@
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
 
-    cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    cell.textLabel.textColor = [UIColor labelColor];
-    cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    // Reset cell state to avoid reuse artifacts
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
     cell.imageView.image = nil;
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.accessoryView = nil;
+    cell.textLabel.textColor = [UIColor labelColor];
+    cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    cell.textLabel.textAlignment = NSTextAlignmentLeft;
+    cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    cell.userInteractionEnabled = YES;
+
+    for (UIView *subview in cell.contentView.subviews) {
+        if ([subview isKindOfClass:[UIButton class]] && [((UIButton *)subview).titleLabel.text isEqualToString:@"Copy"]) {
+            [subview removeFromSuperview];
+        }
+    }
 
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
@@ -558,20 +567,18 @@
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
-            cell.userInteractionEnabled = YES;
         } else if ((isSubscribed && indexPath.row == 0) || (!isSubscribed && indexPath.row == 1)) {
             cell.textLabel.text = NSLocalizedString(@"restore_purchases", @"Label for restore purchases button");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
-            cell.userInteractionEnabled = YES;
         } else if (isSubscribed && indexPath.row == 1) {
             cell.textLabel.text = NSLocalizedString(@"userid", nil);
             cell.textLabel.textColor = [UIColor labelColor];
             cell.textLabel.textAlignment = NSTextAlignmentLeft;
             if (self.isUserIDVisible) {
                 NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-                cell.detailTextLabel.text = sessionToken ?: NSLocalizedString(@"userid", nil);;
+                cell.detailTextLabel.text = sessionToken ?: NSLocalizedString(@"userid", nil);
 
                 // Add copy button
                 UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -583,25 +590,11 @@
                 copyButton.frame = buttonFrame;
                 copyButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
                 [copyButton addTarget:self action:@selector(copyUserIDToClipboard:) forControlEvents:UIControlEventTouchUpInside];
-                for (UIView *subview in cell.contentView.subviews) {
-                    if ([subview isKindOfClass:[UIButton class]] && [((UIButton *)subview).titleLabel.text isEqualToString:@"Copy"]) {
-                        [subview removeFromSuperview];
-                    }
-                }
-
                 [cell.contentView addSubview:copyButton];
             } else {
                 cell.detailTextLabel.text = NSLocalizedString(@"tap_for_userid", nil);
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-
-                // Remove copy button if it exists
-                for (UIView *subview in cell.contentView.subviews) {
-                    if ([subview isKindOfClass:[UIButton class]] && [((UIButton *)subview).titleLabel.text isEqualToString:@"Copy"]) {
-                        [subview removeFromSuperview];
-                    }
-                }
             }
-            cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 5) { // Terms and Privacy
         if (indexPath.row == 0) {
