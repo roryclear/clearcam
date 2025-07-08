@@ -100,6 +100,12 @@
 "all" = "전체";
 "people+vehicles" = "사람+차량";
 
+"authenticate_to_view_user_id" = "사용자 ID를 보려면 인증하세요.";
+"tap_for_userid" = "사용자 ID를 보려면 탭하세요, 공유하지 마세요.";
+"id_copied" = "사용자 ID가 클립보드에 복사되었습니다.";
+"copied" = "복사됨";
+"userid" = "사용자 ID";  
+
 "person" = "사람";
 "bicycle" = "자전거";
 "car" = "자동차";

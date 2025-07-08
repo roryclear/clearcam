@@ -100,6 +100,12 @@
 "all" = "todos";
 "people+vehicles" = "personas+vehículos";
 
+"authenticate_to_view_user_id" = "Autentícate para ver tu ID de usuario.";
+"tap_for_userid" = "Toca para revelar tu ID de usuario, no lo compartas.";
+"id_copied" = "ID de usuario copiado al portapapeles.";
+"copied" = "Copiado";
+"userid" = "ID de usuario";  
+
 "person" = "persona";
 "bicycle" = "bicicleta";
 "car" = "coche";
