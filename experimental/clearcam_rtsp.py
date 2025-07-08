@@ -455,7 +455,7 @@ class VideoCapture:
                                 timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
                                 filename = f"event_images/frame_{timestamp}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
-                                if userID is not None: threading.Thread(target=send_notif(userID), daemon=True).start()
+                                if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
                                 last_det = time.time()
                         if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                             os.makedirs("event_clips", exist_ok=True)
