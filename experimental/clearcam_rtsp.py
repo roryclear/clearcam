@@ -453,7 +453,7 @@ class VideoCapture:
                                 timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
                                 filename = f"event_images/frame_{timestamp}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
-                                if userID is not None: send_notif(userID)
+                                if userID is not None: threading.Thread(target=send_notif(userID), daemon=True).start()
                                 last_det = time.time()
                         if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                             os.makedirs("event_clips", exist_ok=True)
@@ -712,34 +712,32 @@ def schedule_daily_restart(hls_streamer, restart_time):
         hls_streamer.start()
 
 def send_notif(session_token: str):
-    def _send():
-        host = "www.rors.ai"
-        endpoint = "/test/send"
-        boundary = f"Boundary-{uuid.uuid4()}"
-        content_type = f"multipart/form-data; boundary={boundary}"
-        lines = [
-            f"--{boundary}",
-            'Content-Disposition: form-data; name="session_token"',
-            "",
-            session_token,
-            f"--{boundary}--",
-            ""
-        ]
-        body = "\r\n".join(lines).encode("utf-8")
-        conn = http.client.HTTPSConnection(host)
-        headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
-        try:
-            conn.request("POST", endpoint, body, headers)
-            response = conn.getresponse()
-            print(f"Status: {response.status} {response.reason}")
-            print(response.read().decode())
-        except Exception as e:
-            print(f"Error sending session token: {e}")
-        finally:
-            conn.close()
+    host = "www.rors.ai"
+    endpoint = "/test/send"
+    boundary = f"Boundary-{uuid.uuid4()}"
+    content_type = f"multipart/form-data; boundary={boundary}"
+    lines = [
+        f"--{boundary}",
+        'Content-Disposition: form-data; name="session_token"',
+        "",
+        session_token,
+        f"--{boundary}--",
+        ""
+    ]
+    body = "\r\n".join(lines).encode("utf-8")
+    conn = http.client.HTTPSConnection(host)
+    headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
+    try:
+        conn.request("POST", endpoint, body, headers)
+        response = conn.getresponse()
+        print(f"Status: {response.status} {response.reason}")
+        print(response.read().decode())
+    except Exception as e:
+        print(f"Error sending session token: {e}")
+    finally:
+        conn.close()
 
-    # Run the actual request in a daemon thread
-    threading.Thread(target=_send, daemon=True).start()
+    
 
 
 import aes
