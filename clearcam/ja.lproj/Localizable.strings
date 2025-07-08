@@ -82,8 +82,8 @@
 "preset_name_placeholder" = "プリセット名";
 "restoring_purchases_title" = "購入を復元中";
 "restoring_purchases_message" = "以前の購入を復元しています...";
-"steps_text_live" = "1. 別のiPhoneにClearcamをインストール\n2. Clearcamプレミアムにアップグレード（両方の端末で同じAppleアカウントを使用）\n3. 配信用iPhoneで「ネットワーク経由でライブ配信」を有効にし、パスワードとデバイス名を設定\n4. 録画を開始";
-"steps_text_clips" = "1. 別のiPhoneにClearcamをインストール\n2. Clearcamプレミアムにアップグレード（両方の端末で同じAppleアカウントを使用）\n3. 配信用iPhoneで「検出時に動画を送信」を有効にし、パスワードを設定\n4. （任意）検出設定とスケジュールを構成\n5. 録画を開始";
+"steps_text_live" = "1. 別のスマートフォンまたはRTSP対応カメラにClearcamをインストールします。\n2. Clearcam Premiumにアップグレードします。\n3. 別のスマートフォン（またはPC）で「ネットワーク経由でライブ配信」を有効にし、安全なパスワードとデバイス名を設定します。\n4. 録画を開始します。";
+"steps_text_clips" = "1. 別のスマートフォンまたはRTSP対応カメラにClearcamをインストールします。\n2. Clearcam Premiumにアップグレードします。\n3. 「検知時に動画を送信」（またはPCで通知を受け取る）を有効にし、安全なパスワードを設定します。\n4. （任意）検知設定とスケジュールを構成します。\n5. 録画を開始します。";
 "no_live_devices" = "配信中のデバイスなし\n";
 "no_videos_available" = "利用可能な動画なし\n";
 "share" = "共有";
