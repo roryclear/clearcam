@@ -435,7 +435,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.4 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.6 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -468,7 +468,7 @@ class VideoCapture:
                         last_live_check = time.time()
                         print("CHECKING FOR LIVE",live_link)
                         threading.Thread(target=check_upload_link, daemon=True).start()
-                    if live_link and (time.time() - last_live_seg) >= 2:
+                    if live_link and (time.time() - last_live_seg) >= 4:
                         last_live_seg = time.time()
                         mp4_filename = f"segment.mp4"
                         self.streamer.export_last_segments(Path(mp4_filename),last=True)
@@ -529,7 +529,7 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="hls_output", segment_time=2):
+    def __init__(self, video_capture, output_dir="hls_output", segment_time=4):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
@@ -548,7 +548,7 @@ class HLSStreamer:
     def start(self):
         self.running = True
         self.current_stream_dir = self._get_new_stream_dir()
-        self.recent_segments = deque(maxlen=8)
+        self.recent_segments = deque(maxlen=4)
         # Start FFmpeg process for HLS streaming to local files
         ffmpeg_cmd = [
             "ffmpeg",
@@ -622,7 +622,7 @@ class HLSStreamer:
         while self.running:
             segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
             self.recent_segments.clear()
-            self.recent_segments.extend(segment_files[-8:]) # last 3 for now
+            self.recent_segments.extend(segment_files[-4:]) # last 3 for now
             time.sleep(self.segment_time / 2)
 
     def _feed_frames(self):
@@ -742,7 +742,7 @@ def schedule_daily_restart(hls_streamer, restart_time):
 
 def send_notif(session_token: str):
     host = "www.rors.ai"
-    endpoint = "/test/send"
+    endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"
     content_type = f"multipart/form-data; boundary={boundary}"
     lines = [
@@ -839,7 +839,7 @@ def upload_file(file_path: Path, session_token: str):
             "size": str(file_size)
         }
         response = requests.get(
-            f"https://rors.ai/test/upload",
+            f"https://rors.ai/upload", #/test
             params=params,
             timeout=10
         )
@@ -889,7 +889,7 @@ live_link = False
 is_live_lock = threading.Lock()
 def check_upload_link():
     global live_link
-    url = f"https://rors.ai/test/get_stream_upload_link?name=clearcampy&session_token={userID}"
+    url = f"https://rors.ai/get_stream_upload_link?name=clearcampy&session_token={userID}" # /test
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -916,7 +916,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
-  classes = {"0","1","2","7","14"} # person, bike, car, truck, bird
+  classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
@@ -964,3 +964,4 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
+
