@@ -23,6 +23,7 @@ import requests
 from datetime import datetime, time as time_obj
 import uuid
 from collections import deque
+from urllib.parse import urlparse, parse_qs
 
 from pathlib import Path
 import struct
@@ -659,64 +660,79 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         return max(stream_dirs, key=os.path.getmtime)
 
     def do_GET(self):
-      if self.path == '/':
-        # Serve a simple HTML page with a video player
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
+        parsed_path = urlparse(self.path)
         
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-        </head>
-        <body>
-            <video id="video" controls width="{self.server.cam.width}"></video>
-            <script>
-                if(Hls.isSupported()) {{
-                    var video = document.getElementById('video');
-                    var hls = new Hls();
-                    hls.loadSource('stream.m3u8');
-                    hls.attachMedia(video);
-                    hls.on(Hls.Events.MANIFEST_PARSED,function() {{
-                        video.play();
-                    }});
-                }}
-                else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
-                    video.src = 'stream.m3u8';
-                    video.addEventListener('loadedmetadata',function() {{
-                        video.play();
-                    }});
-                }}
-            </script>
-        </body>
-        </html>
-        """
-        self.wfile.write(html.encode('utf-8'))
-        return
-      
+        if parsed_path.path == '/':
+            query_params = parse_qs(parsed_path.query)
+            start_param = query_params.get('start', [None])[0]  # None means no param
+            try:
+                start_time = float(start_param) if start_param is not None else None
+            except ValueError:
+                start_time = None
 
-      latest_dir = self._get_latest_stream()
-      if not latest_dir:
-          self.send_error(404)
-          return
-          
-      file_path = latest_dir / self.path.lstrip('/')
-      if not file_path.exists():
-          self.send_error(404)
-          return
-          
-      self.send_response(200)
-      if file_path.suffix == '.m3u8':
-          self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
-          self.send_header('Cache-Control', 'no-cache')
-      elif file_path.suffix == '.ts':
-          self.send_header('Content-Type', 'video/MP2T')
-      self.end_headers()
-      
-      with open(file_path, 'rb') as f:
-          shutil.copyfileobj(f, self.wfile)
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+
+            html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+            </head>
+            <body>
+                <video id="video" controls width="{self.server.cam.width}"></video>
+                <script>
+                    const startTime = {start_time if start_time is not None else 'null'};
+                    const video = document.getElementById('video');
+
+                    if(Hls.isSupported()) {{
+                        const hls = new Hls();
+                        hls.loadSource('stream.m3u8');
+                        hls.attachMedia(video);
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {{
+                            if (startTime !== null) {{
+                                video.currentTime = startTime;
+                            }}
+                            video.play();
+                        }});
+                    }}
+                    else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                        video.src = 'stream.m3u8';
+                        video.addEventListener('loadedmetadata', function() {{
+                            if (startTime !== null) {{
+                                video.currentTime = startTime;
+                            }}
+                            video.play();
+                        }});
+                    }}
+                </script>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode('utf-8'))
+            return
+        
+        latest_dir = self._get_latest_stream()
+        if not latest_dir:
+            self.send_error(404)
+            return
+
+        file_path = latest_dir / self.path.lstrip('/')
+        if not file_path.exists():
+            self.send_error(404)
+            return
+
+        self.send_response(200)
+        if file_path.suffix == '.m3u8':
+            self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+            self.send_header('Cache-Control', 'no-cache')
+        elif file_path.suffix == '.ts':
+            self.send_header('Content-Type', 'video/MP2T')
+        self.end_headers()
+
+        with open(file_path, 'rb') as f:
+            shutil.copyfileobj(f, self.wfile)
 
 def schedule_daily_restart(hls_streamer, restart_time):
     """Schedule daily restarts at a specific time"""
