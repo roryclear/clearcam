@@ -663,8 +663,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         
         if parsed_path.path == '/':
-            query_params = parse_qs(parsed_path.query)
-            start_param = query_params.get('start', [None])[0]  # None means no param
+            stream_dirs = sorted(self.hls_dir.glob("*"), key=os.path.getmtime, reverse=True)
+            dir_names = [d.name for d in stream_dirs if (d / "stream.m3u8").exists()]
+
+            selected_dir = parse_qs(parsed_path.query).get("folder", [dir_names[0] if dir_names else ""])[0]
+            start_param = parse_qs(parsed_path.query).get("start", [None])[0]
+
             try:
                 start_time = float(start_param) if start_param is not None else None
             except ValueError:
@@ -674,6 +678,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.end_headers()
 
+            options_html = "".join(
+                f'<option value="{name}" {"selected" if name == selected_dir else ""}>{name}</option>'
+                for name in dir_names
+            )
+
             html = f"""
             <!DOCTYPE html>
             <html>
@@ -681,44 +690,60 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
             </head>
             <body>
-                <video id="video" controls width="{self.server.cam.width}"></video>
-                <script>
-                    const startTime = {start_time if start_time is not None else 'null'};
-                    const video = document.getElementById('video');
+                <label for="folderSelect">Choose a stream:</label>
+                <select id="folderSelect">
+                    {options_html}
+                </select>
 
-                    if(Hls.isSupported()) {{
-                        const hls = new Hls();
-                        hls.loadSource('stream.m3u8');
-                        hls.attachMedia(video);
-                        hls.on(Hls.Events.MANIFEST_PARSED, function() {{
-                            if (startTime !== null) {{
-                                video.currentTime = startTime;
-                            }}
-                            video.play();
-                        }});
+                <video id="video" controls width="{self.server.cam.width}"></video>
+
+                <script>
+                    const folderSelect = document.getElementById("folderSelect");
+                    const video = document.getElementById("video");
+                    const startTime = {start_time if start_time is not None else 'null'};
+
+                    function loadStream(folder) {{
+                        const url = folder + '/stream.m3u8';
+                        if (Hls.isSupported()) {{
+                            const hls = new Hls();
+                            hls.loadSource(url);
+                            hls.attachMedia(video);
+                            hls.on(Hls.Events.MANIFEST_PARSED, function () {{
+                                if (startTime !== null) {{
+                                    video.currentTime = startTime;
+                                }}
+                                video.play();
+                            }});
+                        }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                            video.src = url;
+                            video.addEventListener('loadedmetadata', function () {{
+                                if (startTime !== null) {{
+                                    video.currentTime = startTime;
+                                }}
+                                video.play();
+                            }});
+                        }}
                     }}
-                    else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
-                        video.src = 'stream.m3u8';
-                        video.addEventListener('loadedmetadata', function() {{
-                            if (startTime !== null) {{
-                                video.currentTime = startTime;
-                            }}
-                            video.play();
-                        }});
-                    }}
+
+                    folderSelect.addEventListener("change", () => {{
+                        loadStream(folderSelect.value);
+                    }});
+
+                    loadStream(folderSelect.value);
                 </script>
             </body>
             </html>
             """
-            self.wfile.write(html.encode('utf-8'))
+            self.wfile.write(html.encode("utf-8"))
             return
         
-        latest_dir = self._get_latest_stream()
-        if not latest_dir:
+        requested_path = self.path.lstrip('/')
+        file_path = self.hls_dir / requested_path
+
+        if not file_path.exists():
             self.send_error(404)
             return
-
-        file_path = latest_dir / self.path.lstrip('/')
+        
         if not file_path.exists():
             self.send_error(404)
             return
