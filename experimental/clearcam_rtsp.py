@@ -453,7 +453,7 @@ class VideoCapture:
                                 send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
                                 os.makedirs("event_images", exist_ok=True)
-                                timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+                                timestamp = datetime.now().strftime("%Y-%m-%d")
                                 filename = f"event_images/frame_{timestamp}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
@@ -540,9 +540,11 @@ class HLSStreamer:
         if not self.output_dir.exists(): self.output_dir.mkdir()
     
     def _get_new_stream_dir(self):
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d")
         stream_dir = self.output_dir / timestamp
         self.cam.dir = stream_dir
+        if stream_dir.exists():
+            shutil.rmtree(stream_dir)
         stream_dir.mkdir(exist_ok=True)
         return stream_dir
         
@@ -666,7 +668,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             stream_dirs = sorted(self.hls_dir.glob("*"), key=os.path.getmtime, reverse=True)
             dir_names = [d.name for d in stream_dirs if (d / "stream.m3u8").exists()]
 
-            selected_dir = parse_qs(parsed_path.query).get("folder", [dir_names[0] if dir_names else ""])[0]
+            selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
 
             try:
@@ -691,14 +693,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             </head>
             <body>
                 <label for="folderSelect">Choose a stream:</label>
-                <select id="folderSelect">
-                    {options_html}
-                </select>
+                <input type="date" id="folderPicker" value="{selected_dir}">
 
                 <video id="video" controls width="{self.server.cam.width}"></video>
 
                 <script>
-                    const folderSelect = document.getElementById("folderSelect");
+                    const folderPicker = document.getElementById("folderPicker");
                     const video = document.getElementById("video");
                     const startTime = {start_time if start_time is not None else 'null'};
 
@@ -725,11 +725,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         }}
                     }}
 
-                    folderSelect.addEventListener("change", () => {{
-                        loadStream(folderSelect.value);
+                    folderPicker.addEventListener("change", () => {{
+                        loadStream(folderPicker.value);
                     }});
-
-                    loadStream(folderSelect.value);
+                    loadStream(folderPicker.value);
                 </script>
             </body>
             </html>
@@ -806,9 +805,6 @@ def send_notif(session_token: str):
         print(f"Error sending session token: {e}")
     finally:
         conn.close()
-
-    
-
 
 import aes
 MAGIC_NUMBER = 0x4D41474943
