@@ -531,7 +531,7 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="hls_output", segment_time=4):
+    def __init__(self, video_capture, output_dir="", segment_time=4):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
@@ -652,7 +652,7 @@ class HLSStreamer:
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.hls_dir = Path("hls_output")
+        self.hls_dir = Path("")
         super().__init__(*args, **kwargs)
     
     def _get_latest_stream(self):
@@ -671,6 +671,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
+
+            event_image_dir = Path(f"event_images/{selected_dir}")
+            event_images = sorted(event_image_dir.glob("*.jpg")) if event_image_dir.exists() else []
+            image_links = ""
+            for img in event_images:
+                ts = int(img.stem)  # filename is timestamp in seconds
+                image_links += f"""
+                <a href="/?folder={selected_dir}&start={ts}">
+                    <img src="/{img}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
+                </a>
+                """
+
 
             try:
                 start_time = float(start_param) if start_param is not None else None
@@ -731,6 +743,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     }});
                     loadStream(folderPicker.value);
                 </script>
+            <h3>Detected Events</h3>
+                <div style="display: flex; flex-wrap: wrap;">
+                    {image_links}
+                </div>
             </body>
             </html>
             """
@@ -738,7 +754,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
         
         requested_path = self.path.lstrip('/')
-        file_path = self.hls_dir / requested_path
+        file_path = Path(requested_path)
 
         if not file_path.exists():
             self.send_error(404)
@@ -754,6 +770,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache')
         elif file_path.suffix == '.ts':
             self.send_header('Content-Type', 'video/MP2T')
+        elif file_path.suffix == '.jpg':
+            self.send_header('Content-Type', 'image/jpeg')
         self.end_headers()
 
         with open(file_path, 'rb') as f:
