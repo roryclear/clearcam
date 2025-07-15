@@ -437,7 +437,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.4 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.6 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -531,7 +531,7 @@ class VideoCapture:
             self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="", segment_time=4):
+    def __init__(self, video_capture, output_dir="streams", segment_time=4):
         self.cam = video_capture
         self.output_dir = Path(output_dir)
         self.segment_time = segment_time
@@ -652,7 +652,7 @@ class HLSStreamer:
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.hls_dir = Path("")
+        self.hls_dir = Path("streams")
         super().__init__(*args, **kwargs)
     
     def _get_latest_stream(self):
@@ -716,7 +716,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const startTime = {start_time if start_time is not None else 'null'};
 
                     function loadStream(folder) {{
-                        const url = folder + '/stream.m3u8';
+                        const url = 'streams/' + folder + '/stream.m3u8';
                         if (Hls.isSupported()) {{
                             const hls = new Hls();
                             hls.loadSource(url);
