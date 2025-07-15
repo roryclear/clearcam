@@ -423,6 +423,7 @@ class VideoCapture:
         send_det = False
         last_live_check = time.time()
         last_live_seg = time.time()
+        stream_start_time = time.time()
         while self.running:
             try:
                 raw_bytes = self.proc.stdout.read(frame_size)
@@ -436,7 +437,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.6 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.4 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -452,9 +453,9 @@ class VideoCapture:
                             if time.time() - last_det >= 60: # once per min for now
                                 send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
-                                os.makedirs("event_images", exist_ok=True)
                                 timestamp = datetime.now().strftime("%Y-%m-%d")
-                                filename = f"event_images/frame_{timestamp}.jpg"
+                                os.makedirs(f"event_images/{timestamp}", exist_ok=True)
+                                filename = f"event_images/{timestamp}/{int(time.time() - stream_start_time - 10)}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
                                 last_det = time.time()
