@@ -423,7 +423,6 @@ class VideoCapture:
         send_det = False
         last_live_check = time.time()
         last_live_seg = time.time()
-        stream_start_time = time.time()
         while self.running:
             try:
                 raw_bytes = self.proc.stdout.read(frame_size)
@@ -437,7 +436,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.6 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.3 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -449,13 +448,13 @@ class VideoCapture:
                     for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                     del self.object_queue[0]
                     for k in self.object_dict.keys():
-                        if abs(self.object_dict[k] - last_dict[k]) > 2:
+                        if abs(self.object_dict[k] - last_dict[k]) > 8:
                             if time.time() - last_det >= 60: # once per min for now
                                 send_det = True
                                 print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
                                 timestamp = datetime.now().strftime("%Y-%m-%d")
                                 os.makedirs(f"event_images/{timestamp}", exist_ok=True)
-                                filename = f"event_images/{timestamp}/{int(time.time() - stream_start_time - 10)}.jpg"
+                                filename = f"event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
                                 cv2.imwrite(filename, self.annotated_frame)
                                 if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
                                 last_det = time.time()
@@ -537,6 +536,7 @@ class HLSStreamer:
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
+        self.start_time = None
 
         if not self.output_dir.exists(): self.output_dir.mkdir()
     
@@ -553,6 +553,7 @@ class HLSStreamer:
         self.running = True
         self.current_stream_dir = self._get_new_stream_dir()
         self.recent_segments = deque(maxlen=4)
+        self.start_time = time.time()
         # Start FFmpeg process for HLS streaming to local files
         ffmpeg_cmd = [
             "ffmpeg",
