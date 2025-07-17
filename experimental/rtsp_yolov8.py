@@ -7,7 +7,7 @@ import numpy as np
 from itertools import chain
 from pathlib import Path
 import cv2
-from collections import defaultdict
+from collections import defaultdict, deque
 import time, sys
 from tinygrad.helpers import fetch
 from tinygrad.nn.state import safe_load, load_state_dict
@@ -352,6 +352,32 @@ from datetime import datetime
 import os
 import threading
 
+class RollingClassCounter:
+    def __init__(self, window_seconds=3600):
+        self.window = window_seconds
+        self.data = defaultdict(deque)
+
+    def add(self, class_id):
+        now = time.time()
+        self.data[class_id].append(now)
+        self.cleanup(class_id, now)
+
+    def cleanup(self, class_id, now):
+        q = self.data[class_id]
+        while q and now - q[0] > self.window:
+            q.popleft()
+
+    def get_counts(self):
+        now = time.time()
+        counts = {}
+        for class_id, q in self.data.items():
+            # Remove old timestamps
+            while q and now - q[0] > self.window:
+                q.popleft()
+            if q:
+                counts[class_id] = len(q)
+        return counts
+
 def resolve_youtube_stream_url(youtube_url):
     import yt_dlp
     ydl_opts = {
@@ -371,6 +397,8 @@ def resolve_youtube_stream_url(youtube_url):
 
 class VideoCapture:
     def __init__(self, src):
+        self.counter = RollingClassCounter(window_seconds=3600)
+        self.object_set = set()
         self.src = src
         self.width = 1280  # Reduced resolution for better performance
         self.height = 720
@@ -476,6 +504,9 @@ class VideoCapture:
                 preds2 = []
                 for x in online_targets:
                     preds2.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+                    if int(x.track_id) not in self.object_set:
+                        self.object_set.add(int(x.track_id))
+                        self.counter.add(int(x.class_id))
                 preds2 = np.array(preds2)
                 preds2 = scale_boxes(pre.shape[:2], preds2, frame.shape)
                 with self.lock:
@@ -502,6 +533,25 @@ class VideoCapture:
             font_color = (0, 0, 0) if self.is_bright_color(color) else (255, 255, 255)
             cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
+
+        counts = self.counter.get_counts()
+        if counts:
+            top_classes = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:5]
+            stats_lines = ["objects in last hour:"] + [f"{class_labels[cls]}: {count}" for cls, count in top_classes]
+
+            # Measure box size
+            box_padding = 5
+            line_height = 15
+            box_width = max(cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0][0] for line in stats_lines) + 2 * box_padding
+            box_height = line_height * len(stats_lines) + 2 * box_padding
+
+            # Draw box background
+            cv2.rectangle(frame, (5, 5), (5 + box_width, 5 + box_height), (50, 50, 50), -1)
+
+            # Draw each line
+            for i, line in enumerate(stats_lines):
+                y = 5 + box_padding + (i + 1) * line_height - 3
+                cv2.putText(frame, line, (5 + box_padding, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
         return frame
 
     def get_frame(self):
