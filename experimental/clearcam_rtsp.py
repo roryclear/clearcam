@@ -436,7 +436,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.3 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -666,6 +666,26 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         
+        if parsed_path.path == '/event_thumbs':
+            selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+            event_image_dir = Path(f"event_images/{selected_dir}")
+            event_images = sorted(event_image_dir.glob("*.jpg")) if event_image_dir.exists() else []
+            
+            image_links = ""
+            for img in event_images:
+                ts = int(img.stem)
+                image_links += f"""
+                <a href="/?folder={selected_dir}&start={ts}">
+                    <img src="/{img}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
+                </a>
+                """
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(image_links.encode('utf-8'))
+            return
+
         if parsed_path.path == '/':
             stream_dirs = sorted(self.hls_dir.glob("*"), key=os.path.getmtime, reverse=True)
             dir_names = [d.name for d in stream_dirs if (d / "stream.m3u8").exists()]
@@ -694,10 +714,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.end_headers()
 
-            options_html = "".join(
-                f'<option value="{name}" {"selected" if name == selected_dir else ""}>{name}</option>'
-                for name in dir_names
-            )
 
             html = f"""
             <!DOCTYPE html>
@@ -739,18 +755,37 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         }}
                     }}
 
+                    function loadEventImages(folder) {{
+                        fetch(`/event_thumbs?folder=${{folder}}`)
+                            .then(response => response.text())
+                            .then(html => {{
+                                document.getElementById("eventImagesContainer").innerHTML = html;
+                            }})
+                            .catch(err => {{
+                                console.error("Failed to load images:", err);
+                                document.getElementById("eventImagesContainer").innerHTML = "<p>No event images found.</p>";
+                            }});
+                    }}
+
                     folderPicker.addEventListener("change", () => {{
-                        loadStream(folderPicker.value);
+                        const folder = folderPicker.value;
+                        loadStream(folder);
+                        loadEventImages(folder);
                     }});
+
+                    // Initial load
                     loadStream(folderPicker.value);
+                    loadEventImages(folderPicker.value);
                 </script>
-            <h3>Detected Events</h3>
-                <div style="display: flex; flex-wrap: wrap;">
+
+                <h3>Detected Events</h3>
+                <div id="eventImagesContainer" style="display: flex; flex-wrap: wrap;">
                     {image_links}
                 </div>
             </body>
             </html>
             """
+
             self.wfile.write(html.encode("utf-8"))
             return
         
