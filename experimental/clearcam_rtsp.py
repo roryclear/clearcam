@@ -864,7 +864,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     #eventImagesContainer img:hover {{
                         transform: scale(1.05);
                     }}
-
                     @media (max-width: 600px) {{
                         .controls {{
                             flex-direction: column;
@@ -875,10 +874,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             flex-direction: row;
                             justify-content: center;
                             width: 100%;
+                            gap: 8px;
+                        }}
+
+                        .time-inputs input[type="time"] {{
+                            width: 110px;
                         }}
 
                         input[type="date"],
-                        input[type="time"],
                         button {{
                             width: 100%;
                             box-sizing: border-box;
