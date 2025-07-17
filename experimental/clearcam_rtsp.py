@@ -764,18 +764,162 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.end_headers()
 
-
             html = f"""
             <!DOCTYPE html>
             <html>
             <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+                <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
+                <style>
+                    body {{
+                        font-family: 'Inter', sans-serif;
+                        margin: 0;
+                        padding: 0;
+                        background-color: #f9f9f9;
+                        color: #333;
+                    }}
+
+                    .container {{
+                        max-width: 900px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }}
+
+                    video {{
+                        width: 100%;
+                        border-radius: 12px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        margin-bottom: 20px;
+                    }}
+
+                    .controls {{
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 16px;
+                        align-items: flex-end;
+                        justify-content: center;
+                        margin-bottom: 20px;
+                    }}
+
+                    .controls label {{
+                        font-size: 0.9rem;
+                        display: flex;
+                        flex-direction: column;
+                        flex: 1 1 auto;
+                        min-width: 120px;
+                    }}
+
+                    .time-inputs {{
+                        display: flex;
+                        gap: 12px;
+                        flex-wrap: nowrap;
+                        justify-content: center;
+                        flex: 1 1 100%;
+                    }}
+
+                    input[type="date"],
+                    input[type="time"] {{
+                        padding: 6px 10px;
+                        border-radius: 8px;
+                        border: 1px solid #ccc;
+                        font-size: 1rem;
+                    }}
+
+                    button {{
+                        background-color: #4CAF50;
+                        color: white;
+                        padding: 10px 16px;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 1rem;
+                        cursor: pointer;
+                        transition: background-color 0.3s ease;
+                    }}
+
+                    button:hover {{
+                        background-color: #45a049;
+                    }}
+
+                    h3 {{
+                        font-size: 1.2rem;
+                        margin: 20px 0 10px;
+                    }}
+
+                    #eventImagesContainer {{
+                        display: flex;
+                        flex-wrap: wrap;
+                        justify-content: center;
+                        gap: 14px;
+                    }}
+
+                    #eventImagesContainer img {{
+                        width: 220px;
+                        height: auto;
+                        border-radius: 10px;
+                        border: 1px solid #ccc;
+                        transition: transform 0.2s;
+                    }}
+
+                    #eventImagesContainer img:hover {{
+                        transform: scale(1.05);
+                    }}
+
+                    @media (max-width: 600px) {{
+                        .controls {{
+                            flex-direction: column;
+                            align-items: center;
+                        }}
+
+                        .time-inputs {{
+                            flex-direction: row;
+                            justify-content: center;
+                            width: 100%;
+                        }}
+
+                        input[type="date"],
+                        input[type="time"],
+                        button {{
+                            width: 100%;
+                            box-sizing: border-box;
+                        }}
+
+                        .controls label {{
+                            align-items: center;
+                            width: 100%;
+                        }}
+                    }}
+                </style>
             </head>
             <body>
-                <label for="folderSelect">Choose a stream:</label>
-                <input type="date" id="folderPicker" value="{selected_dir}">
+                <div class="container">
+                    <video id="video" controls></video>
 
-                <video id="video" controls width="{self.server.cam.width}"></video>
+                    <div class="controls">
+                        <label>
+                            Choose a stream:
+                            <input type="date" id="folderPicker" value="{selected_dir}">
+                        </label>
+
+                        <div class="time-inputs">
+                            <label>
+                                Start:
+                                <input type="time" id="clipStart" step="1" value="00:00:00">
+                            </label>
+                            <label>
+                                End:
+                                <input type="time" id="clipEnd" step="1" value="00:00:10">
+                            </label>
+                        </div>
+
+                        <button onclick="downloadClip()">Download Clip</button>
+                    </div>
+
+                    <h3>Detected Events</h3>
+                    <div id="eventImagesContainer">
+                        {image_links}
+                    </div>
+                </div>
 
                 <script>
                     const folderPicker = document.getElementById("folderPicker");
@@ -850,29 +994,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         loadEventImages(folder);
                     }});
 
-                    // Initial load
                     loadStream(folderPicker.value);
                     loadEventImages(folderPicker.value);
                 </script>
-                <h3>Download Clip</h3>
-                <div style="margin: 10px 0;">
-                    <label>
-                        Start Time:
-                        <input type="time" id="clipStart" step="1" value="00:00:00">
-                    </label>
-                    <label>
-                        End Time:
-                        <input type="time" id="clipEnd" step="1" value="00:00:10">
-                    </label>
-                    <button onclick="downloadClip()">Download</button>
-                </div>
-                <h3>Detected Events</h3>
-                <div id="eventImagesContainer" style="display: flex; flex-wrap: wrap;">
-                    {image_links}
-                </div>
             </body>
             </html>
             """
+
+
 
             self.wfile.write(html.encode("utf-8"))
             return
