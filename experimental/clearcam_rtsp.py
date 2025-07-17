@@ -436,7 +436,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.5 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= 0.4 and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -451,7 +451,6 @@ class VideoCapture:
                         if abs(self.object_dict[k] - last_dict[k]) > 4:
                             if time.time() - last_det >= 60: # once per min for now
                                 send_det = True
-                                print("DETECTED") # todo, magic 5, change of 5 over 10 frames = detection
                                 timestamp = datetime.now().strftime("%Y-%m-%d")
                                 os.makedirs(f"event_images/{timestamp}", exist_ok=True)
                                 filename = f"event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
@@ -467,7 +466,6 @@ class VideoCapture:
                             send_det = False
                     if live and (time.time() - last_live_check) >= 5:
                         last_live_check = time.time()
-                        print("CHECKING FOR LIVE",live_link)
                         threading.Thread(target=check_upload_link, daemon=True).start()
                     if live_link and (time.time() - last_live_seg) >= 4:
                         last_live_seg = time.time()
@@ -719,7 +717,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == '/event_thumbs':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             event_image_dir = Path(f"event_images/{selected_dir}")
-            event_images = sorted(event_image_dir.glob("*.jpg")) if event_image_dir.exists() else []
+            event_images = sorted(
+                event_image_dir.glob("*.jpg"),
+                key=lambda p: int(p.stem),
+                reverse=True
+            ) if event_image_dir.exists() else []
             
             image_links = ""
             for img in event_images:
@@ -1003,9 +1005,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             </body>
             </html>
             """
-
-
-
             self.wfile.write(html.encode("utf-8"))
             return
         
