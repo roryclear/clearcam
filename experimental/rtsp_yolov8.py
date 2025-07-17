@@ -398,7 +398,7 @@ class VideoCapture:
         command = [
             "ffmpeg",
             "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "-headers", "Referer: https://www.earthcam.com/\r\n",
+            "-headers", "Referer: https://www.google.com/\r\n",
             "-i", self.src,
             "-loglevel", "quiet",
             "-reconnect", "1",
