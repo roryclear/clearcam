@@ -20,6 +20,17 @@ import threading
 import shutil
 from datetime import datetime, time as time_obj
 
+from yolox.tracker.byte_tracker import BYTETracker
+
+class Args:
+    def __init__(self):
+        self.track_thresh = 0.6
+        self.track_buffer = 60 #frames, was 30
+        self.mot20 = False
+        self.match_thresh = 0.9
+
+tracker = BYTETracker(Args())
+
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
 
@@ -460,10 +471,15 @@ class VideoCapture:
                 frame = self.raw_frame.copy() if self.raw_frame is not None else None
             if frame is not None:
                 pre = preprocess(frame)
-                preds = do_inf(pre).numpy()
-                preds = scale_boxes(pre.shape[:2], preds, frame.shape)
+                preds2 = do_inf(pre).numpy()
+                online_targets = tracker.update(preds2, [1280,1280], [1280,1280])
+                preds2 = []
+                for x in online_targets:
+                    preds2.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+                preds2 = np.array(preds2)
+                preds2 = scale_boxes(pre.shape[:2], preds2, frame.shape)
                 with self.lock:
-                    self.last_preds = preds
+                    self.last_preds = preds2
                 curr_time = time.time()
                 fps = 1 / (curr_time - prev_time)
                 prev_time = curr_time
