@@ -666,6 +666,56 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         
+        if parsed_path.path == '/download_clip':
+            query = parse_qs(parsed_path.query)
+            folder = query.get("folder", [None])[0]
+            start = query.get("start", [None])[0]
+            end = query.get("end", [None])[0]
+
+            if not folder or start is None or end is None:
+                self.send_error(400, "Missing parameters")
+                return
+
+            try:
+                start = float(start)
+                end = float(end)
+            except ValueError:
+                self.send_error(400, "Invalid start or end time")
+                return
+
+            stream_path = self.hls_dir / folder / "stream.m3u8"
+            if not stream_path.exists():
+                self.send_error(404, "Stream not found")
+                return
+
+            output_path = Path(f"tmp_clip_{uuid.uuid4().hex}.mp4")
+            try:
+                command = [
+                    "ffmpeg",
+                    "-y",
+                    "-ss", str(start),
+                    "-i", str(stream_path),
+                    "-t", str(end - start),
+                    "-c", "copy",
+                    str(output_path)
+                ]
+                subprocess.run(command, check=True)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Content-Disposition", f'attachment; filename="clip_{folder}_{int(start)}_{int(end)}.mp4"')
+                self.send_header("Content-Length", str(output_path.stat().st_size))
+                self.end_headers()
+
+                with open(output_path, "rb") as f:
+                    shutil.copyfileobj(f, self.wfile)
+            except Exception as e:
+                self.send_error(500, f"Failed to create clip: {e}")
+            finally:
+                if output_path.exists():
+                    output_path.unlink()
+            return
+
         if parsed_path.path == '/event_thumbs':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             event_image_dir = Path(f"event_images/{selected_dir}")
@@ -767,6 +817,33 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }});
                     }}
 
+                    function downloadClip() {{
+                        const folder = folderPicker.value;
+                        const startHMS = document.getElementById("clipStart").value;
+                        const endHMS = document.getElementById("clipEnd").value;
+                        const start = hmsToSeconds(startHMS);
+                        const end = hmsToSeconds(endHMS);
+
+                        if (isNaN(start) || isNaN(end) || end <= start) {{
+                            alert("Please enter a valid start and end time (end must be after start).");
+                            return;
+                        }}
+
+                        const url = `/download_clip?folder=${{folder}}&start=${{start}}&end=${{end}}`;
+
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `clip_${{folder}}_${{start}}_${{end}}.mp4`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }}
+
+                    function hmsToSeconds(hms) {{
+                        const [h, m, s] = hms.split(":").map(Number);
+                        return h * 3600 + m * 60 + s;
+                    }}
+
                     folderPicker.addEventListener("change", () => {{
                         const folder = folderPicker.value;
                         loadStream(folder);
@@ -777,7 +854,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     loadStream(folderPicker.value);
                     loadEventImages(folderPicker.value);
                 </script>
-
+                <h3>Download Clip</h3>
+                <div style="margin: 10px 0;">
+                    <label>
+                        Start Time:
+                        <input type="time" id="clipStart" step="1" value="00:00:00">
+                    </label>
+                    <label>
+                        End Time:
+                        <input type="time" id="clipEnd" step="1" value="00:00:10">
+                    </label>
+                    <button onclick="downloadClip()">Download</button>
+                </div>
                 <h3>Detected Events</h3>
                 <div id="eventImagesContainer" style="display: flex; flex-wrap: wrap;">
                     {image_links}
