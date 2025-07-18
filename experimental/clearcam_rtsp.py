@@ -393,9 +393,10 @@ class RollingClassCounter:
 		return counts
 
 class VideoCapture:
-	def __init__(self, src):
+	def __init__(self, src,camera_name="clearcampy"):
 		# objects in scene count
 		self.counter = RollingClassCounter(window_seconds=3600)
+		self.camera_name = camera_name
 		self.object_set = set()
 
 		self.object_dict = defaultdict(int)
@@ -495,7 +496,7 @@ class VideoCapture:
 												send_det = False
 								if live and (time.time() - last_live_check) >= 5:
 										last_live_check = time.time()
-										threading.Thread(target=check_upload_link, daemon=True).start()
+										threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
 								if live_link and (time.time() - last_live_seg) >= 4:
 										last_live_seg = time.time()
 										mp4_filename = f"segment.mp4"
@@ -1244,9 +1245,9 @@ def upload_file(file_path: Path, session_token: str):
 
 live_link = False
 is_live_lock = threading.Lock()
-def check_upload_link():
+def check_upload_link(camera_name="clearcampy"):
 		global live_link
-		url = f"https://rors.ai/get_stream_upload_link?name=clearcampy&session_token={userID}" # /test
+		url = f"https://rors.ai/get_stream_upload_link?name={camera_name}&session_token={userID}" # /test
 		try:
 				response = requests.get(url)
 				response.raise_for_status()
@@ -1309,7 +1310,7 @@ if __name__ == "__main__":
 	class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
 	color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 	
-	cam = VideoCapture(rtsp_url)
+	cam = VideoCapture(rtsp_url,camera_name="clearcampy2")
 	hls_streamer = HLSStreamer(cam)
 	cam.streamer = hls_streamer
 	
