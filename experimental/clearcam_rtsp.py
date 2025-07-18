@@ -1343,10 +1343,7 @@ if __name__ == "__main__":
   
   try:
     server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
-    server.cam = cam  # Pass camera reference to server
-    
     hls_streamer.start()
-
     restart_time = (0, 0)
     scheduler = threading.Thread(
     target=schedule_daily_restart,
