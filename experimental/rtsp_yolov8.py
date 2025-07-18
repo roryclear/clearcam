@@ -537,21 +537,36 @@ class VideoCapture:
         counts = self.counter.get_counts()
         if counts:
             top_classes = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:5]
-            stats_lines = ["objects in last hour:"] + [f"{class_labels[cls]}: {count}" for cls, count in top_classes]
-
-            # Measure box size
-            box_padding = 5
+            labels = ["objects in last hour:"] + [class_labels[cls] for cls, _ in top_classes]
+            values = [""] + [format(count, ",") for _, count in top_classes]
+            labels.append("github.com/roryclear/clearcam")
+            values.append("")
+            # Font settings
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.5
+            font_thickness = 1
             line_height = 15
-            box_width = max(cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0][0] for line in stats_lines) + 2 * box_padding
-            box_height = line_height * len(stats_lines) + 2 * box_padding
+            padding = 5
 
-            # Draw box background
-            cv2.rectangle(frame, (5, 5), (5 + box_width, 5 + box_height), (50, 50, 50), -1)
+            # Measure box sizes
+            label_width = max(cv2.getTextSize(label, font, font_scale, font_thickness)[0][0] for label in labels)
+            value_width = max(cv2.getTextSize(value, font, font_scale, font_thickness)[0][0] for value in values)
 
-            # Draw each line
-            for i, line in enumerate(stats_lines):
-                y = 5 + box_padding + (i + 1) * line_height - 3
-                cv2.putText(frame, line, (5 + box_padding, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            box_height = line_height * len(labels) + 2 * padding
+            label_box_width = label_width + 2 * padding
+            value_box_width = value_width + 2 * padding
+            total_width = label_box_width + value_box_width
+
+            # Draw background
+            x, y = 5, 5
+            cv2.rectangle(frame, (x, y), (x + total_width, y + box_height), (50, 50, 50), -1)
+
+            # Draw text
+            for i, (label, value) in enumerate(zip(labels, values)):
+                text_y = y + padding + (i + 1) * line_height - 3
+                cv2.putText(frame, label, (x + padding, text_y), font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+                cv2.putText(frame, value, (x + label_box_width + padding, text_y), font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+
         return frame
 
     def get_frame(self):
