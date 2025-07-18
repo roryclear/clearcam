@@ -18,13 +18,16 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
 import shutil
-from datetime import datetime, time as time_obj
+from datetime import datetime, time as time_obj, timedelta
 
 from yolox.tracker.byte_tracker import BYTETracker
 
+track_thresh = 0.5 # default is 0.6
+yolo_thresh = 0.5
+
 class Args:
     def __init__(self):
-        self.track_thresh = 0.6
+        self.track_thresh = track_thresh
         self.track_buffer = 60 #frames, was 30
         self.mot20 = False
         self.match_thresh = 0.9
@@ -523,7 +526,7 @@ class VideoCapture:
 
     def draw_predictions(self, frame, preds):
         for x1, y1, x2, y2, conf, cls in preds:
-            if conf < 0.5 or (classes is not None and str(int(cls)) not in classes):
+            if conf < yolo_thresh or (classes is not None and str(int(cls)) not in classes):
                 continue
             x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
             label = f"{class_labels[int(cls)]}:{conf:.2f}"
@@ -566,6 +569,16 @@ class VideoCapture:
                 text_y = y + padding + (i + 1) * line_height - 3
                 cv2.putText(frame, label, (x + padding, text_y), font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
                 cv2.putText(frame, value, (x + label_box_width + padding, text_y), font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+
+        timestamp = (datetime.now() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        thickness = 2
+        (text_width, text_height), baseline = cv2.getTextSize(timestamp, font, font_scale, thickness)
+        x, y = frame.shape[1] - text_width - 20, 30
+        box_coords = ((x - 5, y - text_height - 5), (x + text_width + 5, y + baseline + 5))
+        cv2.rectangle(frame, box_coords[0], box_coords[1], (0, 0, 0), thickness=-1)
+        cv2.putText(frame, timestamp, (x, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
         return frame
 
