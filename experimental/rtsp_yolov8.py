@@ -508,6 +508,7 @@ class VideoCapture:
                 for x in online_targets:
                     preds2.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
                     if int(x.track_id) not in self.object_set:
+                        if classes is not None and str(int(x.class_id)) not in classes: continue 
                         self.object_set.add(int(x.track_id))
                         self.counter.add(int(x.class_id))
                 preds2 = np.array(preds2)
@@ -760,7 +761,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
-  classes = None
+  classes = {"0","1","2","3","5","7","15","16","24","26","67"}
   
   # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
