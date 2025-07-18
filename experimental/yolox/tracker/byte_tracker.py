@@ -81,6 +81,7 @@ class STrack(BaseTrack):
         self.is_activated = True
 
         self.score = new_track.score
+        self.class_id = new_track.class_id
 
     @property
     # @jit(nopython=True)
