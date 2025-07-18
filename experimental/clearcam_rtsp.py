@@ -566,6 +566,7 @@ class HLSStreamer:
             "-crf", "21",
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),
+            "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
             "-f", "hls",
             "-hls_time", str(self.segment_time),
             "-hls_list_size", "0",
