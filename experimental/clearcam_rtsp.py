@@ -501,6 +501,7 @@ class VideoCapture:
                         mp4_filename = f"segment.mp4"
                         self.streamer.export_last_segments(Path(mp4_filename),last=True)
                         encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                        Path(mp4_filename).unlink()
                         threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link), daemon=True).start()
                 with self.lock:
                     self.raw_frame = frame.copy()
@@ -1173,15 +1174,16 @@ def upload_file(file_path: Path, session_token: str):
     if not file_path.exists():
         print(f"File not found: {file_path}")
         return False
+
     try:
         with open(file_path, 'rb') as f:
             file_data = f.read()
-        
         file_name = file_path.name
+        file_size = len(file_data)
     except Exception as e:
         print(f"Error reading file: {e}")
         return False
-    file_size = len(file_data)
+
     try:
         params = {
             "filename": file_name,
@@ -1189,7 +1191,7 @@ def upload_file(file_path: Path, session_token: str):
             "size": str(file_size)
         }
         response = requests.get(
-            f"https://rors.ai/upload", #/test
+            "https://rors.ai/upload",
             params=params,
             timeout=10
         )
@@ -1197,43 +1199,48 @@ def upload_file(file_path: Path, session_token: str):
             print(f"Failed to get upload URL: {response.status_code}")
             return False
         response_data = response.json()
-        if not response_data.get("url"):
+        presigned_url = response_data.get("url")
+        if not presigned_url:
             print("Invalid response - missing upload URL")
-            return False 
-        presigned_url = response_data["url"]
+            return False
     except Exception as e:
         print(f"Error getting upload URL: {e}")
         return False
 
+    success = False
     for attempt in range(4):
         try:
             headers = {
                 "Content-Type": "application/octet-stream",
                 "Content-Length": str(file_size)
             }
-            
             upload_response = requests.put(
                 presigned_url,
                 headers=headers,
                 data=file_data,
                 timeout=30
             )
-            
             if 200 <= upload_response.status_code < 300:
                 print(f"File uploaded successfully on attempt {attempt + 1}")
-                return True
+                success = True
+                break
             else:
                 print(f"Upload failed with status {upload_response.status_code} on attempt {attempt + 1}")
         except Exception as e:
             print(f"Upload error on attempt {attempt + 1}: {e}")
-        
-        # Exponential backoff before retrying
-        if attempt < 4 - 1:
+
+        if attempt < 3:
             delay = 3 * (2 ** attempt)
             print(f"Waiting {delay:.1f} seconds before retrying...")
             time.sleep(delay)
-  
-    return False
+
+    try:
+        file_path.unlink()
+        print(f"Deleted file: {file_path}")
+    except Exception as e:
+        print(f"Failed to delete file: {e}")
+
+    return success
 
 live_link = False
 is_live_lock = threading.Lock()
