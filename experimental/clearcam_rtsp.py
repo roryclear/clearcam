@@ -465,7 +465,7 @@ class VideoCapture:
                     continue
                 fail_count = 0
                 frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-                filtered_preds = [p for p in self.last_preds if p[4] >= 0.4 and (classes is None or str(int(p[5])) in classes)]
+                filtered_preds = [p for p in self.last_preds if p[4] >= yolo_thresh and (classes is None or str(int(p[5])) in classes)]
                 objects = [int(x[5]) for x in filtered_preds]
                 self.object_queue.append(objects)
                 if count % 10 == 0: # todo magic 10s
@@ -1275,12 +1275,15 @@ if __name__ == "__main__":
     sys.exit(1)
   live = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
 
+  track_thresh = 0.4 #default 0.6
+  yolo_thresh = 0.4
+
   track = True #for now
   if track: 
         from yolox.tracker.byte_tracker import BYTETracker
         class Args:
             def __init__(self):
-                self.track_thresh = 0.6
+                self.track_thresh = track_thresh
                 self.track_buffer = 60 #frames, was 30
                 self.mot20 = False
                 self.match_thresh = 0.9
