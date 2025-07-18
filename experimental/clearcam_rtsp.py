@@ -366,9 +366,38 @@ def resolve_youtube_stream_url(youtube_url):
         else:
             raise RuntimeError("Could not resolve YouTube stream URL")
 
+class RollingClassCounter:
+    def __init__(self, window_seconds=3600):
+        self.window = window_seconds
+        self.data = defaultdict(deque)
+
+    def add(self, class_id):
+        now = time.time()
+        self.data[class_id].append(now)
+        self.cleanup(class_id, now)
+
+    def cleanup(self, class_id, now):
+        q = self.data[class_id]
+        while q and now - q[0] > self.window:
+            q.popleft()
+
+    def get_counts(self):
+        now = time.time()
+        counts = {}
+        for class_id, q in self.data.items():
+            # Remove old timestamps
+            while q and now - q[0] > self.window:
+                q.popleft()
+            if q:
+                counts[class_id] = len(q)
+        return counts
+
 class VideoCapture:
     def __init__(self, src):
         # objects in scene count
+        self.counter = RollingClassCounter(window_seconds=3600)
+        self.object_set = set()
+
         self.object_dict = defaultdict(int)
         self.object_queue = []
 
@@ -491,6 +520,15 @@ class VideoCapture:
             if frame is not None:
                 pre = preprocess(frame)
                 preds = do_inf(pre).numpy()
+                if track: 
+                    online_targets = tracker.update(preds, [1280,1280], [1280,1280])
+                    preds = []
+                    for x in online_targets:
+                        preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+                        if int(x.track_id) not in self.object_set:
+                            self.object_set.add(int(x.track_id))
+                            self.counter.add(int(x.class_id))
+                    preds = np.array(preds)
                 preds = scale_boxes(pre.shape[:2], preds, frame.shape)
                 with self.lock:
                     self.last_preds = preds
@@ -1236,6 +1274,19 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   live = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
+
+  track = True #for now
+  if track: 
+        from yolox.tracker.byte_tracker import BYTETracker
+        class Args:
+            def __init__(self):
+                self.track_thresh = 0.6
+                self.track_buffer = 60 #frames, was 30
+                self.mot20 = False
+                self.match_thresh = 0.9
+
+        tracker = BYTETracker(Args())
+
   live_link = None
   device_name = "clearcam py"
   
