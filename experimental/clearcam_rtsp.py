@@ -349,6 +349,8 @@ from datetime import datetime
 import os
 import threading
 
+CAMERA_BASE_DIR = Path("cameras")
+
 def resolve_youtube_stream_url(youtube_url):
   import yt_dlp
   ydl_opts = {
@@ -482,8 +484,9 @@ class VideoCapture:
                         if time.time() - last_det >= 60: # once per min for now
                             send_det = True
                             timestamp = datetime.now().strftime("%Y-%m-%d")
-                            os.makedirs(f"{self.camera_name}/event_images/{timestamp}", exist_ok=True)
-                            filename = f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
+                            event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
+                            event_dir.mkdir(parents=True, exist_ok=True)
+                            filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
                             cv2.imwrite(filename, self.annotated_frame)
                             if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
                             last_det = time.time()
@@ -571,7 +574,7 @@ class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, camera_name="clearcampy"):
         self.camera_name = camera_name
         self.cam = video_capture
-        self.output_dir = Path(self.camera_name) / output_dir
+        self.output_dir = CAMERA_BASE_DIR / self.camera_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -693,7 +696,7 @@ class HLSStreamer:
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.base_dir = Path("")  # Changed from streams to cameras
+        self.base_dir = CAMERA_BASE_DIR 
         super().__init__(*args, **kwargs)
 
     def get_camera_path(self, camera_name=None):
@@ -1078,9 +1081,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(html.encode("utf-8"))
             return
         
-        # Handle static files (m3u8, ts, jpg) with camera prefix
         requested_path = self.path.lstrip('/')
-        file_path = self.base_dir / requested_path  # Look in cameras directory first
+        if requested_path.startswith("cameras/"):
+            requested_path = requested_path[len("cameras/"):]
+        file_path = self.base_dir / requested_path
 
         if not file_path.exists():
             self.send_error(404)
