@@ -518,29 +518,29 @@ class VideoCapture:
   
 
   def inference_loop(self):
-      prev_time = time.time()
-      while self.running:
-          with self.lock:
-              frame = self.raw_frame.copy() if self.raw_frame is not None else None
-          if frame is not None:
-              pre = preprocess(frame)
-              preds = do_inf(pre).numpy()
-              if track: 
-                  online_targets = tracker.update(preds, [1280,1280], [1280,1280])
-                  preds = []
-                  for x in online_targets:
-                      preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
-                      if int(x.track_id) not in self.object_set:
-                          self.object_set.add(int(x.track_id))
-                          self.counter.add(int(x.class_id))
-                  preds = np.array(preds)
-              preds = scale_boxes(pre.shape[:2], preds, frame.shape)
-              with self.lock:
-                  self.last_preds = preds
-              curr_time = time.time()
-              fps = 1 / (curr_time - prev_time)
-              prev_time = curr_time
-              print(f"\rFPS: {fps:.2f}", end="", flush=True)
+    prev_time = time.time()
+    while self.running:
+      with self.lock:
+        frame = self.raw_frame.copy() if self.raw_frame is not None else None
+      if frame is not None:
+        pre = preprocess(frame)
+        preds = do_inf(pre).numpy()
+        if track:
+          online_targets = tracker.update(preds, [1280,1280], [1280,1280])
+          preds = []
+          for x in online_targets:
+            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+            if int(x.track_id) not in self.object_set:
+              self.object_set.add(int(x.track_id))
+              self.counter.add(int(x.class_id))
+        preds = np.array(preds)
+        preds = scale_boxes(pre.shape[:2], preds, frame.shape)
+        with self.lock:
+          self.last_preds = preds
+        curr_time = time.time()
+        fps = 1 / (curr_time - prev_time)
+        prev_time = curr_time
+        print(f"\rFPS: {fps:.2f}", end="", flush=True)
   
   def is_bright_color(self,color):
     r, g, b = color
