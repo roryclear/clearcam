@@ -500,13 +500,13 @@ class VideoCapture:
                 if live and (time.time() - last_live_check) >= 5:
                     last_live_check = time.time()
                     threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
-                if live_link and (time.time() - last_live_seg) >= 4:
+                if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
                     mp4_filename = f"segment.mp4"
                     self.streamer.export_last_segments(Path(mp4_filename),last=True)
                     encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                     Path(mp4_filename).unlink()
-                    threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link), daemon=True).start()
+                    threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.camera_name]), daemon=True).start()
             with self.lock:
                 self.raw_frame = frame.copy()
                 self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
@@ -1274,7 +1274,7 @@ def upload_file(file_path: Path, session_token: str):
 
     return success
 
-live_link = False
+live_link = dict()
 is_live_lock = threading.Lock()
 def check_upload_link(camera_name="clearcampy"):
     global live_link
@@ -1284,10 +1284,10 @@ def check_upload_link(camera_name="clearcampy"):
         response.raise_for_status()
         json_data = response.json()
         upload_link = json_data.get("upload_link")
-        with is_live_lock: live_link = upload_link
+        with is_live_lock: live_link[camera_name] = upload_link
     except Exception as e:
         with is_live_lock:
-            live_link = None
+            if camera_name in live_link: live_link[camera_name] = None
         print(f"Error checking upload link: {e}")
 
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
@@ -1329,7 +1329,7 @@ if __name__ == "__main__":
 
         tracker = BYTETracker(Args())
 
-  live_link = None
+  live_link = dict()
   device_name = "clearcam py"
   
   # Model initialization
