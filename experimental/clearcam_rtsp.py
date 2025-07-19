@@ -1340,9 +1340,10 @@ if __name__ == "__main__":
   load_state_dict(yolo_infer, state_dict)
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
-  
-  cam = VideoCapture(rtsp_url,camera_name="clearcampy")
-  hls_streamer = HLSStreamer(cam)
+
+  cam_name = "clearcampy"
+  cam = VideoCapture(rtsp_url,camera_name=cam_name)
+  hls_streamer = HLSStreamer(cam,camera_name=cam_name)
   cam.streamer = hls_streamer
   
   try:
@@ -1356,10 +1357,6 @@ if __name__ == "__main__":
     )
     scheduler.start()
     
-    print("\nServing HLS stream on:")
-    print(f"  - Web player: http://localhost:8080/")
-    print(f"  - HLS URL (for VLC): http://localhost:8080/stream.m3u8")
-    print("\nPress Ctrl+C to stop...")
     server.serve_forever()
   except KeyboardInterrupt:
     print("\nShutting down...")
