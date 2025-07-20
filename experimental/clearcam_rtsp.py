@@ -455,6 +455,7 @@ class VideoCapture:
     send_det = False
     last_live_check = time.time()
     last_live_seg = time.time()
+    last_preview_time = None
     while self.running:
         try:
             raw_bytes = self.proc.stdout.read(frame_size)
@@ -474,9 +475,16 @@ class VideoCapture:
             if count % 10 == 0: # todo magic 10s
                 last_dict = self.object_dict.copy()
             count = (count + 1) % 10
+
             for x in objects:
                 self.object_dict[int(x)] += 1
             if len(self.object_queue) > 10:
+                if last_preview_time is None or time.time() - last_det >= 3600: # preview every hour
+                    last_preview_time = time.time()
+                    preview_dir = CAMERA_BASE_DIR / self.camera_name
+                    preview_dir.mkdir(parents=True, exist_ok=True)
+                    filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
+                    cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
                 for k in self.object_dict.keys():
@@ -709,17 +717,35 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         query = parse_qs(parsed_path.query)
 
-        # If no ?cam= and root path, show camera list only
         if parsed_path.path == '/' and "cam" not in query:
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
-            links = "\n".join(
-                f'<p><a href="/?cam={cam}">{cam}</a></p>' for cam in available_cams
-            )
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(links.encode('utf-8'))
-            return
+          available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+          cam_entries = "\n".join(
+              f'''
+              <div style="margin: 10px;">
+                  <a href="/?cam={cam}">
+                      <img src="/{cam}/preview.jpg" alt="{cam} preview" width="200" style="display: block; border: 1px solid #ccc; margin-bottom: 5px;">
+                      <div style="text-align: center;">{cam}</div>
+                  </a>
+              </div>
+              ''' for cam in available_cams
+          )
+          html = f"""
+          <!DOCTYPE html>
+          <html>
+          <head><title>Available Cameras</title></head>
+          <body>
+              <h2>Available Cameras</h2>
+              <div style="display: flex; flex-wrap: wrap;">
+                  {cam_entries}
+              </div>
+          </body>
+          </html>
+          """
+          self.send_response(200)
+          self.send_header('Content-type', 'text/html')
+          self.end_headers()
+          self.wfile.write(html.encode('utf-8'))
+          return
         
         # Get camera name from query parameter or default to first camera
         camera_name = query.get("cam", [None])[0]
