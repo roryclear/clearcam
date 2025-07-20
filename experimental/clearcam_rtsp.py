@@ -708,6 +708,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         query = parse_qs(parsed_path.query)
+
+        # If no ?cam= and root path, show camera list only
+        if parsed_path.path == '/' and "cam" not in query:
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            links = "\n".join(
+                f'<p><a href="/?cam={cam}">{cam}</a></p>' for cam in available_cams
+            )
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(links.encode('utf-8'))
+            return
         
         # Get camera name from query parameter or default to first camera
         camera_name = query.get("cam", [None])[0]
@@ -1312,7 +1324,8 @@ if __name__ == "__main__":
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
-  live = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
+  live = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--live=")), None)
+  cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--cam_name=")), "my_camera")
 
   track_thresh = 0.4 #default 0.6
   yolo_thresh = 0.4
@@ -1338,7 +1351,6 @@ if __name__ == "__main__":
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
-  cam_name = "clearcampy"
   cam = VideoCapture(rtsp_url,camera_name=cam_name)
   hls_streamer = HLSStreamer(cam,camera_name=cam_name)
   cam.streamer = hls_streamer
