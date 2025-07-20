@@ -1299,7 +1299,7 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
             timeout=2
         )
       
-
+import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
@@ -1319,20 +1319,17 @@ if __name__ == "__main__":
 
   track = True #for now
   if track: 
-        from yolox.tracker.byte_tracker import BYTETracker
-        class Args:
-            def __init__(self):
-                self.track_thresh = track_thresh
-                self.track_buffer = 60 #frames, was 30
-                self.mot20 = False
-                self.match_thresh = 0.9
+    from yolox.tracker.byte_tracker import BYTETracker
+    class Args:
+        def __init__(self):
+            self.track_thresh = track_thresh
+            self.track_buffer = 60 #frames, was 30
+            self.mot20 = False
+            self.match_thresh = 0.9
 
-        tracker = BYTETracker(Args())
-
+    tracker = BYTETracker(Args())
   live_link = dict()
-  device_name = "clearcam py"
   
-  # Model initialization
   yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
   depth, width, ratio = get_variant_multiples(yolo_variant)
   yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
@@ -1347,17 +1344,28 @@ if __name__ == "__main__":
   cam.streamer = hls_streamer
   
   try:
-    server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
+    try:
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
+    except OSError as e:
+      if e.errno == socket.errno.EADDRINUSE:
+        print("Port in use, server not started.")
+        server = None
+      else:
+          raise
+
     hls_streamer.start()
     restart_time = (0, 0)
-    scheduler = threading.Thread(
-    target=schedule_daily_restart,
-    args=(hls_streamer, restart_time),
-    daemon=True
-    )
-    scheduler.start()
-    
-    server.serve_forever()
+    threading.Thread(
+      target=schedule_daily_restart,
+      args=(hls_streamer, restart_time),
+      daemon=True
+    ).start()
+
+    if server:
+      server.serve_forever()
+    else:
+      while True: time.sleep(3600)
+
   except KeyboardInterrupt:
     print("\nShutting down...")
     hls_streamer.stop()
