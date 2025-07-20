@@ -738,6 +738,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               <div style="display: flex; flex-wrap: wrap;">
                   {cam_entries}
               </div>
+              <h3>Add New Camera</h3>
+              <form method="GET" action="/add_camera">
+                  <label>Camera Name: <input type="text" name="cam_name" required></label><br>
+                  <label>RTSP Link: <input type="text" name="rtsp" required style="width: 400px;"></label><br><br>
+                  <button type="submit">Add Camera</button>
+              </form>
           </body>
           </html>
           """
@@ -766,6 +772,37 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         hls_dir = self.get_camera_path(camera_name)
         event_image_dir = self.base_dir / camera_name / "event_images"
+
+        if parsed_path.path == '/add_camera':
+            camera_name = query.get("cam_name", [None])[0]
+            rtsp = query.get("rtsp", [None])[0]
+            
+            if not camera_name or not rtsp:
+                self.send_error(400, "Missing camera_name or rtsp")
+                return
+
+            # Build new args, modifying or adding --camera_name and --rtsp
+            args = sys.argv[:]
+            script = sys.argv[0]
+
+            def upsert_arg(args, key, value):
+                prefix = f"--{key}="
+                for i, arg in enumerate(args):
+                    if arg.startswith(prefix):
+                        args[i] = f"{prefix}{value}"
+                        return args
+                return args + [f"{prefix}{value}"]
+
+            args = upsert_arg(args, "cam_name", camera_name)
+            args = upsert_arg(args, "rtsp", rtsp)
+
+            subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
+
+            # Redirect back to home
+            self.send_response(302)
+            self.send_header('Location', '/')
+            self.end_headers()
+            return
 
         if parsed_path.path == '/download_clip' or parsed_path.path.endswith('/download_clip'):
             query = parse_qs(parsed_path.query)
@@ -1343,9 +1380,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
-  if rtsp_url is None:
-    print("missing --rtsp parm")
-    exit()
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
@@ -1380,9 +1414,10 @@ if __name__ == "__main__":
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
-  cam = VideoCapture(rtsp_url,camera_name=cam_name)
-  hls_streamer = HLSStreamer(cam,camera_name=cam_name)
-  cam.streamer = hls_streamer
+  if rtsp_url:
+    cam = VideoCapture(rtsp_url,camera_name=cam_name)
+    hls_streamer = HLSStreamer(cam,camera_name=cam_name)
+    cam.streamer = hls_streamer
   
   try:
     try:
@@ -1393,14 +1428,15 @@ if __name__ == "__main__":
         server = None
       else:
           raise
-
-    hls_streamer.start()
-    restart_time = (0, 0)
-    threading.Thread(
-      target=schedule_daily_restart,
-      args=(hls_streamer, restart_time),
-      daemon=True
-    ).start()
+    
+    if rtsp_url:
+      hls_streamer.start()
+      restart_time = (0, 0)
+      threading.Thread(
+        target=schedule_daily_restart,
+        args=(hls_streamer, restart_time),
+        daemon=True
+      ).start()
 
     if server:
       server.serve_forever()
@@ -1408,10 +1444,7 @@ if __name__ == "__main__":
       while True: time.sleep(3600)
 
   except KeyboardInterrupt:
-    print("\nShutting down...")
-    hls_streamer.stop()
-    cam.release()
-    server.shutdown()
-
-
-
+    if rtsp_url:
+      hls_streamer.stop()
+      cam.release()
+      server.shutdown()
