@@ -1342,16 +1342,19 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
 if __name__ == "__main__":
-  rtsp_url = sys.argv[1] if len(sys.argv) >= 2 else (print("No rtsp url given") or sys.exit(1))
+  rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
+  if rtsp_url is None:
+    print("missing --rtsp parm")
+    exit()
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
-  userID = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--userid=")), None)
-  key = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--key=")), None)
+  userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
+  key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
-  live = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--live=")), None)
-  cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[2:] if arg.startswith("--cam_name=")), "my_camera")
+  live = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--live=")), None)
+  cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
   track_thresh = 0.4 #default 0.6
   yolo_thresh = 0.4
@@ -1369,7 +1372,7 @@ if __name__ == "__main__":
     tracker = BYTETracker(Args())
   live_link = dict()
   
-  yolo_variant = sys.argv[2] if len(sys.argv) >= 3 else (print("No variant given, so choosing 'n' as the default. Yolov8 has different variants, you can choose from ['n', 's', 'm', 'l', 'x']") or 'n')
+  yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), 'n')
   depth, width, ratio = get_variant_multiples(yolo_variant)
   yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
   state_dict = safe_load(get_weights_location(yolo_variant))
