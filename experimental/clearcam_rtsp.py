@@ -717,6 +717,37 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         query = parse_qs(parsed_path.query)
 
+        if parsed_path.path == '/add_camera':
+            camera_name = query.get("cam_name", [None])[0]
+            rtsp = query.get("rtsp", [None])[0]
+            
+            if not camera_name or not rtsp:
+                self.send_error(400, "Missing camera_name or rtsp")
+                return
+
+            # Build new args, modifying or adding --camera_name and --rtsp
+            args = sys.argv[:]
+            script = sys.argv[0]
+
+            def upsert_arg(args, key, value):
+                prefix = f"--{key}="
+                for i, arg in enumerate(args):
+                    if arg.startswith(prefix):
+                        args[i] = f"{prefix}{value}"
+                        return args
+                return args + [f"{prefix}{value}"]
+
+            args = upsert_arg(args, "cam_name", camera_name)
+            args = upsert_arg(args, "rtsp", rtsp)
+
+            subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
+
+            # Redirect back to home
+            self.send_response(302)
+            self.send_header('Location', '/')
+            self.end_headers()
+            return
+
         if parsed_path.path == '/' and "cam" not in query:
           available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
           cam_entries = "\n".join(
@@ -772,37 +803,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         hls_dir = self.get_camera_path(camera_name)
         event_image_dir = self.base_dir / camera_name / "event_images"
-
-        if parsed_path.path == '/add_camera':
-            camera_name = query.get("cam_name", [None])[0]
-            rtsp = query.get("rtsp", [None])[0]
-            
-            if not camera_name or not rtsp:
-                self.send_error(400, "Missing camera_name or rtsp")
-                return
-
-            # Build new args, modifying or adding --camera_name and --rtsp
-            args = sys.argv[:]
-            script = sys.argv[0]
-
-            def upsert_arg(args, key, value):
-                prefix = f"--{key}="
-                for i, arg in enumerate(args):
-                    if arg.startswith(prefix):
-                        args[i] = f"{prefix}{value}"
-                        return args
-                return args + [f"{prefix}{value}"]
-
-            args = upsert_arg(args, "cam_name", camera_name)
-            args = upsert_arg(args, "rtsp", rtsp)
-
-            subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
-
-            # Redirect back to home
-            self.send_response(302)
-            self.send_header('Location', '/')
-            self.end_headers()
-            return
 
         if parsed_path.path == '/download_clip' or parsed_path.path.endswith('/download_clip'):
             query = parse_qs(parsed_path.query)
