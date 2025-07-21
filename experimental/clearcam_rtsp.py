@@ -27,6 +27,7 @@ from urllib.parse import urlparse, parse_qs
 
 from pathlib import Path
 import struct
+import pickle
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -350,6 +351,8 @@ import os
 import threading
 
 CAMERA_BASE_DIR = Path("cameras")
+Path("cameras").mkdir(parents=True, exist_ok=True)
+
 
 def resolve_youtube_stream_url(youtube_url):
   import yt_dlp
@@ -724,23 +727,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not camera_name or not rtsp:
                 self.send_error(400, "Missing camera_name or rtsp")
                 return
-
-            # Build new args, modifying or adding --camera_name and --rtsp
-            args = sys.argv[:]
-            script = sys.argv[0]
-
-            def upsert_arg(args, key, value):
-                prefix = f"--{key}="
-                for i, arg in enumerate(args):
-                    if arg.startswith(prefix):
-                        args[i] = f"{prefix}{value}"
-                        return args
-                return args + [f"{prefix}{value}"]
-
-            args = upsert_arg(args, "cam_name", camera_name)
-            args = upsert_arg(args, "rtsp", rtsp)
-
-            subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
+            
+            start_cam(rtsp=rtsp,cam_name=camera_name)
+            cams[camera_name] = rtsp
+            with open("cams.pkl", 'wb') as f:
+              pickle.dump(cams, f)  
 
             # Redirect back to home
             self.send_response(302)
@@ -1349,6 +1340,25 @@ def upload_file(file_path: Path, session_token: str):
 
     return success
 
+def start_cam(rtsp,cam_name):
+  if not rtsp or not cam_name: return
+  args = sys.argv[:]
+  script = sys.argv[0]
+
+  def upsert_arg(args, key, value):
+      prefix = f"--{key}="
+      for i, arg in enumerate(args):
+          if arg.startswith(prefix):
+              args[i] = f"{prefix}{value}"
+              return args
+      return args + [f"{prefix}{value}"]
+
+  args = upsert_arg(args, "cam_name", cam_name)
+  args = upsert_arg(args, "rtsp", rtsp)
+
+  subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
+
+
 live_link = dict()
 is_live_lock = threading.Lock()
 def check_upload_link(camera_name="clearcampy"):
@@ -1373,12 +1383,22 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
             headers={'Content-Type': 'application/octet-stream'},
             timeout=2
         )
-      
+
+cams = dict()
+
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
 
 if __name__ == "__main__":
+  if os.path.exists("cams.pkl"):
+      with open("cams.pkl", 'rb') as f:
+        cams = pickle.load(f)
+  else:
+      with open("cams.pkl", 'wb') as f:
+         pickle.dump(cams, f)  
+
+
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
@@ -1413,6 +1433,10 @@ if __name__ == "__main__":
   load_state_dict(yolo_infer, state_dict)
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
+
+  if rtsp_url is None:
+    for camera_name in cams.keys():
+      start_cam(rtsp=cams[camera_name],cam_name=camera_name)
 
   if rtsp_url:
     cam = VideoCapture(rtsp_url,camera_name=cam_name)
