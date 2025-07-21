@@ -516,6 +516,7 @@ class VideoCapture:
                   if os.path.exists("counters.pkl"):
                       with open("counters.pkl", 'rb') as f:
                           counters = pickle.load(f)
+                      if counters.get(self.camera_name) is None: self.counter = RollingClassCounter()
                       counters[self.camera_name] = self.counter
                       with open("counters.pkl", 'wb') as f:
                           pickle.dump(counters, f)
@@ -759,7 +760,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             except Exception:
                 counters = {}
 
-            counter = counters.get(cam_name)
+            counter = counters[cam_name]
             if not counter:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -767,7 +768,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"{}")
                 return
 
-            # Convert counts to label form here
             raw_counts = counter.get_counts()
             labeled_counts = {
                 class_labels[int(k)]: v
@@ -779,6 +779,24 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(labeled_counts).encode("utf-8"))
+            return
+        
+        if parsed_path.path == "/reset_counts":
+            cam_name = query.get("cam", [None])[0]
+            if not cam_name:
+                self.send_error(400, "Missing cam parameter")
+                return
+
+            with open("counters.pkl", "rb") as f:
+                counters = pickle.load(f)
+            counters[cam_name] = None
+            with open("counters.pkl", 'wb') as f:
+                pickle.dump(counters, f)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b"{}")
             return
 
 
@@ -1085,6 +1103,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </thead>
                         <tbody></tbody>
                     </table>
+                    <div style="text-align: center; margin-top: 10px;">
+                        <button onclick="resetCounts()">Reset Counts</button>
+                    </div>
 
                     <div class="controls">
                         <label>
@@ -1220,6 +1241,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     setInterval(fetchCounts, 5000);
                     fetchCounts();
+
+                    function resetCounts() {{
+                        if (!confirm("Are you sure you want to reset the counts for this camera?")) return;
+
+                        fetch(`/reset_counts?cam=${{encodeURIComponent("{camera_name}")}}`)
+                            .then(response => response.json())
+                            .then(data => {{
+                                console.log("Counts reset");
+                                fetchCounts(); // refresh display
+                            }})
+                            .catch(err => {{
+                                console.error("Failed to reset counts:", err);
+                                alert("Failed to reset counts.");
+                            }});
+                    }}
 
                 </script>
             </body>
@@ -1466,7 +1502,6 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         )
 
 cams = dict()
-counters = dict()
 
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -1485,7 +1520,7 @@ if __name__ == "__main__":
         counters = pickle.load(f)
   else:
       with open("counters.pkl", 'wb') as f:
-         pickle.dump(counters, f)  
+         pickle.dump(dict(), f)  
 
 
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
