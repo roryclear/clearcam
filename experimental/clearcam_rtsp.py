@@ -390,7 +390,6 @@ class RollingClassCounter:
     now = time.time()
     counts = {}
     for class_id, q in self.data.items():
-      # Remove old timestamps
       while self.window and q and now - q[0] > self.window:
         q.popleft()
       if q:
@@ -492,7 +491,7 @@ class VideoCapture:
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
                 for k in self.object_dict.keys():
-                    if abs(self.object_dict[k] - last_dict[k]) > 4:
+                    if abs(self.object_dict[k] - last_dict[k]) > 1:
                         if time.time() - last_det >= 60: # once per min for now
                             send_det = True
                             timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -513,12 +512,13 @@ class VideoCapture:
                     last_live_check = time.time()
                     threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
                 if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-                  if os.path.exists("counters.pkl"):
-                      with open("counters.pkl", 'rb') as f:
+                  counters_dir = CAMERA_BASE_DIR / self.camera_name / "counters.pkl"
+                  if os.path.exists(counters_dir):
+                      with open(counters_dir, 'rb') as f:
                           counters = pickle.load(f)
                       if counters.get(self.camera_name) is None: self.counter = RollingClassCounter()
                       counters[self.camera_name] = self.counter
-                      with open("counters.pkl", 'wb') as f:
+                      with open(counters_dir, 'wb') as f:
                           pickle.dump(counters, f)
                 if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
@@ -753,11 +753,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-
+            counters_dir = CAMERA_BASE_DIR / cam_name / "counters.pkl"
             try:
-                with open("counters.pkl", "rb") as f:
+                with open(counters_dir, "rb") as f:
                     counters = pickle.load(f)
             except Exception:
+                with open(counters_dir, 'wb') as f:
+                    counters = dict()
+                    counters[cam_name] = RollingClassCounter()
+                    pickle.dump(counters, f)
                 counters = {}
 
             counter = counters[cam_name]
@@ -786,11 +790,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
+            counters_dir = CAMERA_BASE_DIR / cam_name / "counters.pkl"
 
-            with open("counters.pkl", "rb") as f:
+            with open(counters_dir, "rb") as f:
                 counters = pickle.load(f)
             counters[cam_name] = None
-            with open("counters.pkl", 'wb') as f:
+            with open(counters_dir, 'wb') as f:
                 pickle.dump(counters, f)
 
             self.send_response(200)
@@ -1514,14 +1519,6 @@ if __name__ == "__main__":
   else:
       with open("cams.pkl", 'wb') as f:
          pickle.dump(cams, f)  
-
-  if os.path.exists("counters.pkl"):
-      with open("counters.pkl", 'rb') as f:
-        counters = pickle.load(f)
-  else:
-      with open("counters.pkl", 'wb') as f:
-         pickle.dump(dict(), f)  
-
 
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
