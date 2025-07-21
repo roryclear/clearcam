@@ -400,6 +400,7 @@ class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
     # objects in scene count
     self.counter = RollingClassCounter()
+    self.default_notif_counter = RollingClassCounter(window_seconds=60)
     self.camera_name = camera_name
     self.object_set = set()
 
@@ -452,7 +453,6 @@ class VideoCapture:
   def capture_loop(self):
     frame_size = self.width * self.height * 3
     fail_count = 0
-    count = 0
     last_det = -1
     send_det = False
     last_live_check = time.time()
@@ -475,9 +475,7 @@ class VideoCapture:
             filtered_preds = [p for p in self.last_preds if p[4] >= yolo_thresh and (classes is None or str(int(p[5])) in classes)]
             objects = [int(x[5]) for x in filtered_preds]
             self.object_queue.append(objects)
-            if count % 10 == 0: # todo magic 10s
-                last_dict = self.object_dict.copy()
-            count = (count + 1) % 10
+
 
             for x in objects:
                 self.object_dict[int(x)] += 1
@@ -490,24 +488,23 @@ class VideoCapture:
                     cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
-                for k in self.object_dict.keys():
-                    if abs(self.object_dict[k] - last_dict[k]) > 1:
-                        if time.time() - last_det >= 60: # once per min for now
-                            send_det = True
-                            timestamp = datetime.now().strftime("%Y-%m-%d")
-                            event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
-                            event_dir.mkdir(parents=True, exist_ok=True)
-                            filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
-                            cv2.imwrite(filename, self.annotated_frame)
-                            if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
-                            last_det = time.time()
-                    if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
-                        os.makedirs("event_clips", exist_ok=True)
-                        mp4_filename = f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-                        self.streamer.export_last_segments(Path(mp4_filename))
-                        encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                        threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
-                        send_det = False
+                if self.default_notif_counter.get_counts() != {}:
+                    if time.time() - last_det >= 60: # once per min for now
+                        send_det = True
+                        timestamp = datetime.now().strftime("%Y-%m-%d")
+                        event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
+                        event_dir.mkdir(parents=True, exist_ok=True)
+                        filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
+                        cv2.imwrite(filename, self.annotated_frame)
+                        if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
+                        last_det = time.time()
+                if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
+                    os.makedirs("event_clips", exist_ok=True)
+                    mp4_filename = f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+                    self.streamer.export_last_segments(Path(mp4_filename))
+                    encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                    threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+                    send_det = False
                 if live and (time.time() - last_live_check) >= 5:
                     last_live_check = time.time()
                     threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
@@ -550,9 +547,11 @@ class VideoCapture:
           preds = []
           for x in online_targets:
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
-            if int(x.track_id) not in self.object_set:
+            if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
+              if self.default_notif_counter.get_counts() == {}:
+                self.default_notif_counter.add(int(x.class_id)) #only add if empty, don't spam notifs
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
@@ -1593,4 +1592,5 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
+
 
