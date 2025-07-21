@@ -391,7 +391,7 @@ class RollingClassCounter:
     counts = {}
     for class_id, q in self.data.items():
       # Remove old timestamps
-      while q and now - q[0] > self.window:
+      while self.window and q and now - q[0] > self.window:
         q.popleft()
       if q:
         counts[class_id] = len(q)
@@ -459,6 +459,7 @@ class VideoCapture:
     last_live_check = time.time()
     last_live_seg = time.time()
     last_preview_time = None
+    last_counter_update = time.time()
     while self.running:
         try:
             raw_bytes = self.proc.stdout.read(frame_size)
@@ -511,6 +512,13 @@ class VideoCapture:
                 if live and (time.time() - last_live_check) >= 5:
                     last_live_check = time.time()
                     threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
+                if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
+                  if os.path.exists("counters.pkl"):
+                      with open("counters.pkl", 'rb') as f:
+                          counters = pickle.load(f)
+                      counters[self.camera_name] = self.counter
+                      with open("counters.pkl", 'wb') as f:
+                          pickle.dump(counters, f)
                 if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
                     mp4_filename = f"segment.mp4"
@@ -738,6 +746,41 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Location', '/')
             self.end_headers()
             return
+
+        if parsed_path.path == "/get_counts":
+            cam_name = query.get("cam", [None])[0]
+            if not cam_name:
+                self.send_error(400, "Missing cam parameter")
+                return
+
+            try:
+                with open("counters.pkl", "rb") as f:
+                    counters = pickle.load(f)
+            except Exception:
+                counters = {}
+
+            counter = counters.get(cam_name)
+            if not counter:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"{}")
+                return
+
+            # Convert counts to label form here
+            raw_counts = counter.get_counts()
+            labeled_counts = {
+                class_labels[int(k)]: v
+                for k, v in raw_counts.items()
+                if int(k) < len(class_labels)
+            }
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(labeled_counts).encode("utf-8"))
+            return
+
 
         if parsed_path.path == '/' and "cam" not in query:
           available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
@@ -1036,6 +1079,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             <body>
                 <div class="container">
                     <video id="video" controls></video>
+                    <table id="objectCounts" style="margin: 20px auto; font-size: 1rem; border-collapse: collapse;">
+                        <thead>
+                            <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
 
                     <div class="controls">
                         <label>
@@ -1140,6 +1189,38 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     loadStream(folderPicker.value);
                     loadEventImages(folderPicker.value);
+
+                    function fetchCounts() {{
+                        fetch(`/get_counts?cam=${{encodeURIComponent("{camera_name}")}}`)
+                            .then(response => response.json())
+                            .then(data => {{
+                                const tbody = document.querySelector("#objectCounts tbody");
+                                tbody.innerHTML = "";
+
+                                const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+                                if (entries.length === 0) {{
+                                    tbody.innerHTML = '<tr><td colspan="2">No detections.</td></tr>';
+                                    return;
+                                }}
+
+                                for (const [label, count] of entries) {{
+                                    const row = `<tr>
+                                        <td style="padding: 6px 12px; border-bottom: 1px solid #eee;">${{label}}</td>
+                                        <td style="padding: 6px 12px; border-bottom: 1px solid #eee;">${{count}}</td>
+                                    </tr>`;
+                                    tbody.innerHTML += row;
+                                }}
+                            }})
+                            .catch(err => {{
+                                console.error("Failed to fetch counts:", err);
+                                const tbody = document.querySelector("#objectCounts tbody");
+                                tbody.innerHTML = '<tr><td colspan="2">Error fetching counts.</td></tr>';
+                            }});
+                    }}
+
+                    setInterval(fetchCounts, 5000);
+                    fetchCounts();
+
                 </script>
             </body>
             </html>
@@ -1385,6 +1466,7 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         )
 
 cams = dict()
+counters = dict()
 
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -1397,6 +1479,13 @@ if __name__ == "__main__":
   else:
       with open("cams.pkl", 'wb') as f:
          pickle.dump(cams, f)  
+
+  if os.path.exists("counters.pkl"):
+      with open("counters.pkl", 'rb') as f:
+        counters = pickle.load(f)
+  else:
+      with open("counters.pkl", 'wb') as f:
+         pickle.dump(counters, f)  
 
 
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
