@@ -7,13 +7,11 @@ import numpy as np
 from itertools import chain
 from pathlib import Path
 import cv2
-from collections import defaultdict
+from collections import defaultdict, deque
 import time, sys
 from tinygrad.helpers import fetch
 from tinygrad.nn.state import safe_load, load_state_dict
 import json
-import cv2
-import time
 import http
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -22,9 +20,7 @@ import shutil
 import requests
 from datetime import datetime, time as time_obj
 import uuid
-from collections import deque
 from urllib.parse import urlparse, parse_qs
-
 from pathlib import Path
 import struct
 import pickle
@@ -1089,6 +1085,19 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         color: #333;
                     }}
 
+                    .container {{
+                        max-width: 900px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }}
+
+                    video {{
+                        width: 100%;
+                        border-radius: 12px;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                        margin-bottom: 20px;
+                    }}
+
                     .date-picker-container {{
                         display: flex;
                         justify-content: center;
@@ -1108,7 +1117,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         box-sizing: border-box;
                     }}
 
-                    /* Counts table and reset button alignment */
                     .counts-wrapper {{
                         display: flex;
                         flex-wrap: wrap;
@@ -1116,19 +1124,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         align-items: center;
                         gap: 20px;
                         margin: 20px 0;
-                    }}
-
-                    .container {{
-                        max-width: 900px;
-                        margin: 0 auto;
-                        padding: 20px;
-                    }}
-
-                    video {{
-                        width: 100%;
-                        border-radius: 12px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                        margin-bottom: 20px;
                     }}
 
                     .controls {{
@@ -1175,20 +1170,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         transition: all 0.3s ease;
                         min-width: 100px;
                         text-align: center;
-                        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
                     }}
 
                     button:hover {{
                         background-color: #e0e0e0;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                     }}
 
-                    /* Modal action buttons */
                     .form-actions button {{
                         min-width: 80px;
                     }}
 
-                    /* Table action buttons */
                     #alertsContainer table button {{
                         padding: 6px 12px;
                         min-width: 90px;
@@ -1221,25 +1214,29 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     }}
 
                     /* Modal styles */
-                    .modal {{
+                    .modal,
+                    .download-modal {{
                         display: none;
                         position: fixed;
-                        z-index: 1;
+                        z-index: 999;
                         left: 0;
                         top: 0;
                         width: 100%;
                         height: 100%;
-                        background-color: rgba(0,0,0,0.4);
+                        background-color: rgba(0, 0, 0, 0.4);
+                        justify-content: center;
+                        align-items: center;
+                        overflow: auto;
                     }}
 
-                    .modal-content {{
+                    .modal-content,
+                    .download-modal-content {{
                         background-color: #fefefe;
-                        margin: 15% auto;
                         padding: 20px;
                         border-radius: 8px;
-                        width: 80%;
+                        width: 90%;
                         max-width: 500px;
-                        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
                     }}
 
                     .modal-header {{
@@ -1289,37 +1286,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         margin-top: 20px;
                     }}
 
-                    .download-modal {{
-                      display: none;
-                      position: fixed;
-                      z-index: 1;
-                      left: 0;
-                      top: 0;
-                      width: 100%;
-                      height: 100%;
-                      background-color: rgba(0,0,0,0.4);
-                  }}
+                    .download-controls {{
+                        display: flex;
+                        flex-direction: column;
+                        gap: 15px;
+                    }}
 
-                  .download-modal-content {{
-                      background-color: #fefefe;
-                      margin: 15% auto;
-                      padding: 20px;
-                      border-radius: 8px;
-                      width: 80%;
-                      max-width: 500px;
-                      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-                  }}
-
-                  .download-controls {{
-                      display: flex;
-                      flex-direction: column;
-                      gap: 15px;
-                  }}
-
-                  .download-time-inputs {{
-                      display: flex;
-                      gap: 10px;
-                  }}
+                    .download-time-inputs {{
+                        display: flex;
+                        gap: 10px;
+                    }}
 
                     @media (max-width: 600px) {{
                         button {{
@@ -1327,44 +1303,39 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             font-size: 0.9rem;
                             min-width: 80px;
                         }}
-                        
+
                         .form-actions button {{
                             min-width: 70px;
                         }}
-                        
-                        /* Make date picker more compact */
+
                         input[type="date"] {{
                             width: 100%;
                             max-width: 200px;
                             padding: 6px 8px;
                             font-size: 0.9rem;
                         }}
-                        
-                        /* Make time inputs more compact */
+
                         input[type="time"] {{
                             width: 100px;
                             padding: 6px 8px;
                             font-size: 0.9rem;
                         }}
-                        
-                        /* Adjust modal content for mobile */
-                        .modal-content, .download-modal-content {{
+
+                        .modal-content,
+                        .download-modal-content {{
                             width: 95%;
-                            margin: 10% auto;
                             padding: 15px;
                         }}
-                        
-                        /* Make form inputs more compact */
+
                         .form-group input {{
                             padding: 6px 8px;
                             font-size: 0.9rem;
                         }}
-                        
-                        /* Adjust table layout */
+
                         #alertsContainer table {{
                             font-size: 0.9rem;
                         }}
-                        
+
                         #alertsContainer table button {{
                             min-width: 80px;
                             padding: 5px 10px;
@@ -1375,10 +1346,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             flex-direction: column;
                             gap: 8px;
                         }}
+
                         .controls label {{
                             min-width: auto;
                             width: 100%;
                         }}
+
                         .counts-wrapper {{
                             flex-direction: column;
                             gap: 10px;
@@ -1394,7 +1367,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             font-size: 0.85rem;
                             padding: 6px 10px;
                         }}
-
                     }}
                 </style>
             </head>
@@ -1483,270 +1455,229 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 </div>
 
                 <script>
-                    // Modal functions
-                    function openAlertModal() {{
-                        document.getElementById('alertModal').style.display = 'block';
+                const alertModal = document.getElementById("alertModal");
+                const downloadModal = document.getElementById("downloadModal");
+                const folderPicker = document.getElementById("folderPicker");
+                const video = document.getElementById("video");
+                const startTime = {start_time if start_time is not None else 'null'};
+                const cameraName = "{camera_name}";
+
+                function openAlertModal() {{
+                    alertModal.style.display = "flex";
+                }}
+
+                function closeAlertModal() {{
+                    alertModal.style.display = "none";
+                }}
+
+                function openDownloadModal() {{
+                    downloadModal.style.display = "flex";
+                }}
+
+                function closeDownloadModal() {{
+                    downloadModal.style.display = "none";
+                }}
+
+                window.addEventListener("click", function(event) {{
+                    if (event.target === alertModal) closeAlertModal();
+                    if (event.target === downloadModal) closeDownloadModal();
+                }});
+
+                function loadStream(folder) {{
+                    const url = `${{cameraName}}/streams/${{folder}}/stream.m3u8`;
+                    if (Hls.isSupported()) {{
+                        const hls = new Hls();
+                        hls.loadSource(url);
+                        hls.attachMedia(video);
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {{
+                            if (startTime !== null) video.currentTime = startTime;
+                            video.play();
+                        }});
+                    }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                        video.src = url;
+                        video.addEventListener('loadedmetadata', function() {{
+                            if (startTime !== null) video.currentTime = startTime;
+                            video.play();
+                        }});
                     }}
+                }}
 
-                    function closeAlertModal() {{
-                        document.getElementById('alertModal').style.display = 'none';
-                    }}
-
-                    // Close modal when clicking outside
-                    window.onclick = function(event) {{
-                        const modal = document.getElementById('alertModal');
-                        if (event.target == modal) {{
-                            closeAlertModal();
-                        }}
-                    }}
-
-                    function openDownloadModal() {{
-                        document.getElementById('downloadModal').style.display = 'block';
-                    }}
-
-                    function closeDownloadModal() {{
-                        document.getElementById('downloadModal').style.display = 'none';
-                    }}
-
-                    // Close modal when clicking outside
-                    window.onclick = function(event) {{
-                        const modal = document.getElementById('downloadModal');
-                        if (event.target == modal) {{
-                            closeDownloadModal();
-                        }}
-                    }}
-
-                    const folderPicker = document.getElementById("folderPicker");
-                    const video = document.getElementById("video");
-                    const startTime = {start_time if start_time is not None else 'null'};
-
-                    loadStream(folderPicker.value);
-
-                    function loadStream(folder) {{
-                        const url = '{camera_name}/streams/' + folder + '/stream.m3u8';
-                        if (Hls.isSupported()) {{
-                            const hls = new Hls();
-                            hls.loadSource(url);
-                            hls.attachMedia(video);
-                            hls.on(Hls.Events.MANIFEST_PARSED, function() {{
-                                if (startTime !== null) {{
-                                    video.currentTime = startTime;
-                                }}
-                                video.play();
-                            }});
-                        }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
-                            video.src = url;
-                            video.addEventListener('loadedmetadata', function() {{
-                                if (startTime !== null) {{
-                                    video.currentTime = startTime;
-                                }}
-                                video.play();
-                            }});
-                        }}
-                    }}
-
-                    function loadEventImages(folder) {{
-                        fetch(`/event_thumbs?cam={camera_name}&folder=${{folder}}`)
-                            .then(response => response.text())
-                            .then(html => {{
-                                document.getElementById("eventImagesContainer").innerHTML = html;
-                            }})
-                            .catch(err => {{
-                                console.error("Failed to load images:", err);
-                                document.getElementById("eventImagesContainer").innerHTML = "<p>No event images found.</p>";
-                            }});
-                    }}
-
-                    function downloadClip() {{
-                        const folder = folderPicker.value;
-                        const startHMS = document.getElementById("clipStart").value;
-                        const endHMS = document.getElementById("clipEnd").value;
-                        const start = hmsToSeconds(startHMS);
-                        const end = hmsToSeconds(endHMS);
-
-                        if (isNaN(start) || isNaN(end) || end <= start) {{
-                            alert("Please enter a valid start and end time (end must be after start).");
-                            return;
-                        }}
-
-                        const url = `/download_clip?cam={camera_name}&folder=${{folder}}&start=${{start}}&end=${{end}}`;
-
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `clip_{camera_name}_${{folder}}_${{start}}_${{end}}.mp4`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    }}
-
-                    function hmsToSeconds(hms) {{
-                        const [h, m, s] = hms.split(":").map(Number);
-                        return h * 3600 + m * 60 + s;
-                    }}
-
-                    folderPicker.addEventListener("change", () => {{
-                        const folder = folderPicker.value;
-                        loadStream(folder);
-                        loadEventImages(folder);
-                    }});
-
-                    loadStream(folderPicker.value);
-                    loadEventImages(folderPicker.value);
-
-                    function fetchCounts() {{
-                        fetch(`/get_counts?cam=${{encodeURIComponent("{camera_name}")}}`)
-                            .then(response => response.json())
-                            .then(data => {{
-                                const tbody = document.querySelector("#objectCounts tbody");
-                                tbody.innerHTML = "";
-
-                                const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
-                                if (entries.length === 0) {{
-                                    tbody.innerHTML = '<tr><td colspan="2">No detections.</td></tr>';
-                                    return;
-                                }}
-
-                                for (const [label, count] of entries) {{
-                                    const row = `<tr>
-                                        <td style="padding: 6px 12px; border-bottom: 1px solid #eee;">${{label}}</td>
-                                        <td style="padding: 6px 12px; border-bottom: 1px solid #eee;">${{count}}</td>
-                                    </tr>`;
-                                    tbody.innerHTML += row;
-                                }}
-                            }})
-                            .catch(err => {{
-                                console.error("Failed to fetch counts:", err);
-                                const tbody = document.querySelector("#objectCounts tbody");
-                                tbody.innerHTML = '<tr><td colspan="2">Error fetching counts.</td></tr>';
-                            }});
-                    }}
-
-                    setInterval(fetchCounts, 5000);
-                    fetchCounts();
-
-                    function resetCounts() {{
-                        if (!confirm("Are you sure you want to reset the counts for this camera?")) return;
-
-                        fetch(`/reset_counts?cam=${{encodeURIComponent("{camera_name}")}}`)
-                            .then(response => response.json())
-                            .then(data => {{
-                                console.log("Counts reset");
-                                fetchCounts();
-                            }})
-                            .catch(err => {{
-                                console.error("Failed to reset counts:", err);
-                                alert("Failed to reset counts.");
-                            }});
-                    }}
-
-                    function fetchAlerts() {{
-                        fetch(`/get_alerts?cam=${{encodeURIComponent("{camera_name}")}}`)
-                            .then(res => res.json())
-                            .then(alerts => {{
-                                const container = document.getElementById("alertsContainer");
-                                if (!alerts.length) {{
-                                    container.innerHTML = `<p>No alerts configured.</p>
-                                        <button onclick="openAlertModal()">Add New</button>`;
-                                    return;
-                                }}
-
-                                let html = `
-                                    <table style="width:100%; border-collapse: collapse;">
-                                        <thead>
-                                            <tr>
-                                                <th style="text-align:left;">Window (s)</th>
-                                                <th style="text-align:left;">Max</th>
-                                                <th style="text-align:left;">Classes</th>
-                                                <th style="text-align:left;">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                `;
-                                
-                                for (const alert of alerts) {{
-                                    const classNames = alert.classes.join(", ");
-                                    html += `
-                                        <tr>
-                                            <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
-                                            <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
-                                            <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
-                                            <td style="padding:6px; border-bottom:1px solid #ccc;">
-                                                <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
-                                            </td>
-                                        </tr>
-                                    `;
-                                }}
-                                
-                                html += `
-                                        <tr>
-                                            <td colspan="3" style="padding:6px; border-bottom:1px solid #ccc;"></td>
-                                            <td style="padding:6px; border-bottom:1px solid #ccc;">
-                                                <button onclick="openAlertModal()">Add Alert</button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                    </table>
-                                `;
-                                
-                                container.innerHTML = html;
-                            }})
-                            .catch(err => {{
-                                console.error("Failed to fetch alerts:", err);
-                                document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
-                            }});
-                    }}
-
-                    fetchAlerts();
-
-                    function deleteAlert(alertId) {{
-                        fetch(`/delete_alert?cam=${{encodeURIComponent("{camera_name}")}}&id=${{alertId}}`, {{
-                            method: 'GET'
+                function loadEventImages(folder) {{
+                    fetch(`/event_thumbs?cam=${{cameraName}}&folder=${{folder}}`)
+                        .then(res => res.text())
+                        .then(html => {{
+                            document.getElementById("eventImagesContainer").innerHTML = html;
                         }})
-                        .then(response => {{
-                            if (!response.ok) throw new Error("Failed to delete alert");
+                        .catch(err => {{
+                            console.error("Failed to load images:", err);
+                            document.getElementById("eventImagesContainer").innerHTML = "<p>No event images found.</p>";
+                        }});
+                }}
+
+                function hmsToSeconds(hms) {{
+                    const [h, m, s] = hms.split(":").map(Number);
+                    return h * 3600 + m * 60 + s;
+                }}
+
+                function downloadClip() {{
+                    const folder = folderPicker.value;
+                    const start = hmsToSeconds(document.getElementById("clipStart").value);
+                    const end = hmsToSeconds(document.getElementById("clipEnd").value);
+
+                    if (isNaN(start) || isNaN(end) || end <= start) {{
+                        alert("Please enter a valid start and end time (end must be after start).");
+                        return;
+                    }}
+
+                    const url = `/download_clip?cam=${{cameraName}}&folder=${{folder}}&start=${{start}}&end=${{end}}`;
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `clip_${{cameraName}}_${{folder}}_${{start}}_${{end}}.mp4`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }}
+
+                function fetchCounts() {{
+                    fetch(`/get_counts?cam=${{encodeURIComponent(cameraName)}}`)
+                        .then(res => res.json())
+                        .then(data => {{
+                            const tbody = document.querySelector("#objectCounts tbody");
+                            tbody.innerHTML = "";
+
+                            const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+                            if (!entries.length) {{
+                                tbody.innerHTML = "<tr><td colspan='2'>No detections.</td></tr>";
+                                return;
+                            }}
+
+                            for (const [label, count] of entries) {{
+                                tbody.innerHTML += `
+                                    <tr>
+                                        <td style="padding:6px 12px; border-bottom:1px solid #eee;">${{label}}</td>
+                                        <td style="padding:6px 12px; border-bottom:1px solid #eee;">${{count}}</td>
+                                    </tr>`;
+                            }}
+                        }})
+                        .catch(err => {{
+                            console.error("Failed to fetch counts:", err);
+                            document.querySelector("#objectCounts tbody").innerHTML = "<tr><td colspan='2'>Error fetching counts.</td></tr>";
+                        }});
+                }}
+
+                function resetCounts() {{
+                    if (!confirm("Are you sure you want to reset the counts for this camera?")) return;
+                    fetch(`/reset_counts?cam=${{encodeURIComponent(cameraName)}}`)
+                        .then(res => res.json())
+                        .then(() => {{
+                            console.log("Counts reset");
+                            fetchCounts();
+                        }})
+                        .catch(err => {{
+                            console.error("Failed to reset counts:", err);
+                            alert("Failed to reset counts.");
+                        }});
+                }}
+
+                function fetchAlerts() {{
+                    fetch(`/get_alerts?cam=${{encodeURIComponent(cameraName)}}`)
+                        .then(res => res.json())
+                        .then(alerts => {{
+                            const container = document.getElementById("alertsContainer");
+                            if (!alerts.length) {{
+                                container.innerHTML = `<p>No alerts configured.</p><button onclick="openAlertModal()">Add New</button>`;
+                                return;
+                            }}
+
+                            let html = `<table style="width:100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr><th>Window (s)</th><th>Max</th><th>Classes</th><th>Actions</th></tr>
+                                </thead><tbody>`;
+
+                            for (const alert of alerts) {{
+                                const classNames = alert.classes.join(", ");
+                                html += `
+                                    <tr>
+                                        <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
+                                        <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
+                                        <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
+                                        <td style="padding:6px; border-bottom:1px solid #ccc;">
+                                            <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                        </td>
+                                    </tr>`;
+                            }}
+
+                            html += `
+                                <tr>
+                                    <td colspan="3" style="padding:6px; border-bottom:1px solid #ccc;"></td>
+                                    <td style="padding:6px; border-bottom:1px solid #ccc;">
+                                        <button onclick="openAlertModal()">Add Alert</button>
+                                    </td>
+                                </tr></tbody></table>`;
+
+                            container.innerHTML = html;
+                        }})
+                        .catch(err => {{
+                            console.error("Failed to fetch alerts:", err);
+                            document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
+                        }});
+                }}
+
+                function deleteAlert(alertId) {{
+                    fetch(`/delete_alert?cam=${{encodeURIComponent(cameraName)}}&id=${{alertId}}`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to delete alert");
                             fetchAlerts();
                         }})
                         .catch(err => {{
                             console.error("Delete failed:", err);
                             alert("Failed to delete alert.");
                         }});
-                    }}
+                }}
 
-                    function addAlert(event) {{
-                        event.preventDefault();
-                        
-                        const form = event.target;
-                        const formData = new FormData(form);
-                        const params = new URLSearchParams();
-                        
-                        // Convert minutes to seconds for the backend
-                        const windowMinutes = parseFloat(formData.get('window'));
-                        const windowSeconds = Math.round(windowMinutes * 60);
-                        
-                        params.append('cam', encodeURIComponent("{camera_name}"));
-                        params.append('window', windowSeconds);
-                        params.append('max', formData.get('max'));
-                        params.append('class_ids', formData.get('class_ids'));
-                        
-                        fetch(`/add_alert?${{params.toString()}}`, {{
-                            method: 'GET'
+                function addAlert(event) {{
+                    event.preventDefault();
+                    const form = event.target;
+                    const formData = new FormData(form);
+                    const windowMinutes = parseFloat(formData.get('window'));
+                    const windowSeconds = Math.round(windowMinutes * 60);
+
+                    const params = new URLSearchParams({{
+                        cam: cameraName,
+                        window: windowSeconds,
+                        max: formData.get('max'),
+                        class_ids: formData.get('class_ids'),
+                    }});
+
+                    fetch(`/add_alert?${{params.toString()}}`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to add alert");
+                            return res.json();
                         }})
-                        .then(response => {{
-                            if (!response.ok) throw new Error("Failed to add alert");
-                            return response.json();
-                        }})
-                        .then(data => {{
+                        .then(() => {{
                             closeAlertModal();
-                            document.getElementById("alertForm").reset();
+                            form.reset();
                             fetchAlerts();
                             alert("Alert added successfully!");
                         }})
                         .catch(err => {{
                             console.error("Add alert failed:", err);
-                            alert("Failed to add alert. See console for details.");
+                            alert("Failed to add alert.");
                         }});
-                    }}
-                </script>
+                }}
+
+                folderPicker.addEventListener("change", () => {{
+                    const folder = folderPicker.value;
+                    loadStream(folder);
+                    loadEventImages(folder);
+                }});
+
+                loadStream(folderPicker.value);
+                loadEventImages(folderPicker.value);
+                fetchAlerts();
+                fetchCounts();
+                setInterval(fetchCounts, 5000);
+            </script>
             </body>
             </html>
             """
@@ -2024,7 +1955,7 @@ if __name__ == "__main__":
     class Args:
         def __init__(self):
             self.track_thresh = track_thresh
-            self.track_buffer = 60 #frames, was 30
+            self.track_buffer = 60 # frames, was 30
             self.mot20 = False
             self.match_thresh = 0.9
 
