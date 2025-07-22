@@ -1114,6 +1114,29 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         color: #333;
                     }}
 
+                    .date-picker-container {{
+                        display: flex;
+                        justify-content: center;
+                        margin: 20px 0;
+                    }}
+
+                    /* Download button centering */
+                    .download-button-container {{
+                        display: flex;
+                        justify-content: center;
+                        margin: 20px 0;
+                    }}
+
+                    /* Counts table and reset button alignment */
+                    .counts-wrapper {{
+                        display: flex;
+                        flex-wrap: wrap;
+                        justify-content: center;
+                        align-items: center;
+                        gap: 20px;
+                        margin: 20px 0;
+                    }}
+
                     .container {{
                         max-width: 900px;
                         margin: 0 auto;
@@ -1345,17 +1368,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             padding: 4px 8px;
                             font-size: 0.8rem;
                         }}
-                        
-                        /* Stack time inputs vertically in download modal */
+
                         .download-time-inputs {{
                             flex-direction: column;
                             gap: 8px;
                         }}
-                        
-                        /* Make sure controls don't overflow */
                         .controls label {{
                             min-width: auto;
                             width: 100%;
+                        }}
+                        .counts-wrapper {{
+                            flex-direction: column;
+                            gap: 10px;
                         }}
                     }}
                 </style>
@@ -1399,11 +1423,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </div>
                     </div>
 
-                    <label>
-                    Date:
-                    <input type="date" id="folderPicker" value="{selected_dir}">
-                    </label>
-                    <div class="download-section">
+                    <div class="date-picker-container">
+                        <label>
+                            Date:
+                            <input type="date" id="folderPicker" value="{selected_dir}">
+                        </label>
+                    </div>
+
+                    <div class="download-button-container">
                         <button onclick="openDownloadModal()">Download Clip</button>
                     </div>
 
@@ -1433,13 +1460,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </div>
                     </div>
 
-                    <table id="objectCounts" style="margin: 20px auto; font-size: 1rem; border-collapse: collapse;">
-                        <thead>
-                            <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                    <div style="text-align: center; margin-top: 10px;">
+                    <div class="counts-wrapper">
+                        <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
+                            <thead>
+                                <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
                         <button onclick="resetCounts()">Reset Counts</button>
                     </div>
 
