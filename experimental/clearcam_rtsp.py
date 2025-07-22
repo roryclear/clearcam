@@ -405,7 +405,7 @@ class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
     # objects in scene count
     self.counter = RollingClassCounter()
-    self.default_notif_counter = RollingClassCounter(window_seconds=60, max=1, classes={1,2,3,5,7})
+    self.default_notif_counter = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})
     self.camera_name = camera_name
     self.object_set = set()
 
