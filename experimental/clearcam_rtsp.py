@@ -428,7 +428,8 @@ class VideoCapture:
             self.alert_counters = pickle.load(f)
     except Exception:
         with open(alerts_dir, 'wb') as f:
-            self.alert_counters = [RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})]
+            self.alert_counters = dict()
+            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})
             pickle.dump(self.alert_counters, f)
 
     self.lock = threading.Lock()
@@ -501,9 +502,9 @@ class VideoCapture:
                     cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
-                for i in range(len(self.alert_counters)):
-                    if self.alert_counters[i].get_counts()[1]:
-                        if time.time() - last_det >= self.alert_counters[i].window: # once per min for now
+                for _,alert in self.alert_counters.items():
+                    if alert.get_counts()[1]:
+                        if time.time() - last_det >= alert.window: # once per min for now
                             send_det = True
                             timestamp = datetime.now().strftime("%Y-%m-%d")
                             event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
@@ -564,9 +565,9 @@ class VideoCapture:
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
-              for i in range(len(self.alert_counters)):
-                if not self.alert_counters[i].get_counts()[1]:
-                    self.alert_counters[i].add(int(x.class_id)) #only add if empty, don't spam notifs
+              for _, alert in self.alert_counters.items():
+                if not alert.get_counts()[1]:
+                    alert.add(int(x.class_id)) #only add if empty, don't spam notifs
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
@@ -774,11 +775,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 try:
                     with open(alerts_file, "rb") as f:
                         raw_alerts = pickle.load(f) 
-                        for alert in raw_alerts:
+                        for key,alert in raw_alerts.items():
                             alert_info.append({
                                 "window": alert.window,
                                 "max": alert.max,
-                                "classes": list(alert.classes)
+                                "classes": list(alert.classes),
+                                "id": str(key)
                             })
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")
