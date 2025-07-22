@@ -1184,18 +1184,33 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     }}
 
                     button {{
-                        background-color: #4CAF50;
-                        color: white;
-                        padding: 10px 16px;
+                        background-color: #f0f0f0;
+                        color: #1a73e8;
+                        padding: 10px 24px;
                         border: none;
-                        border-radius: 8px;
+                        border-radius: 6px;
                         font-size: 1rem;
                         cursor: pointer;
-                        transition: background-color 0.3s ease;
+                        transition: all 0.3s ease;
+                        min-width: 100px;
+                        text-align: center;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
                     }}
 
                     button:hover {{
-                        background-color: #45a049;
+                        background-color: #e0e0e0;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    }}
+
+                    /* Modal action buttons */
+                    .form-actions button {{
+                        min-width: 80px;
+                    }}
+
+                    /* Table action buttons */
+                    #alertsContainer table button {{
+                        padding: 6px 12px;
+                        min-width: auto;
                     }}
 
                     h3 {{
@@ -1325,10 +1340,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     @media (max-width: 600px) {{
                         button {{
-                            padding: 8px 12px;
+                            padding: 8px 16px;
                             font-size: 0.9rem;
-                            width: auto;
-                            margin: 4px 0;
+                            min-width: 80px;
+                        }}
+                        
+                        .form-actions button {{
+                            min-width: 70px;
                         }}
                         
                         /* Make date picker more compact */
@@ -1387,7 +1405,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             <body>
                 <div class="container">
                     <video id="video" controls></video>
-                    
+                    <div class="date-picker-container">
+                        <label>
+                            <input type="date" id="folderPicker" value="{selected_dir}">
+                            <button onclick="openDownloadModal()">Download</button>
+                        </label>
+                    </div>
                     <h3>Active Alerts</h3>
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
@@ -1423,17 +1446,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </div>
                     </div>
 
-                    <div class="date-picker-container">
-                        <label>
-                            Date:
-                            <input type="date" id="folderPicker" value="{selected_dir}">
-                        </label>
-                    </div>
-
-                    <div class="download-button-container">
-                        <button onclick="openDownloadModal()">Download Clip</button>
-                    </div>
-
                     <!-- Download Modal -->
                     <div id="downloadModal" class="download-modal">
                         <div class="download-modal-content">
@@ -1467,7 +1479,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             </thead>
                             <tbody></tbody>
                         </table>
-                        <button onclick="resetCounts()">Reset Counts</button>
+                        <button onclick="resetCounts()">Reset</button>
                     </div>
 
                     <h3>Detected Events</h3>
@@ -1640,7 +1652,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const container = document.getElementById("alertsContainer");
                                 if (!alerts.length) {{
                                     container.innerHTML = `<p>No alerts configured.</p>
-                                        <button onclick="openAlertModal()">Add Alert</button>`;
+                                        <button onclick="openAlertModal()">Add New</button>`;
                                     return;
                                 }}
 
