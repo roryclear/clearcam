@@ -1268,10 +1268,46 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         margin-top: 20px;
                     }}
 
+                    .download-modal {{
+                      display: none;
+                      position: fixed;
+                      z-index: 1;
+                      left: 0;
+                      top: 0;
+                      width: 100%;
+                      height: 100%;
+                      background-color: rgba(0,0,0,0.4);
+                  }}
+
+                  .download-modal-content {{
+                      background-color: #fefefe;
+                      margin: 15% auto;
+                      padding: 20px;
+                      border-radius: 8px;
+                      width: 80%;
+                      max-width: 500px;
+                      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                  }}
+
+                  .download-controls {{
+                      display: flex;
+                      flex-direction: column;
+                      gap: 15px;
+                  }}
+
+                  .download-time-inputs {{
+                      display: flex;
+                      gap: 10px;
+                  }}
+
                     @media (max-width: 600px) {{
                         .controls {{
                             flex-direction: column;
                             align-items: center;
+                        }}
+
+                        .download-time-inputs {{
+                          flex-direction: column;
                         }}
 
                         .time-inputs {{
@@ -1347,16 +1383,32 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <input type="date" id="folderPicker" value="{selected_dir}">
                     </label>
                     <div class="download-section">
-                        <div id="downloadControls" class="collapsible download-controls">
-                            <label>
-                                Start:
-                                <input type="time" id="clipStart" step="1" value="00:00:00">
-                            </label>
-                            <label>
-                                End:
-                                <input type="time" id="clipEnd" step="1" value="00:00:10">
-                            </label>
-                            <button onclick="downloadClip()">Download Now</button>
+                        <button onclick="openDownloadModal()">Download Clip</button>
+                    </div>
+
+                    <!-- Download Modal -->
+                    <div id="downloadModal" class="download-modal">
+                        <div class="download-modal-content">
+                            <div class="modal-header">
+                                <h3>Download Clip</h3>
+                                <span class="close" onclick="closeDownloadModal()">&times;</span>
+                            </div>
+                            <div class="download-controls">
+                                <div class="download-time-inputs">
+                                    <div class="form-group">
+                                        <label for="clipStart">Start Time</label>
+                                        <input type="time" id="clipStart" step="1" value="00:00:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="clipEnd">End Time</label>
+                                        <input type="time" id="clipEnd" step="1" value="00:00:10">
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" onclick="closeDownloadModal()">Cancel</button>
+                                    <button type="button" onclick="downloadClip()">Download Now</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1391,6 +1443,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         const modal = document.getElementById('alertModal');
                         if (event.target == modal) {{
                             closeAlertModal();
+                        }}
+                    }}
+
+                    function openDownloadModal() {{
+                        document.getElementById('downloadModal').style.display = 'block';
+                    }}
+
+                    function closeDownloadModal() {{
+                        document.getElementById('downloadModal').style.display = 'none';
+                    }}
+
+                    // Close modal when clicking outside
+                    window.onclick = function(event) {{
+                        const modal = document.getElementById('downloadModal');
+                        if (event.target == modal) {{
+                            closeDownloadModal();
                         }}
                     }}
 
