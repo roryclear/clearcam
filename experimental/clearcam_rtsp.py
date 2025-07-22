@@ -405,7 +405,7 @@ class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
     # objects in scene count
     self.counter = RollingClassCounter()
-    self.default_notif_counter = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})
+    self.alert_counters = [RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})]
     self.camera_name = camera_name
     self.object_set = set()
 
@@ -493,16 +493,17 @@ class VideoCapture:
                     cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
-                if self.default_notif_counter.get_counts()[1]:
-                    if time.time() - last_det >= self.default_notif_counter.window: # once per min for now
-                        send_det = True
-                        timestamp = datetime.now().strftime("%Y-%m-%d")
-                        event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
-                        event_dir.mkdir(parents=True, exist_ok=True)
-                        filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
-                        cv2.imwrite(filename, self.annotated_frame)
-                        if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
-                        last_det = time.time()
+                for i in range(len(self.alert_counters)):
+                    if self.alert_counters[i].get_counts()[1]:
+                        if time.time() - last_det >= self.alert_counters[i].window: # once per min for now
+                            send_det = True
+                            timestamp = datetime.now().strftime("%Y-%m-%d")
+                            event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
+                            event_dir.mkdir(parents=True, exist_ok=True)
+                            filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
+                            cv2.imwrite(filename, self.annotated_frame)
+                            if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
+                            last_det = time.time()
                 if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                     os.makedirs("event_clips", exist_ok=True)
                     mp4_filename = f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
@@ -555,8 +556,9 @@ class VideoCapture:
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
-              if not self.default_notif_counter.get_counts()[1]:
-                self.default_notif_counter.add(int(x.class_id)) #only add if empty, don't spam notifs
+              for i in range(len(self.alert_counters)):
+                if not self.alert_counters[i].get_counts()[1]:
+                    self.alert_counters[i].add(int(x.class_id)) #only add if empty, don't spam notifs
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
