@@ -405,7 +405,6 @@ class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
     # objects in scene count
     self.counter = RollingClassCounter()
-    self.alert_counters = [RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})]
     self.camera_name = camera_name
     self.object_set = set()
 
@@ -422,6 +421,15 @@ class VideoCapture:
     self.annotated_frame = None
     self.last_preds = []
     self.dir = None
+
+    alerts_dir = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+    try:
+        with open(alerts_dir, "rb") as f:
+            self.alert_counters = pickle.load(f)
+    except Exception:
+        with open(alerts_dir, 'wb') as f:
+            self.alert_counters = [RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})]
+            pickle.dump(self.alert_counters, f)
 
     self.lock = threading.Lock()
 
@@ -752,6 +760,34 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()
+            return
+
+        if parsed_path.path == "/get_alerts":
+            cam_name = query.get("cam", [None])[0]
+            if not cam_name:
+                self.send_error(400, "Missing cam parameter")
+                return
+
+            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            alert_info = []
+            if alerts_file.exists():
+                try:
+                    with open(alerts_file, "rb") as f:
+                        raw_alerts = pickle.load(f) 
+                        for alert in raw_alerts:
+                            alert_info.append({
+                                "window": alert.window,
+                                "max": alert.max,
+                                "classes": list(alert.classes)
+                            })
+                except Exception as e:
+                    self.send_error(500, f"Failed to load alerts: {e}")
+                    return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(alert_info).encode("utf-8"))
             return
 
         if parsed_path.path == "/get_counts":
@@ -1105,6 +1141,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             <body>
                 <div class="container">
                     <video id="video" controls></video>
+                    <h3>Active Alerts</h3>
+                    <div id="alertsContainer">
+                        <p>Loading alerts...</p>
+                    </div>
                     <table id="objectCounts" style="margin: 20px auto; font-size: 1rem; border-collapse: collapse;">
                         <thead>
                             <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
@@ -1264,6 +1304,46 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 alert("Failed to reset counts.");
                             }});
                     }}
+
+                      function fetchAlerts() {{
+                          fetch(`/get_alerts?cam=${{encodeURIComponent("{camera_name}")}}`)
+                              .then(res => res.json())
+                              .then(alerts => {{
+                                  const container = document.getElementById("alertsContainer");
+                                  if (!alerts.length) {{
+                                      container.innerHTML = "<p>No alerts configured.</p>";
+                                      return;
+                                  }}
+
+                                  let html = `
+                                      <table style="width:100%; border-collapse: collapse;">
+                                          <tr>
+                                              <th style="text-align:left;">Window (s)</th>
+                                              <th style="text-align:left;">Max</th>
+                                              <th style="text-align:left;">Classes</th>
+                                          </tr>
+                                  `;
+                                  for (const alert of alerts) {{
+                                      const classNames = alert.classes.join(", ");
+
+                                      html += `
+                                          <tr>
+                                              <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
+                                              <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
+                                              <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
+                                          </tr>
+                                      `;
+                                  }}
+                                  html += `</table>`;
+                                  container.innerHTML = html;
+                              }})
+                              .catch(err => {{
+                                  console.error("Failed to fetch alerts:", err);
+                                  document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
+                              }});
+                      }}
+
+                      fetchAlerts();
 
                 </script>
             </body>
