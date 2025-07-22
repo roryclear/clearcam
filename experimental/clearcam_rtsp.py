@@ -1301,40 +1301,61 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   }}
 
                     @media (max-width: 600px) {{
-                        .controls {{
-                            flex-direction: column;
-                            align-items: center;
+                        button {{
+                            padding: 8px 12px;
+                            font-size: 0.9rem;
+                            width: auto;
+                            margin: 4px 0;
                         }}
-
-                        .download-time-inputs {{
-                          flex-direction: column;
-                        }}
-
-                        .time-inputs {{
-                            flex-direction: row;
-                            justify-content: center;
+                        
+                        /* Make date picker more compact */
+                        input[type="date"] {{
                             width: 100%;
+                            max-width: 200px;
+                            padding: 6px 8px;
+                            font-size: 0.9rem;
+                        }}
+                        
+                        /* Make time inputs more compact */
+                        input[type="time"] {{
+                            width: 100px;
+                            padding: 6px 8px;
+                            font-size: 0.9rem;
+                        }}
+                        
+                        /* Adjust modal content for mobile */
+                        .modal-content, .download-modal-content {{
+                            width: 95%;
+                            margin: 10% auto;
+                            padding: 15px;
+                        }}
+                        
+                        /* Make form inputs more compact */
+                        .form-group input {{
+                            padding: 6px 8px;
+                            font-size: 0.9rem;
+                        }}
+                        
+                        /* Adjust table layout */
+                        #alertsContainer table {{
+                            font-size: 0.9rem;
+                        }}
+                        
+                        #alertsContainer table button {{
+                            padding: 4px 8px;
+                            font-size: 0.8rem;
+                        }}
+                        
+                        /* Stack time inputs vertically in download modal */
+                        .download-time-inputs {{
+                            flex-direction: column;
                             gap: 8px;
                         }}
-
-                        .time-inputs input[type="time"] {{
-                            width: 110px;
-                        }}
-
-                        input[type="date"],
-                        button {{
-                            width: 100%;
-                            box-sizing: border-box;
-                        }}
-
+                        
+                        /* Make sure controls don't overflow */
                         .controls label {{
-                            align-items: center;
+                            min-width: auto;
                             width: 100%;
-                        }}
-
-                        .modal-content {{
-                            width: 90%;
-                            margin: 20% auto;
                         }}
                     }}
                 </style>
