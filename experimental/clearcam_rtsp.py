@@ -1198,6 +1198,76 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     #eventImagesContainer img:hover {{
                         transform: scale(1.05);
                     }}
+
+                    /* Modal styles */
+                    .modal {{
+                        display: none;
+                        position: fixed;
+                        z-index: 1;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0,0,0,0.4);
+                    }}
+
+                    .modal-content {{
+                        background-color: #fefefe;
+                        margin: 15% auto;
+                        padding: 20px;
+                        border-radius: 8px;
+                        width: 80%;
+                        max-width: 500px;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    }}
+
+                    .modal-header {{
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 15px;
+                    }}
+
+                    .modal-header h3 {{
+                        margin: 0;
+                    }}
+
+                    .close {{
+                        color: #aaa;
+                        font-size: 28px;
+                        font-weight: bold;
+                        cursor: pointer;
+                    }}
+
+                    .close:hover {{
+                        color: black;
+                    }}
+
+                    .form-group {{
+                        margin-bottom: 15px;
+                    }}
+
+                    .form-group label {{
+                        display: block;
+                        margin-bottom: 5px;
+                        font-weight: 500;
+                    }}
+
+                    .form-group input {{
+                        width: 100%;
+                        padding: 8px;
+                        border: 1px solid #ddd;
+                        border-radius: 4px;
+                        box-sizing: border-box;
+                    }}
+
+                    .form-actions {{
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 10px;
+                        margin-top: 20px;
+                    }}
+
                     @media (max-width: 600px) {{
                         .controls {{
                             flex-direction: column;
@@ -1225,43 +1295,71 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             align-items: center;
                             width: 100%;
                         }}
+
+                        .modal-content {{
+                            width: 90%;
+                            margin: 20% auto;
+                        }}
                     }}
                 </style>
-</head>
+            </head>
             <body>
                 <div class="container">
                     <video id="video" controls></video>
+                    
                     <h3>Active Alerts</h3>
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
+                        <button onclick="openAlertModal()">Add Alert</button>
                     </div>
-                    <h3>Add New Alert</h3>
-                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                        <form id="alertForm" onsubmit="addAlert(event)">
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
-                                <label>
-                                    Window (seconds):
-                                    <input type="number" name="window" min="1" value="60" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
-                                </label>
-                                <label>
-                                    Max Count:
-                                    <input type="number" name="max" min="1" value="5" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
-                                </label>
+
+                    <!-- The Modal -->
+                    <div id="alertModal" class="modal">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Add New Alert</h3>
+                                <span class="close" onclick="closeAlertModal()">&times;</span>
                             </div>
-                            <label>
-                                Class IDs (comma separated numbers):
-                                <input type="text" name="class_ids" value="0,2" required 
-                                      placeholder="e.g., 0,2,3" 
-                                      style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
-                                <div style="font-size: 0.8em; color: #666; margin-top: 4px;">
-                                    Common IDs: 0=person, 1=bicycle, 2=car, etc.
+                            <form id="alertForm" onsubmit="addAlert(event)">
+                                <div class="form-group">
+                                    <label for="windowMinutes">Window (minutes)</label>
+                                    <input type="number" id="windowMinutes" name="window" min="1" value="1" required>
                                 </div>
-                            </label>
-                            <div style="margin-top: 15px;">
-                                <button type="submit" style="background-color: #4285f4; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer;">Add Alert</button>
-                            </div>
-                        </form>
+                                <div class="form-group">
+                                    <label for="maxCount">Max Count</label>
+                                    <input type="number" id="maxCount" name="max" min="1" value="5" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="classIds">Class IDs (comma separated)</label>
+                                    <input type="text" id="classIds" name="class_ids" value="0,2" required placeholder="e.g., 0,2,3">
+                                    <small>Common IDs: 0=person, 1=bicycle, 2=car, etc.</small>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" onclick="closeAlertModal()">Cancel</button>
+                                    <button type="submit">Save Alert</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
+
+                    <label>
+                    Date:
+                    <input type="date" id="folderPicker" value="{selected_dir}">
+                    </label>
+                    <div class="download-section">
+                        <div id="downloadControls" class="collapsible download-controls">
+                            <label>
+                                Start:
+                                <input type="time" id="clipStart" step="1" value="00:00:00">
+                            </label>
+                            <label>
+                                End:
+                                <input type="time" id="clipEnd" step="1" value="00:00:10">
+                            </label>
+                            <button onclick="downloadClip()">Download Now</button>
+                        </div>
+                    </div>
+
                     <table id="objectCounts" style="margin: 20px auto; font-size: 1rem; border-collapse: collapse;">
                         <thead>
                             <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
@@ -1272,26 +1370,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         <button onclick="resetCounts()">Reset Counts</button>
                     </div>
 
-                    <div class="controls">
-                        <label>
-                            Choose a stream:
-                            <input type="date" id="folderPicker" value="{selected_dir}">
-                        </label>
-
-                        <div class="time-inputs">
-                            <label>
-                                Start:
-                                <input type="time" id="clipStart" step="1" value="00:00:00">
-                            </label>
-                            <label>
-                                End:
-                                <input type="time" id="clipEnd" step="1" value="00:00:10">
-                            </label>
-                        </div>
-
-                        <button onclick="downloadClip()">Download Clip</button>
-                    </div>
-
                     <h3>Detected Events</h3>
                     <div id="eventImagesContainer">
                         {image_links}
@@ -1299,6 +1377,23 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 </div>
 
                 <script>
+                    // Modal functions
+                    function openAlertModal() {{
+                        document.getElementById('alertModal').style.display = 'block';
+                    }}
+
+                    function closeAlertModal() {{
+                        document.getElementById('alertModal').style.display = 'none';
+                    }}
+
+                    // Close modal when clicking outside
+                    window.onclick = function(event) {{
+                        const modal = document.getElementById('alertModal');
+                        if (event.target == modal) {{
+                            closeAlertModal();
+                        }}
+                    }}
+
                     const folderPicker = document.getElementById("folderPicker");
                     const video = document.getElementById("video");
                     const startTime = {start_time if start_time is not None else 'null'};
@@ -1311,7 +1406,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             const hls = new Hls();
                             hls.loadSource(url);
                             hls.attachMedia(video);
-                            hls.on(Hls.Events.MANIFEST_PARSED, function () {{
+                            hls.on(Hls.Events.MANIFEST_PARSED, function() {{
                                 if (startTime !== null) {{
                                     video.currentTime = startTime;
                                 }}
@@ -1319,7 +1414,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }});
                         }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
                             video.src = url;
-                            video.addEventListener('loadedmetadata', function () {{
+                            video.addEventListener('loadedmetadata', function() {{
                                 if (startTime !== null) {{
                                     video.currentTime = startTime;
                                 }}
@@ -1363,14 +1458,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     }}
 
                     function hmsToSeconds(hms) {{
-                            const [h, m, s] = hms.split(":").map(Number);
-                            return h * 3600 + m * 60 + s;
+                        const [h, m, s] = hms.split(":").map(Number);
+                        return h * 3600 + m * 60 + s;
                     }}
 
                     folderPicker.addEventListener("change", () => {{
-                            const folder = folderPicker.value;
-                            loadStream(folder);
-                            loadEventImages(folder);
+                        const folder = folderPicker.value;
+                        loadStream(folder);
+                        loadEventImages(folder);
                     }});
 
                     loadStream(folderPicker.value);
@@ -1414,7 +1509,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             .then(response => response.json())
                             .then(data => {{
                                 console.log("Counts reset");
-                                fetchCounts(); // refresh display
+                                fetchCounts();
                             }})
                             .catch(err => {{
                                 console.error("Failed to reset counts:", err);
@@ -1422,92 +1517,113 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }});
                     }}
 
-                      function fetchAlerts() {{
-                          fetch(`/get_alerts?cam=${{encodeURIComponent("{camera_name}")}}`)
-                              .then(res => res.json())
-                              .then(alerts => {{
-                                  const container = document.getElementById("alertsContainer");
-                                  if (!alerts.length) {{
-                                      container.innerHTML = "<p>No alerts configured.</p>";
-                                      return;
-                                  }}
+                    function fetchAlerts() {{
+                        fetch(`/get_alerts?cam=${{encodeURIComponent("{camera_name}")}}`)
+                            .then(res => res.json())
+                            .then(alerts => {{
+                                const container = document.getElementById("alertsContainer");
+                                if (!alerts.length) {{
+                                    container.innerHTML = `<p>No alerts configured.</p>
+                                        <button onclick="openAlertModal()">Add Alert</button>`;
+                                    return;
+                                }}
 
-                                  let html = `
-                                      <table style="width:100%; border-collapse: collapse;">
-                                          <tr>
-                                              <th style="text-align:left;">Window (s)</th>
-                                              <th style="text-align:left;">Max</th>
-                                              <th style="text-align:left;">Classes</th>
-                                          </tr>
-                                  `;
-                                  for (const alert of alerts) {{
-                                      const classNames = alert.classes.join(", ");
+                                let html = `
+                                    <table style="width:100%; border-collapse: collapse;">
+                                        <thead>
+                                            <tr>
+                                                <th style="text-align:left;">Window (s)</th>
+                                                <th style="text-align:left;">Max</th>
+                                                <th style="text-align:left;">Classes</th>
+                                                <th style="text-align:left;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                `;
+                                
+                                for (const alert of alerts) {{
+                                    const classNames = alert.classes.join(", ");
+                                    html += `
+                                        <tr>
+                                            <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
+                                            <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
+                                            <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
+                                            <td style="padding:6px; border-bottom:1px solid #ccc;">
+                                                <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }}
+                                
+                                html += `
+                                        <tr>
+                                            <td colspan="3" style="padding:6px; border-bottom:1px solid #ccc;"></td>
+                                            <td style="padding:6px; border-bottom:1px solid #ccc;">
+                                                <button onclick="openAlertModal()">Add Alert</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                    </table>
+                                `;
+                                
+                                container.innerHTML = html;
+                            }})
+                            .catch(err => {{
+                                console.error("Failed to fetch alerts:", err);
+                                document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
+                            }});
+                    }}
 
-                                      html += `
-                                          <tr>
-                                              <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
-                                              <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
-                                              <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
-                                              <td style="padding:6px; border-bottom:1px solid #ccc;">
-                                                  <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
-                                              </td>
-                                          </tr>
-                                      `;
-                                  }}
-                                  html += `</table>`;
-                                  container.innerHTML = html;
-                              }})
-                              .catch(err => {{
-                                  console.error("Failed to fetch alerts:", err);
-                                  document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
-                              }});
-                      }}
+                    fetchAlerts();
 
-                      fetchAlerts();
-                      function deleteAlert(alertId) {{
-                          fetch(`/delete_alert?cam=${{encodeURIComponent("{camera_name}")}}&id=${{alertId}}`, {{
-                              method: 'GET'
-                          }})
-                          .then(response => {{
-                              if (!response.ok) throw new Error("Failed to delete alert");
-                              fetchAlerts(); // reload alerts
-                          }})
-                          .catch(err => {{
-                              console.error("Delete failed:", err);
-                              alert("Failed to delete alert.");
-                          }});
-                      }}
-                      
-                      function addAlert(event) {{
-                          event.preventDefault();
-                          
-                          const form = event.target;
-                          const formData = new FormData(form);
-                          const params = new URLSearchParams();
-                          
-                          params.append('cam', encodeURIComponent("{camera_name}"));
-                          params.append('window', formData.get('window'));
-                          params.append('max', formData.get('max'));
-                          params.append('class_ids', formData.get('class_ids'));
-                          
-                          fetch(`/add_alert?${{params.toString()}}`, {{
-                              method: 'GET'
-                          }})
-                          .then(response => {{
-                              if (!response.ok) throw new Error("Failed to add alert");
-                              return response.json();
-                          }})
-                          .then(data => {{
-                              alert("Alert added successfully!");
-                              fetchAlerts(); // Refresh the alerts list
-                              form.reset(); // Reset the form
-                          }})
-                          .catch(err => {{
-                              console.error("Add alert failed:", err);
-                              alert("Failed to add alert. See console for details.");
-                          }});
-                      }}
+                    function deleteAlert(alertId) {{
+                        fetch(`/delete_alert?cam=${{encodeURIComponent("{camera_name}")}}&id=${{alertId}}`, {{
+                            method: 'GET'
+                        }})
+                        .then(response => {{
+                            if (!response.ok) throw new Error("Failed to delete alert");
+                            fetchAlerts();
+                        }})
+                        .catch(err => {{
+                            console.error("Delete failed:", err);
+                            alert("Failed to delete alert.");
+                        }});
+                    }}
 
+                    function addAlert(event) {{
+                        event.preventDefault();
+                        
+                        const form = event.target;
+                        const formData = new FormData(form);
+                        const params = new URLSearchParams();
+                        
+                        // Convert minutes to seconds for the backend
+                        const windowMinutes = parseFloat(formData.get('window'));
+                        const windowSeconds = Math.round(windowMinutes * 60);
+                        
+                        params.append('cam', encodeURIComponent("{camera_name}"));
+                        params.append('window', windowSeconds);
+                        params.append('max', formData.get('max'));
+                        params.append('class_ids', formData.get('class_ids'));
+                        
+                        fetch(`/add_alert?${{params.toString()}}`, {{
+                            method: 'GET'
+                        }})
+                        .then(response => {{
+                            if (!response.ok) throw new Error("Failed to add alert");
+                            return response.json();
+                        }})
+                        .then(data => {{
+                            closeAlertModal();
+                            document.getElementById("alertForm").reset();
+                            fetchAlerts();
+                            alert("Alert added successfully!");
+                        }})
+                        .catch(err => {{
+                            console.error("Add alert failed:", err);
+                            alert("Failed to add alert. See console for details.");
+                        }});
+                    }}
                 </script>
             </body>
             </html>
