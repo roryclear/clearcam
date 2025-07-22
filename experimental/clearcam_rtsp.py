@@ -372,12 +372,14 @@ def resolve_youtube_stream_url(youtube_url):
       raise RuntimeError("Could not resolve YouTube stream URL")
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None):
+  def __init__(self, window_seconds=None, max=None, classes=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
+    self.classes = classes
 
   def add(self, class_id):
+    if self.classes is not None and class_id not in self.classes: return
     now = time.time()
     self.data[class_id].append(now)
     self.cleanup(class_id, now)
@@ -403,7 +405,7 @@ class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
     # objects in scene count
     self.counter = RollingClassCounter()
-    self.default_notif_counter = RollingClassCounter(window_seconds=60, max=1)
+    self.default_notif_counter = RollingClassCounter(window_seconds=60, max=1, classes={1,2,3,5,7})
     self.camera_name = camera_name
     self.object_set = set()
 
