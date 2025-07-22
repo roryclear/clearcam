@@ -423,6 +423,7 @@ class VideoCapture:
     self.dir = None
 
     alerts_dir = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+    alerts_dir.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(alerts_dir, "rb") as f:
             self.alert_counters = pickle.load(f)
