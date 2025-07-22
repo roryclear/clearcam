@@ -354,23 +354,6 @@ CAMERA_BASE_DIR = Path("cameras")
 Path("cameras").mkdir(parents=True, exist_ok=True)
 
 
-def resolve_youtube_stream_url(youtube_url):
-  import yt_dlp
-  ydl_opts = {
-    'format': 'best',
-    'quiet': True,
-    'noplaylist': True,
-    'force_generic_extractor': False,
-  }
-  with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    info = ydl.extract_info(youtube_url, download=False)
-    if 'url' in info:
-      return info['url']
-    elif 'entries' in info and info['entries']:
-      return info['entries'][0]['url']
-    else:
-      raise RuntimeError("Could not resolve YouTube stream URL")
-
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None):
     self.window = window_seconds
@@ -444,8 +427,6 @@ class VideoCapture:
   def _open_ffmpeg(self):
     if self.proc:
         self.proc.kill()
-    
-    if "youtube.com" in self.src or "youtu.be" in self.src: self.src = resolve_youtube_stream_url(self.src)
     
     command = [
         "ffmpeg",
@@ -793,7 +774,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 classes = [int(c.strip()) for c in class_ids.split(",")]  # Parse as integers
                 alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
                 added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
-                id = uuid.uuid4()
+                id = str(uuid.uuid4())
                 with open(alerts_file, "rb") as f:
                     raw_alerts = pickle.load(f)
                     raw_alerts[id] = RollingClassCounter(window_seconds=window,max=max_count,classes=classes) 
@@ -838,8 +819,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
 
             alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            print("RORY DELTETING ",alert_id)
             with open(alerts_file, "rb") as f:
                 raw_alerts = pickle.load(f)
+                print(raw_alerts)
                 del raw_alerts[alert_id]
             with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
             deleted_alerts_file = CAMERA_BASE_DIR / cam_name / "deleted_alerts.pkl"
@@ -1065,9 +1048,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == '/' or parsed_path.path == f'/{camera_name}':
-            stream_dirs = sorted(hls_dir.glob("*"), key=os.path.getmtime, reverse=True)
-            dir_names = [d.name for d in stream_dirs if (d / "stream.m3u8").exists()]
-
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
 
@@ -1087,12 +1067,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 start_time = None
 
-            # Get list of available cameras for the dropdown
             available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
-            cam_options = "\n".join(
-                f'<option value="{cam}" {"selected" if cam == camera_name else ""}>{cam}</option>'
-                for cam in available_cams
-            )
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
