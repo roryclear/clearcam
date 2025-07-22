@@ -1117,14 +1117,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     .date-picker-container {{
                         display: flex;
                         justify-content: center;
+                        align-items: center;
+                        gap: 10px;
                         margin: 20px 0;
+                        flex-wrap: wrap;
                     }}
 
-                    /* Download button centering */
-                    .download-button-container {{
-                        display: flex;
-                        justify-content: center;
-                        margin: 20px 0;
+                    .date-picker-container input[type="date"],
+                    .date-picker-container button {{
+                        height: 40px;
+                        font-size: 0.95rem;
+                        padding: 6px 12px;
+                        border-radius: 6px;
+                        border: 1px solid #ccc;
+                        box-sizing: border-box;
                     }}
 
                     /* Counts table and reset button alignment */
@@ -1210,7 +1216,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     /* Table action buttons */
                     #alertsContainer table button {{
                         padding: 6px 12px;
-                        min-width: auto;
+                        min-width: 90px;
+                        text-align: center;
+                        font-size: 0.9rem;
                     }}
 
                     h3 {{
@@ -1383,7 +1391,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         }}
                         
                         #alertsContainer table button {{
-                            padding: 4px 8px;
+                            min-width: 80px;
+                            padding: 5px 10px;
                             font-size: 0.8rem;
                         }}
 
@@ -1399,6 +1408,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             flex-direction: column;
                             gap: 10px;
                         }}
+
+                        .date-picker-container {{
+                            flex-wrap: nowrap;
+                        }}
+
+                        .date-picker-container input[type="date"],
+                        .date-picker-container button {{
+                            height: 36px;
+                            font-size: 0.85rem;
+                            padding: 6px 10px;
+                        }}
+
                     }}
                 </style>
             </head>
@@ -1406,10 +1427,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 <div class="container">
                     <video id="video" controls></video>
                     <div class="date-picker-container">
-                        <label>
-                            <input type="date" id="folderPicker" value="{selected_dir}">
-                            <button onclick="openDownloadModal()">Download</button>
-                        </label>
+                        <input type="date" id="folderPicker" value="{selected_dir}">
+                        <button onclick="openDownloadModal()">Download</button>
                     </div>
                     <h3>Active Alerts</h3>
                     <div id="alertsContainer">
