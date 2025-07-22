@@ -1419,18 +1419,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 <h3>Download Clip</h3>
                                 <span class="close" onclick="closeDownloadModal()">&times;</span>
                             </div>
-                            <div class="download-controls">
-                                <div class="download-time-inputs">
-                                    <div class="form-group">
+                            <div class="download-controls" style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                                <div class="download-time-inputs" style="display: flex; justify-content: center; gap: 20px; width: 100%;">
+                                    <div class="form-group" style="text-align: center;">
                                         <label for="clipStart">Start Time</label>
-                                        <input type="time" id="clipStart" step="1" value="00:00:00">
+                                        <input type="time" id="clipStart" step="1" value="00:00:00" style="text-align: center;">
                                     </div>
-                                    <div class="form-group">
+                                    <div class="form-group" style="text-align: center;">
                                         <label for="clipEnd">End Time</label>
-                                        <input type="time" id="clipEnd" step="1" value="00:00:10">
+                                        <input type="time" id="clipEnd" step="1" value="00:00:10" style="text-align: center;">
                                     </div>
                                 </div>
-                                <div class="form-actions">
+                                <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; width: 100%;">
                                     <button type="button" onclick="closeDownloadModal()">Cancel</button>
                                     <button type="button" onclick="downloadClip()">Download Now</button>
                                 </div>
