@@ -372,9 +372,10 @@ def resolve_youtube_stream_url(youtube_url):
       raise RuntimeError("Could not resolve YouTube stream URL")
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None):
+  def __init__(self, window_seconds=None, max=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
+    self.max = max
 
   def add(self, class_id):
     now = time.time()
@@ -387,6 +388,7 @@ class RollingClassCounter:
         q.popleft()
 
   def get_counts(self):
+    max_reached = False
     now = time.time()
     counts = {}
     for class_id, q in self.data.items():
@@ -394,13 +396,14 @@ class RollingClassCounter:
         q.popleft()
       if q:
         counts[class_id] = len(q)
-    return counts
+        if self.max and len(q) >= self.max: max_reached = True
+    return counts, max_reached
 
 class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
     # objects in scene count
     self.counter = RollingClassCounter()
-    self.default_notif_counter = RollingClassCounter(window_seconds=60)
+    self.default_notif_counter = RollingClassCounter(window_seconds=60, max=1)
     self.camera_name = camera_name
     self.object_set = set()
 
@@ -488,8 +491,8 @@ class VideoCapture:
                     cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
-                if self.default_notif_counter.get_counts() != {}:
-                    if time.time() - last_det >= 60: # once per min for now
+                if self.default_notif_counter.get_counts()[1]:
+                    if time.time() - last_det >= self.default_notif_counter.window: # once per min for now
                         send_det = True
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
@@ -550,7 +553,7 @@ class VideoCapture:
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
-              if self.default_notif_counter.get_counts() == {}:
+              if not self.default_notif_counter.get_counts()[1]:
                 self.default_notif_counter.add(int(x.class_id)) #only add if empty, don't spam notifs
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
@@ -771,7 +774,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"{}")
                 return
 
-            raw_counts = counter.get_counts()
+            raw_counts = counter.get_counts()[0]
             labeled_counts = {
                 class_labels[int(k)]: v
                 for k, v in raw_counts.items()
