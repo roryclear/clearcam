@@ -1385,26 +1385,30 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     <!-- The Modal -->
                     <div id="alertModal" class="modal">
-                        <div class="modal-content">
+                        <div class="modal-content" style="max-width: 400px;">
                             <div class="modal-header">
                                 <h3>Add New Alert</h3>
                                 <span class="close" onclick="closeAlertModal()">&times;</span>
                             </div>
-                            <form id="alertForm" onsubmit="addAlert(event)">
-                                <div class="form-group">
+                            <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
+                                <div class="form-group" style="width: 80%; text-align: center;">
                                     <label for="windowMinutes">Window (minutes)</label>
-                                    <input type="number" id="windowMinutes" name="window" min="1" value="1" required>
+                                    <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
+                                          style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
                                 </div>
-                                <div class="form-group">
+                                <div class="form-group" style="width: 80%; text-align: center;">
                                     <label for="maxCount">Max Count</label>
-                                    <input type="number" id="maxCount" name="max" min="1" value="5" required>
+                                    <input type="number" id="maxCount" name="max" min="1" value="5" required 
+                                          style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
                                 </div>
-                                <div class="form-group">
+                                <div class="form-group" style="width: 80%; text-align: center;">
                                     <label for="classIds">Class IDs (comma separated)</label>
-                                    <input type="text" id="classIds" name="class_ids" value="0,2" required placeholder="e.g., 0,2,3">
-                                    <small>Common IDs: 0=person, 1=bicycle, 2=car, etc.</small>
+                                    <input type="text" id="classIds" name="class_ids" value="0,2" required 
+                                          placeholder="e.g., 0,2,3" 
+                                          style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
+                                    <small style="display: block; margin-top: 5px;">Common IDs: 0=person, 1=bicycle, 2=car, etc.</small>
                                 </div>
-                                <div class="form-actions">
+                                <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
                                     <button type="button" onclick="closeAlertModal()">Cancel</button>
                                     <button type="submit">Save Alert</button>
                                 </div>
