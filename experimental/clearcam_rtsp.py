@@ -517,11 +517,11 @@ class VideoCapture:
                   counters_dir = CAMERA_BASE_DIR / self.camera_name / "counters.pkl"
                   if os.path.exists(counters_dir):
                       with open(counters_dir, 'rb') as f:
-                          counters = pickle.load(f)
-                      if counters.get(self.camera_name) is None: self.counter = RollingClassCounter()
-                      counters[self.camera_name] = self.counter
+                          counter = pickle.load(f)
+                      if counter is None: self.counter = RollingClassCounter()
+                      counter = self.counter
                       with open(counters_dir, 'wb') as f:
-                          pickle.dump(counters, f)
+                          pickle.dump(counter, f)
                 if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
                     mp4_filename = f"segment.mp4"
@@ -760,15 +760,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             counters_dir = CAMERA_BASE_DIR / cam_name / "counters.pkl"
             try:
                 with open(counters_dir, "rb") as f:
-                    counters = pickle.load(f)
+                    counter = pickle.load(f)
             except Exception:
                 with open(counters_dir, 'wb') as f:
-                    counters = dict()
-                    counters[cam_name] = RollingClassCounter()
-                    pickle.dump(counters, f)
-                counters = {}
+                    counter = RollingClassCounter()
+                    pickle.dump(counter, f)
 
-            counter = counters[cam_name]
             if not counter:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -797,10 +794,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             counters_dir = CAMERA_BASE_DIR / cam_name / "counters.pkl"
 
             with open(counters_dir, "rb") as f:
-                counters = pickle.load(f)
-            counters[cam_name] = None
+                counter = pickle.load(f)
+            counter = None
             with open(counters_dir, 'wb') as f:
-                pickle.dump(counters, f)
+                pickle.dump(counter, f)
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
