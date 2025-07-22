@@ -463,7 +463,6 @@ class VideoCapture:
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-
   def capture_loop(self):
     frame_size = self.width * self.height * 3
     fail_count = 0
@@ -532,6 +531,16 @@ class VideoCapture:
                       counter = self.counter
                       with open(counters_dir, 'wb') as f:
                           pickle.dump(counter, f)
+                  # delete alerts and save
+                  
+                  deleted_alerts_dir = CAMERA_BASE_DIR / self.camera_name / "deleted_alerts.pkl"
+                  if deleted_alerts_dir.exists():
+                    with open(deleted_alerts_dir, 'rb') as f:
+                        deleted_alerts = pickle.load(f)
+                        for a in deleted_alerts: 
+                          if a in self.alert_counters: del self.alert_counters[a]
+                    deleted_alerts_dir.unlink()
+                  
                 if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
                     mp4_filename = f"segment.mp4"
@@ -729,6 +738,21 @@ class HLSStreamer:
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
 
+
+def append_to_pickle_list(pkl_path, item):
+    pkl_path = Path(pkl_path)
+    if pkl_path.exists():
+        try:
+            with open(pkl_path, 'rb') as f:
+                data = pickle.load(f)
+        except Exception as e:
+            data = []
+    else:
+        data = []
+    data.append(item)
+    with open(pkl_path, 'wb') as f:
+        pickle.dump(data, f)
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR 
@@ -761,6 +785,28 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()
+            return
+
+        if parsed_path.path == "/delete_alert":
+            cam_name = query.get("cam", [None])[0]
+            alert_id = query.get("id", [None])[0]
+            
+            if not cam_name or not alert_id:
+                self.send_error(400, "Missing cam or id")
+                return
+
+            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            with open(alerts_file, "rb") as f:
+                raw_alerts = pickle.load(f)
+                del raw_alerts[alert_id]
+            with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
+            deleted_alerts_file = CAMERA_BASE_DIR / cam_name / "deleted_alerts.pkl"
+            append_to_pickle_list(pkl_path=deleted_alerts_file,item=alert_id)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
             return
 
         if parsed_path.path == "/get_alerts":
@@ -1333,6 +1379,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                               <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
                                               <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
                                               <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
+                                              <td style="padding:6px; border-bottom:1px solid #ccc;">
+                                                  <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                              </td>
                                           </tr>
                                       `;
                                   }}
@@ -1346,7 +1395,19 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       }}
 
                       fetchAlerts();
-
+                        function deleteAlert(alertId) {{
+                          fetch(`/delete_alert?cam=${{encodeURIComponent("{camera_name}")}}&id=${{alertId}}`, {{
+                              method: 'GET'
+                          }})
+                          .then(response => {{
+                              if (!response.ok) throw new Error("Failed to delete alert");
+                              fetchAlerts(); // reload alerts
+                          }})
+                          .catch(err => {{
+                              console.error("Delete failed:", err);
+                              alert("Failed to delete alert.");
+                          }});
+                      }}
                 </script>
             </body>
             </html>
