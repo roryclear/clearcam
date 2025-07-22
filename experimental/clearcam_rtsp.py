@@ -531,8 +531,7 @@ class VideoCapture:
                       counter = self.counter
                       with open(counters_dir, 'wb') as f:
                           pickle.dump(counter, f)
-                  # delete alerts and save
-                  
+                  # delete alerts
                   deleted_alerts_dir = CAMERA_BASE_DIR / self.camera_name / "deleted_alerts.pkl"
                   if deleted_alerts_dir.exists():
                     with open(deleted_alerts_dir, 'rb') as f:
@@ -541,6 +540,15 @@ class VideoCapture:
                           if a in self.alert_counters: del self.alert_counters[a]
                     deleted_alerts_dir.unlink()
                   
+                  # add new alerts
+                  added_alerts_dir = CAMERA_BASE_DIR / self.camera_name / "added_alerts.pkl"
+                  if added_alerts_dir.exists():
+                    with open(added_alerts_dir, 'rb') as f:
+                      added_alerts = pickle.load(f)
+                      for id,a in added_alerts:
+                        self.alert_counters[id] = a
+                      added_alerts_dir.unlink()
+                      
                 if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
                     mp4_filename = f"segment.mp4"
@@ -767,6 +775,39 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         query = parse_qs(parsed_path.query)
+
+        if parsed_path.path == "/add_alert":
+            cam_name = query.get("cam", [None])[0]
+            window = query.get("window", [None])[0]
+            max_count = query.get("max", [None])[0]
+            class_ids = query.get("class_ids", [None])[0]
+            
+            if not cam_name or not window or not max_count or not class_ids:
+                self.send_error(400, "Missing parameters")
+                return
+            
+            try:
+                window = int(window)
+                max_count = int(max_count)
+                classes = [int(c.strip()) for c in class_ids.split(",")]  # Parse as integers
+                alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+                added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
+                id = uuid.uuid4()
+                with open(alerts_file, "rb") as f:
+                    raw_alerts = pickle.load(f)
+                    raw_alerts[id] = RollingClassCounter(window_seconds=window,max=max_count,classes=classes) 
+                with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
+                append_to_pickle_list(pkl_path=added_alerts_file,item=[id,RollingClassCounter(window_seconds=window,max=max_count,classes=classes)])
+
+            except ValueError as e:
+                self.send_error(400, f"Invalid parameters: {e}")
+                return
+            
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+            return
 
         if parsed_path.path == '/add_camera':
             camera_name = query.get("cam_name", [None])[0]
@@ -1193,6 +1234,33 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
                     </div>
+                    <h3>Add New Alert</h3>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                        <form id="alertForm" onsubmit="addAlert(event)">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                                <label>
+                                    Window (seconds):
+                                    <input type="number" name="window" min="1" value="60" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+                                </label>
+                                <label>
+                                    Max Count:
+                                    <input type="number" name="max" min="1" value="5" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+                                </label>
+                            </div>
+                            <label>
+                                Class IDs (comma separated numbers):
+                                <input type="text" name="class_ids" value="0,2" required 
+                                      placeholder="e.g., 0,2,3" 
+                                      style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+                                <div style="font-size: 0.8em; color: #666; margin-top: 4px;">
+                                    Common IDs: 0=person, 1=bicycle, 2=car, etc.
+                                </div>
+                            </label>
+                            <div style="margin-top: 15px;">
+                                <button type="submit" style="background-color: #4285f4; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer;">Add Alert</button>
+                            </div>
+                        </form>
+                    </div>
                     <table id="objectCounts" style="margin: 20px auto; font-size: 1rem; border-collapse: collapse;">
                         <thead>
                             <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
@@ -1395,7 +1463,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       }}
 
                       fetchAlerts();
-                        function deleteAlert(alertId) {{
+                      function deleteAlert(alertId) {{
                           fetch(`/delete_alert?cam=${{encodeURIComponent("{camera_name}")}}&id=${{alertId}}`, {{
                               method: 'GET'
                           }})
@@ -1408,6 +1476,37 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                               alert("Failed to delete alert.");
                           }});
                       }}
+                      
+                      function addAlert(event) {{
+                          event.preventDefault();
+                          
+                          const form = event.target;
+                          const formData = new FormData(form);
+                          const params = new URLSearchParams();
+                          
+                          params.append('cam', encodeURIComponent("{camera_name}"));
+                          params.append('window', formData.get('window'));
+                          params.append('max', formData.get('max'));
+                          params.append('class_ids', formData.get('class_ids'));
+                          
+                          fetch(`/add_alert?${{params.toString()}}`, {{
+                              method: 'GET'
+                          }})
+                          .then(response => {{
+                              if (!response.ok) throw new Error("Failed to add alert");
+                              return response.json();
+                          }})
+                          .then(data => {{
+                              alert("Alert added successfully!");
+                              fetchAlerts(); // Refresh the alerts list
+                              form.reset(); // Reset the form
+                          }})
+                          .catch(err => {{
+                              console.error("Add alert failed:", err);
+                              alert("Failed to add alert. See console for details.");
+                          }});
+                      }}
+
                 </script>
             </body>
             </html>
@@ -1739,5 +1838,3 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
-
-
