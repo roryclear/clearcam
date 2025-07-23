@@ -1663,9 +1663,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 </thead><tbody>`;
 
                             for (const alert of alerts) {{
-                                const classNames = alert.classes.join(", ");
+                                const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
+                                const h = Math.floor(alert.window / 3600);
+                                const m = Math.floor((alert.window % 3600) / 60);
+                                const s = alert.window % 60;
+                                const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
                                 html += `<tr>
-                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.window}}</td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">
