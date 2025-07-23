@@ -1068,7 +1068,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-
             html = f"""
             <!DOCTYPE html>
             <html>
@@ -1083,6 +1082,53 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         padding: 0;
                         background-color: #f9f9f9;
                         color: #333;
+                    }}
+
+                    .checkbox-container {{
+                        display: grid;
+                        grid-template-columns: auto 1fr;
+                        align-items: center;
+                        gap: 8px;
+                        padding: 8px;
+                        width: fit-content;
+                        max-height: none; /* Remove fixed max-height */
+                        overflow-y: visible; /* Remove inner scrolling */
+                    }}
+    
+                    .checkbox-container input[type="checkbox"] {{
+                        margin: 0;
+                        width: 16px;
+                        height: 16px;
+                    }}
+
+                    .checkbox-item {{
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        margin-left: 10px;
+                    }}
+
+                    .checkbox-item input[type="checkbox"] {{
+                        margin: 0;
+                        transform: scale(1.2);
+                    }}
+
+                    .checkbox-column {{
+                        display: grid;
+                        grid-template-columns: auto 1fr;
+                        align-items: center;
+                        gap: 8px;
+                        max-height: 200px;
+                        overflow-y: auto;
+                        padding: 8px;
+                        margin: 0 auto;
+                        width: fit-content;
+                    }}
+                    
+                    .checkbox-column input[type="checkbox"] {{
+                        margin: 0;
+                        width: 16px;
+                        height: 16px;
                     }}
 
                     .container {{
@@ -1227,6 +1273,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         justify-content: center;
                         align-items: center;
                         overflow: auto;
+                    }}
+
+                    .modal-content {{
+                        max-height: 80vh;
+                        overflow-y: auto;
+                        display: flex;
+                        flex-direction: column;
+                    }}
+                    .form-group.checkbox-group {{
+                        flex: 1;
+                        min-height: 0; /* Important for flex children */
                     }}
 
                     .modal-content,
@@ -1401,12 +1458,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <input type="number" id="maxCount" name="max" min="1" value="5" required 
                                           style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
                                 </div>
-                                <div class="form-group" style="width: 90%; text-align: center; max-height: 200px; overflow-y: auto;">
+                                <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
                                     <label>Class IDs</label>
-                                    <div id="checkboxContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 5px; padding: 10px;">
-                                        <!-- Checkboxes inserted via JS -->
+                                    <div id="checkboxContainer" class="checkbox-container">
+                                        <!-- Checkboxes will be inserted here -->
                                     </div>
-                                    <small style="display: block; margin-top: 5px;">Common IDs: 0=person, 1=bicycle, 2=car, etc.</small>
                                 </div>
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
                                     <button type="button" onclick="closeAlertModal()">Cancel</button>
@@ -1459,6 +1515,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 </div>
 
                 <script>
+                const classLabels = {class_labels};
                 const alertModal = document.getElementById("alertModal");
                 const downloadModal = document.getElementById("downloadModal");
                 const folderPicker = document.getElementById("folderPicker");
@@ -1468,20 +1525,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                 window.onload = function () {{
                     const container = document.getElementById('checkboxContainer');
+                    container.innerHTML = '';
+                    
                     for (let i = 0; i < 80; i++) {{
-                        const label = document.createElement('label');
-                        label.style.display = 'flex';
-                        label.style.alignItems = 'center';
-                        label.style.justifyContent = 'center';
-                        label.style.gap = '4px';
-
                         const checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
                         checkbox.value = i;
                         checkbox.name = 'class_ids';
-
-                        label.appendChild(checkbox);
-                        label.appendChild(document.createTextNode(i));
+                        checkbox.id = 'class_' + i;
+                        
+                        const label = document.createElement('label');
+                        label.htmlFor = 'class_' + i;
+                        label.textContent = (classLabels[i] !== undefined) ? classLabels[i] : i;
+                        
+                        container.appendChild(checkbox);
                         container.appendChild(label);
                     }}
                 }};
@@ -1658,7 +1715,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to delete alert.");
                         }});
                 }}
-                
+
                 function addAlert(event) {{
                     event.preventDefault();
                     const form = event.target;
