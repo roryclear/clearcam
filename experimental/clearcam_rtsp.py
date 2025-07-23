@@ -1086,13 +1086,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     .checkbox-container {{
                         display: grid;
-                        grid-template-columns: auto 1fr;
-                        align-items: center;
-                        gap: 8px;
+                        grid-template-columns: auto auto;
+                        gap: 8px 16px;
+                        max-height: 200px;
+                        overflow-y: auto;
+                        margin: 0 auto;
                         padding: 8px;
-                        width: fit-content;
-                        max-height: none; /* Remove fixed max-height */
-                        overflow-y: visible; /* Remove inner scrolling */
+                        justify-content: center;
                     }}
     
                     .checkbox-container input[type="checkbox"] {{
@@ -1111,24 +1111,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     .checkbox-item input[type="checkbox"] {{
                         margin: 0;
                         transform: scale(1.2);
-                    }}
-
-                    .checkbox-column {{
-                        display: grid;
-                        grid-template-columns: auto 1fr;
-                        align-items: center;
-                        gap: 8px;
-                        max-height: 200px;
-                        overflow-y: auto;
-                        padding: 8px;
-                        margin: 0 auto;
-                        width: fit-content;
-                    }}
-                    
-                    .checkbox-column input[type="checkbox"] {{
-                        margin: 0;
-                        width: 16px;
-                        height: 16px;
                     }}
 
                     .container {{
@@ -1536,7 +1518,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         
                         const label = document.createElement('label');
                         label.htmlFor = 'class_' + i;
-                        label.textContent = (classLabels[i] !== undefined) ? classLabels[i] : i;
+                        label.textContent = (classLabels[i] !== undefined) ? `${{classLabels[i]}}` : `${{i}}`;
                         
                         container.appendChild(checkbox);
                         container.appendChild(label);
