@@ -1430,21 +1430,23 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 <span class="close" onclick="closeAlertModal()">&times;</span>
                             </div>
                             <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
-                                <div class="form-group" style="width: 80%; text-align: center;">
-                                    <label for="windowMinutes">Window (minutes)</label>
-                                    <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
-                                          style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
-                                </div>
-                                <div class="form-group" style="width: 80%; text-align: center;">
-                                    <label for="maxCount">Max Count</label>
+                                <div class="form-group" style="width: 90%; text-align: center;">
+                                    <label for="maxCount">Trigger if there are more than</label>
                                     <input type="number" id="maxCount" name="max" min="1" value="5" required 
-                                          style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
+                                        style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+                                    <span>objects detected</span>
                                 </div>
                                 <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
-                                    <label>Class IDs</label>
+                                    <label>of class(es)</label>
                                     <div id="checkboxContainer" class="checkbox-container">
                                         <!-- Checkboxes will be inserted here -->
                                     </div>
+                                </div>
+                                <div class="form-group" style="width: 90%; text-align: center;">
+                                    <label for="windowMinutes">within this time window</label>
+                                    <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
+                                        style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+                                    <span>minutes</span>
                                 </div>
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
                                     <button type="button" onclick="closeAlertModal()">Cancel</button>
@@ -1655,10 +1657,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window (s)</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Max</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Occurances of</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Within</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
                                     </tr>
                                 </thead><tbody>`;
 
@@ -1669,11 +1671,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const s = alert.window % 60;
                                 const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
                                 html += `<tr>
-                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">
-                                        <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                    <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
                                     </td>
                                 </tr>`;
                             }}
