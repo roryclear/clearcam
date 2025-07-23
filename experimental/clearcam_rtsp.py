@@ -473,7 +473,7 @@ class VideoCapture:
 
             for x in objects:
                 self.object_dict[int(x)] += 1
-            if len(self.object_queue) > 10:
+            if userID and len(self.object_queue) > 10:
                 if last_preview_time is None or time.time() - last_det >= 3600: # preview every hour
                     last_preview_time = time.time()
                     preview_dir = CAMERA_BASE_DIR / self.camera_name
@@ -497,7 +497,7 @@ class VideoCapture:
                     encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                     threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
                     send_det = False
-                if live and (time.time() - last_live_check) >= 5:
+                if userID and (time.time() - last_live_check) >= 5:
                     last_live_check = time.time()
                     threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
                 if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
@@ -2130,10 +2130,20 @@ if __name__ == "__main__":
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
+
+  if rtsp_url is None and userID is None:
+    userID = input("enter your Clearcam user id or press Enter to skip: ")
+    if len(userID) > 0:
+      key = ""
+      while len(key) < 1: key = input("enter a password for encryption: ")
+      new_args = sys.argv + [f"--userid={userID}", f"--key={key}"]
+      subprocess.Popen([sys.executable] + new_args, close_fds=True)
+      sys.exit(0)
+    else: userID = None
+
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
-  live = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--live=")), None)
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
   track_thresh = 0.4 #default 0.6
