@@ -406,6 +406,8 @@ class VideoCapture:
     try:
         with open(alerts_dir, "rb") as f:
             self.alert_counters = pickle.load(f)
+            for _,a in self.alert_counters.items():
+              for c in a.classes: classes.add(str(c))
     except Exception:
         with open(alerts_dir, 'wb') as f:
             self.alert_counters = dict()
@@ -525,6 +527,7 @@ class VideoCapture:
                       added_alerts = pickle.load(f)
                       for id,a in added_alerts:
                         self.alert_counters[id] = a
+                        for c in a.classes: classes.add(str(c))
                       added_alerts_dir.unlink()
                       
                 if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
