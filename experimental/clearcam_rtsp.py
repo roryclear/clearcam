@@ -2082,6 +2082,8 @@ def start_cam(rtsp,cam_name):
 
   args = upsert_arg(args, "cam_name", cam_name)
   args = upsert_arg(args, "rtsp", rtsp)
+  args = upsert_arg(args, "key", key)
+  args = upsert_arg(args, "userid", userID)
 
   subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
 
@@ -2110,7 +2112,6 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
             headers={'Content-Type': 'application/octet-stream'},
             timeout=2
         )
-
 cams = dict()
 
 import socket
@@ -2126,14 +2127,11 @@ if __name__ == "__main__":
          pickle.dump(cams, f)  
 
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
-  classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
-
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
-  if userID is not None and key is None:
-    print("Error: key is required when userID is provided")
-    sys.exit(1)
-  live = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--live=")), None)
+
+  classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
+  live = True
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
   track_thresh = 0.4 #default 0.6
@@ -2160,15 +2158,26 @@ if __name__ == "__main__":
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
-  if rtsp_url is None:
-    for camera_name in cams.keys():
-      start_cam(rtsp=cams[camera_name],cam_name=camera_name)
-
   if rtsp_url:
     cam = VideoCapture(rtsp_url,camera_name=cam_name)
     hls_streamer = HLSStreamer(cam,camera_name=cam_name)
     cam.streamer = hls_streamer
-  
+  else:
+    userID = input("Enter your Clearcam userID or press Enter to skip: ")
+    sys.stdout.write("\033[H\033[J")
+    sys.stdout.flush()
+    if len(userID) > 0:
+      key = input("Enter a key for encryption: ")
+      sys.stdout.write("\033[H\033[J")
+      sys.stdout.flush()
+      
+      for camera_name in cams.keys():
+        start_cam(rtsp=cams[camera_name],cam_name=camera_name)
+
+    else:
+      userID = None
+      live = False
+     
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
