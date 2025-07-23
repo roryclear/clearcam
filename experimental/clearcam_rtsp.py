@@ -1401,11 +1401,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <input type="number" id="maxCount" name="max" min="1" value="5" required 
                                           style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
                                 </div>
-                                <div class="form-group" style="width: 80%; text-align: center;">
-                                    <label for="classIds">Class IDs (comma separated)</label>
-                                    <input type="text" id="classIds" name="class_ids" value="0,2" required 
-                                          placeholder="e.g., 0,2,3" 
-                                          style="width: 100%; max-width: 200px; margin: 0 auto; text-align: center;">
+                                <div class="form-group" style="width: 90%; text-align: center; max-height: 200px; overflow-y: auto;">
+                                    <label>Class IDs</label>
+                                    <div id="checkboxContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 5px; padding: 10px;">
+                                        <!-- Checkboxes inserted via JS -->
+                                    </div>
                                     <small style="display: block; margin-top: 5px;">Common IDs: 0=person, 1=bicycle, 2=car, etc.</small>
                                 </div>
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
@@ -1465,6 +1465,26 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 const video = document.getElementById("video");
                 const startTime = {start_time if start_time is not None else 'null'};
                 const cameraName = "{camera_name}";
+
+                window.onload = function () {{
+                    const container = document.getElementById('checkboxContainer');
+                    for (let i = 0; i < 80; i++) {{
+                        const label = document.createElement('label');
+                        label.style.display = 'flex';
+                        label.style.alignItems = 'center';
+                        label.style.justifyContent = 'center';
+                        label.style.gap = '4px';
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.value = i;
+                        checkbox.name = 'class_ids';
+
+                        label.appendChild(checkbox);
+                        label.appendChild(document.createTextNode(i));
+                        container.appendChild(label);
+                    }}
+                }};
 
                 function openAlertModal() {{
                     alertModal.style.display = "flex";
@@ -1638,7 +1658,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to delete alert.");
                         }});
                 }}
-
+                
                 function addAlert(event) {{
                     event.preventDefault();
                     const form = event.target;
@@ -1646,11 +1666,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const windowMinutes = parseFloat(formData.get('window'));
                     const windowSeconds = Math.round(windowMinutes * 60);
 
+                    // Get all checked class_ids
+                    const checked = form.querySelectorAll('input[name="class_ids"]:checked');
+                    const classIds = Array.from(checked).map(cb => cb.value).join(',');
+
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         window: windowSeconds,
                         max: formData.get('max'),
-                        class_ids: formData.get('class_ids'),
+                        class_ids: classIds,
                     }});
 
                     fetch(`/add_alert?${{params.toString()}}`)
