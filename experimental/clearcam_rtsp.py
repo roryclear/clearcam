@@ -387,9 +387,6 @@ class VideoCapture:
     self.camera_name = camera_name
     self.object_set = set()
 
-    self.object_dict = defaultdict(int)
-    self.object_queue = []
-
     self.src = src
     self.width = 1280  # Reduced resolution for better performance
     self.height = 720
@@ -479,8 +476,10 @@ class VideoCapture:
                       if time.time() - last_det >= alert.window: # once per min for now
                           send_det = True
                           timestamp = datetime.now().strftime("%Y-%m-%d")
-                          filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
-                          cv2.imwrite(filename, self.annotated_frame)
+                          filepath = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}"
+                          filepath.mkdir(parents=True, exist_ok=True)
+                          filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
+                          cv2.imwrite(str(filename), self.annotated_frame)
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
                           last_det = time.time()
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
