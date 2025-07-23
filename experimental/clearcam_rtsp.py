@@ -754,6 +754,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         query = parse_qs(parsed_path.query)
 
+        if parsed_path.path == "/list_cameras":
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(available_cams).encode("utf-8"))
+            return
+
         if parsed_path.path == "/add_alert":
             cam_name = query.get("cam", [None])[0]
             window = query.get("window", [None])[0]
@@ -915,31 +923,108 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == '/' and "cam" not in query:
           available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
-          cam_entries = "\n".join(
-              f'''
-              <div style="margin: 10px;">
-                  <a href="/?cam={cam}">
-                      <img src="/{cam}/preview.jpg" alt="{cam} preview" width="200" style="display: block; border: 1px solid #ccc; margin-bottom: 5px;">
-                      <div style="text-align: center;">{cam}</div>
-                  </a>
-              </div>
-              ''' for cam in available_cams
-          )
           html = f"""
           <!DOCTYPE html>
           <html>
-          <head><title>Available Cameras</title></head>
+          <head>
+              <style>
+                  .camera-grid {{
+                      display: flex;
+                      flex-wrap: wrap;
+                      gap: 20px;
+                  }}
+                  .camera-card {{
+                      width: 220px;
+                      border: 1px solid #ccc;
+                      border-radius: 8px;
+                      overflow: hidden;
+                      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                      text-align: center;
+                      font-family: sans-serif;
+                  }}
+                  .camera-card img {{
+                      width: 100%;
+                      display: block;
+                  }}
+                  .camera-card div {{
+                      padding: 8px;
+                      background: #f9f9f9;
+                  }}
+                  .form-section {{
+                      margin-top: 20px;
+                      font-family: sans-serif;
+                  }}
+                  .form-section input {{
+                      padding: 6px;
+                      margin: 4px;
+                      border: 1px solid #ccc;
+                      border-radius: 4px;
+                      width: 200px;
+                  }}
+                  .form-section button {{
+                      padding: 6px 12px;
+                      background: #007bff;
+                      color: white;
+                      border: none;
+                      border-radius: 4px;
+                      cursor: pointer;
+                  }}
+                  .form-section button:hover {{
+                      background: #0056b3;
+                  }}
+              </style>
+          </head>
           <body>
-              <h2>Available Cameras</h2>
-              <div style="display: flex; flex-wrap: wrap;">
-                  {cam_entries}
+              <div id="cameraList" class="camera-grid">
+                  {"".join([
+                      f'''
+                      <div class="camera-card">
+                          <a href="/?cam={cam}">
+                              <img src="/{cam}/preview.jpg" alt="{cam} preview">
+                              <div>{cam}</div>
+                          </a>
+                      </div>
+                      ''' for cam in available_cams
+                  ])}
               </div>
-              <h3>Add New Camera</h3>
-              <form method="GET" action="/add_camera">
-                  <label>Camera Name: <input type="text" name="cam_name" required></label><br>
-                  <label>RTSP Link: <input type="text" name="rtsp" required style="width: 400px;"></label><br><br>
-                  <button type="submit">Add Camera</button>
-              </form>
+
+              <div class="form-section">
+                  <h3>Add New Camera</h3>
+                  <form id="addCameraForm">
+                      <input type="text" name="cam_name" placeholder="Camera Name" required>
+                      <input type="text" name="rtsp" placeholder="RTSP Link" required>
+                      <button type="submit">Add Camera</button>
+                  </form>
+              </div>
+
+              <script>
+                  async function fetchCameras() {{
+                      const res = await fetch('/list_cameras');
+                      const cams = await res.json();
+                      const container = document.getElementById("cameraList");
+                      container.innerHTML = cams.map(cam => `
+                          <div class="camera-card">
+                              <a href="/?cam=${{cam}}">
+                                  <img src="/${{cam}}/preview.jpg" alt="${{cam}} preview">
+                                  <div>${{cam}}</div>
+                              </a>
+                          </div>
+                      `).join('');
+                  }}
+
+                  // Refresh list every 5 seconds
+                  setInterval(fetchCameras, 5000);
+
+                  // Submit form via fetch, no full-page reload
+                  document.getElementById("addCameraForm").addEventListener("submit", async (e) => {{
+                      e.preventDefault();
+                      const form = e.target;
+                      const params = new URLSearchParams(new FormData(form)).toString();
+                      await fetch(`/add_camera?${{params}}`);
+                      form.reset();
+                      fetchCameras(); // Immediately refresh
+                  }});
+              </script>
           </body>
           </html>
           """
