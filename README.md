@@ -4,7 +4,7 @@
 https://apps.apple.com/app/clearcam/id6743237694
 ## install from source
 1. git clone https://github.com/roryclear/clearcam.git
-2. open clearcam.xcodeproj
+2. open ios/clearcam.xcodeproj
 
 ## requirements
 - iOS 15 or newer
