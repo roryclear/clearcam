@@ -453,6 +453,7 @@ class VideoCapture:
     last_preview_time = None
     last_counter_update = time.time()
     while self.running:
+        if not (CAMERA_BASE_DIR / self.camera_name).is_dir(): os._exit(1) # deleted cam
         try:
             raw_bytes = self.proc.stdout.read(frame_size)
             if len(raw_bytes) != frame_size:
@@ -476,7 +477,6 @@ class VideoCapture:
                 if last_preview_time is None or time.time() - last_det >= 3600: # preview every hour
                     last_preview_time = time.time()
                     preview_dir = CAMERA_BASE_DIR / self.camera_name
-                    preview_dir.mkdir(parents=True, exist_ok=True)
                     filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
                     cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
@@ -486,8 +486,6 @@ class VideoCapture:
                         if time.time() - last_det >= alert.window: # once per min for now
                             send_det = True
                             timestamp = datetime.now().strftime("%Y-%m-%d")
-                            event_dir = CAMERA_BASE_DIR / self.camera_name / "event_images" / timestamp
-                            event_dir.mkdir(parents=True, exist_ok=True)
                             filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}/{int(time.time() - self.streamer.start_time - 10)}.jpg"
                             cv2.imwrite(filename, self.annotated_frame)
                             if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
@@ -870,6 +868,32 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(alert_info).encode("utf-8"))
             return
 
+        if parsed_path.path == '/delete_camera':
+            camera_name = query.get("cam_name", [None])[0]
+            if not camera_name:
+                self.send_error(400, "Missing cam_name parameter")
+                return
+
+            cam_path = CAMERA_BASE_DIR / camera_name
+            if cam_path.exists() and cam_path.is_dir():
+                try:
+                    shutil.rmtree(cam_path)
+                    cams.pop(camera_name, None)
+                    with open("cams.pkl", 'wb') as f:
+                        pickle.dump(cams, f)
+                except Exception as e:
+                    self.send_error(500, f"Error deleting camera: {e}")
+                    return
+            else:
+                self.send_error(404, "Camera not found")
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"deleted"}')
+            return
+
         if parsed_path.path == "/get_counts":
             cam_name = query.get("cam", [None])[0]
             if not cam_name:
@@ -930,7 +954,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           <!DOCTYPE html>
           <html>
           <head>
-              <title>Available Cameras</title>
               <style>
                   .camera-grid {{
                       display: flex;
@@ -979,18 +1002,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               </style>
           </head>
           <body>
-              <h2>Available Cameras</h2>
               <div id="cameraList" class="camera-grid">
-                  {"".join([
-                      f'''
-                      <div class="camera-card">
-                          <a href="/?cam={cam}">
-                              <img src="/{cam}/preview.jpg" alt="{cam} preview">
-                              <div>{cam}</div>
-                          </a>
-                      </div>
-                      ''' for cam in available_cams
-                  ])}
               </div>
 
               <div class="form-section">
@@ -1013,11 +1025,24 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                   <img src="/${{cam}}/preview.jpg" alt="${{cam}} preview">
                                   <div>${{cam}}</div>
                               </a>
+                              <button onclick="deleteCamera('${{cam}}')">Delete</button>
                           </div>
                       `).join('');
                   }}
 
+                  
+                  async function deleteCamera(cam) {{
+                      if (!confirm(`Are you sure you want to delete ${{cam}}?`)) return;
+                      const res = await fetch(`/delete_camera?cam_name=${{cam}}`);
+                      if (res.ok) {{
+                          fetchCameras();
+                      }} else {{
+                          alert("Failed to delete camera.");
+                      }}
+                  }}
+
                   // Refresh list every 5 seconds
+                  fetchCameras();
                   setInterval(fetchCameras, 5000);
 
                   // Submit form via fetch, no full-page reload
