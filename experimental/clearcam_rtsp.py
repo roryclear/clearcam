@@ -473,10 +473,9 @@ class VideoCapture:
 
             for x in objects:
                 self.object_dict[int(x)] += 1
-            if userID and len(self.object_queue) > 10:
+            if len(self.object_queue) > 10:
                 if last_preview_time is None or time.time() - last_det >= 3600: # preview every hour
                     last_preview_time = time.time()
-                    preview_dir = CAMERA_BASE_DIR / self.camera_name
                     filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
                     cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
@@ -528,7 +527,7 @@ class VideoCapture:
                         for c in a.classes: classes.add(str(c))
                       added_alerts_dir.unlink()
                       
-                if live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
+                if userID and live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
                     last_live_seg = time.time()
                     mp4_filename = f"segment.mp4"
                     self.streamer.export_last_segments(Path(mp4_filename),last=True)
