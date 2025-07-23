@@ -1000,7 +1000,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               </div>
 
               <div class="form-section">
-                  <h3>Add New Camera</h3>
                   <form id="addCameraForm">
                       <input type="text" name="cam_name" placeholder="Camera Name" required>
                       <input type="text" name="rtsp" placeholder="RTSP Link" required>
