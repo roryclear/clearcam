@@ -1029,13 +1029,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             ) if event_image_path.exists() else []
             
             image_links = ""
-            for img in event_images:
-                ts = int(img.stem)
-                image_links += f"""
-                <a href="/?cam={camera_name}&folder={selected_dir}&start={ts}">
-                    <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
-                </a>
-                """
+            if event_images:
+                for img in event_images:
+                    ts = int(img.stem)
+                    image_links += f"""
+                    <a href="/?cam={camera_name}&folder={selected_dir}&start={ts}">
+                        <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
+                    </a>
+                    """
+            else:
+                image_links = '<p style="text-align:center; color:#666;">No alerts detected yet.</p>'
             
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -1731,7 +1734,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             closeAlertModal();
                             form.reset();
                             fetchAlerts();
-                            alert("Alert added successfully!");
                         }})
                         .catch(err => {{
                             console.error("Add alert failed:", err);
