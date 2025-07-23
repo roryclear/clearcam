@@ -476,7 +476,7 @@ class VideoCapture:
                     preview_dir = CAMERA_BASE_DIR / self.camera_name
                     preview_dir.mkdir(parents=True, exist_ok=True)
                     filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
-                    cv2.imwrite(filename, self.annotated_frame)
+                    if (CAMERA_BASE_DIR / f"{self.camera_name}").exists(): cv2.imwrite(filename, self.annotated_frame)
                 for x in self.object_queue[0]: self.object_dict[int(x)] -= 1
                 del self.object_queue[0]
                 for _,alert in self.alert_counters.items():
@@ -762,6 +762,32 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(available_cams).encode("utf-8"))
             return
 
+        if parsed_path.path == '/delete_camera':
+            camera_name = query.get("cam_name", [None])[0]
+            if not camera_name:
+                self.send_error(400, "Missing cam_name parameter")
+                return
+
+            cam_path = CAMERA_BASE_DIR / camera_name
+            if cam_path.exists() and cam_path.is_dir():
+                try:
+                    shutil.rmtree(cam_path)
+                    cams.pop(camera_name, None)
+                    with open("cams.pkl", 'wb') as f:
+                        pickle.dump(cams, f)
+                except Exception as e:
+                    self.send_error(500, f"Error deleting camera: {e}")
+                    return
+            else:
+                self.send_error(404, "Camera not found")
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"deleted"}')
+            return
+
         if parsed_path.path == "/add_alert":
             cam_name = query.get("cam", [None])[0]
             window = query.get("window", [None])[0]
@@ -976,16 +1002,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           </head>
           <body>
               <div id="cameraList" class="camera-grid">
-                  {"".join([
-                      f'''
-                      <div class="camera-card">
-                          <a href="/?cam={cam}">
-                              <img src="/{cam}/preview.jpg" alt="{cam} preview">
-                              <div>{cam}</div>
-                          </a>
-                      </div>
-                      ''' for cam in available_cams
-                  ])}
               </div>
 
               <div class="form-section">
@@ -1008,11 +1024,23 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                   <img src="/${{cam}}/preview.jpg" alt="${{cam}} preview">
                                   <div>${{cam}}</div>
                               </a>
+                              <button onclick="deleteCamera('${{cam}}')">Delete</button>
                           </div>
                       `).join('');
                   }}
 
+                  async function deleteCamera(cam) {{
+                      if (!confirm(`Are you sure you want to delete ${{cam}}?`)) return;
+                      const res = await fetch(`/delete_camera?cam_name=${{cam}}`);
+                      if (res.ok) {{
+                          fetchCameras();
+                      }} else {{
+                          alert("Failed to delete camera.");
+                      }}
+                  }}
+
                   // Refresh list every 5 seconds
+                  fetchCameras();
                   setInterval(fetchCameras, 5000);
 
                   // Submit form via fetch, no full-page reload
@@ -1531,7 +1559,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     </div>
                                 </div>
                                 <div class="form-group" style="width: 90%; text-align: center;">
-                                    <label for="windowMinutes">within this time window</label>
+                                    <label for="windowMinutes">within time window:</label>
                                     <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
                                         style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
                                     <span>minutes</span>
