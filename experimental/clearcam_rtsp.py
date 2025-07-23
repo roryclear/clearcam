@@ -1670,32 +1670,32 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 return;
                             }}
 
-                            let html = `<table style="width:100%; border-collapse: collapse;">
+                            let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                                 <thead>
-                                    <tr><th>Window (s)</th><th>Max</th><th>Classes</th><th>Actions</th></tr>
+                                    <tr>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window (s)</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Max</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
+                                    </tr>
                                 </thead><tbody>`;
 
                             for (const alert of alerts) {{
                                 const classNames = alert.classes.join(", ");
-                                html += `
-                                    <tr>
-                                        <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.window}}</td>
-                                        <td style="padding:6px; border-bottom:1px solid #ccc;">${{alert.max}}</td>
-                                        <td style="padding:6px; border-bottom:1px solid #ccc;">${{classNames}}</td>
-                                        <td style="padding:6px; border-bottom:1px solid #ccc;">
-                                            <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
-                                        </td>
-                                    </tr>`;
+                                html += `<tr>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.window}}</td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">
+                                        <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                    </td>
+                                </tr>`;
                             }}
 
-                            html += `
-                                <tr>
-                                    <td colspan="3" style="padding:6px; border-bottom:1px solid #ccc;"></td>
-                                    <td style="padding:6px; border-bottom:1px solid #ccc;">
+                            html += `</tbody></table>
+                                    <div style="margin-top:10px; text-align:right;">
                                         <button onclick="openAlertModal()">Add Alert</button>
-                                    </td>
-                                </tr></tbody></table>`;
-
+                                    </div>`;
                             container.innerHTML = html;
                         }})
                         .catch(err => {{
