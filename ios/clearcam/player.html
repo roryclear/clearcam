@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevents body scrolling */
+            height: 100vh;
+            width: 100vw;
+        }
+        #videoContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .video-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensures the video fits within the container with letterboxing or pillarboxing */
+        }
+
+        .videoPlayer {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensure video fits within the container */
+        }
+        #controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            box-sizing: border-box;
+        }
+        #controls.show {
+            opacity: 1;
+        }
+        .top-controls {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        #progress {
+            width: 100%;
+            height: 10px;
+            background-color: #ccc;
+            cursor: pointer;
+            position: relative;
+            border-radius: 5px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            border-radius: 5px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+        }
+
+        .gap-indicator {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: repeating-linear-gradient(
+                -45deg,
+                black,
+                black 3px,
+                grey 3px,
+                grey 6px
+            );
+            pointer-events: none;
+        }
+
+        button {
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0;
+        }
+        #timeDisplay {
+            color: white;
+            margin-left: 10px;
+        }
+        #fullscreenBtn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            padding: 8px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            outline: none;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+            box-sizing: border-box;
+        }
+
+        #controls.show {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #playPauseBtn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s, background 0.3s;
+            opacity: 0; /* Start hidden */
+            visibility: hidden; /* Start hidden */
+        }
+
+        #playPauseBtn.show {
+            opacity: 1; /* Show when .show is added */
+            visibility: visible; /* Show when .show is added */
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #playPauseBtn:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        #playPauseBtn svg {
+            width: 30px;
+            height: 30px;
+        }
+
+        /* Adjust the top controls to align time and fullscreen button to the right */
+        .top-controls {
+            justify-content: flex-end;
+        }
+
+        .top-controls #timeDisplay {
+            margin-right: 10px;
+        }
+        /* Existing styles remain the same until .top-controls */
+
+
+
+        #classSelector {
+            margin-right: 0; /* Remove margin for the last element */
+        }
+
+        /* Adjust the bottom controls to remove the date picker and select dropdown */
+        #controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+            box-sizing: border-box;
+        }
+
+        #controls.show {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* Adjust the time display and fullscreen button container */
+        .top-controls {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            justify-content: flex-end; /* Align to the right */
+            gap: 10px; /* Add gap between elements */
+        }
+
+        #timeDisplay {
+            font-size: 14px; /* Smaller font size for compactness */
+            white-space: nowrap; /* Prevent wrapping */
+            color: white; /* White text */
+        }
+
+        #fullscreenBtn {
+            width: 30px; /* Smaller button for compactness */
+            height: 30px;
+            padding: 5px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
+        #topControls {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; /* Align items to the right */
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            box-sizing: border-box;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+            z-index: 5; /* Ensure it's above the video */
+            gap: 10px; /* Add gap between elements */
+        }
+
+        #topControls.show {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #datePicker, #classSelector {
+            flex: 0 1 auto; /* Don't grow, but allow shrinking */
+            min-width: 120px; /* Set a minimum width */
+            max-width: 200px; /* Set a maximum width */
+            font-size: 14px; /* Smaller font size for compactness */
+            padding: 5px; /* Smaller padding for compactness */
+            background: rgba(255, 255, 255, 0.1); /* Slightly transparent background */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* Light border */
+            color: white; /* White text */
+            border-radius: 4px; /* Rounded corners */
+        }
+        
+        /* Media query for smaller screens */
+        @media (max-width: 600px) {
+            #datePicker, #classSelector {
+                min-width: 100px; /* Smaller minimum width for mobile */
+                max-width: 150px; /* Smaller maximum width for mobile */
+                font-size: 12px; /* Even smaller font size for mobile */
+                padding: 4px; /* Even smaller padding for mobile */
+            }
+
+            #timeDisplay {
+                font-size: 12px; /* Smaller font size for mobile */
+            }
+
+            #fullscreenBtn {
+                width: 24px; /* Smaller button for mobile */
+                height: 24px;
+                padding: 4px;
+            }
+        }
+        
+    </style>
+</head>
+<body>
+    <div id="videoContainer">
+            <div class="video-wrapper">
+                <!-- Video elements remain the same -->
+                <video class="videoPlayer" playsinline webkit-playsinline muted></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+                <video class="videoPlayer" playsinline webkit-playsinline muted style="display: none;"></video>
+
+                <!-- New top controls bar, to find less shit icon -->
+                <div id="topControls">
+                    <!-- Existing download icon -->
+                    <a href="/events.html" id="downloadIcon" target="_blank" rel="noopener noreferrer">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                            <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.48-4.23C15.91 6.01 13.43 3.5 10.5 3.5S5.09 6.01 5.09 9.5 7.57 15.5 10.5 15.5c1.61 0 3.09-.59 4.23-1.48l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-5 0C8.01 14 6 11.99 6 9.5S8.01 5 10.5 5 15 7.01 15 9.5 12.99 14 10.5 14z"/>
+                        </svg>
+                    </a>
+                    <input type="date" id="datePicker" name="datePicker">
+                </div>
+
+                <!-- Bottom controls (progress bar, time display, fullscreen button) -->
+                <div id="controls">
+                    <div class="top-controls">
+                        <div id="timeDisplay">0:00 / 0:00</div>
+                        <button id="fullscreenBtn">
+                            <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                                <path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm6 12v6h-6v-2h4v-4zm-12 6H3v-6h2v4h4z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="progress">
+                        <div id="progress-bar"></div>
+                        <div id="gaps-container"></div>
+                    </div>
+                </div>
+
+                <!-- Play/Pause button -->
+                <button id="playPauseBtn">
+                    <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="24px" height="24px" style="display: none;">
+                        <path d="M6 19h4V5H6zm8-14v14h4V5h-4z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    <script>
+        let n_segments = 0; //not all new segments will get added to segments if some are removed, indexes will be maintained at backend though
+        const yolo_classes = [
+                    ["person", "red"], ["bicycle", "green"], ["car", "blue"],
+                    ["motorcycle", "cyan"], ["airplane", "magenta"], ["bus", "yellow"],
+                    ["train", "orange"], ["truck", "purple"], ["boat", "brown"],
+                    ["traffic light", "rgb(128, 179, 51)"], ["fire hydrant", "rgb(204, 26, 26)"],
+                    ["stop sign", "rgb(77, 77, 204)"], ["parking meter", "rgb(179, 128, 77)"],
+                    ["bench", "rgb(102, 102, 51)"], ["bird", "rgb(26, 128, 230)"],
+                    ["cat", "rgb(204, 51, 153)"], ["dog", "rgb(230, 77, 77)"],
+                    ["horse", "rgb(51, 153, 179)"], ["sheep", "rgb(179, 77, 128)"],
+                    ["cow", "rgb(102, 204, 102)"], ["elephant", "rgb(77, 102, 230)"],
+                    ["bear", "rgb(153, 51, 204)"], ["zebra", "rgb(204, 128, 51)"],
+                    ["giraffe", "rgb(128, 230, 26)"], ["backpack", "rgb(77, 179, 102)"],
+                    ["umbrella", "rgb(102, 153, 230)"], ["handbag", "rgb(230, 51, 128)"],
+                    ["tie", "rgb(128, 77, 179)"], ["suitcase", "rgb(153, 179, 51)"],
+                    ["frisbee", "rgb(179, 51, 102)"], ["skis", "rgb(77, 230, 77)"],
+                    ["snowboard", "rgb(204, 26, 153)"], ["sports ball", "rgb(102, 77, 204)"],
+                    ["kite", "rgb(51, 128, 179)"], ["baseball bat", "rgb(153, 102, 51)"],
+                    ["baseball glove", "rgb(179, 26, 102)"], ["skateboard", "rgb(128, 204, 128)"],
+                    ["surfboard", "rgb(204, 77, 153)"], ["tennis racket", "rgb(51, 179, 230)"],
+                    ["bottle", "rgb(230, 51, 77)"], ["wine glass", "rgb(153, 153, 77)"],
+                    ["cup", "rgb(77, 102, 230)"], ["fork", "rgb(102, 179, 51)"],
+                    ["knife", "rgb(204, 51, 128)"], ["spoon", "rgb(153, 77, 179)"],
+                    ["bowl", "rgb(51, 204, 102)"], ["banana", "rgb(179, 179, 26)"],
+                    ["apple", "rgb(230, 26, 102)"], ["sandwich", "rgb(102, 128, 204)"],
+                    ["orange", "rgb(204, 153, 51)"], ["broccoli", "rgb(77, 204, 77)"],
+                    ["carrot", "rgb(179, 51, 153)"], ["hot dog", "rgb(230, 77, 128)"],
+                    ["pizza", "rgb(128, 77, 204)"], ["donut", "rgb(204, 26, 102)"],
+                    ["cake", "rgb(179, 128, 26)"], ["chair", "rgb(153, 51, 102)"],
+                    ["couch", "rgb(102, 153, 51)"], ["potted plant", "rgb(204, 102, 128)"],
+                    ["bed", "rgb(77, 179, 179)"], ["dining table", "rgb(128, 204, 77)"],
+                    ["toilet", "rgb(179, 102, 153)"], ["tv", "rgb(230, 128, 51)"],
+                    ["laptop", "rgb(153, 77, 179)"], ["mouse", "rgb(51, 230, 128)"],
+                    ["remote", "rgb(204, 102, 77)"], ["keyboard", "rgb(77, 153, 204)"],
+                    ["cell phone", "rgb(179, 77, 230)"], ["microwave", "rgb(102, 230, 102)"],
+                    ["oven", "rgb(128, 179, 51)"], ["toaster", "rgb(230, 51, 77)"],
+                    ["sink", "rgb(153, 204, 77)"], ["refrigerator", "rgb(204, 102, 179)"],
+                    ["book", "rgb(77, 128, 230)"], ["clock", "rgb(179, 179, 51)"],
+                    ["vase", "rgb(230, 102, 128)"], ["scissors", "rgb(51, 179, 204)"],
+                    ["teddy bear", "rgb(153, 77, 230)"], ["hair drier", "rgb(204, 51, 77)"],
+                    ["toothbrush", "rgb(102, 179, 153)"]
+                ];
+                
+                
+                let currentDate = "";
+                const dateParam = getQueryParam("date");
+                if (!dateParam) {
+                    const fetchStartTime = new Date();
+                    currentDate = formatDate(fetchStartTime);
+                } else{
+                    currentDate = dateParam;
+                }
+                
+                let segments = [];
+                let gaps = [];
+                let totalDuration = 0;
+                let retryTimeout = 2000;
+
+                
+                const videoPlayers = document.querySelectorAll(".videoPlayer");
+                let is_prepared = new Array(videoPlayers.length).fill(false); //todo, store in one obj
+                const playPauseBtn = document.getElementById('playPauseBtn');
+                const playIcon = document.getElementById('playIcon');
+                const pauseIcon = document.getElementById('pauseIcon');
+                const progressBar = document.getElementById('progress-bar');
+                const progress = document.getElementById('progress');
+                const timeDisplay = document.getElementById('timeDisplay');
+                
+                let video_index = 0;
+                let currentSegment = 0;
+                let isPlaying = false;
+                let isScrubbing = false;
+                let isWaitingForNextSegment = false;
+                let wasPlayingBeforeScrub = false;
+                let shape_idx = -1;
+
+                let hideControlsTimeout;
+                const controls = document.getElementById('controls');
+                const topControls = document.getElementById('topControls');
+                const videoContainer = document.getElementById('videoContainer');
+                
+                //todo
+                topControls.addEventListener('focusin', showControls);
+                topControls.addEventListener('focusout', hideControls);
+                controls.addEventListener('focusin', showControls);
+                controls.addEventListener('focusout', hideControls);
+
+                function showControls() {
+                    controls.classList.add('show');
+                    topControls.classList.add('show');
+                    playPauseBtn.classList.add('show'); // Show the play/pause button
+                    clearTimeout(hideControlsTimeout);
+                    hideControlsTimeout = setTimeout(() => {
+                        topControls.classList.remove('show');
+                        controls.classList.remove('show');
+                        playPauseBtn.classList.remove('show'); // Hide the play/pause button
+                        controls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
+                        topControls.style.transform = 'translateY(0.0001px)'; // Tiny nudge to force repaint
+                    }, 4000);
+                }
+
+                function hideControls() {
+                    if (!document.activeElement.closest('#topControls') && !document.activeElement.closest('#controls')) {
+                        topControls.classList.remove('show');
+                        controls.classList.remove('show');
+                        playPauseBtn.classList.remove('show'); // Hide the play/pause button
+                        topControls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
+                        controls.style.transform = 'translateY(0.0001px)'; // Safari-specific hack
+                    }
+                }
+
+                function toggleControls() {
+                    if (controls.classList.contains('show')) {
+                        hideControls();
+                    } else {
+                        showControls();
+                    }
+                }
+
+                // Event listeners to show/hide controls
+                videoContainer.addEventListener('mousemove', showControls);
+                videoContainer.addEventListener('mouseleave', hideControls);
+                videoContainer.addEventListener('touchend', toggleControls);
+                videoContainer.addEventListener('click', toggleControls);
+                
+                function retrySegment(videoElement) {
+                    console.warn(`Retrying segment: ${segments[currentSegment].url}`);
+                    setTimeout(() => {
+                        videoElement.src = segments[currentSegment].url;
+                        videoElement.load();
+                        videoElement.play();
+                    }, retryTimeout);
+                }
+
+        async function updateTimeline() {
+            const startTimestamp = segments[0].timeStamp;
+            let adjustedStartTimestamp;
+
+            if (startTimestamp < 0) {
+                adjustedStartTimestamp = (24 * 3600) + startTimestamp; // Possible hack?
+            } else {
+                adjustedStartTimestamp = startTimestamp;
+            }
+
+            const currentTime = adjustedStartTimestamp + videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
+            let frames = segments[currentSegment].frames;
+            let show_new = false;
+
+            if (frames) {
+                while ((shape_idx + 1 < frames.length) && (currentTime > frames[shape_idx + 1].frame_timeStamp)) {
+                    shape_idx += 1;
+                    show_new = true;
+                }
+
+                if (show_new) {
+                    let n_boxes = document.querySelectorAll(".bounding-box").length;
+                    let aspect_ratio = frames[shape_idx].aspect_ratio;
+                    let res = frames[shape_idx].res;
+
+                    for (let i = 0; i < frames[shape_idx].squares.length; i++) {
+                        if (portrait) {
+                            let originX = frames[shape_idx].squares[i].originX / (res / aspect_ratio);
+                            let originY = frames[shape_idx].squares[i].originY / res;
+                            let length = (frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / (res / aspect_ratio);
+                            let height = (frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / res;
+                            if (aspect_ratio !== 9 / 16) {
+                                let scale = aspect_ratio / (16 / 9);
+                                let offset = (1 - scale) / 2;
+                                originY = originY * scale + offset;
+                                height *= scale;
+                            }
+                            drawBoundingBox(originX, originY, length, height, yolo_classes[frames[shape_idx].squares[i].classIndex][1], yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                        } else {
+                            let originX = frames[shape_idx].squares[i].originX / res;
+                            let originY = frames[shape_idx].squares[i].originY / (res / aspect_ratio);
+                            let length = (frames[shape_idx].squares[i].bottomRightX - frames[shape_idx].squares[i].originX) / res;
+                            let height = (frames[shape_idx].squares[i].bottomRightY - frames[shape_idx].squares[i].originY) / (res / aspect_ratio);
+                            if (aspect_ratio !== 16 / 9) {
+                                let scale = aspect_ratio / (16 / 9);
+                                let offset = (1 - scale) / 2;
+                                originX = originX * scale + offset;
+                                length *= scale;
+                            }
+                            drawBoundingBox(originX, originY, length, height, yolo_classes[frames[shape_idx].squares[i].classIndex][1], yolo_classes[frames[shape_idx].squares[i].classIndex][0]);
+                        }
+                    }
+
+                    // Remove old bounding boxes
+                    let boundingBoxes = document.querySelectorAll(".bounding-box");
+                    for (let i = 0; i < n_boxes; i++) {
+                        boundingBoxes[i].remove();
+                    }
+                }
+            }
+
+            progressBar.style.width = `${(currentTime - adjustedStartTimestamp) / totalDuration * 100}%`;
+            timeDisplay.innerText = `${formatTime(currentTime)} / ${formatTime(adjustedStartTimestamp + totalDuration)}`;
+            updateGaps();
+        }
+
+        function hideMultiWindowIconInIframe() {
+            const multiWindowIcon = document.getElementById('multiWindowIcon');
+            if (window.self !== window.top) { // Page is in an iframe
+                multiWindowIcon.style.display = 'none';
+            } else { // Page is standalone
+                multiWindowIcon.style.display = 'inline-block';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', hideMultiWindowIconInIframe);
+            
+        
+                function updateGaps() {
+                    const progressBar = document.getElementById("progress");
+                    const gapsContainer = document.getElementById("gaps-container");
+                    gapsContainer.innerHTML = ''; // Clear existing gaps
+
+                    gaps.forEach(([start, duration]) => {
+                        const gapElement = document.createElement("div");
+                        gapElement.classList.add("gap-indicator");
+
+
+                        const gapStartPercent = (start / totalDuration) * 100;
+                        const gapWidthPercent = (duration / totalDuration) * 100;
+
+                        gapElement.style.left = `${gapStartPercent}%`;
+                        gapElement.style.width = `${gapWidthPercent}%`;
+
+                        gapsContainer.appendChild(gapElement);
+                    });
+                }
+
+                function togglePlayPause() {
+                    if (isPlaying) {
+                        videoPlayers[video_index].pause();
+                        playIcon.style.display = 'block';
+                        pauseIcon.style.display = 'none';
+                        isPlaying = false;
+                    } else {
+                        videoPlayers[video_index].play();
+                        playIcon.style.display = 'none';
+                        pauseIcon.style.display = 'block';
+                        isPlaying = true;
+                    }
+                    updateTimeline();
+                }
+
+                playPauseBtn.addEventListener('click', togglePlayPause);
+
+                
+                videoContainer.addEventListener('dblclick', (e) => {
+                    const containerWidth = videoContainer.clientWidth;
+                    const x = e.clientX;
+                    const currentTime = videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart;
+
+                    if (x > containerWidth * 0.6) {
+                        // Double-tap/click on the right side to skip forward 10s
+                        let newTime = Math.min(currentTime + 10, totalDuration);
+                        seekToTime(newTime);
+                    } else if (x < containerWidth * 0.4) {
+                        // Double-tap/click on the left side to rewind 10s
+                        let newTime = Math.max(currentTime - 10, 0);
+                        seekToTime(newTime);
+                    }
+
+                    updateTimeline();
+                });
+                
+                
+                function seekToTime(time) {
+                    clearBoundingBoxes();
+                    is_prepared = new Array(videoPlayers.length).fill(false);
+                    let targetSegment = segments.findIndex(segment => time < segment.cumulativeStart + segment.duration);
+                    targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
+                    currentSegment = targetSegment;
+                    videoPlayers[video_index].src = segments[currentSegment].url;
+                    videoPlayers[video_index].currentTime = time - segments[currentSegment].cumulativeStart;
+                    
+                    shape_idx = 0;
+                    if (isPlaying) {
+                        videoPlayers[video_index].play();
+                    }
+                }
+
+                function getQueryParam(name) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get(name);
+                }
+                        
+                function formatDate(date) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+                
+                document.addEventListener('DOMContentLoaded', function() {
+                    const datePicker = document.getElementById('datePicker');
+                    datePicker.value = currentDate;
+                    datePicker.addEventListener('change', function() {
+                        n_segments = 0;
+                        const selectedDate = new Date(this.value);
+                        const formattedDate = formatDate(selectedDate);
+                        window.location.href = `${window.location.pathname}?date=${formattedDate}`;
+                    });
+                });
+
+                let isFetchingSegments = false;
+                async function fetchSegments() {
+                    if (isFetchingSegments) return;
+                    isFetchingSegments = true;
+
+                    try {
+                        let start = -1;
+                        if(n_segments > 0){
+                            start = segments[n_segments - 1].timeStamp + segments[n_segments - 1].duration;
+                        }
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${start}`);
+                        if (response.ok) {
+                            const newSegments = await response.json();
+                            if (Array.isArray(newSegments)) {
+                                const oldTotalDuration = totalDuration;
+
+                                let cumulativeStart = totalDuration;
+                                let i = 0;
+                                let next_i = 1;
+                                while(next_i < newSegments.length) {
+                                    if(newSegments[i].url.length == 0){
+                                        i=next_i;
+                                        next_i+=1;
+                                    }
+                                    while(newSegments[next_i].url.length == 0 && next_i < newSegments.length){
+                                        next_i += 1;
+                                    }
+                                    if(next_i >= newSegments.length){
+                                        break;
+                                    }
+                                    const segment = newSegments[i];
+                                    const timeDifference = newSegments[next_i].timeStamp - newSegments[i].timeStamp;
+                                    const lostFrames = timeDifference - segment.duration;
+                                    const currentCumulativeStart = cumulativeStart;
+                                    cumulativeStart += timeDifference;
+                                    segments.push({
+                                        ...segment,
+                                        cumulativeStart: currentCumulativeStart,
+                                        lostFrames: lostFrames > 0 ? lostFrames : 0,
+                                    });
+                                    if(lostFrames > 1){ //todo why 60
+                                        gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
+                                    }
+                                    i=next_i;
+                                    next_i+=1;
+                                }
+                                n_segments += i;
+                                totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
+                                if (totalDuration !== oldTotalDuration) {
+                                    updateTimeline();
+                                    preloadNextSegments();
+
+                                    if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
+                                        (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
+                                        const currentVideo = videoPlayers[video_index];
+                                        currentVideo.src = segments[currentSegment].url;
+                                        currentVideo.currentTime = 0;
+                                        currentVideo.style.display = "block";
+
+                                        // Hide other video players
+                                        for (let i = 1; i < videoPlayers.length; i++) {
+                                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                                        }
+
+                                        currentVideo.play();
+                                        isPlaying = true;
+                                        playIcon.style.display = "none";
+                                        pauseIcon.style.display = "block";
+
+                                        // Adjust container dimensions based on video orientation
+                                        currentVideo.addEventListener('loadedmetadata', () => {
+                                            adjustContainerForOrientation(currentVideo);
+                                        });
+                                        preloadNextSegments();
+                                    }
+                                    if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
+                                        isWaitingForNextSegment = false;
+                                        switchToNextSegment();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch segments:', error);
+                    } finally {
+                        isFetchingSegments = false;
+                    }
+                }
+        
+
+                function formatTime(seconds) {
+                    const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
+                    const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+                    const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+                    return `${hours}:${minutes}:${secs}`;
+                }
+
+                function scrub(e) {
+                    const scrubTime = Math.min(((e.offsetX || e.touches[0].clientX - progress.getBoundingClientRect().left) / progress.offsetWidth) * totalDuration, totalDuration - 1);
+
+                    let targetSegment = segments.findIndex(segment => scrubTime < segment.cumulativeStart + segment.duration);
+                    targetSegment = targetSegment === -1 ? segments.length - 1 : targetSegment;
+
+                    const targetTime = scrubTime - segments[targetSegment].cumulativeStart;
+
+                    if (targetSegment >= 0 && targetSegment < segments.length) {
+                        currentSegment = targetSegment;
+                        videoPlayers[video_index].src = segments[currentSegment].url;
+                        videoPlayers[video_index].currentTime = targetTime;
+                        if (wasPlayingBeforeScrub) {
+                            videoPlayers[video_index].play();
+                        }
+                    }
+
+                    updateTimeline();
+                    preloadNextSegments();
+                }
+
+                function startScrubbing(e) {
+                    wasPlayingBeforeScrub = !videoPlayers[video_index].paused;
+                    isScrubbing = true;
+                    scrub(e);
+                    document.addEventListener("mousemove", scrubWhileDragging);
+                    document.addEventListener("mouseup", stopScrubbing);
+                    document.addEventListener("touchmove", scrubWhileDragging);
+                    document.addEventListener("touchend", stopScrubbing);
+                }
+
+                function scrubWhileDragging(e) {
+                    if (isScrubbing) {
+                        scrub(e);
+                    }
+                }
+
+                function stopScrubbing() {
+                    clearBoundingBoxes();
+                    isScrubbing = false;
+                    if (!wasPlayingBeforeScrub) {
+                        videoPlayers[video_index].pause();
+                    }
+                    document.removeEventListener("mousemove", scrubWhileDragging);
+                    document.removeEventListener("mouseup", stopScrubbing);
+                    document.removeEventListener("touchmove", scrubWhileDragging);
+                    document.removeEventListener("touchend", stopScrubbing);
+                }
+                
+                async function preloadNextSegments() {
+                    let x = 1;
+                    while (x < videoPlayers.length) {
+                        let current_x = x;
+
+                        if (currentSegment + x < segments.length) {
+                            let segment = segments[currentSegment + current_x];
+                            let player = videoPlayers[(video_index + current_x) % videoPlayers.length];
+
+                            // Preload video if not already loaded
+                            if (!player.src.endsWith(segment.url)) {
+                                player.src = segment.url;
+                                player.load();
+                                player.preload = 'auto';
+                            }
+
+                            // Preload frames if not already loaded or fetching
+                            if (!segment.frames && !segment.fetchingFrames) {
+                                segment.fetchingFrames = true; // Set fetching flag to avoid duplicate requests
+                                try {
+                                    const response = await fetch(`/get-frames?url=${encodeURIComponent(segment.url)}`);
+                                    if (!response.ok) throw new Error(`Failed to fetch frames for ${segment.url}`);
+                                    const frames = await response.json();
+                                    segment.frames = frames; // Store frames to prevent refetching
+                                } catch (error) {
+                                    console.error("Error fetching frames:", error);
+                                }
+                                segment.fetchingFrames = false; // Reset fetching flag
+                            }
+                        }
+                        x++;
+                    }
+                }
+                
+        let portrait = false;
+
+        function adjustContainerForOrientation(videoElement) {
+            const videoContainer = document.getElementById('videoContainer');
+
+            // Get the video's dimensions
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
+
+            // Determine if the video is in portrait mode
+            portrait = videoHeight > videoWidth;
+
+            // Get the window's dimensions
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            // Adjust the container's dimensions based on the video's orientation
+            if (portrait) {
+                // Portrait mode (9:16 aspect ratio)
+                const containerHeight = Math.min(windowHeight, windowWidth * (16 / 9));
+                const containerWidth = containerHeight * (9 / 16);
+
+                videoContainer.style.width = containerWidth + 'px';
+                videoContainer.style.height = containerHeight + 'px';
+            } else {
+                // Landscape mode (16:9 aspect ratio)
+                const containerWidth = Math.min(windowWidth, windowHeight * (16 / 9));
+                const containerHeight = containerWidth * (9 / 16);
+
+                videoContainer.style.width = containerWidth + 'px';
+                videoContainer.style.height = containerHeight + 'px';
+            }
+
+            // Ensure the container doesn't exceed the viewport dimensions
+            videoContainer.style.maxWidth = '100vw';
+            videoContainer.style.maxHeight = '100vh';
+
+            // Send the container's dimensions and orientation to the parent page
+            const message = {
+                type: 'videoContainerUpdate',
+                width: videoContainer.offsetWidth,
+                height: videoContainer.offsetHeight,
+                portrait: portrait,
+            };
+            window.parent.postMessage(message, '*'); // Send to the parent page
+        }
+
+        // Example usage with a video element
+        const videoElement = document.querySelector('video'); // Replace with your video element
+        videoElement.addEventListener('loadedmetadata', () => {
+            adjustContainerForOrientation(videoElement);
+        });
+
+        // Optional: Handle window resizing to keep the container responsive
+        window.addEventListener('resize', () => {
+            adjustContainerForOrientation(videoElement);
+        });
+
+
+                function switchToNextSegment() {
+                    if (currentSegment + 1 < segments.length) {
+                        let lostFrames = segments[currentSegment].lostFrames
+                        currentSegment++;
+                        is_prepared[video_index] = false;
+                        video_index = (video_index + 1) % videoPlayers.length;
+
+                        // Hide other video players
+                        for (let i = 1; i < videoPlayers.length; i++) {
+                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                        }
+
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.style.display = "block";
+
+                        // Play the video
+                        if(lostFrames < 60){
+                            console.log(`${lostFrames} - ${segments.length}`);
+                            setTimeout(() => {
+                                currentVideo.play().catch(() => {
+                                    retrySegment(currentVideo);
+                                });
+                            }, lostFrames*1000 + 28); // to ms //todo +28ms is a hack to stop the playback playing slightly too fast,
+                            //+28 was picked from trial and error, but may be proportional to frame rate
+                        } else {
+                            currentVideo.play().catch(() => {
+                                retrySegment(currentVideo);
+                            });
+                        }
+
+                        // Adjust container dimensions based on video orientation
+                        currentVideo.addEventListener('loadedmetadata', () => {
+                            adjustContainerForOrientation(currentVideo);
+                        });
+
+                        // Preload the next segments
+                        preloadNextSegments();
+                    } else {
+                        isWaitingForNextSegment = true;
+                    }
+                    shape_idx = -1;
+                }
+
+                setInterval(updateTimeline, 50);
+                
+                for(let i = 0; i < videoPlayers.length; i++) {
+                    videoPlayers[i].addEventListener("timeupdate", updateTimeline);
+                    videoPlayers[i].addEventListener("ended", switchToNextSegment);
+                    videoPlayers[i].addEventListener("error", () => retrySegment(videoPlayers[i]));
+                }
+
+                progress.addEventListener("mousedown", startScrubbing);
+                progress.addEventListener("touchstart", startScrubbing);
+
+                setInterval(fetchSegments, 500);
+
+                const fullscreenBtn = document.getElementById('fullscreenBtn');
+                        fullscreenBtn.addEventListener('click', () => {
+                            clearBoundingBoxes(); //todo, redraw instead?
+                            if (!document.fullscreenElement) {
+                                if (videoContainer.requestFullscreen) {
+                                    videoContainer.requestFullscreen();
+                                } else if (videoContainer.mozRequestFullScreen) { /* Firefox */
+                                    videoContainer.mozRequestFullScreen();
+                                } else if (videoContainer.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
+                                    videoContainer.webkitRequestFullscreen();
+                                } else if (videoContainer.msRequestFullscreen) { /* IE/Edge */
+                                    videoContainer.msRequestFullscreen();
+                                }
+                            } else {
+                                if (document.exitFullscreen) {
+                                    document.exitFullscreen();
+                                } else if (document.mozCancelFullScreen) { /* Firefox */
+                                    document.mozCancelFullScreen();
+                                } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
+                                    document.webkitExitFullscreen();
+                                } else if (document.msExitFullscreen) { /* IE/Edge */
+                                    document.msExitFullscreen();
+                                }
+                            }
+                        });
+                
+                function isMobile() {
+                    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                }
+
+                if (isMobile()) {
+                    document.getElementById('fullscreenBtn').style.display = 'none';
+                }
+
+                async function handleVisibilityAndLoad() { //todo, clean
+                    
+                    if (isFetchingSegments) return;
+                    isFetchingSegments = true;
+
+                    try {
+                        let start = -1;
+                        if(n_segments > 0){
+                            start = segments[n_segments - 1].timeStamp + segments[n_segments - 1].duration;
+                        }
+                        const response = await fetch(`/get-segments?date=${currentDate}&start=${start}`);
+                        if (response.ok) {
+                            const newSegments = await response.json();
+                            if (Array.isArray(newSegments)) {
+                                const oldTotalDuration = totalDuration;
+
+                                let cumulativeStart = totalDuration;
+                                let i = 0;
+                                let next_i = 1;
+                                while(next_i < newSegments.length) {
+                                    if(newSegments[i].url.length == 0){
+                                        i=next_i;
+                                        next_i+=1;
+                                    }
+                                    while(newSegments[next_i].url.length == 0 && next_i < newSegments.length){
+                                        next_i += 1;
+                                    }
+                                    if(next_i >= newSegments.length){
+                                        break;
+                                    }
+                                    const segment = newSegments[i];
+                                    const timeDifference = newSegments[next_i].timeStamp - newSegments[i].timeStamp;
+                                    const lostFrames = timeDifference - segment.duration;
+                                    const currentCumulativeStart = cumulativeStart;
+                                    cumulativeStart += timeDifference;
+                                    segments.push({
+                                        ...segment,
+                                        cumulativeStart: currentCumulativeStart,
+                                        lostFrames: lostFrames > 0 ? lostFrames : 0,
+                                    });
+                                    if(lostFrames > 1){ //todo why 60
+                                        gaps.push([currentCumulativeStart + segment.duration,lostFrames]);
+                                    }
+                                    i=next_i;
+                                    next_i+=1;
+                                }
+                                n_segments += i;
+                                totalDuration = segments[segments.length-1].duration + (segments[segments.length - 1].timeStamp - segments[0].timeStamp);
+                                if (totalDuration !== oldTotalDuration) {
+                                    updateTimeline();
+                                    //await preloadNextSegments();
+
+                                    if (videoPlayers[video_index].currentTime + segments[currentSegment].cumulativeStart === 0 ||
+                                        (isPlaying && isWaitingForNextSegment && segments.length < currentSegment + 1)) {
+                                        const currentVideo = videoPlayers[video_index];
+                                        currentVideo.src = segments[currentSegment].url;
+                                        currentVideo.currentTime = 0;
+                                        currentVideo.style.display = "block";
+
+                                        // Hide other video players
+                                        for (let i = 1; i < videoPlayers.length; i++) {
+                                            videoPlayers[(video_index + i) % videoPlayers.length].style.display = "none";
+                                        }
+
+                                        currentVideo.play();
+                                        isPlaying = true;
+                                        playIcon.style.display = "none";
+                                        pauseIcon.style.display = "block";
+
+                                        // Adjust container dimensions based on video orientation
+                                        currentVideo.addEventListener('loadedmetadata', () => {
+                                            adjustContainerForOrientation(currentVideo);
+                                        });
+                                    }
+                                    if (isWaitingForNextSegment && segments.length > currentSegment + 1) {
+                                        isWaitingForNextSegment = false;
+                                        switchToNextSegment();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch segments:', error);
+                    } finally {
+                    isFetchingSegments = false;
+                    let currentDate = "";
+                    const dateParam = getQueryParam("date");
+                    const fetchStartTime = new Date();
+                    currentDate = formatDate(fetchStartTime);
+                    const startParam = getQueryParam("start");
+                    if ((currentDate == dateParam || !dateParam) && !startParam) {
+                    if (isPlaying && segments.length > 0) {
+                        currentSegment = segments.length - 1;
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.src = segments[currentSegment].url;
+
+                        currentVideo.addEventListener('loadedmetadata', function onMetadata() {
+                            currentVideo.currentTime = segments[currentSegment].duration;
+                            currentVideo.play().catch(() => {}); // Ensure play() is only called after metadata is loaded
+                            currentVideo.removeEventListener('loadedmetadata', onMetadata); // Cleanup event listener
+                        });
+                        }
+                    } else if (startParam) {
+                        for (let i = 0; i < segments.length; i++) {
+                            if (segments[i].timeStamp > startParam) {
+                                break;
+                            }
+                            currentSegment = i;
+                        }
+
+                        const currentVideo = videoPlayers[video_index];
+                        currentVideo.src = segments[currentSegment].url;
+
+                        currentVideo.addEventListener('loadedmetadata', function onMetadata() {
+                            let eventTime = startParam - segments[currentSegment].timeStamp;
+                            if (eventTime < segments[currentSegment].duration) {
+                                currentVideo.currentTime = eventTime;
+                            } else {
+                                currentVideo.currentTime = segments[currentSegment].duration;
+                            }
+                            
+                            currentVideo.play().catch(() => {}); // Ensure play() is only called after metadata is loaded
+                            currentVideo.removeEventListener('loadedmetadata', onMetadata); // Cleanup listener
+                        });
+                    }
+
+                    
+                    //fetch first segment's frames! preload only does future ones
+                    if (!segments[currentSegment].frames && !segments[currentSegment].fetchingFrames) {
+                        segments[currentSegment].fetchingFrames = true; // Set fetching flag to avoid duplicate requests
+                        try {
+                            const response = await fetch(`/get-frames?url=${encodeURIComponent(segments[currentSegment].url)}`);
+                            if (!response.ok) throw new Error(`Failed to fetch frames for ${segments[currentSegment].url}`);
+                            const frames = await response.json();
+                            segments[currentSegment].frames = frames; // Store frames to prevent refetching
+                        } catch (error) {
+                            console.error("Error fetching frames:", error);
+                        }
+                        segments[currentSegment].fetchingFrames = false; // Reset fetching flag
+                    }
+                    
+                    await preloadNextSegments();
+                    
+                    //alert("PLAY!");
+                    videoPlayers[video_index].play().catch(() => {});
+                    window.history.replaceState({}, document.title, window.location.pathname); //remove params
+                    //alert(segments.length);
+                }
+                }
+
+                // Handle visibility change
+                document.addEventListener("visibilitychange", async () => {
+                    if (!document.hidden) {
+                        await handleVisibilityAndLoad();
+                    }
+                });
+
+                // Handle page load/refresh
+                window.addEventListener("load", async () => {
+                    await handleVisibilityAndLoad();
+                });
+                
+                function drawBoundingBox(relativeX, relativeY, relativeWidth, relativeHeight, color, label) {
+                    const container = document.getElementById("videoContainer");
+                    const video = container.querySelector("video");
+                                
+                    const containerAspectRatio = container.clientWidth / container.clientHeight;
+                    let videoWidth, videoHeight, offsetX, offsetY;
+                    
+                    if (portrait) {
+                        // Video is pillarboxed
+                        videoHeight = container.clientHeight;
+                        videoWidth = videoHeight * containerAspectRatio;
+                    } else {
+                        // Video is letterboxed
+                        videoWidth = container.clientWidth;
+                        videoHeight = videoWidth / containerAspectRatio;
+                    }
+
+                    let boxWrapper = document.createElement("div");
+                    boxWrapper.classList.add("bounding-box");
+
+                    // Create the bounding box
+                    let box = document.createElement("div");
+                    box.style.position = "absolute";
+                    box.style.left = `${relativeX * videoWidth}px`;
+                    box.style.top = `${relativeY * videoHeight}px`;
+                    box.style.width = `${relativeWidth * videoWidth}px`;
+                    box.style.height = `${relativeHeight * videoHeight}px`;
+                    box.style.border = `2px solid ${color}`;
+                    box.style.boxSizing = "border-box";
+                    box.style.pointerEvents = "none";
+                    
+                    // Create the label (interactive)
+                    let labelDiv = document.createElement("span");
+                    labelDiv.textContent = label;
+                    labelDiv.style.position = "absolute";
+                    labelDiv.style.top = "-20px";
+                    labelDiv.style.left = "0";
+                    labelDiv.style.background = color;
+                    labelDiv.style.color = "white";
+                    labelDiv.style.padding = "2px 5px";
+                    labelDiv.style.fontSize = "12px";
+                    labelDiv.style.fontFamily = "Arial, sans-serif";
+                    labelDiv.style.whiteSpace = "nowrap";
+                    labelDiv.style.pointerEvents = "auto"; //Keeps label clickable if needed
+                    box.style.zIndex = "1000";
+                    labelDiv.style.zIndex = "1001";
+
+                    box.appendChild(labelDiv);
+                    boxWrapper.appendChild(box);
+                    container.appendChild(boxWrapper);
+                }
+
+                function clearBoundingBoxes() {
+                    document.querySelectorAll(".bounding-box").forEach(box => box.remove());
+                }
+                
+                function hideBoundingBoxes() {
+                    document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "none");
+                }
+                function showBoundingBoxes() {
+                    document.querySelectorAll(".bounding-box").forEach(box => box.style.display = "");
+                }
+    </script>
+</body>
+</html>
