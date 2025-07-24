@@ -27,11 +27,8 @@ import pickle
 from urllib.parse import unquote
 from urllib.parse import quote
 
-#Model architecture from https://github.com/ultralytics/ultralytics/issues/189
-#The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
 
-#Pre processing image functions.
-def compute_transform(image, new_shape=(1280, 1280), auto=False, scaleFill=False, scaleup=True, stride=32) -> Tensor:
+def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
   new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
   r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
@@ -48,9 +45,6 @@ def compute_transform(image, new_shape=(1280, 1280), auto=False, scaleFill=False
   image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
   return Tensor(image)
 
-def preprocess(im, imgsz=1280, model_stride=32, model_pt=True): return compute_transform(im, new_shape=imgsz, auto=True, stride=model_stride)
-
-# utility functions for forward pass.
 def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
   lt, rb = distance.chunk(2, dim)
   x1y1 = anchor_points - lt
@@ -2208,7 +2202,6 @@ def start_cam(rtsp,cam_name):
 
   args = upsert_arg(args, "cam_name", cam_name)
   args = upsert_arg(args, "rtsp", rtsp)
-
   proc = subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
   active_subprocesses.append(proc)
 
@@ -2292,8 +2285,8 @@ if __name__ == "__main__":
     sys.exit(1)
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
-  track_thresh = 0.4 #default 0.6
-  yolo_thresh = 0.4
+  track_thresh = 0.5 #default 0.6
+  yolo_thresh = 0.5
 
   track = True #for now
   if track: 
