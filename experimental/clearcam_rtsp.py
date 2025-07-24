@@ -356,6 +356,7 @@ class RollingClassCounter:
     self.data = defaultdict(deque)
     self.max = max
     self.classes = classes
+    self.last_det = 0
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -467,13 +468,13 @@ class VideoCapture:
             filtered_preds = [p for p in self.last_preds if p[4] >= yolo_thresh and (classes is None or str(int(p[5])) in classes)]
 
             if count > 10:
-              if last_preview_time is None or time.time() - last_det >= 3600: # preview every hour
+              if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
                   filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
                   cv2.imwrite(filename, self.annotated_frame)
               for _,alert in self.alert_counters.items():
                   if alert.get_counts()[1]:
-                      if time.time() - last_det >= alert.window: # once per min for now
+                      if time.time() - alert.last_det >= alert.window:
                           send_det = True
                           timestamp = datetime.now().strftime("%Y-%m-%d")
                           filepath = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}"
@@ -482,6 +483,7 @@ class VideoCapture:
                           cv2.imwrite(str(filename), self.annotated_frame)
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
                           last_det = time.time()
+                          alert.last_det = time.time()
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                   os.makedirs("event_clips", exist_ok=True)
                   mp4_filename = f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
