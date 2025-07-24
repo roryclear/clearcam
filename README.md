@@ -4,9 +4,9 @@
 https://apps.apple.com/app/clearcam/id6743237694
 
 <p align="center">
-  <img src="front.png" alt="Front" width="300" />
+  <img src="images/front.png" alt="Front" width="300" />
   &nbsp;&nbsp;&nbsp;
-  <img src="server.png" alt="Server" width="300" />
+  <img src="images/server.png" alt="Server" width="300" />
 </p>
 
 ## run DVR in python
