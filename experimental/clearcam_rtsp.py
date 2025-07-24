@@ -485,8 +485,8 @@ class VideoCapture:
                           last_det = time.time()
                           alert.last_det = time.time()
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
-                  os.makedirs("event_clips", exist_ok=True)
-                  mp4_filename = f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+                  os.makedirs(CAMERA_BASE_DIR / self.camera_name / "event_clips", exist_ok=True)
+                  mp4_filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                   self.streamer.export_last_segments(Path(mp4_filename))
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
