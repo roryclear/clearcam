@@ -924,6 +924,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         
         if parsed_path.path == "/shutdown": 
           threading.Thread(target=self.server.shutdown).start()
+          for proc in active_subprocesses:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except:
+                try:
+                    proc.kill()
+                except:
+                    pass
           sys.exit(0)
 
         if parsed_path.path == "/reset_counts":
@@ -2107,7 +2116,8 @@ def start_cam(rtsp,cam_name):
   args = upsert_arg(args, "cam_name", cam_name)
   args = upsert_arg(args, "rtsp", rtsp)
 
-  subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
+  proc = subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
+  active_subprocesses.append(proc)
 
 
 live_link = dict()
@@ -2136,7 +2146,7 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         )
 
 cams = dict()
-
+active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Serve HTTP requests in separate threads."""
