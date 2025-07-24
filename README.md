@@ -1,8 +1,17 @@
 # clearcam
-# Turn your old iPhone into a state of the art AI Security Camera
+# Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
 ## Now on the Apple App Store ##
 https://apps.apple.com/app/clearcam/id6743237694
-## install from source
+
+## run DVR in python
+1. pip install -r requirements.txt
+2. python3 clearcam.py
+3. (optional) enter your Clearam premium userID (viewable in iOS app) to receive streams and notifications
+4. add your rtsp cameras
+- use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
+- use --yolo_size={s, m, l, or x for larger yolov8 variants}
+
+## install ios from source
 1. git clone https://github.com/roryclear/clearcam.git
 2. open ios/clearcam.xcodeproj
 
