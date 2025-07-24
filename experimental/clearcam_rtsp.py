@@ -17,9 +17,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
 import shutil
-import requests
 from datetime import datetime, time as time_obj
 import uuid
+import urllib
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 import struct
@@ -2039,19 +2039,19 @@ def upload_file(file_path: Path, session_token: str):
             "session_token": session_token,
             "size": str(file_size)
         }
-        response = requests.get(
-            "https://rors.ai/upload",
-            params=params,
-            timeout=10
-        )
-        if response.status_code != 200:
-            print(f"Failed to get upload URL: {response.status_code}")
-            return False
-        response_data = response.json()
-        presigned_url = response_data.get("url")
-        if not presigned_url:
-            print("Invalid response - missing upload URL")
-            return False
+        query_string = urllib.parse.urlencode(params)
+        url = f"https://rors.ai/upload?{query_string}"
+        
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status != 200:
+                print(f"Failed to get upload URL: {response.status}")
+                return False
+            response_data = json.loads(response.read().decode('utf-8'))
+            presigned_url = response_data.get("url")
+            if not presigned_url:
+                print("Invalid response - missing upload URL")
+                return False
     except Exception as e:
         print(f"Error getting upload URL: {e}")
         return False
@@ -2059,22 +2059,27 @@ def upload_file(file_path: Path, session_token: str):
     success = False
     for attempt in range(4):
         try:
+            url_parts = urllib.parse.urlparse(presigned_url)
+            if url_parts.scheme == 'https':
+                conn = http.client.HTTPSConnection(url_parts.netloc)
+            else:
+                conn = http.client.HTTPConnection(url_parts.netloc)
+            
             headers = {
                 "Content-Type": "application/octet-stream",
                 "Content-Length": str(file_size)
             }
-            upload_response = requests.put(
-                presigned_url,
-                headers=headers,
-                data=file_data,
-                timeout=30
-            )
-            if 200 <= upload_response.status_code < 300:
+            conn.request("PUT", url_parts.path + "?" + url_parts.query, body=file_data, headers=headers)
+            upload_response = conn.getresponse()
+            
+            if 200 <= upload_response.status < 300:
                 print(f"File uploaded successfully on attempt {attempt + 1}")
                 success = True
+                conn.close()
                 break
             else:
-                print(f"Upload failed with status {upload_response.status_code} on attempt {attempt + 1}")
+                print(f"Upload failed with status {upload_response.status} on attempt {attempt + 1}")
+                conn.close()
         except Exception as e:
             print(f"Upload error on attempt {attempt + 1}: {e}")
 
@@ -2126,26 +2131,45 @@ live_link = dict()
 is_live_lock = threading.Lock()
 def check_upload_link(camera_name="clearcampy"):
     global live_link
-    url = f"https://rors.ai/get_stream_upload_link?name={camera_name}&session_token={userID}" # /test
+    query_params = urllib.parse.urlencode({
+        "name": camera_name,
+        "session_token": userID
+    })
+    url = f"https://rors.ai/get_stream_upload_link?{query_params}"
+    
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        json_data = response.json()
-        upload_link = json_data.get("upload_link")
-        with is_live_lock: live_link[camera_name] = upload_link
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                response_data = json.loads(response.read().decode('utf-8'))
+                upload_link = response_data.get("upload_link")
+                with is_live_lock: live_link[camera_name] = upload_link
+            else:
+                raise Exception(f"HTTP Error: {response.status}")
     except Exception as e:
         with is_live_lock:
             if camera_name in live_link: live_link[camera_name] = None
         print(f"Error checking upload link: {e}")
 
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
-    with file_path.open('rb') as f:
-        _ = requests.put(
-            signed_url,
-            data=f,
-            headers={'Content-Type': 'application/octet-stream'},
-            timeout=2
-        )
+    try:
+        url_parts = urllib.parse.urlparse(signed_url)
+        if url_parts.scheme == 'https':
+            conn = http.client.HTTPSConnection(url_parts.netloc)
+        else:
+            conn = http.client.HTTPConnection(url_parts.netloc)
+        
+        with file_path.open('rb') as f:
+            file_data = f.read()
+            headers = {'Content-Type': 'application/octet-stream'}
+            conn.request("PUT", url_parts.path + "?" + url_parts.query, body=file_data, headers=headers)
+            response = conn.getresponse()
+            if 200 <= response.status < 300:
+                return True
+            return False
+    except Exception as e:
+        print(f"Error uploading to R2: {e}")
+        return False
 
 cams = dict()
 active_subprocesses = []
