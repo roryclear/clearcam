@@ -2166,19 +2166,19 @@ if __name__ == "__main__":
     tracker = BYTETracker(Args())
   live_link = dict()
   
-  yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), 'n')
-  depth, width, ratio = get_variant_multiples(yolo_variant)
-  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-  state_dict = safe_load(get_weights_location(yolo_variant))
-  load_state_dict(yolo_infer, state_dict)
-  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
   if rtsp_url is None:
     for camera_name in cams.keys():
       start_cam(rtsp=cams[camera_name],cam_name=camera_name)
 
+  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
+  yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), 'n')
+  color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
+  depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
+    yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+    state_dict = safe_load(get_weights_location(yolo_variant))
+    load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,camera_name=cam_name)
     hls_streamer = HLSStreamer(cam,camera_name=cam_name)
     cam.streamer = hls_streamer
