@@ -423,19 +423,20 @@ class VideoCapture:
     def _open_ffmpeg(self):
         if self.proc:
             self.proc.kill()
-        
-        if "youtube.com" in self.src or "youtu.be" in self.src: self.src = resolve_youtube_stream_url(self.src)
-        
+
+        if "youtube.com" in self.src or "youtu.be" in self.src:
+            self.src = resolve_youtube_stream_url(self.src)
+
         command = [
             "ffmpeg",
-            "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "-headers", "Referer: https://www.google.com/\r\n",
+            "-user_agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "-headers", "Referer: https://www.google.com.com/\r\n",
             "-i", self.src,
             "-loglevel", "quiet",
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", "2",
-            "-an",  # No audio
+            "-an",
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-vf", f"scale={self.width}:{self.height}",
@@ -444,30 +445,8 @@ class VideoCapture:
             "-"
         ]
 
-        '''
-        stream_url = "rtmp://a.rtmp.youtube.com/live2/aaaaaaaaaaaaa"
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{self.cam.width}x{self.cam.height}",
-            "-r", "30",
-            "-i", "-",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-tune", "zerolatency",
-            "-pix_fmt", "yuv420p",
-            "-crf", "21",
-            "-g", str(30 * self.segment_time),
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-ar", "44100",
-            "-f", "flv",
-            stream_url
-        ]
-        '''
         self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
 
 
     def capture_loop(self):
@@ -571,15 +550,17 @@ class VideoCapture:
                 cv2.putText(frame, label, (x + padding, text_y), font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
                 cv2.putText(frame, value, (x + label_box_width + padding, text_y), font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
 
-        timestamp = (datetime.now() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.7
-        thickness = 2
-        (text_width, text_height), baseline = cv2.getTextSize(timestamp, font, font_scale, thickness)
-        x, y = frame.shape[1] - text_width - 20, 30
-        box_coords = ((x - 5, y - text_height - 5), (x + text_width + 5, y + baseline + 5))
-        cv2.rectangle(frame, box_coords[0], box_coords[1], (0, 0, 0), thickness=-1)
-        cv2.putText(frame, timestamp, (x, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+            timestamp = (datetime.now() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            thickness = 2
+            (text_width, text_height), baseline = cv2.getTextSize(timestamp, font, font_scale, thickness)
+            x, y = frame.shape[1] - text_width - 20, 30
+            padding = 5
+            box_coords = ((x - padding, y - text_height - padding), (x + text_width + padding, y + padding))
+            cv2.rectangle(frame, box_coords[0], box_coords[1], (0, 0, 0), thickness=-1)
+            cv2.putText(frame, timestamp, (x, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
 
         return frame
 
@@ -616,20 +597,26 @@ class HLSStreamer:
     def start(self):
         self.running = True
         self.current_stream_dir = self._get_new_stream_dir()
-        # Start FFmpeg process for HLS streaming to local files
+        # Start FFmpeg process for HLS streaming to local files 
+        '''
         ffmpeg_cmd = [
             "ffmpeg",
+            "-stream_loop", "-1",
+            "-i", "lofihiphop.mp3",  # Audio input (looped)
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.cam.width}x{self.cam.height}",
             "-use_wallclock_as_timestamps", "1",
             "-fflags", "+genpts",
-            "-i", "-",
+            "-i", "-",  # Raw video from stdin
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             "-crf", "21",
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "44100",
             "-f", "hls",
             "-hls_time", str(self.segment_time),
             "-hls_list_size", "0",
@@ -637,6 +624,31 @@ class HLSStreamer:
             "-hls_allow_cache", "0",
             str(self.current_stream_dir / "stream.m3u8")
         ]
+        '''
+
+        
+        stream_url = "rtmp://a.rtmp.youtube.com/live2/aaaaaaaaaaa"
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", f"1280x720",
+            "-r", "30",
+            "-i", "-",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-tune", "zerolatency",
+            "-pix_fmt", "yuv420p",
+            "-crf", "21",
+            "-g", str(30 * 7),
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "44100",
+            "-f", "flv",
+            stream_url
+        ]
+        
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
         threading.Thread(target=self._feed_frames, daemon=True).start()
