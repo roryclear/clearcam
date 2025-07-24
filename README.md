@@ -15,7 +15,16 @@ https://apps.apple.com/app/clearcam/id6743237694
 1. git clone https://github.com/roryclear/clearcam.git
 2. open ios/clearcam.xcodeproj
 
-## requirements
+## python requirements
+- ffmpeg
+- tinygrad
+- numpy
+- cv2
+- scipy
+- lap
+- cython_bbox
+
+## iOS requirements
 - iOS 15 or newer
 - iPhone SE (1st gen) or newer (older iPhones *might* work)
 - dependencies: NONE!
