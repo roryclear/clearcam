@@ -922,6 +922,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(labeled_counts).encode("utf-8"))
             return
         
+        if parsed_path.path == "/shutdown": 
+          threading.Thread(target=self.server.shutdown).start()
+          sys.exit(0)
+
         if parsed_path.path == "/reset_counts":
             cam_name = query.get("cam", [None])[0]
             if not cam_name:
@@ -993,6 +997,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   .form-section button:hover {{
                       background: #0056b3;
                   }}
+                  .shutdown-wrapper {{
+                      margin-top: 20px;
+                  }}
               </style>
           </head>
           <body>
@@ -1005,6 +1012,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       <input type="text" name="rtsp" placeholder="RTSP Link" required>
                       <button type="submit">Add Camera</button>
                   </form>
+                  <div class="shutdown-wrapper">
+                  <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
+                  </div>
               </div>
 
               <script>
@@ -1031,6 +1041,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                           fetchCameras();
                       }} else {{
                           alert("Failed to delete camera.");
+                      }}
+                  }}
+
+                  async function shutdownServer() {{
+                      if (!confirm("Are you sure you want to shut down the server?")) return;
+                      const res = await fetch('/shutdown');
+                      if (res.ok) {{
+                          alert("Server is shutting down...");
+                      }} else {{
+                          alert("Shutdown failed.");
                       }}
                   }}
 
