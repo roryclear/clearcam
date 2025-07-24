@@ -3,6 +3,12 @@
 ## Now on the Apple App Store ##
 https://apps.apple.com/app/clearcam/id6743237694
 
+<p align="center">
+  <img src="front.png" alt="Front" width="300" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="server.png" alt="Server" width="300" />
+</p>
+
 ## run DVR in python
 1. pip install -r requirements.txt
 2. python3 clearcam.py
