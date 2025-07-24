@@ -24,6 +24,7 @@ from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 import struct
 import pickle
+from urllib.parse import unquote
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -748,7 +749,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         return self.base_dir
     
     def do_GET(self):
-        parsed_path = urlparse(self.path)
+        parsed_path = urlparse(unquote(self.path))
         query = parse_qs(parsed_path.query)
 
         if parsed_path.path == "/list_cameras":
@@ -1898,7 +1899,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(html.encode("utf-8"))
             return
         
-        requested_path = self.path.lstrip('/')
+        requested_path = parsed_path.path.lstrip('/')
         if requested_path.startswith("cameras/"):
             requested_path = requested_path[len("cameras/"):]
         file_path = self.base_dir / requested_path
