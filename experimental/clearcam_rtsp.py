@@ -1773,11 +1773,36 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     fetch(`/event_thumbs?cam=${{cameraName}}&folder=${{folder}}`)
                         .then(res => res.text())
                         .then(html => {{
-                            document.getElementById("eventImagesContainer").innerHTML = html;
+                            const container = document.getElementById("eventImagesContainer");
+
+                            // Create a temporary div to parse incoming HTML
+                            const temp = document.createElement("div");
+                            temp.innerHTML = html.trim();
+
+                            // Compare child count and content
+                            const isSameLength = container.children.length === temp.children.length;
+                            let isSame = isSameLength;
+
+                            if (isSameLength) {{
+                                for (let i = 0; i < container.children.length; i++) {{
+                                    if (
+                                        container.children[i].outerHTML.trim() !==
+                                        temp.children[i].outerHTML.trim()
+                                    ) {{
+                                        isSame = false;
+                                        break;
+                                    }}
+                                }}
+                            }}
+
+                            if (!isSame) {{
+                                container.innerHTML = html;
+                            }}
                         }})
                         .catch(err => {{
                             console.error("Failed to load images:", err);
-                            document.getElementById("eventImagesContainer").innerHTML = "<p>No event images found.</p>";
+                            const container = document.getElementById("eventImagesContainer");
+                            container.innerHTML = "<p>No event images found.</p>";
                         }});
                 }}
 
@@ -1951,6 +1976,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 fetchAlerts();
                 fetchCounts();
                 setInterval(fetchCounts, 5000);
+                setInterval(() => loadEventImages(folderPicker.value), 5000);
             </script>
             </body>
             </html>
