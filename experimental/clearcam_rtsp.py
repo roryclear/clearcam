@@ -2060,6 +2060,17 @@ def upload_file(file_path: Path, session_token: str):
 
     return success
 
+def get_lan_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
 def start_cam(rtsp,cam_name):
   if not rtsp or not cam_name: return
   args = sys.argv[:]
@@ -2175,6 +2186,7 @@ if __name__ == "__main__":
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
+      print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
         print("Port in use, server not started.")
