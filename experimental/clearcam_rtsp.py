@@ -25,6 +25,7 @@ from pathlib import Path
 import struct
 import pickle
 from urllib.parse import unquote
+from urllib.parse import quote
 
 #Model architecture from https://github.com/ultralytics/ultralytics/issues/189
 #The upsampling class has been taken from this pull request https://github.com/tinygrad/tinygrad/pull/784 by dc-dc-dc. Now 2(?) models use upsampling. (retinet and this)
@@ -2133,7 +2134,7 @@ is_live_lock = threading.Lock()
 def check_upload_link(camera_name="clearcampy"):
     global live_link
     query_params = urllib.parse.urlencode({
-        "name": camera_name,
+        "name": quote(camera_name),
         "session_token": userID
     })
     url = f"https://rors.ai/get_stream_upload_link?{query_params}"
