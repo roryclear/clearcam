@@ -380,7 +380,9 @@ class RollingClassCounter:
   
   def is_active(self):
     if not self.sched: return True
-    return False 
+    now = time.localtime()
+    time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
+    return time_of_day < self.sched[1] and time_of_day > self.sched[0] 
 
 class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
@@ -825,28 +827,47 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             window = query.get("window", [None])[0]
             max_count = query.get("max", [None])[0]
             class_ids = query.get("class_ids", [None])[0]
-            
+            sched_from = query.get("from", [None])[0]
+            sched_to = query.get("to", [None])[0]
+
             if not cam_name or not window or not max_count or not class_ids:
                 self.send_error(400, "Missing parameters")
                 return
-            
             try:
                 window = int(window)
                 max_count = int(max_count)
-                classes = [int(c.strip()) for c in class_ids.split(",")]  # Parse as integers
+                classes = [int(c.strip()) for c in class_ids.split(",")]
+
+                def hms_to_seconds(hms):
+                    h, m, s = map(int, hms.split(":"))
+                    return h * 3600 + m * 60 + s
+
+                if sched_from and sched_to:
+                    schedule = [hms_to_seconds(sched_from), hms_to_seconds(sched_to)]
+                else:
+                    schedule = None
+
                 alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
                 added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
                 id = str(uuid.uuid4())
+
                 with open(alerts_file, "rb") as f:
                     raw_alerts = pickle.load(f)
-                    raw_alerts[id] = RollingClassCounter(window_seconds=window,max=max_count,classes=classes) 
-                with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
-                append_to_pickle_list(pkl_path=added_alerts_file,item=[id,RollingClassCounter(window_seconds=window,max=max_count,classes=classes)])
+                    raw_alerts[id] = RollingClassCounter(
+                        window_seconds=window,
+                        max=max_count,
+                        classes=classes,
+                        sched=schedule
+                    )
+
+                with open(alerts_file, 'wb') as f:
+                    pickle.dump(raw_alerts, f)
+                append_to_pickle_list(pkl_path=added_alerts_file, item=[id, RollingClassCounter(window_seconds=window, max=max_count,classes=classes, sched=schedule)])
 
             except ValueError as e:
                 self.send_error(400, f"Invalid parameters: {e}")
                 return
-            
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1651,6 +1672,19 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                         style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
                                     <span>minutes</span>
                                 </div>
+                                <div class="form-group" style="width: 90%; text-align: center;">
+                                    <label>Schedule (optional)</label>
+                                    <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                                        <div>
+                                            <label for="scheduleFrom">From</label><br>
+                                            <input type="time" id="scheduleFrom" name="schedule_from" step="1" style="text-align: center;">
+                                        </div>
+                                        <div>
+                                            <label for="scheduleTo">To</label><br>
+                                            <input type="time" id="scheduleTo" name="schedule_to" step="1" style="text-align: center;">
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
                                     <button type="button" onclick="closeAlertModal()">Cancel</button>
                                     <button type="submit">Save Alert</button>
@@ -1933,38 +1967,44 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 }}
 
                 function addAlert(event) {{
-                    event.preventDefault();
-                    const form = event.target;
-                    const formData = new FormData(form);
-                    const windowMinutes = parseFloat(formData.get('window'));
-                    const windowSeconds = Math.round(windowMinutes * 60);
+                  event.preventDefault();
+                  const form = event.target;
+                  const formData = new FormData(form);
+                  const windowMinutes = parseFloat(formData.get('window'));
+                  const windowSeconds = Math.round(windowMinutes * 60);
+                  const checked = form.querySelectorAll('input[name="class_ids"]:checked');
+                  const classIds = Array.from(checked).map(cb => cb.value).join(',');
+                  const scheduleFrom = formData.get("schedule_from");
+                  const scheduleTo = formData.get("schedule_to");
 
-                    // Get all checked class_ids
-                    const checked = form.querySelectorAll('input[name="class_ids"]:checked');
-                    const classIds = Array.from(checked).map(cb => cb.value).join(',');
+                  const params = new URLSearchParams({{
+                      cam: cameraName,
+                      window: windowSeconds,
+                      max: formData.get('max'),
+                      class_ids: classIds,
+                  }});
 
-                    const params = new URLSearchParams({{
-                        cam: cameraName,
-                        window: windowSeconds,
-                        max: formData.get('max'),
-                        class_ids: classIds,
-                    }});
+                  if (scheduleFrom && scheduleTo) {{
+                      params.append("from", scheduleFrom);
+                      params.append("to", scheduleTo);
+                  }}
 
-                    fetch(`/add_alert?${{params.toString()}}`)
-                        .then(res => {{
-                            if (!res.ok) throw new Error("Failed to add alert");
-                            return res.json();
-                        }})
-                        .then(() => {{
-                            closeAlertModal();
-                            form.reset();
-                            fetchAlerts();
-                        }})
-                        .catch(err => {{
-                            console.error("Add alert failed:", err);
-                            alert("Failed to add alert.");
-                        }});
+                  fetch(`/add_alert?${{params.toString()}}`)
+                      .then(res => {{
+                          if (!res.ok) throw new Error("Failed to add alert");
+                          return res.json();
+                      }})
+                      .then(() => {{
+                          closeAlertModal();
+                          form.reset();
+                          fetchAlerts();
+                      }})
+                      .catch(err => {{
+                          console.error("Add alert failed:", err);
+                          alert("Failed to add alert.");
+                      }});
                 }}
+
 
                 folderPicker.addEventListener("change", () => {{
                     const folder = folderPicker.value;
