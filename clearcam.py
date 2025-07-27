@@ -347,12 +347,13 @@ Path("cameras").mkdir(parents=True, exist_ok=True)
 
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
     self.classes = classes
     self.last_det = 0
+    self.sched = sched
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -376,6 +377,10 @@ class RollingClassCounter:
         counts[class_id] = len(q)
         if self.max and len(q) >= self.max: max_reached = True
     return counts, max_reached
+  
+  def is_active(self):
+    if not self.sched: return True
+    return False 
 
 class VideoCapture:
   def __init__(self, src,camera_name="clearcampy"):
@@ -469,6 +474,7 @@ class VideoCapture:
                   filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
                   cv2.imwrite(filename, self.annotated_frame)
               for _,alert in self.alert_counters.items():
+                  if not alert.is_active(): continue
                   if alert.get_counts()[1]:
                       if time.time() - alert.last_det >= alert.window:
                           send_det = True
