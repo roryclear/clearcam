@@ -790,6 +790,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             recordings.sort(key=lambda x: x[1])
             oldest_recording = recordings[0][0]
             shutil.rmtree(oldest_recording)
+            shutil.rmtree(largest_cam / "event_images" / oldest_recording.name, ignore_errors=True)
             print(f"Deleted oldest recording: {oldest_recording}")
             
         except Exception as e:
