@@ -750,7 +750,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def check_and_cleanup_storage(self):
         try:
             total_size = sum(f.stat().st_size for f in self.base_dir.glob('**/*') if f.is_file())
-            size_gb = total_size / (1024 ** 3)
+            size_gb = total_size / (1000 ** 3)
             if size_gb > 30: # todo, hardcoded to 30GB for now
                 self.cleanup_oldest_files()
         except Exception as e:
