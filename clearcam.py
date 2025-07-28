@@ -1656,7 +1656,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
                                 <div class="form-group" style="width: 90%; text-align: center;">
                                     <label for="maxCount">Trigger if there are more than</label>
-                                    <input type="number" id="maxCount" name="max" min="1" value="5" required 
+                                    <input type="number" id="maxCount" name="max" min="1" value="1" required
                                         style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
                                     <span>objects detected</span>
                                 </div>
