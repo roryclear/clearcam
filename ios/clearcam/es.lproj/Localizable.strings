@@ -61,7 +61,7 @@
 "premium_feature_2" = "Notificaciones en tiempo real";
 "premium_feature_3" = "Transmisión en vivo remota";
 "premium_feature_4" = "Cifrado de extremo a extremo.";
-"upgrade_button" = "Mejorar por %@/mes";
+"upgrade_button" = "Luego por %@ al mes";
 "not_now" = "Ahora no";
 "premium_disclaimer" = "Límite mensual: 5,000 clips y 1,000 minutos de transmisión.";
 "purchase_failed" = "Error de compra";

@@ -61,7 +61,7 @@
 "premium_feature_2" = "リアルタイム通知を受信";
 "premium_feature_3" = "どこからでもライブ配信を視聴";
 "premium_feature_4" = "送信される全てのカメラデータにエンドツーエンド暗号化を適用。";
-"upgrade_button" = "月額%@でアップグレード";
+"upgrade_button" = "その後、月々 %@";
 "not_now" = "後で";
 "premium_disclaimer" = "月間制限: 5,000クリップのアップロードと1,000分のライブ配信視聴。";
 "purchase_failed" = "購入に失敗しました";

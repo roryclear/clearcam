@@ -61,7 +61,7 @@
 "premium_feature_2" = "接收实时事件通知";
 "premium_feature_3" = "随时随地直播";
 "premium_feature_4" = "手机发送的所有摄像头数据均采用端到端加密。";
-"upgrade_button" = "升级至每月%@";
+"upgrade_button" = "然后每月 %@";
 "not_now" = "暂不";
 "premium_disclaimer" = "每月限制5000个片段上传和1000分钟或次数的直播观看。";
 "purchase_failed" = "购买失败";

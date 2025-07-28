@@ -61,7 +61,7 @@
 "premium_feature_2" = "Receive real-time event notifications";
 "premium_feature_3" = "Live stream from anywhere";
 "premium_feature_4" = "End-to-end encryption on all camera data sent from your phone.";
-"upgrade_button" = "Upgrade for %@ per month";
+"upgrade_button" = "then for %@ per month";
 "not_now" = "Not now";
 "premium_disclaimer" = "Monthly limit of 5,000 clip uploads and 1,000 minutes or sessions of live stream viewing.";
 "purchase_failed" = "Purchase Failed";

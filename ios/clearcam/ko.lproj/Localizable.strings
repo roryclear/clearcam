@@ -61,7 +61,7 @@
 "premium_feature_2" = "실시간 이벤트 알림 받기";
 "premium_feature_3" = "어디서든 라이브 스트림";
 "premium_feature_4" = "휴대폰에서 전송되는 모든 카메라 데이터에 대해 종단 간 암호화";
-"upgrade_button" = "%@/월에 업그레이드";
+"upgrade_button" = "그 후 %@ 매월";
 "not_now" = "지금은 아니요";
 "premium_disclaimer" = "월 최대 5,000개 클립 업로드 및 1,000분 또는 세션의 라이브 스트림 시청 제한이 있습니다.";
 "purchase_failed" = "구매 실패";

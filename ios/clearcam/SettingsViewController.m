@@ -988,13 +988,32 @@
             // Upgrade button
             UIButton *upgradeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
             upgradeBtn.translatesAutoresizingMaskIntoConstraints = NO;
-            NSString *upgradeTitle = [NSString stringWithFormat:NSLocalizedString(@"upgrade_button", @"Upgrade button text with price"), localizedPrice];
-            [upgradeBtn setTitle:upgradeTitle forState:UIControlStateNormal];
-            [upgradeBtn setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+
+            NSString *line1 = NSLocalizedString(@"1 week free trial", @"Free trial label");
+            NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"upgrade_button", @"Subscription price after trial"), localizedPrice];
+            NSString *fullText = [NSString stringWithFormat:@"%@\n%@", line1, line2];
+
+            NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+            paragraphStyle.alignment = NSTextAlignmentCenter;
+
+            NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc] initWithString:fullText attributes:@{
+                NSParagraphStyleAttributeName: paragraphStyle,
+                NSForegroundColorAttributeName: UIColor.blackColor
+            }];
+
+            NSRange line1Range = [fullText rangeOfString:line1];
+            [attributedTitle addAttribute:NSFontAttributeName value:[UIFont boldSystemFontOfSize:17] range:line1Range];
+
+            NSRange line2Range = [fullText rangeOfString:line2];
+            [attributedTitle addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:14] range:line2Range];
+
+            [upgradeBtn setAttributedTitle:attributedTitle forState:UIControlStateNormal];
+            upgradeBtn.titleLabel.numberOfLines = 2;
+            upgradeBtn.titleLabel.textAlignment = NSTextAlignmentCenter;
             upgradeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0];
-            upgradeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:17];
             upgradeBtn.layer.cornerRadius = 12;
             [upgradeBtn addTarget:self action:@selector(handleUpgradeTap) forControlEvents:UIControlEventTouchUpInside];
+
 
             // Cancel button
             UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
