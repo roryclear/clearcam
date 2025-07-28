@@ -744,65 +744,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR 
         super().__init__(*args, **kwargs)
-        self.start_cleanup_thread()
-
-    def start_cleanup_thread(self):
-        def cleanup_task():
-            while True:
-                self.check_and_cleanup_storage()
-                time.sleep(600)
-
-        thread = threading.Thread(target=cleanup_task, daemon=True)
-        thread.start()
-
-    def check_and_cleanup_storage(self):
-        try:
-            total_size = sum(f.stat().st_size for f in self.base_dir.glob('**/*') if f.is_file())
-            size_gb = total_size / (1000 ** 3)
-            if size_gb > 30: # todo, hardcoded to 30GB for now
-                self.cleanup_oldest_files()
-        except Exception as e:
-            print(f"Error during storage cleanup: {e}")
-
-    def cleanup_oldest_files(self):
-        try:
-            camera_dirs = []
-            for cam_dir in self.base_dir.iterdir():
-                if cam_dir.is_dir():
-                    dir_size = sum(f.stat().st_size for f in cam_dir.glob('**/*') if f.is_file())
-                    camera_dirs.append((cam_dir, dir_size))
-            
-            if not camera_dirs:
-                return
-                
-            largest_cam = max(camera_dirs, key=lambda x: x[1])[0]
-            streams_dir = largest_cam / "streams"
-            
-            if not streams_dir.exists():
-                # If no streams folder exists, delete the entire camera folder
-                shutil.rmtree(largest_cam)
-                print(f"Deleted camera folder with no streams: {largest_cam}")
-                return
-                
-            recordings = []
-            for rec_dir in streams_dir.iterdir():
-                if rec_dir.is_dir():
-                    recordings.append((rec_dir, rec_dir.stat().st_ctime))
-                    
-            if not recordings:
-                # If streams folder exists but is empty, delete the entire camera folder
-                shutil.rmtree(largest_cam)
-                print(f"Deleted camera folder with empty streams: {largest_cam}")
-                return
-                
-            recordings.sort(key=lambda x: x[1])
-            oldest_recording = recordings[0][0]
-            shutil.rmtree(oldest_recording)
-            shutil.rmtree(largest_cam / "event_images" / oldest_recording.name, ignore_errors=True)
-            print(f"Deleted oldest recording: {oldest_recording}")
-            
-        except Exception as e:
-            print(f"Error during cleanup of oldest files: {e}")
 
     def get_camera_path(self, camera_name=None):
         """Get the path for a specific camera or all cameras"""
@@ -2301,7 +2242,103 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Serve HTTP requests in separate threads."""
+    """Threaded HTTP server with centralized cleanup management"""
+    def __init__(self, server_address, RequestHandlerClass):
+        ThreadingMixIn.__init__(self)
+        HTTPServer.__init__(self, server_address, RequestHandlerClass)
+        self.cleanup_stop_event = threading.Event()
+        self.cleanup_thread = None
+        self._setup_cleanup_thread()
+
+    def _setup_cleanup_thread(self):
+        if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
+            self.cleanup_stop_event.clear()
+            self.cleanup_thread = threading.Thread(
+                target=self._cleanup_task,
+                daemon=True,
+                name="StorageCleanup"
+            )
+            self.cleanup_thread.start()
+
+    def _cleanup_task(self):
+        while not self.cleanup_stop_event.is_set():
+            try:
+                self._check_and_cleanup_storage()
+            except Exception as e:
+                print(f"Cleanup error: {e}")
+            self.cleanup_stop_event.wait(timeout=600)  # Check every 10 min
+
+    def _check_and_cleanup_storage(self):
+        try:
+            total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
+            size_gb = total_size / (1000 ** 3)
+            if size_gb > 30:  # 30GB threshold
+                self._cleanup_oldest_files()
+        except Exception as e:
+            print(f"Error checking storage: {e}")
+
+    def _cleanup_oldest_files(self):
+        try:
+            camera_dirs = []
+            for cam_dir in CAMERA_BASE_DIR.iterdir():
+                if cam_dir.is_dir():
+                    try:
+                        dir_size = sum(f.stat().st_size for f in cam_dir.glob('**/*') if f.is_file())
+                        camera_dirs.append((cam_dir, dir_size))
+                    except Exception as e:
+                        print(f"Error calculating size for {cam_dir}: {e}")
+            
+            if not camera_dirs:
+                return
+                
+            largest_cam = max(camera_dirs, key=lambda x: x[1])[0]
+            streams_dir = largest_cam / "streams"
+            
+            if not streams_dir.exists():
+                try:
+                    shutil.rmtree(largest_cam)
+                    print(f"Deleted camera folder with no streams: {largest_cam}")
+                except Exception as e:
+                    print(f"Error deleting camera folder {largest_cam}: {e}")
+                return
+                
+            recordings = []
+            for rec_dir in streams_dir.iterdir():
+                if rec_dir.is_dir():
+                    try:
+                        recordings.append((rec_dir, rec_dir.stat().st_ctime))
+                    except Exception as e:
+                        print(f"Error getting ctime for {rec_dir}: {e}")
+                    
+            if not recordings:
+                try:
+                    shutil.rmtree(largest_cam)
+                    print(f"Deleted camera folder with empty streams: {largest_cam}")
+                except Exception as e:
+                    print(f"Error deleting empty camera folder {largest_cam}: {e}")
+                return
+                
+            recordings.sort(key=lambda x: x[1])
+            oldest_recording = recordings[0][0]
+            try:
+                shutil.rmtree(oldest_recording)
+                event_images_dir = largest_cam / "event_images" / oldest_recording.name
+                if event_images_dir.exists():
+                    shutil.rmtree(event_images_dir)
+                print(f"Deleted oldest recording: {oldest_recording}")
+            except Exception as e:
+                print(f"Error deleting recording {oldest_recording}: {e}")
+            
+        except Exception as e:
+            print(f"Error in cleanup process: {e}")
+
+    def server_close(self):
+        """Clean shutdown"""
+        if hasattr(self, 'cleanup_stop_event'):
+            self.cleanup_stop_event.set()
+        if hasattr(self, 'cleanup_thread') and self.cleanup_thread:
+            self.cleanup_thread.join(timeout=5)
+        super().server_close()
 
 if __name__ == "__main__":
   if os.path.exists("cams.pkl"):
