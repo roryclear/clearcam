@@ -1662,9 +1662,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     <div class="counts-wrapper">
                         <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
-                            <thead>
-                                <tr><th style="text-align:left; border-bottom: 1px solid #ccc;">Object</th><th style="text-align:left; border-bottom: 1px solid #ccc;">Count</th></tr>
-                            </thead>
                             <tbody></tbody>
                         </table>
                         <button onclick="resetCounts()">Reset</button>
