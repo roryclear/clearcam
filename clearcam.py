@@ -26,6 +26,7 @@ import struct
 import pickle
 from urllib.parse import unquote
 from urllib.parse import quote
+import platform
 
 
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
@@ -2338,6 +2339,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 if __name__ == "__main__":
+  if platform.system() == 'Darwin': subprocess.Popen(['caffeinate', '-dimsu'])
+  elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
+  elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
+
   if os.path.exists("cams.pkl"):
       with open("cams.pkl", 'rb') as f:
         cams = pickle.load(f)
