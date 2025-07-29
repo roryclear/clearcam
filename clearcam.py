@@ -1128,59 +1128,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404, "No cameras found")
                 return
-
-        hls_dir = self.get_camera_path(camera_name)
+            
         event_image_dir = self.base_dir / camera_name / "event_images"
-
-        if parsed_path.path == '/download_clip' or parsed_path.path.endswith('/download_clip'):
-            query = parse_qs(parsed_path.query)
-            folder = query.get("folder", [None])[0]
-            start = query.get("start", [None])[0]
-            end = query.get("end", [None])[0]
-
-            if not folder or start is None or end is None:
-                self.send_error(400, "Missing parameters")
-                return
-
-            try:
-                start = float(start)
-                end = float(end)
-            except ValueError:
-                self.send_error(400, "Invalid start or end time")
-                return
-
-            stream_path = hls_dir / folder / "stream.m3u8"
-            if not stream_path.exists():
-                self.send_error(404, "Stream not found")
-                return
-
-            output_path = Path(f"tmp_clip_{uuid.uuid4().hex}.mp4")
-            try:
-                command = [
-                    "ffmpeg",
-                    "-y",
-                    "-ss", str(start),
-                    "-i", str(stream_path),
-                    "-t", str(end - start),
-                    "-c", "copy",
-                    str(output_path)
-                ]
-                subprocess.run(command, check=True)
-
-                self.send_response(200)
-                self.send_header("Content-Type", "video/mp4")
-                self.send_header("Content-Disposition", f'attachment; filename="clip_{camera_name}_{folder}_{int(start)}_{int(end)}.mp4"')
-                self.send_header("Content-Length", str(output_path.stat().st_size))
-                self.end_headers()
-
-                with open(output_path, "rb") as f:
-                    shutil.copyfileobj(f, self.wfile)
-            except Exception as e:
-                self.send_error(500, f"Failed to create clip: {e}")
-            finally:
-                if output_path.exists():
-                    output_path.unlink()
-            return
 
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
@@ -1408,8 +1357,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     }}
 
                     /* Modal styles */
-                    .modal,
-                    .download-modal {{
+                    .modal {{
                         display: none;
                         position: fixed;
                         z-index: 999;
@@ -1434,8 +1382,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         min-height: 0; /* Important for flex children */
                     }}
 
-                    .modal-content,
-                    .download-modal-content {{
+                    .modal-content {{
                         background-color: #fefefe;
                         padding: 20px;
                         border-radius: 8px;
@@ -1491,17 +1438,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         margin-top: 20px;
                     }}
 
-                    .download-controls {{
-                        display: flex;
-                        flex-direction: column;
-                        gap: 15px;
-                    }}
-
-                    .download-time-inputs {{
-                        display: flex;
-                        gap: 10px;
-                    }}
-
                     @media (max-width: 600px) {{
                         button {{
                             padding: 8px 16px;
@@ -1526,8 +1462,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             font-size: 0.9rem;
                         }}
 
-                        .modal-content,
-                        .download-modal-content {{
+                        .modal-content {{
                             width: 95%;
                             padding: 15px;
                         }}
@@ -1545,11 +1480,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             min-width: 80px;
                             padding: 5px 10px;
                             font-size: 0.8rem;
-                        }}
-
-                        .download-time-inputs {{
-                            flex-direction: column;
-                            gap: 8px;
                         }}
 
                         .controls label {{
@@ -1580,7 +1510,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <video id="video" controls></video>
                     <div class="date-picker-container">
                         <input type="date" id="folderPicker" value="{selected_dir}">
-                        <button onclick="openDownloadModal()">Download</button>
                     </div>
                     <h3>Active Alerts</h3>
                     <div id="alertsContainer">
@@ -1635,31 +1564,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </div>
                     </div>
 
-                    <!-- Download Modal -->
-                    <div id="downloadModal" class="download-modal">
-                        <div class="download-modal-content">
-                            <div class="modal-header">
-                                <h3>Download Clip</h3>
-                                <span class="close" onclick="closeDownloadModal()">&times;</span>
-                            </div>
-                            <div class="download-controls" style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
-                                <div class="download-time-inputs" style="display: flex; justify-content: center; gap: 20px; width: 100%;">
-                                    <div class="form-group" style="text-align: center;">
-                                        <label for="clipStart">Start Time</label>
-                                        <input type="time" id="clipStart" step="1" value="00:00:00" style="text-align: center;">
-                                    </div>
-                                    <div class="form-group" style="text-align: center;">
-                                        <label for="clipEnd">End Time</label>
-                                        <input type="time" id="clipEnd" step="1" value="00:00:10" style="text-align: center;">
-                                    </div>
-                                </div>
-                                <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; width: 100%;">
-                                    <button type="button" onclick="closeDownloadModal()">Cancel</button>
-                                    <button type="button" onclick="downloadClip()">Download Now</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
                     <div class="counts-wrapper">
                         <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
@@ -1677,7 +1581,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 <script>
                 const classLabels = {class_labels};
                 const alertModal = document.getElementById("alertModal");
-                const downloadModal = document.getElementById("downloadModal");
                 const folderPicker = document.getElementById("folderPicker");
                 const video = document.getElementById("video");
                 const startTime = {start_time if start_time is not None else 'null'};
@@ -1711,17 +1614,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     alertModal.style.display = "none";
                 }}
 
-                function openDownloadModal() {{
-                    downloadModal.style.display = "flex";
-                }}
-
-                function closeDownloadModal() {{
-                    downloadModal.style.display = "none";
-                }}
-
                 window.addEventListener("click", function(event) {{
                     if (event.target === alertModal) closeAlertModal();
-                    if (event.target === downloadModal) closeDownloadModal();
                 }});
 
                 function loadStream(folder) {{
@@ -1785,24 +1679,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     return h * 3600 + m * 60 + s;
                 }}
 
-                function downloadClip() {{
-                    const folder = folderPicker.value;
-                    const start = hmsToSeconds(document.getElementById("clipStart").value);
-                    const end = hmsToSeconds(document.getElementById("clipEnd").value);
-
-                    if (isNaN(start) || isNaN(end) || end <= start) {{
-                        alert("Please enter a valid start and end time (end must be after start).");
-                        return;
-                    }}
-
-                    const url = `/download_clip?cam=${{cameraName}}&folder=${{folder}}&start=${{start}}&end=${{end}}`;
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `clip_${{cameraName}}_${{folder}}_${{start}}_${{end}}.mp4`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                }}
 
                 function fetchCounts() {{
                     fetch(`/get_counts?cam=${{encodeURIComponent(cameraName)}}`)
