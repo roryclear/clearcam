@@ -494,6 +494,7 @@ class VideoCapture:
                   mp4_filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                   self.streamer.export_last_segments(Path(mp4_filename))
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                  os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
                   send_det = False
               if userID and (time.time() - last_live_check) >= 5:
@@ -2015,6 +2016,7 @@ def upload_file(file_path: Path, session_token: str):
             upload_response = conn.getresponse()
             
             if 200 <= upload_response.status < 300:
+                os.unlink(file_path) # todo remove on failure or success
                 print(f"File uploaded successfully on attempt {attempt + 1}")
                 success = True
                 conn.close()
@@ -2035,7 +2037,7 @@ def upload_file(file_path: Path, session_token: str):
         print(f"Deleted file: {file_path}")
     except Exception as e:
         print(f"Failed to delete file: {e}")
-
+    
     return success
 
 def get_lan_ip():
