@@ -9,7 +9,7 @@ https://apps.apple.com/app/clearcam/id6743237694
   <img src="images/front.PNG" alt="Server" width="400" />
 </p>
 
-## run DVR + inference in python
+## run NVR + inference in python
 1. pip install -r requirements.txt
 2. python3 clearcam.py
 3. (optional) enter your Clearam premium userID (viewable in iOS app) to receive streams and notifications
