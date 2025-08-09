@@ -288,7 +288,6 @@ fun getNewestCreationTimeFromFiles(videosDir: File): Long {
     return videosDir.listFiles()
         ?.mapNotNull { file: File ->
             try {
-                // Parse filename like "2025-08-01_13-41-50.mp4"
                 val baseName = file.name.removeSuffix(".mp4")
                 val format = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault())
                 format.parse(baseName)?.time ?: 0L

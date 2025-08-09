@@ -242,7 +242,6 @@ fun HomeScreen(userId: String) {
                 cameraNames = camerasDeferred.await()
                 val decryptionKeys = getDecryptionKeys(context).toMutableList()
 
-                // First try to decrypt any existing encrypted files with all available keys
                 videosDir.listFiles()?.forEach { file ->
                     if (file.name.endsWith(".aes")) {
                         val outputFilename = file.name.removeSuffix(".aes")
@@ -253,7 +252,6 @@ fun HomeScreen(userId: String) {
                                 try {
                                     val aesData = file.readBytes()
                                     if (decryptAesFileToMp4(aesData, videoFile, key)) {
-                                        // Success - delete the encrypted file
                                         file.delete()
                                         break
                                     }
@@ -265,7 +263,6 @@ fun HomeScreen(userId: String) {
                     }
                 }
 
-                // Then process new videos
                 newVideos.forEach { video ->
                     try {
                         val outputFilename = video.fileName.removeSuffix(".aes")
@@ -286,7 +283,6 @@ fun HomeScreen(userId: String) {
                             }
 
                             if (!success) {
-                                // Keep the encrypted file if decryption fails
                                 videoFile.delete()
                             }
                         }
@@ -356,7 +352,6 @@ fun HomeScreen(userId: String) {
                 .padding(16.dp)
                 .verticalScroll(scrollState)
         ) {
-            // 🔝 Compact scrollable top bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -419,7 +414,7 @@ fun HomeScreen(userId: String) {
                             currentCameraName = cameraName
                             showLiveStream = true
                         },
-                        onRefresh = { refreshData() }  // Pass the existing refresh function
+                        onRefresh = { refreshData() }
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -436,7 +431,6 @@ fun HomeScreen(userId: String) {
                             if (file.exists()) {
                                 file.delete()
                             }
-                            // Clear the thumbnail cache
                             ThumbnailCache.deleteCachedThumbnail(context, deletedVideo.fileName)
 
                             coroutineScope.launch {
@@ -479,22 +473,17 @@ fun SimpleVideoPlayer(videoPath: String, onDismiss: () -> Unit) {
     val videoViewRef = remember { mutableStateOf<VideoView?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Track playback states
     var isPrepared by remember { mutableStateOf(false) }
     var isInitialPlay by remember { mutableStateOf(true) }
 
-    // Handle video playback
     LaunchedEffect(videoPath) {
         videoViewRef.value?.apply {
-            // Reset states
             showError = false
             isPrepared = false
 
-            // Reset the video view
             stopPlayback()
             setVideoPath("")
 
-            // Set the new path
             setVideoPath(videoPath)
         }
     }
@@ -531,7 +520,6 @@ fun SimpleVideoPlayer(videoPath: String, onDismiss: () -> Unit) {
                         }
                         isPlaying = true
 
-                        // Update position periodically
                         coroutineScope.launch {
                             while (isActive) {
                                 if (!isScrubbing) {
@@ -551,7 +539,6 @@ fun SimpleVideoPlayer(videoPath: String, onDismiss: () -> Unit) {
                     }
 
                     setOnErrorListener { _, what, extra ->
-                        // Only show error if we were actually trying to play
                         if (isPrepared) {
                             showError = true
                         }
@@ -968,7 +955,7 @@ fun CameraHorizontalList(
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Refresh, // Using Material Icons
+                    imageVector = Icons.Default.Refresh,
                     contentDescription = "Refresh cameras"
                 )
             }
@@ -1108,21 +1095,12 @@ fun EventVideoSection(
                 val outputFile = File(videosDir, video.fileName.removeSuffix(".aes") + ".mp4")
 
                 if (decryptAesFileToMp4(encryptedFile.readBytes(), outputFile, key)) {
-                    // Success - add key to saved keys
                     addDecryptionKey(context, key)
-
-                    // Delete the encrypted file
                     encryptedFile.delete()
-
-                    // Clear thumbnail cache for encrypted version
                     ThumbnailCache.deleteCachedThumbnail(context, video.fileName)
-
-                    // Trigger refresh to update UI
                     onVideoClick(outputFile.absolutePath)
                 } else {
-                    // Failed - delete the output file if it was created
                     if (outputFile.exists()) outputFile.delete()
-                    // Show error
                     Toast.makeText(context, "Invalid decryption key", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -1203,7 +1181,6 @@ fun EventVideoListItem(
                 thumbnailBitmap = bitmap
             }
         } else {
-            // Ensure there's no misleading thumbnail from old cache
             ThumbnailCache.deleteCachedThumbnail(context, cacheKey)
         }
     }
@@ -1284,12 +1261,12 @@ fun EventVideoListItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = video.time,  // This shows the formatted time (HH:MM:SS)
+                    text = video.time,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = video.date,  // This shows the date (YYYY-MM-DD)
+                    text = video.date,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )

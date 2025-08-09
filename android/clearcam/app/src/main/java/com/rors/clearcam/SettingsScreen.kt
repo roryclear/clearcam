@@ -106,7 +106,6 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Your existing notification toggle - completely unchanged
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
