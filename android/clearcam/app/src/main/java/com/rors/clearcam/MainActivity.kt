@@ -1,11 +1,14 @@
 package com.rors.clearcam
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -88,6 +92,7 @@ fun LoginScreen(onLoginSuccess: (String) -> Unit) {
     var loginStatus by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     fun attemptLogin() {
         coroutineScope.launch {
@@ -166,6 +171,7 @@ fun LoginScreen(onLoginSuccess: (String) -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+
         Button(
             onClick = { attemptLogin() },
             enabled = !isLoading && userId.isNotBlank(),
@@ -181,6 +187,15 @@ fun LoginScreen(onLoginSuccess: (String) -> Unit) {
                 Text("Login")
             }
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Help",
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://roryclear.github.io/clearcam/#how-to-sign-up-on-android"))
+                context.startActivity(intent)
+            }
+        )
     }
 }
 
