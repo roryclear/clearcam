@@ -27,6 +27,7 @@ import pickle
 from urllib.parse import unquote
 from urllib.parse import quote
 import platform
+import ctypes
 
 
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
