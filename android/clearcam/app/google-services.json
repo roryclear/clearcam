@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "765515979480",
+    "project_id": "clearcam-6e490",
+    "storage_bucket": "clearcam-6e490.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:765515979480:android:6e7ebcaaab760e365755ad",
+        "android_client_info": {
+          "package_name": "com.rors.clearcam"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5bMBTRykCPiB26K8e562rVUxfu9gY3mk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
