@@ -30,18 +30,23 @@
                                                                             style:UIBarButtonItemStylePlain
                                                                            target:nil
                                                                            action:nil];
-    
 
+    UIImageSymbolConfiguration *leftConfig = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightRegular];
+    UIBarButtonItem *cameraButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"camera.fill" withConfiguration:leftConfig]
+                                                                     style:UIBarButtonItemStylePlain
+                                                                    target:self
+                                                                    action:@selector(cameraTapped)];
+    cameraButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
+    self.navigationItem.leftBarButtonItem = cameraButton;
 
-    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightRegular scale:UIImageSymbolScaleDefault];
-    UIBarButtonItem *settingsButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"gearshape.fill" withConfiguration:config]
+    UIImageSymbolConfiguration *rightConfig = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightRegular];
+    UIBarButtonItem *settingsButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"gearshape.fill" withConfiguration:rightConfig]
                                                                       style:UIBarButtonItemStylePlain
                                                                      target:self
                                                                      action:@selector(settingsTapped)];
     settingsButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
     self.navigationItem.rightBarButtonItem = settingsButton;
 
-    // Setup IP label
     self.ipLabel = [[UILabel alloc] init];
     self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.ipLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -56,7 +61,6 @@
         [self.ipLabel.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20]
     ]];
 
-    // Stack View setup
     self.mainStackView = [[UIStackView alloc] init];
     self.mainStackView.axis = UILayoutConstraintAxisVertical;
     self.mainStackView.distribution = UIStackViewDistributionFillEqually;
@@ -65,7 +69,6 @@
     self.mainStackView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.mainStackView];
 
-    // Create the two possible top constraints for the stack view
     self.mainStackViewTopToIPLabelConstraint = [self.mainStackView.topAnchor constraintEqualToAnchor:self.ipLabel.bottomAnchor constant:20];
     self.mainStackViewTopToSafeAreaConstraint = [self.mainStackView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20];
 
@@ -76,21 +79,16 @@
     ]];
 
     [self addItemToStackView:self.mainStackView
-                     title:NSLocalizedString(@"camera_desc", nil)
-                     image:[UIImage systemImageNamed:@"camera.fill"]
-                    action:@selector(cameraTapped)];
+                       title:NSLocalizedString(@"gallery_desc", nil)
+                       image:[UIImage systemImageNamed:@"photo.on.rectangle"]
+                      action:@selector(galleryTapped)];
 
-    [self addItemToStackView:self.mainStackView
-                     title:NSLocalizedString(@"gallery_desc", nil)
-                     image:[UIImage systemImageNamed:@"photo.on.rectangle"]
-                    action:@selector(galleryTapped)];
-
-    // Observe IP address changes
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateIPAddressLabel)
                                                  name:@"DeviceIPAddressDidChangeNotification"
                                                object:nil];
 }
+
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
