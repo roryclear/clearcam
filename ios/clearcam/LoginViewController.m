@@ -1,5 +1,6 @@
 #import "LoginViewController.h"
 #import "MainViewController.h"
+#import "StoreManager.h"
 
 @interface LoginViewController ()
 
@@ -35,7 +36,6 @@
     [container addSubview:self.loginButton];
     
     [NSLayoutConstraint activateConstraints:@[
-        // Center container vertically
         [container.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [container.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32],
         [container.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32],
@@ -54,8 +54,39 @@
 }
 
 - (void)loginButtonTapped {
-    MainViewController *mainVC = [[MainViewController alloc] init];
-    [self.navigationController pushViewController:mainVC animated:YES];
+    NSString *enteredToken = [self.usernameTextField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    
+    if (enteredToken.length == 0) {
+        [self showAlertWithTitle:@"Error" message:@"Please enter your Clearcam User ID."];
+        return;
+    }
+    
+    NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", enteredToken];
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            
+            if (!error && httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+                [[StoreManager sharedInstance] storeSessionTokenInKeychain:enteredToken];
+                MainViewController *mainVC = [[MainViewController alloc] init];
+                [self.navigationController pushViewController:mainVC animated:YES];
+            } else {
+                [self showAlertWithTitle:@"Invalid ID" message:@"The Clearcam User ID you entered is not valid."];
+            }
+        });
+    }];
+    [task resume];
+}
+
+- (void)showAlertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 @end
