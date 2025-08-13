@@ -1,5 +1,5 @@
 #import "LoginViewController.h"
-#import "MainViewController.h"
+#import "GalleryViewController.h"
 #import "StoreManager.h"
 
 @interface LoginViewController ()
@@ -72,7 +72,7 @@
             
             if (!error && httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
                 [[StoreManager sharedInstance] storeSessionTokenInKeychain:enteredToken];
-                MainViewController *mainVC = [[MainViewController alloc] init];
+                GalleryViewController *mainVC = [[GalleryViewController alloc] init];
                 [self.navigationController pushViewController:mainVC animated:YES];
             } else {
                 [self showAlertWithTitle:@"Invalid ID" message:@"The Clearcam User ID you entered is not valid."];

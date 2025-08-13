@@ -5,6 +5,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import "LiveViewController.h"
 #import "ViewController.h"
+#import "FileServer.h"
 #import "SettingsViewController.h"
 
 @interface VideoTableViewCell : UITableViewCell
@@ -83,12 +84,15 @@
 @property (nonatomic, strong) NSMutableSet<NSString *> *loadedFilenames;
 @property (nonatomic, strong) NSTimer *refreshTimer;
 @property (nonatomic, strong) UIView *headerView;
+@property (nonatomic, strong) FileServer *fileServer;
 @end
 
 @implementation GalleryViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.fileServer = [FileServer sharedInstance];
+    [self.fileServer start];
     [self.navigationController setNavigationBarHidden:YES animated:NO];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     

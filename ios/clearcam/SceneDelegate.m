@@ -1,5 +1,5 @@
 #import "SceneDelegate.h"
-#import "MainViewController.h"
+#import "GalleryViewController.h"
 #import "LoginViewController.h"
 #import "StoreManager.h"
 
@@ -17,7 +17,7 @@ willConnectToSession:(UISceneSession *)session
     UIViewController *rootVC;
     
     if (sessionToken && sessionToken.length > 0) {
-        rootVC = [[MainViewController alloc] init];
+        rootVC = [[GalleryViewController alloc] init];
     } else {
         rootVC = [[LoginViewController alloc] init];
     }
