@@ -10,9 +10,10 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [[StoreManager sharedInstance] clearSessionTokenFromKeychain];
     
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.navigationItem.title = @"Login";
+    self.navigationItem.title = @"Log in";
     
     UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
     container.translatesAutoresizingMaskIntoConstraints = NO;

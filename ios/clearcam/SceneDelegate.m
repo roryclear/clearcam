@@ -11,7 +11,7 @@
 - (void)scene:(UIScene *)scene
 willConnectToSession:(UISceneSession *)session
       options:(UISceneConnectionOptions *)connectionOptions {
-    //[[StoreManager sharedInstance] clearSessionTokenFromKeychain]; todo, for testing
+    [[StoreManager sharedInstance] clearSessionTokenFromKeychain]; // todo, for testing
     self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     UIViewController *rootVC;
