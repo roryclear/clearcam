@@ -4,6 +4,8 @@
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import "LiveViewController.h"
+#import "ViewController.h"
+#import "SettingsViewController.h"
 
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
@@ -894,13 +896,13 @@
 }
 
 - (void)cameraTapped {
-    UIViewController *cameraVC = [[UIViewController alloc] init];
-    [self presentViewController:cameraVC animated:YES completion:nil];
+    ViewController *cameraVC = [[ViewController alloc] init];
+    [self.navigationController pushViewController:cameraVC animated:YES];
 }
 
 - (void)settingsTapped {
-    UIViewController *settingsVC = [[UIViewController alloc] init];
-    [self presentViewController:settingsVC animated:YES completion:nil];
+    SettingsViewController *settingsVC = [[SettingsViewController alloc] init];
+    [self.navigationController pushViewController:settingsVC animated:YES];
 }
 
 @end
