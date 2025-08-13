@@ -248,11 +248,36 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     static BOOL isRequestInProgress = NO;
 
     if (isRequestInProgress) return;
+    isRequestInProgress = YES;
+    NSString *sessionToken = [self retrieveSessionTokenFromKeychain];
+    if (sessionToken && sessionToken.length > 0) {
+        NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", sessionToken];
+        NSURL *url = [NSURL URLWithString:urlString];
 
-    isRequestInProgress = YES;  // Mark request as in progress
+        NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            if (!error && httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"isSubscribed"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+                isRequestInProgress = NO;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(YES, [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
+                });
+                return;
+            }
+            [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
+        }];
+        [task resume];
+        return;
+    }
+    [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
+}
 
+- (void)performReceiptVerificationWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion
+                                      requestFlag:(BOOL *)flagPtr {
     NSString *storedReceipt = [[NSUserDefaults standardUserDefaults] stringForKey:@"subscriptionReceipt"];
-    
+
     if (!storedReceipt) {
         NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
         NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
@@ -260,13 +285,12 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         if (!receiptData) {
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
-            isRequestInProgress = NO;  // Reset flag
+            *flagPtr = NO;
             completion(NO, nil);
             return;
         }
 
         storedReceipt = [receiptData base64EncodedStringWithOptions:0];
-
         [[NSUserDefaults standardUserDefaults] setObject:storedReceipt forKey:@"subscriptionReceipt"];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
@@ -278,17 +302,17 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     if (error) {
         [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
-        isRequestInProgress = NO;  // Reset flag
+        *flagPtr = NO;
         completion(NO, nil);
         return;
     }
 
     [FileServer performPostRequestWithURL:@"https://www.rors.ai/verify_receipt"
-                                       method:@"POST"
-                                  contentType:@"application/json"
-                                         body:jsonData
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        isRequestInProgress = NO;
+                                   method:@"POST"
+                              contentType:@"application/json"
+                                     body:jsonData
+                        completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
+        *flagPtr = NO;
         if (error) {
             [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"isSubscribed"];
             [[NSUserDefaults standardUserDefaults] synchronize];
@@ -318,6 +342,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         completion(isSubscribed, nil);
     }];
 }
+
 
 
 - (void)storeSessionTokenInKeychain:(NSString *)sessionToken {
