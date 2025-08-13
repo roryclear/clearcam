@@ -108,6 +108,17 @@
     [self.cameraButton addTarget:self action:@selector(cameraTapped) forControlEvents:UIControlEventTouchUpInside];
     self.cameraButton.translatesAutoresizingMaskIntoConstraints = NO;
     
+    // App icon
+    NSArray *iconFiles = [[[NSBundle mainBundle] infoDictionary] valueForKeyPath:@"CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconFiles"];
+    NSString *iconName = [iconFiles lastObject];
+    UIImageView *appIconView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:iconName]];
+    appIconView.contentMode = UIViewContentModeScaleAspectFit;
+    appIconView.translatesAutoresizingMaskIntoConstraints = NO;
+    appIconView.layer.cornerRadius = 4;
+    appIconView.layer.masksToBounds = YES;
+    [appIconView.widthAnchor constraintEqualToConstant:24].active = YES;
+    [appIconView.heightAnchor constraintEqualToConstant:24].active = YES;
+    
     // Settings button
     self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.settingsButton setImage:[UIImage systemImageNamed:@"gearshape.fill"] forState:UIControlStateNormal];
@@ -122,12 +133,12 @@
     self.ipLabel.textAlignment = NSTextAlignmentCenter;
     self.ipLabel.numberOfLines = 1;
     self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    
-    // Horizontal stack for title bar
-    UIStackView *titleStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.cameraButton, self.settingsButton]];
+
+    UIStackView *titleStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.cameraButton, appIconView, self.settingsButton]];
     titleStack.axis = UILayoutConstraintAxisHorizontal;
-    titleStack.distribution = UIStackViewDistributionEqualSpacing; // This will space the buttons to opposite sides
+    titleStack.distribution = UIStackViewDistributionEqualCentering;
     titleStack.alignment = UIStackViewAlignmentCenter;
+    titleStack.spacing = 16;
     titleStack.translatesAutoresizingMaskIntoConstraints = NO;
     
     // Vertical stack for entire header
@@ -136,8 +147,7 @@
     headerStack.spacing = 8;
     headerStack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.headerView addSubview:headerStack];
-    
-    // Setup the tab controller
+
     self.eventsViewController = [[UIViewController alloc] init];
     self.eventsViewController.title = NSLocalizedString(@"events", @"Title for events screen");
     self.eventsViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:NSLocalizedString(@"events", @"Title for events screen")
@@ -157,38 +167,31 @@
     [self.view addSubview:self.tabController.view];
     self.tabController.view.translatesAutoresizingMaskIntoConstraints = NO;
     [self.tabController didMoveToParentViewController:self];
-    
-    // Constraints
+
     [NSLayoutConstraint activateConstraints:@[
-        // Header view constraints
         [self.headerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.headerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.headerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.headerView.heightAnchor constraintEqualToConstant:90],
-        
-        // Header stack constraints
+
         [headerStack.topAnchor constraintEqualToAnchor:self.headerView.topAnchor constant:12],
         [headerStack.leadingAnchor constraintEqualToAnchor:self.headerView.leadingAnchor constant:16],
         [headerStack.trailingAnchor constraintEqualToAnchor:self.headerView.trailingAnchor constant:-16],
         [headerStack.bottomAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:-8],
         
-        // Camera/Settings buttons
         [self.cameraButton.widthAnchor constraintEqualToConstant:44],
         [self.cameraButton.heightAnchor constraintEqualToConstant:44],
         [self.settingsButton.widthAnchor constraintEqualToConstant:44],
         [self.settingsButton.heightAnchor constraintEqualToConstant:44],
-        
-        // Tab controller constraints
+
         [self.tabController.view.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor],
         [self.tabController.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tabController.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.tabController.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
     
-    // Move all the existing events UI setup to the eventsViewController
     [self setupEventsViewController];
-    
-    // Rest of your existing viewDidLoad code...
+
     self.videoFiles = [NSMutableArray array];
     self.groupedVideos = [NSMutableDictionary dictionary];
     self.sectionTitles = [NSMutableArray array];
@@ -202,7 +205,6 @@
     [self setupDownloadDirectory];
     [self loadExistingVideos];
     
-    // Register for IP address notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateIPAddressLabel)
                                                  name:@"DeviceIPAddressDidChangeNotification"
