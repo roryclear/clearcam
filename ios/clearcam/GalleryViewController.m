@@ -10,8 +10,8 @@
 
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
-@property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIButton *menuButton;
+@property (nonatomic, strong) UILabel *titleLabel;
 @end
 
 @implementation VideoTableViewCell
@@ -108,12 +108,6 @@
     [self.cameraButton addTarget:self action:@selector(cameraTapped) forControlEvents:UIControlEventTouchUpInside];
     self.cameraButton.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // Title label
-    self.titleLabel = [[UILabel alloc] init];
-    self.titleLabel.text = @"Clearcam";
-    self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
-    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    
     // Settings button
     self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.settingsButton setImage:[UIImage systemImageNamed:@"gearshape.fill"] forState:UIControlStateNormal];
@@ -130,11 +124,10 @@
     self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
     
     // Horizontal stack for title bar
-    UIStackView *titleStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.cameraButton, self.titleLabel, self.settingsButton]];
+    UIStackView *titleStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.cameraButton, self.settingsButton]];
     titleStack.axis = UILayoutConstraintAxisHorizontal;
-    titleStack.distribution = UIStackViewDistributionFill;
+    titleStack.distribution = UIStackViewDistributionEqualSpacing; // This will space the buttons to opposite sides
     titleStack.alignment = UIStackViewAlignmentCenter;
-    titleStack.spacing = 16;
     titleStack.translatesAutoresizingMaskIntoConstraints = NO;
     
     // Vertical stack for entire header
