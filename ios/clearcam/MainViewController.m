@@ -30,6 +30,16 @@
                                                                             style:UIBarButtonItemStylePlain
                                                                            target:nil
                                                                            action:nil];
+    
+
+
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightRegular scale:UIImageSymbolScaleDefault];
+    UIBarButtonItem *settingsButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"gearshape.fill" withConfiguration:config]
+                                                                      style:UIBarButtonItemStylePlain
+                                                                     target:self
+                                                                     action:@selector(settingsTapped)];
+    settingsButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
+    self.navigationItem.rightBarButtonItem = settingsButton;
 
     // Setup IP label
     self.ipLabel = [[UILabel alloc] init];
@@ -56,9 +66,8 @@
     [self.view addSubview:self.mainStackView];
 
     // Create the two possible top constraints for the stack view
-    // The constant for mainStackViewTopToIPLabelConstraint should ensure there's enough space below the label
-    self.mainStackViewTopToIPLabelConstraint = [self.mainStackView.topAnchor constraintEqualToAnchor:self.ipLabel.bottomAnchor constant:20]; // Keep original constant
-    self.mainStackViewTopToSafeAreaConstraint = [self.mainStackView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20]; // Keep original constant
+    self.mainStackViewTopToIPLabelConstraint = [self.mainStackView.topAnchor constraintEqualToAnchor:self.ipLabel.bottomAnchor constant:20];
+    self.mainStackViewTopToSafeAreaConstraint = [self.mainStackView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.mainStackView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
@@ -76,11 +85,6 @@
                      image:[UIImage systemImageNamed:@"photo.on.rectangle"]
                     action:@selector(galleryTapped)];
 
-    [self addItemToStackView:self.mainStackView
-                     title:NSLocalizedString(@"settings_desc", nil)
-                     image:[UIImage systemImageNamed:@"gear"]
-                    action:@selector(settingsTapped)];
-
     // Observe IP address changes
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateIPAddressLabel)
@@ -90,7 +94,7 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self updateIPAddressLabel]; // Ensure layout is correct when view appears/reappears
+    [self updateIPAddressLabel];
 }
 
 - (void)updateIPAddressLabel {
@@ -98,48 +102,37 @@
     NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
 
     if (streamViaWifiEnabled) {
-        // If streaming is enabled, IP label should be visible
         self.ipLabel.hidden = NO;
         self.ipLabel.text = (ipAddress.length > 0) ? [NSString stringWithFormat:NSLocalizedString(@"streaming_over_wifi", nil), ipAddress] : NSLocalizedString(@"waiting_for_ip", nil);
-
-        // Activate constraint to IP label, deactivate constraint to safe area
         self.mainStackViewTopToSafeAreaConstraint.active = NO;
         self.mainStackViewTopToIPLabelConstraint.active = YES;
     } else {
-        // If streaming is disabled, IP label should be hidden
         self.ipLabel.hidden = YES;
-        self.ipLabel.text = nil; // Clear text when hidden
-
-        // Activate constraint to safe area, deactivate constraint to IP label
+        self.ipLabel.text = nil;
         self.mainStackViewTopToIPLabelConstraint.active = NO;
         self.mainStackViewTopToSafeAreaConstraint.active = YES;
     }
 
-    // Force layout update after constraint changes
     [self.view layoutIfNeeded];
 }
 
 - (void)addItemToStackView:(UIStackView *)stackView title:(NSString *)title image:(UIImage *)image action:(SEL)action {
-    // Create container view
     UIView *container = [[UIView alloc] init];
     container.backgroundColor = [UIColor systemGray6Color];
     container.layer.cornerRadius = 10;
     container.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Create image view
     UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
     imageView.contentMode = UIViewContentModeScaleAspectFit;
     imageView.tintColor = [UIColor systemBlueColor];
     imageView.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Create label
     UILabel *label = [[UILabel alloc] init];
     label.text = title;
     label.numberOfLines = 0;
     label.font = [UIFont systemFontOfSize:18];
     label.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Create horizontal stack view for image and label
     UIStackView *itemStackView = [[UIStackView alloc] init];
     itemStackView.axis = UILayoutConstraintAxisHorizontal;
     itemStackView.alignment = UIStackViewAlignmentCenter;
@@ -148,7 +141,6 @@
     [itemStackView addArrangedSubview:imageView];
     [itemStackView addArrangedSubview:label];
 
-    // Add stack view to container
     [container addSubview:itemStackView];
     [NSLayoutConstraint activateConstraints:@[
         [itemStackView.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:15],
@@ -159,12 +151,10 @@
         [imageView.heightAnchor constraintEqualToConstant:50]
     ]];
 
-    // Add tap gesture
     container.userInteractionEnabled = YES;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:action];
     [container addGestureRecognizer:tap];
 
-    // Add to main stack view
     [stackView addArrangedSubview:container];
 }
 
