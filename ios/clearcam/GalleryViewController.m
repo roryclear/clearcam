@@ -80,39 +80,116 @@
 @property (nonatomic, assign) BOOL isLoadingVideos;
 @property (nonatomic, strong) NSMutableSet<NSString *> *loadedFilenames;
 @property (nonatomic, strong) NSTimer *refreshTimer;
+@property (nonatomic, strong) UIView *headerView;
 @end
 
 @implementation GalleryViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [self.navigationController setNavigationBarHidden:YES animated:NO];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.navigationController.navigationBarHidden = NO;
     
-    // Initialize view controllers for tabs
+    // Create header view
+    self.headerView = [[UIView alloc] init];
+    self.headerView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.headerView];
+    
+    // Camera button
+    self.cameraButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.cameraButton setImage:[UIImage systemImageNamed:@"camera.fill"] forState:UIControlStateNormal];
+    self.cameraButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
+    [self.cameraButton addTarget:self action:@selector(cameraTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.cameraButton.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    // Title label
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.text = @"Clearcam";
+    self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    // Settings button
+    self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.settingsButton setImage:[UIImage systemImageNamed:@"gearshape.fill"] forState:UIControlStateNormal];
+    self.settingsButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
+    [self.settingsButton addTarget:self action:@selector(settingsTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.settingsButton.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    // IP label
+    self.ipLabel = [[UILabel alloc] init];
+    self.ipLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.ipLabel.textColor = [UIColor secondaryLabelColor];
+    self.ipLabel.textAlignment = NSTextAlignmentCenter;
+    self.ipLabel.numberOfLines = 1;
+    self.ipLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    // Horizontal stack for title bar
+    UIStackView *titleStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.cameraButton, self.titleLabel, self.settingsButton]];
+    titleStack.axis = UILayoutConstraintAxisHorizontal;
+    titleStack.distribution = UIStackViewDistributionFill;
+    titleStack.alignment = UIStackViewAlignmentCenter;
+    titleStack.spacing = 16;
+    titleStack.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    // Vertical stack for entire header
+    UIStackView *headerStack = [[UIStackView alloc] initWithArrangedSubviews:@[titleStack, self.ipLabel]];
+    headerStack.axis = UILayoutConstraintAxisVertical;
+    headerStack.spacing = 8;
+    headerStack.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.headerView addSubview:headerStack];
+    
+    // Setup the tab controller
     self.eventsViewController = [[UIViewController alloc] init];
-    self.eventsViewController.title =  NSLocalizedString(@"events", @"Title for events screen");
+    self.eventsViewController.title = NSLocalizedString(@"events", @"Title for events screen");
     self.eventsViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:NSLocalizedString(@"events", @"Title for events screen")
-                                                                          image:[UIImage systemImageNamed:@"photo.on.rectangle"]
-                                                                            tag:0];
-
+                                                                         image:[UIImage systemImageNamed:@"photo.on.rectangle"]
+                                                                           tag:0];
+    
     self.liveViewController = [[LiveViewController alloc] init];
     self.liveViewController.title = @"Live Cameras";
     self.liveViewController.tabBarItem = [[UITabBarItem alloc] initWithTitle:NSLocalizedString(@"live", @"Title for live screen")
-                                                                        image:[UIImage systemImageNamed:@"video"]
-                                                                          tag:1];
-
+                                                                       image:[UIImage systemImageNamed:@"video"]
+                                                                         tag:1];
+    
     self.tabController = [[UITabBarController alloc] init];
     self.tabController.viewControllers = @[self.eventsViewController, self.liveViewController];
-
+    
     [self addChildViewController:self.tabController];
     [self.view addSubview:self.tabController.view];
-    self.tabController.view.frame = self.view.bounds;
+    self.tabController.view.translatesAutoresizingMaskIntoConstraints = NO;
     [self.tabController didMoveToParentViewController:self];
     
-    // Move all the existing events UI to the eventsViewController
+    // Constraints
+    [NSLayoutConstraint activateConstraints:@[
+        // Header view constraints
+        [self.headerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.headerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.headerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.headerView.heightAnchor constraintEqualToConstant:80],
+        
+        // Header stack constraints
+        [headerStack.topAnchor constraintEqualToAnchor:self.headerView.topAnchor constant:10],
+        [headerStack.leadingAnchor constraintEqualToAnchor:self.headerView.leadingAnchor constant:16],
+        [headerStack.trailingAnchor constraintEqualToAnchor:self.headerView.trailingAnchor constant:-16],
+        [headerStack.bottomAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:-8],
+        
+        // Camera/Settings buttons
+        [self.cameraButton.widthAnchor constraintEqualToConstant:44],
+        [self.cameraButton.heightAnchor constraintEqualToConstant:44],
+        [self.settingsButton.widthAnchor constraintEqualToConstant:44],
+        [self.settingsButton.heightAnchor constraintEqualToConstant:44],
+        
+        // Tab controller constraints
+        [self.tabController.view.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor],
+        [self.tabController.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tabController.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tabController.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    
+    // Move all the existing events UI setup to the eventsViewController
     [self setupEventsViewController];
     
+    // Rest of your existing viewDidLoad code...
     self.videoFiles = [NSMutableArray array];
     self.groupedVideos = [NSMutableDictionary dictionary];
     self.sectionTitles = [NSMutableArray array];
@@ -125,11 +202,40 @@
     self.loadedFilenames = [NSMutableSet set];
     [self setupDownloadDirectory];
     [self loadExistingVideos];
-    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
-        [self getEvents];
-    }];
+    
+    // Register for IP address notifications
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateIPAddressLabel)
+                                                 name:@"DeviceIPAddressDidChangeNotification"
+                                               object:nil];
+    
+    [self updateIPAddressLabel];
     [self updateTableViewBackground];
     [self setupRefreshTimer];
+}
+
+- (void)updateIPAddressLabel {
+    BOOL streamViaWifiEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"stream_via_wifi_enabled"];
+    NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
+
+    if (streamViaWifiEnabled) {
+        self.ipLabel.hidden = NO;
+        self.ipLabel.text = (ipAddress.length > 0) ? [NSString stringWithFormat:NSLocalizedString(@"streaming_over_wifi", nil), ipAddress] : NSLocalizedString(@"waiting_for_ip", nil);
+        self.mainStackViewTopToSafeAreaConstraint.active = NO;
+        self.mainStackViewTopToIPLabelConstraint.active = YES;
+    } else {
+        self.ipLabel.hidden = YES;
+        self.ipLabel.text = nil;
+        self.mainStackViewTopToIPLabelConstraint.active = NO;
+        self.mainStackViewTopToSafeAreaConstraint.active = YES;
+    }
+
+    [self.view layoutIfNeeded];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
 }
 
 - (void)dealloc {
@@ -763,6 +869,7 @@
     [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
+
 - (NSURL *)handleDecryptedData:(NSData *)decryptedData fromURL:(NSURL *)aesFileURL {
     NSString *fileName = [aesFileURL lastPathComponent];
     if ([fileName hasSuffix:@".aes"]) {
@@ -784,6 +891,16 @@
         }
     }
     return decFileURL;
+}
+
+- (void)cameraTapped {
+    UIViewController *cameraVC = [[UIViewController alloc] init];
+    [self presentViewController:cameraVC animated:YES completion:nil];
+}
+
+- (void)settingsTapped {
+    UIViewController *settingsVC = [[UIViewController alloc] init];
+    [self presentViewController:settingsVC animated:YES completion:nil];
 }
 
 @end
