@@ -164,10 +164,10 @@
         [self.headerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.headerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.headerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.headerView.heightAnchor constraintEqualToConstant:80],
+        [self.headerView.heightAnchor constraintEqualToConstant:90],
         
         // Header stack constraints
-        [headerStack.topAnchor constraintEqualToAnchor:self.headerView.topAnchor constant:10],
+        [headerStack.topAnchor constraintEqualToAnchor:self.headerView.topAnchor constant:12],
         [headerStack.leadingAnchor constraintEqualToAnchor:self.headerView.leadingAnchor constant:16],
         [headerStack.trailingAnchor constraintEqualToAnchor:self.headerView.trailingAnchor constant:-16],
         [headerStack.bottomAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:-8],
