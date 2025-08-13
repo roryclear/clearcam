@@ -16,6 +16,7 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 - (NSString *)retrieveSessionTokenFromKeychain;
 - (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion;
 - (void)restorePurchases;
+- (void)storeSessionTokenInKeychain:(NSString *)sessionToken;
 
 @end
 
