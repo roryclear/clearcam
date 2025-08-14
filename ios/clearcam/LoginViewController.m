@@ -41,6 +41,7 @@
     [signUpButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     signUpButton.layer.cornerRadius = 8;
     signUpButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [signUpButton addTarget:self action:@selector(signUpButtonTapped) forControlEvents:UIControlEventTouchUpInside]; // Add this line
     [container addSubview:signUpButton];
     
     UILabel *alreadyHaveLabel = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -113,11 +114,72 @@
         [continueWithoutButton.bottomAnchor constraintEqualToAnchor:container.bottomAnchor]
     ]];
     [continueWithoutButton addTarget:self action:@selector(continueWithoutAccountTapped) forControlEvents:UIControlEventTouchUpInside];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(subscriptionStatusDidChange:)
+                                                 name:StoreManagerSubscriptionStatusDidChangeNotification
+                                               object:nil];
+}
+
+- (void)subscriptionStatusDidChange:(NSNotification *)notification {
+    // Check if user is now subscribed
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
+        if (isActive) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                // Transition to GalleryViewController
+                GalleryViewController *mainVC = [[GalleryViewController alloc] init];
+                [self.navigationController pushViewController:mainVC animated:YES];
+            });
+        }
+    }];
 }
 
 - (void)continueWithoutAccountTapped {
     GalleryViewController *mainVC = [[GalleryViewController alloc] init];
     [self.navigationController pushViewController:mainVC animated:YES];
+}
+
+- (void)signUpButtonTapped {
+    __weak typeof(self) weakSelf = self;
+    
+    // Use the correct method name with completion handler
+    [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {
+        if (success) {
+            // Subscription was successful, verify and log in
+            [weakSelf handleSuccessfulSubscription];
+        }
+    }];
+}
+
+- (void)handleSuccessfulSubscription {
+    // Show loading indicator
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.center = self.view.center;
+    [self.view addSubview:spinner];
+    [spinner startAnimating];
+    
+    // Verify subscription
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [spinner stopAnimating];
+            [spinner removeFromSuperview];
+            
+            if (isActive) {
+                // Generate a new session token (or use the one from verification)
+                NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+                if (!sessionToken) {
+                    sessionToken = [[NSUUID UUID] UUIDString];
+                    [[StoreManager sharedInstance] storeSessionTokenInKeychain:sessionToken];
+                }
+                
+                // Transition to GalleryViewController
+                GalleryViewController *mainVC = [[GalleryViewController alloc] init];
+                [self.navigationController pushViewController:mainVC animated:YES];
+            } else {
+                // Show error if verification failed
+                [self showAlertWithTitle:@"Error" message:@"Subscription verification failed. Please try again."];
+            }
+        });
+    }];
 }
 
 - (void)loginButtonTapped {

@@ -188,11 +188,11 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     }];
 }
 
-- (void)showUpgradePopupInViewController:(UIViewController *)presentingVC {
+- (void)showUpgradePopupInViewController:(UIViewController *)presentingVC
+                             completion:(void (^)(BOOL success))completion {
     [self showUpgradePopupInViewController:presentingVC
                                  darkMode:(presentingVC.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark)
-                               completion:^(BOOL success) {
-    }];
+                               completion:completion];
 }
 
 - (void)handleUpgradeTap:(UIButton *)sender {

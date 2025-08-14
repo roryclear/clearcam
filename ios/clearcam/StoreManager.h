@@ -24,6 +24,8 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 - (void)storeSessionTokenInKeychain:(NSString *)sessionToken;
 - (void)clearSessionTokenFromKeychain;
 - (void)showUpgradePopupInViewController:(UIViewController *)presentingVC;
+- (void)showUpgradePopupInViewController:(UIViewController *)presentingVC
+                             completion:(void (^)(BOOL success))completion;
 
 @end
 
