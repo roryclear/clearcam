@@ -475,6 +475,35 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     }
 }
 
+
+- (void)verifySessionOnlyWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
+    NSString *sessionToken = [self retrieveSessionTokenFromKeychain];
+    
+    if (!sessionToken || sessionToken.length == 0) {
+        completion(NO, nil);
+        return;
+    }
+    
+    NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", sessionToken];
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        
+        if (!error && httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(YES, [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
+            });
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil);
+            });
+        }
+    }];
+    
+    [task resume];
+}
+
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
     self.last_check_time = [[NSDate date] timeIntervalSince1970];
     static BOOL isRequestInProgress = NO;
@@ -505,6 +534,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     }
     [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
 }
+
 
 - (void)performReceiptVerificationWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion
                                       requestFlag:(BOOL *)flagPtr {

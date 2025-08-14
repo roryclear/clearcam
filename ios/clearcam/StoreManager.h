@@ -13,6 +13,7 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 + (instancetype)sharedInstance;
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate * _Nullable expiryDate))completion;
 - (void)verifySubscriptionWithCompletionIfSubbed:(void (^)(BOOL isActive, NSDate * _Nullable expiryDate))completion;
+- (void)verifySessionOnlyWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion;
 - (void)showUpgradePopupInViewController:(UIViewController *)presentingVC
                                darkMode:(BOOL)isDarkMode
                              completion:(void (^)(BOOL success))completion;
