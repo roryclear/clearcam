@@ -1,26 +1,21 @@
 #import "StoreManager.h"
 #import "FileServer.h"
 #import <StoreKit/StoreKit.h>
+#import <objc/runtime.h>
 
 // Define the notification name
 NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreManagerSubscriptionStatusDidChangeNotification";
 
 @interface StoreManager ()
 @property (nonatomic, strong) SKProductsRequest *productsRequest;
-@property (nonatomic, strong) SKProduct *premiumProduct;
-@property (nonatomic, strong) void (^productInfoCompletionHandler)(SKProduct * _Nullable product, NSError * _Nullable error); // Store completion handler for fetching info
+@property (nonatomic, strong) void (^productInfoCompletionHandler)(SKProduct * _Nullable product, NSError * _Nullable error);
 @property (nonatomic, copy) void (^purchaseCompletionHandler)(BOOL success, NSError * _Nullable error);
-// Implement SKPaymentTransactionObserver method to handle transaction updates
-- (void)getPremiumProductInfo:(void (^)(SKProduct * _Nullable product, NSError * _Nullable error))completion;
+@property (nonatomic, copy) void (^restoreCompletionHandler)(BOOL success);
 @end
 
 @implementation StoreManager
 
-- (void)restorePurchases {
-    [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
-}
-
-+ (StoreManager *)sharedInstance {
++ (instancetype)sharedInstance {
     static StoreManager *sharedInstance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -28,6 +23,334 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         [[SKPaymentQueue defaultQueue] addTransactionObserver:sharedInstance];
     });
     return sharedInstance;
+}
+
+- (BOOL)isUserSubscribed {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
+}
+
+#pragma mark - Upgrade Popup
+
+- (void)showUpgradePopupInViewController:(UIViewController *)presentingVC
+                               darkMode:(BOOL)isDarkMode
+                             completion:(void (^)(BOOL success))completion {
+    
+    [self getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!product) {
+                NSLog(@"Error fetching product info: %@", error.localizedDescription);
+                if (completion) completion(NO);
+                return;
+            }
+
+            // Format price
+            NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+            [formatter setNumberStyle:NSNumberFormatterCurrencyStyle];
+            [formatter setLocale:product.priceLocale];
+            NSString *localizedPrice = [formatter stringFromNumber:product.price] ?: NSLocalizedString(@"price_unknown", @"Fallback for unknown price");
+
+            // Colors
+            UIColor *cardBackground = isDarkMode ? [UIColor colorWithWhite:0.1 alpha:1.0] : [UIColor colorWithWhite:1.0 alpha:1.0];
+            UIColor *textColor = isDarkMode ? UIColor.whiteColor : UIColor.blackColor;
+
+            // Overlay
+            UIView *overlay = [[UIView alloc] initWithFrame:presentingVC.view.bounds];
+            overlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
+            overlay.tag = 999;
+            [presentingVC.view addSubview:overlay];
+
+            // Card
+            UIView *card = [[UIView alloc] init];
+            card.translatesAutoresizingMaskIntoConstraints = NO;
+            card.backgroundColor = cardBackground;
+            card.layer.cornerRadius = 20;
+            card.clipsToBounds = YES;
+            [overlay addSubview:card];
+
+            // Title
+            UILabel *title = [[UILabel alloc] init];
+            title.translatesAutoresizingMaskIntoConstraints = NO;
+            title.text = NSLocalizedString(@"get_premium_title", @"Title for premium upgrade popup");
+            title.textColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0]; // gold
+            title.font = [UIFont boldSystemFontOfSize:24];
+            title.textAlignment = NSTextAlignmentCenter;
+
+            // Features
+            UIStackView *featureStack = [[UIStackView alloc] init];
+            featureStack.translatesAutoresizingMaskIntoConstraints = NO;
+            featureStack.axis = UILayoutConstraintAxisVertical;
+            featureStack.spacing = 8;
+
+            NSArray *features = @[
+                NSLocalizedString(@"premium_feature_1", @"Feature 1 description for premium"),
+                NSLocalizedString(@"premium_feature_2", @"Feature 2 description for premium"),
+                NSLocalizedString(@"premium_feature_3", @"Feature 3 description for premium"),
+                NSLocalizedString(@"premium_feature_4", @"Feature 4 description for premium")
+            ];
+
+            for (NSString *item in features) {
+                UILabel *label = [[UILabel alloc] init];
+                label.text = [NSString stringWithFormat:@"• %@", item];
+                label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+                label.textColor = textColor;
+                label.numberOfLines = 0;
+                [featureStack addArrangedSubview:label];
+            }
+
+            // Upgrade button
+            UIButton *upgradeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+            upgradeBtn.translatesAutoresizingMaskIntoConstraints = NO;
+
+            NSString *line1 = NSLocalizedString(@"1 week free trial", @"Free trial label");
+            NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"upgrade_button", @"Subscription price after trial"), localizedPrice];
+            NSString *fullText = [NSString stringWithFormat:@"%@\n%@", line1, line2];
+
+            NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+            paragraphStyle.alignment = NSTextAlignmentCenter;
+
+            NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc] initWithString:fullText attributes:@{
+                NSParagraphStyleAttributeName: paragraphStyle,
+                NSForegroundColorAttributeName: UIColor.blackColor
+            }];
+
+            NSRange line1Range = [fullText rangeOfString:line1];
+            [attributedTitle addAttribute:NSFontAttributeName value:[UIFont boldSystemFontOfSize:17] range:line1Range];
+
+            NSRange line2Range = [fullText rangeOfString:line2];
+            [attributedTitle addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:14] range:line2Range];
+
+            [upgradeBtn setAttributedTitle:attributedTitle forState:UIControlStateNormal];
+            upgradeBtn.titleLabel.numberOfLines = 2;
+            upgradeBtn.titleLabel.textAlignment = NSTextAlignmentCenter;
+            upgradeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0];
+            upgradeBtn.layer.cornerRadius = 12;
+            
+            // Handle upgrade tap
+            __weak typeof(self) weakSelf = self;
+            [upgradeBtn addTarget:weakSelf action:@selector(handleUpgradeTap:) forControlEvents:UIControlEventTouchUpInside];
+            objc_setAssociatedObject(upgradeBtn, @"completionBlock", completion, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            objc_setAssociatedObject(upgradeBtn, @"presentingVC", presentingVC, OBJC_ASSOCIATION_ASSIGN);
+            objc_setAssociatedObject(upgradeBtn, @"overlayView", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+            // Cancel button
+            UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+            cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
+            [cancelBtn setTitle:NSLocalizedString(@"not_now", @"Not now button") forState:UIControlStateNormal];
+            [cancelBtn setTitleColor:textColor forState:UIControlStateNormal];
+            cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15];
+            [cancelBtn addTarget:self action:@selector(dismissUpgradePopup:) forControlEvents:UIControlEventTouchUpInside];
+            objc_setAssociatedObject(cancelBtn, @"overlayView", overlay, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+            // Disclaimer label
+            UILabel *disclaimer = [[UILabel alloc] init];
+            disclaimer.translatesAutoresizingMaskIntoConstraints = NO;
+            disclaimer.text = NSLocalizedString(@"premium_disclaimer", @"Disclaimer for premium subscription limits");
+            disclaimer.font = [UIFont systemFontOfSize:13];
+            disclaimer.textColor = [textColor colorWithAlphaComponent:0.6];
+            disclaimer.numberOfLines = 0;
+            disclaimer.textAlignment = NSTextAlignmentCenter;
+
+            // Add all to card
+            [card addSubview:title];
+            [card addSubview:featureStack];
+            [card addSubview:upgradeBtn];
+            [card addSubview:cancelBtn];
+            [card addSubview:disclaimer];
+
+            // Constraints
+            [NSLayoutConstraint activateConstraints:@[
+                [card.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
+                [card.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor],
+                [card.widthAnchor constraintEqualToConstant:320],
+
+                [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:24],
+                [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [title.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+
+                [featureStack.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:20],
+                [featureStack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [featureStack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+
+                [upgradeBtn.topAnchor constraintEqualToAnchor:featureStack.bottomAnchor constant:24],
+                [upgradeBtn.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [upgradeBtn.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+                [upgradeBtn.heightAnchor constraintEqualToConstant:48],
+
+                [cancelBtn.topAnchor constraintEqualToAnchor:upgradeBtn.bottomAnchor constant:16],
+                [cancelBtn.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+
+                [disclaimer.topAnchor constraintEqualToAnchor:cancelBtn.bottomAnchor constant:14],
+                [disclaimer.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+                [disclaimer.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+                [disclaimer.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
+            ]];
+        });
+    }];
+}
+
+- (void)showUpgradePopupInViewController:(UIViewController *)presentingVC {
+    [self showUpgradePopupInViewController:presentingVC
+                                 darkMode:(presentingVC.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark)
+                               completion:^(BOOL success) {
+    }];
+}
+
+- (void)handleUpgradeTap:(UIButton *)sender {
+    void (^completion)(BOOL) = objc_getAssociatedObject(sender, @"completionBlock");
+    UIViewController *presentingVC = objc_getAssociatedObject(sender, @"presentingVC");
+    UIView *overlay = objc_getAssociatedObject(sender, @"overlayView");
+    
+    // Create and show a loading spinner
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    spinner.color = UIColor.whiteColor;
+    [overlay addSubview:spinner];
+    
+    // Center the spinner in the overlay
+    [NSLayoutConstraint activateConstraints:@[
+        [spinner.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
+        [spinner.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor]
+    ]];
+    
+    [spinner startAnimating];
+    
+    // Disable user interaction on the overlay to prevent multiple taps
+    overlay.userInteractionEnabled = NO;
+    
+    // Fetch and initiate the purchase
+    [self fetchAndPurchaseProductWithCompletion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // Stop the spinner and re-enable interaction
+            [spinner stopAnimating];
+            [spinner removeFromSuperview];
+            overlay.userInteractionEnabled = YES;
+            
+            // Dismiss the upgrade popup
+            [overlay removeFromSuperview];
+            
+            if (!success && error) {
+                // Show error alert if purchase failed
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"purchase_failed", @"Title for purchase failed alert")
+                                                                               message:error.localizedDescription
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
+                [presentingVC presentViewController:alert animated:YES completion:nil];
+            }
+            
+            if (completion) {
+                completion(success);
+            }
+        });
+    }];
+}
+
+- (void)dismissUpgradePopup:(UIButton *)sender {
+    UIView *overlay = objc_getAssociatedObject(sender, @"overlayView");
+    [overlay removeFromSuperview];
+    
+    void (^completion)(BOOL) = objc_getAssociatedObject(sender, @"completionBlock");
+    if (completion) {
+        completion(NO);
+    }
+}
+
+- (void)restorePurchasesWithCompletion:(void (^)(BOOL success))completion {
+    self.restoreCompletionHandler = completion;
+    [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
+}
+
+#pragma mark - SKPaymentTransactionObserver
+
+- (void)paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray<SKPaymentTransaction *> *)transactions {
+    for (SKPaymentTransaction *transaction in transactions) {
+        switch (transaction.transactionState) {
+            case SKPaymentTransactionStatePurchased: {
+                [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+                [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                    if (isActive) {
+                        [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
+                        if (self.purchaseCompletionHandler) {
+                            self.purchaseCompletionHandler(YES, nil);
+                            self.purchaseCompletionHandler = nil;
+                        }
+                    } else if (self.purchaseCompletionHandler) {
+                        self.purchaseCompletionHandler(NO, [NSError errorWithDomain:@"StoreManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Subscription verification failed"}]);
+                        self.purchaseCompletionHandler = nil;
+                    }
+                }];
+                break;
+            }
+            case SKPaymentTransactionStateFailed: {
+                [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+                if (self.purchaseCompletionHandler) {
+                    self.purchaseCompletionHandler(NO, transaction.error);
+                    self.purchaseCompletionHandler = nil;
+                }
+                if (transaction.error.code != SKErrorPaymentCancelled) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchase Failed"
+                                                                                       message:transaction.error.localizedDescription
+                                                                                preferredStyle:UIAlertControllerStyleAlert];
+                        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                        UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+                        while (topController.presentedViewController) {
+                            topController = topController.presentedViewController;
+                        }
+                        [topController presentViewController:alert animated:YES completion:nil];
+                    });
+                }
+                break;
+            }
+            case SKPaymentTransactionStateRestored: {
+                [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+                [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (isActive) {
+                            [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
+                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchases Restored"
+                                                                                           message:@"Your previous purchases have been successfully restored."
+                                                                                    preferredStyle:UIAlertControllerStyleAlert];
+                            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                            UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+                            while (topController.presentedViewController) {
+                                topController = topController.presentedViewController;
+                            }
+                            [topController presentViewController:alert animated:YES completion:nil];
+                            if (self.restoreCompletionHandler) {
+                                self.restoreCompletionHandler(YES);
+                                self.restoreCompletionHandler = nil;
+                            }
+                        } else {
+                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"No Purchases Found"
+                                                                                           message:@"No previous purchases were found to restore."
+                                                                                    preferredStyle:UIAlertControllerStyleAlert];
+                            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                            UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+                            while (topController.presentedViewController) {
+                                topController = topController.presentedViewController;
+                            }
+                            [topController presentViewController:alert animated:YES completion:nil];
+                            if (self.restoreCompletionHandler) {
+                                self.restoreCompletionHandler(NO);
+                                self.restoreCompletionHandler = nil;
+                            }
+                        }
+                    });
+                }];
+                break;
+            }
+            case SKPaymentTransactionStatePurchasing:
+                // No action needed while purchasing
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+
+- (void)restorePurchases {
+    [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 }
 
 - (instancetype)init {
@@ -120,93 +443,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 #pragma mark - SKPaymentTransactionObserver
-
-- (void)paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray<SKPaymentTransaction *> *)transactions {
-    for (SKPaymentTransaction *transaction in transactions) {
-        switch (transaction.transactionState) {
-            case SKPaymentTransactionStatePurchased: {
-                [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
-                [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                    if (isActive) {
-                        [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
-                        if (self.purchaseCompletionHandler) {
-                            self.purchaseCompletionHandler(YES, nil);
-                            self.purchaseCompletionHandler = nil;
-                        }
-                    } else if (self.purchaseCompletionHandler) {
-                        self.purchaseCompletionHandler(NO, [NSError errorWithDomain:@"StoreManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Subscription verification failed"}]);
-                        self.purchaseCompletionHandler = nil;
-                    }
-                }];
-                break;
-            }
-            case SKPaymentTransactionStateFailed: {
-                [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
-                if (self.purchaseCompletionHandler) {
-                    self.purchaseCompletionHandler(NO, transaction.error);
-                    self.purchaseCompletionHandler = nil;
-                }
-                if (transaction.error.code != SKErrorPaymentCancelled) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchase Failed"
-                                                                                       message:transaction.error.localizedDescription
-                                                                                preferredStyle:UIAlertControllerStyleAlert];
-                        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                        UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
-                        while (topController.presentedViewController) {
-                            topController = topController.presentedViewController;
-                        }
-                        [topController presentViewController:alert animated:YES completion:nil];
-                    });
-                }
-                break;
-            }
-            case SKPaymentTransactionStateRestored: {
-                [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
-                [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        if (isActive) {
-                            [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
-                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Purchases Restored"
-                                                                                           message:@"Your previous purchases have been successfully restored."
-                                                                                    preferredStyle:UIAlertControllerStyleAlert];
-                            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                            UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
-                            while (topController.presentedViewController) {
-                                topController = topController.presentedViewController;
-                            }
-                            [topController presentViewController:alert animated:YES completion:nil];
-                            if (self.purchaseCompletionHandler) {
-                                self.purchaseCompletionHandler(YES, nil);
-                                self.purchaseCompletionHandler = nil;
-                            }
-                        } else {
-                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"No Purchases Found"
-                                                                                           message:@"No previous purchases were found to restore."
-                                                                                    preferredStyle:UIAlertControllerStyleAlert];
-                            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                            UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
-                            while (topController.presentedViewController) {
-                                topController = topController.presentedViewController;
-                            }
-                            [topController presentViewController:alert animated:YES completion:nil];
-                            if (self.purchaseCompletionHandler) {
-                                self.purchaseCompletionHandler(NO, [NSError errorWithDomain:@"StoreManager" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"No valid subscriptions found"}]);
-                                self.purchaseCompletionHandler = nil;
-                            }
-                        }
-                    });
-                }];
-                break;
-            }
-            case SKPaymentTransactionStatePurchasing:
-                // No action needed while purchasing
-                break;
-            default:
-                break;
-        }
-    }
-}
 
 - (void)paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue {
     NSLog(@"Restore completed transactions finished.");
