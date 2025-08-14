@@ -27,8 +27,6 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
-
-    // Setup spinner
     self.loadingSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.loadingSpinner.center = self.view.center;
     self.loadingSpinner.color = [UIColor whiteColor];
@@ -48,7 +46,6 @@
 
 - (void)fetchDownloadLinkAndStartStreaming {
     [self fetchDownloadLink];
-    // Start timer to refresh download link every 60 seconds
     self.linkRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:50.0
                                                              target:self
                                                            selector:@selector(fetchDownloadLink)
@@ -87,16 +84,11 @@
 
         NSString *downloadLink = json[@"download_link"];
         if (![downloadLink isKindOfClass:[NSString class]] || downloadLink.length == 0) {
-            NSLog(@"🚫 Invalid downloadLink link");
             return;
         } else {
             self.downloadLink = downloadLink;
         }
-
-        NSLog(@"✅ Got download link: %@", self.downloadLink);
-
         dispatch_async(dispatch_get_main_queue(), ^{
-            // Start downloading segments only if this is the first fetch
             if (!self.downloadTimer) [self startDownloadTimer];
         });
     }];
@@ -122,34 +114,26 @@
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:remoteURL
                                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error || !data) {
-            NSLog(@"❌ Download error: %@", error.localizedDescription);
             return;
         }
 
-        // Only set lastSegmentData after successful decryption
-        NSLog(@"📥 New segment downloaded, attempting decryption");
-
         [self decryptAndQueueSegment:data withCompletion:^(NSData *decryptedData) {
             if (!decryptedData) {
-                NSLog(@"❌ Decryption failed");
                 return;
             }
 
             NSUInteger hash = data.hash;
             NSData *hashData = [NSData dataWithBytes:&hash length:sizeof(hash)];
             if ([self.seenSegmentHashes containsObject:hashData]) {
-                NSLog(@"🔁 Duplicate decrypted segment, skipping queue");
                 return;
             }
             [self.seenSegmentHashes addObject:hashData];
             self.lastSegmentData = data;
-            self.decryptionFailedOnce = NO; // Only reset on success
+            self.decryptionFailedOnce = NO;
 
             NSString *fileName = [NSString stringWithFormat:@"segment_%lu.mp4", (unsigned long)(self.segmentIndex++ % 2)];
             NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
             NSURL *localURL = [NSURL fileURLWithPath:tempPath];
-
-            // Delete existing file if any (from old streams)
             [[NSFileManager defaultManager] removeItemAtURL:localURL error:nil];
 
             if ([decryptedData writeToURL:localURL atomically:YES]) {
@@ -158,7 +142,7 @@
                 //thumbnail save
                 AVAsset *videoAsset = [AVAsset assetWithURL:localURL];
                 AVAssetImageGenerator *imageGenerator = [[AVAssetImageGenerator alloc] initWithAsset:videoAsset];
-                imageGenerator.appliesPreferredTrackTransform = YES; // To avoid rotated images
+                imageGenerator.appliesPreferredTrackTransform = YES;
 
                 CMTime time = CMTimeMakeWithSeconds(0.0, 600); // Grab first frame (0s)
                 [imageGenerator generateCGImagesAsynchronouslyForTimes:@[[NSValue valueWithCMTime:time]]
@@ -200,7 +184,6 @@
     if (self.decryptionKey) {
         NSData *decryptedData = [[SecretManager sharedManager] decryptData:encryptedData withKey:self.decryptionKey];
         if (decryptedData) {
-            // Successful decryption, reset all failure tracking
             self.consecutiveDecryptionFailures = 0;
             self.lastFailedEncryptedData = nil;
             self.decryptionFailedOnce = NO;
@@ -211,7 +194,6 @@
         }
     }
 
-    // Handle failure
     BOOL isSameData = [self.lastFailedEncryptedData isEqualToData:encryptedData];
     if (!isSameData) {
         self.consecutiveDecryptionFailures += 1;
@@ -252,12 +234,11 @@
                     completion(decryptedData);
                 } else {
                     [self showErrorAlertWithMessage:@"The provided key is incorrect. Please try again or cancel." completion:^{
-                        // Re-prompt for the same segment
                         [self promptForKeyOnSecondFailure:encryptedData withCompletion:completion];
                     }];
                 }
             } else {
-                completion(nil); // User cancelled
+                completion(nil);
             }
         }];
     });
@@ -324,11 +305,6 @@
         }
         
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        if (httpResponse.statusCode == 200) {
-            NSLog(@"✅ Successfully deleted stream download link");
-        } else {
-            NSLog(@"⚠️ Delete request failed with status code: %ld", (long)httpResponse.statusCode);
-        }
     }];
     [deleteTask resume];
 }
