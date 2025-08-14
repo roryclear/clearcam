@@ -68,7 +68,8 @@
         NSMutableParagraphStyle *stepsStyle = [[NSMutableParagraphStyle alloc] init];
         stepsStyle.alignment = NSTextAlignmentLeft;
         stepsStyle.headIndent = 20.0;
-        stepsStyle.firstLineHeadIndent = 0.0;
+        stepsStyle.tailIndent = -20.0;
+        stepsStyle.firstLineHeadIndent = 20.0;
         stepsStyle.paragraphSpacing = 8.0;
 
         NSDictionary *stepsAttrs = @{
