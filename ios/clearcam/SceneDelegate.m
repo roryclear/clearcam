@@ -38,7 +38,7 @@ willConnectToSession:(UISceneSession *)session
             });
             return;
         }
-        [[StoreManager sharedInstance] verifySubscriptionWithCompletionIfSubbed:^(BOOL isActive, NSDate *expiryDate) {
+        [[StoreManager sharedInstance] verifySessionOnlyWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 UIViewController *rootVC;
                 

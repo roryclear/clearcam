@@ -2,6 +2,7 @@
 #import "SettingsManager.h"
 #import "SecretManager.h"
 #import "StoreManager.h"
+#import "LoginViewController.h"
 #import "NumberSelectionViewController.h"
 #import "notification.h"
 #import "FileServer.h"
@@ -597,27 +598,32 @@
             }
         }
     } else if (indexPath.section == 5) { // Terms and Privacy
-        if (indexPath.row == 0) {
+        if (indexPath.row == 0) { // Terms of Use
             cell.textLabel.text = NSLocalizedString(@"terms_of_use", @"Label for terms of use link");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 1) {
+        } else if (indexPath.row == 1) { // Privacy Policy
             cell.textLabel.text = NSLocalizedString(@"privacy_policy", @"Label for privacy policy link");
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
-        } else if (indexPath.row == 2) {
+        } else if (indexPath.row == 2) { // Delete Encryption Keys
             cell.textLabel.text = NSLocalizedString(@"delete_encryption_keys", @"Label for delete encryption keys button");
+            cell.textLabel.textColor = [UIColor systemRedColor];
+            cell.textLabel.textAlignment = NSTextAlignmentCenter;
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 3) { // Sign Out
+            cell.textLabel.text = NSLocalizedString(@"sign_out", @"Label for sign out button");
             cell.textLabel.textColor = [UIColor systemRedColor];
             cell.textLabel.textAlignment = NSTextAlignmentCenter;
             cell.accessoryType = UITableViewCellAccessoryNone;
             cell.userInteractionEnabled = YES;
         }
     }
-
     return cell;
 }
 
@@ -638,7 +644,7 @@
     } else if (section == 4) { // Upgrade to Premium / Subscription
         return 2; // 1 row for "Restore Purchases" if subscribed, 2 rows ("Upgrade" + "Restore") if not
     } else if (section == 5) { // Terms and Privacy
-        return 3; // Terms of Use, Privacy Policy, Delete Encryption Keys
+        return 4; // Terms of Use, Privacy Policy, Delete Encryption Keys, Sign out
     }
     return 0;
 }
@@ -899,9 +905,53 @@
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.rors.ai/privacy"] options:@{} completionHandler:nil];
         } else if (indexPath.row == 2) { // Delete Encryption Keys
             [self showDeleteEncryptionKeysPrompt];
+        } else if (indexPath.row == 3) { // Delete Encryption Keys
+            [self showSignOutConfirmation];
         }
     }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (void)showSignOutConfirmation {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"sign_out_title", @"Title for sign out confirmation")
+                                                                   message:NSLocalizedString(@"sign_out_message", @"Message for sign out confirmation")
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *signOutAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"sign_out", @"Sign Out button")
+                                                           style:UIAlertActionStyleDestructive
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        [self performSignOut];
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:NSLocalizedString(@"cancel", @"Cancel button")
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    
+    [alert addAction:signOutAction];
+    [alert addAction:cancelAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)performSignOut {
+    [[StoreManager sharedInstance] clearSessionTokenFromKeychain];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults removeObjectForKey:@"isSubscribed"];
+    [defaults removeObjectForKey:@"device_token"];
+    [defaults removeObjectForKey:@"hasRequestedNotificationPermission"];
+    [defaults removeObjectForKey:@"subscriptionReceipt"];
+    [defaults synchronize];
+    [self deleteDeviceTokenFromServer];
+    LoginViewController *loginVC = [[LoginViewController alloc] init];
+    UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:loginVC];
+    UIWindow *window = [[[UIApplication sharedApplication] windows] firstObject];
+    [UIView transitionWithView:window
+                     duration:0.3
+                      options:UIViewAnimationOptionTransitionCrossDissolve
+                   animations:^{
+                       window.rootViewController = navController;
+                   }
+                   completion:nil];
 }
 
 - (void)authenticateToRevealUserID {
