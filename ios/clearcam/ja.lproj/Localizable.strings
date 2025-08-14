@@ -186,3 +186,14 @@
 "teddy bear" = "テディベア";
 "hair drier" = "ヘアドライヤー";
 "toothbrush" = "歯ブラシ";
+
+"1_week_free_trial" = "1週間無料トライアル";
+"sign_out" = "サインアウト";
+"sign_out_title" = "サインアウトしますか？";
+"sign_out_message" = "ユーザーIDはこの端末に保存されません";
+
+"sign_up" = "サインアップ";
+"already_have_an_account" = "既にアカウントをお持ちですか？";
+"clearcam_user_id" = "ClearcamユーザーID";
+"log_in" = "ログイン";
+"continue_without_account" = "アカウントなしで続ける";

@@ -186,3 +186,14 @@
 "teddy bear" = "oso de peluche";
 "hair drier" = "secador de pelo";
 "toothbrush" = "cepillo de dientes";
+
+"1_week_free_trial" = "1 Semana de Prueba Gratis";
+"sign_out" = "Cerrar sesión";
+"sign_out_title" = "¿Estás seguro de que quieres cerrar sesión?";
+"sign_out_message" = "Tu ID de usuario no se recordará en este dispositivo";
+
+"sign_up" = "Registrarse";
+"already_have_an_account" = "¿Ya tienes una cuenta?";
+"clearcam_user_id" = "ID de usuario de Clearcam";
+"log_in" = "Iniciar sesión";
+"continue_without_account" = "Continuar sin cuenta";

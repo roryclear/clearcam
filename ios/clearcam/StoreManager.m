@@ -97,7 +97,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             UIButton *upgradeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
             upgradeBtn.translatesAutoresizingMaskIntoConstraints = NO;
 
-            NSString *line1 = NSLocalizedString(@"1 week free trial", @"Free trial label");
+            NSString *line1 = NSLocalizedString(@"1_week_free_trial", @"Free trial label");
             NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"upgrade_button", @"Subscription price after trial"), localizedPrice];
             NSString *fullText = [NSString stringWithFormat:@"%@\n%@", line1, line2];
 

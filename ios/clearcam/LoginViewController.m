@@ -36,7 +36,7 @@
     [container addSubview:self.appIconView];
     
     UIButton *signUpButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [signUpButton setTitle:@"Sign Up" forState:UIControlStateNormal];
+    [signUpButton setTitle:NSLocalizedString(@"sign_up", nil) forState:UIControlStateNormal];
     signUpButton.backgroundColor = [UIColor systemBlueColor];
     [signUpButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     signUpButton.titleLabel.font = [UIFont boldSystemFontOfSize:[UIFont buttonFontSize]];
@@ -46,7 +46,7 @@
     [container addSubview:signUpButton];
     
     UILabel *alreadyHaveLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    alreadyHaveLabel.text = @"Already have an account?";
+    alreadyHaveLabel.text = NSLocalizedString(@"already_have_an_account", nil);
     alreadyHaveLabel.textAlignment = NSTextAlignmentCenter;
     alreadyHaveLabel.font = [UIFont boldSystemFontOfSize:15];
     alreadyHaveLabel.textColor = [UIColor labelColor];
@@ -54,7 +54,7 @@
     [container addSubview:alreadyHaveLabel];
     
     self.usernameTextField = [[UITextField alloc] initWithFrame:CGRectZero];
-    self.usernameTextField.placeholder = @"Clearcam User ID";
+    self.usernameTextField.placeholder = NSLocalizedString(@"clearcam_user_id", nil);
     self.usernameTextField.borderStyle = UITextBorderStyleRoundedRect;
     self.usernameTextField.backgroundColor = [UIColor secondarySystemBackgroundColor];
     self.usernameTextField.textColor = [UIColor labelColor];
@@ -62,7 +62,7 @@
     [container addSubview:self.usernameTextField];
     
     self.loginButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.loginButton setTitle:@"Log In" forState:UIControlStateNormal];
+    [self.loginButton setTitle:NSLocalizedString(@"log_in", nil) forState:UIControlStateNormal];
     self.loginButton.backgroundColor = [UIColor systemGray5Color];
     [self.loginButton setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     self.loginButton.titleLabel.font = [UIFont boldSystemFontOfSize:[UIFont buttonFontSize]];
@@ -72,7 +72,7 @@
     [container addSubview:self.loginButton];
 
     UIButton *continueWithoutButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [continueWithoutButton setTitle:@"Continue without account" forState:UIControlStateNormal];
+    [continueWithoutButton setTitle:NSLocalizedString(@"continue_without_account", nil) forState:UIControlStateNormal];
     continueWithoutButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
     [continueWithoutButton setTitleColor:[UIColor systemBlueColor] forState:UIControlStateNormal];
     continueWithoutButton.backgroundColor = [UIColor clearColor];

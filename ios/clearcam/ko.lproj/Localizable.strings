@@ -186,3 +186,14 @@
 "teddy bear" = "곰인형";
 "hair drier" = "헤어드라이어";
 "toothbrush" = "칫솔";
+
+"1_week_free_trial" = "1주일 무료 체험";
+"sign_out" = "로그아웃";
+"sign_out_title" = "로그아웃 하시겠습니까?";
+"sign_out_message" = "사용자 ID가 이 기기에 저장되지 않습니다";
+
+"sign_up" = "가입하기";
+"already_have_an_account" = "이미 계정이 있으신가요?";
+"clearcam_user_id" = "Clearcam 사용자 ID";
+"log_in" = "로그인";
+"continue_without_account" = "계정 없이 계속하기";

@@ -186,3 +186,14 @@
 "teddy bear" = "泰迪熊";
 "hair drier" = "吹风机";
 "toothbrush" = "牙刷";
+
+"1_week_free_trial" = "1周免费试用";
+"sign_out" = "退出登录";
+"sign_out_title" = "确定要退出登录吗？";
+"sign_out_message" = "您的用户ID将不会在此设备上保存";
+
+"sign_up" = "注册";
+"already_have_an_account" = "已有账户？";
+"clearcam_user_id" = "Clearcam 用户ID";
+"log_in" = "登录";
+"continue_without_account" = "继续使用（无账户）";
