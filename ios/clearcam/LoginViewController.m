@@ -39,6 +39,7 @@
     [signUpButton setTitle:@"Sign Up" forState:UIControlStateNormal];
     signUpButton.backgroundColor = [UIColor systemBlueColor];
     [signUpButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    signUpButton.titleLabel.font = [UIFont boldSystemFontOfSize:[UIFont buttonFontSize]];
     signUpButton.layer.cornerRadius = 8;
     signUpButton.translatesAutoresizingMaskIntoConstraints = NO;
     [signUpButton addTarget:self action:@selector(signUpButtonTapped) forControlEvents:UIControlEventTouchUpInside]; // Add this line
@@ -64,6 +65,7 @@
     [self.loginButton setTitle:@"Log In" forState:UIControlStateNormal];
     self.loginButton.backgroundColor = [UIColor systemGray5Color];
     [self.loginButton setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+    self.loginButton.titleLabel.font = [UIFont boldSystemFontOfSize:[UIFont buttonFontSize]];
     self.loginButton.layer.cornerRadius = 8;
     self.loginButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.loginButton addTarget:self action:@selector(loginButtonTapped) forControlEvents:UIControlEventTouchUpInside];
