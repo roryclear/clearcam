@@ -12,7 +12,6 @@
     [super viewDidLoad];
     [[StoreManager sharedInstance] clearSessionTokenFromKeychain];
     
-    // Hide navigation bar title
     self.navigationItem.title = @"";
     [self.navigationController.navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
     self.navigationController.navigationBar.shadowImage = [UIImage new];
@@ -20,27 +19,38 @@
     
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    // Container for all elements
     UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
     container.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:container];
     
-    // App icon
     NSArray *iconFiles = [[[NSBundle mainBundle] infoDictionary] valueForKeyPath:@"CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconFiles"];
     NSString *iconName = [iconFiles lastObject];
     UIImage *appIcon = [UIImage imageNamed:iconName];
     self.appIconView = [[UIImageView alloc] initWithImage:appIcon];
     self.appIconView.contentMode = UIViewContentModeScaleAspectFit;
     self.appIconView.translatesAutoresizingMaskIntoConstraints = NO;
-    
     self.appIconView.layer.cornerRadius = 12.0;
     self.appIconView.layer.masksToBounds = YES;
     self.appIconView.layer.borderWidth = 0.5;
     self.appIconView.layer.borderColor = [[UIColor systemGray4Color] CGColor];
-    
     [container addSubview:self.appIconView];
     
-    // Username text field
+    UIButton *signUpButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [signUpButton setTitle:@"Sign Up" forState:UIControlStateNormal];
+    signUpButton.backgroundColor = [UIColor systemBlueColor];
+    [signUpButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    signUpButton.layer.cornerRadius = 8;
+    signUpButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [container addSubview:signUpButton];
+    
+    UILabel *alreadyHaveLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    alreadyHaveLabel.text = @"Already have an account?";
+    alreadyHaveLabel.textAlignment = NSTextAlignmentCenter;
+    alreadyHaveLabel.font = [UIFont boldSystemFontOfSize:15];
+    alreadyHaveLabel.textColor = [UIColor labelColor];
+    alreadyHaveLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [container addSubview:alreadyHaveLabel];
+    
     self.usernameTextField = [[UITextField alloc] initWithFrame:CGRectZero];
     self.usernameTextField.placeholder = @"Clearcam User ID";
     self.usernameTextField.borderStyle = UITextBorderStyleRoundedRect;
@@ -48,46 +58,68 @@
     self.usernameTextField.textColor = [UIColor labelColor];
     self.usernameTextField.translatesAutoresizingMaskIntoConstraints = NO;
     [container addSubview:self.usernameTextField];
-
-    // Login button
+    
     self.loginButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.loginButton setTitle:@"Log In" forState:UIControlStateNormal];
-    self.loginButton.backgroundColor = [UIColor systemBlueColor];
-    self.loginButton.tintColor = [UIColor whiteColor];
+    self.loginButton.backgroundColor = [UIColor systemGray5Color];
+    [self.loginButton setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     self.loginButton.layer.cornerRadius = 8;
     self.loginButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.loginButton addTarget:self action:@selector(loginButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [container addSubview:self.loginButton];
+
+    UIButton *continueWithoutButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [continueWithoutButton setTitle:@"Continue without account" forState:UIControlStateNormal];
+    continueWithoutButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+    [continueWithoutButton setTitleColor:[UIColor systemBlueColor] forState:UIControlStateNormal];
+    continueWithoutButton.backgroundColor = [UIColor clearColor];
+    continueWithoutButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [container addSubview:continueWithoutButton];
     
-    // Constraints
     [NSLayoutConstraint activateConstraints:@[
-        // Container constraints
-        [container.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-40], // Move up slightly
+        [container.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-40],
         [container.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32],
         [container.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32],
-        
-        // App icon constraints
+
         [self.appIconView.topAnchor constraintEqualToAnchor:container.topAnchor],
         [self.appIconView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
         [self.appIconView.widthAnchor constraintEqualToConstant:100],
         [self.appIconView.heightAnchor constraintEqualToConstant:100],
+
+        [signUpButton.topAnchor constraintEqualToAnchor:self.appIconView.bottomAnchor constant:20],
+        [signUpButton.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [signUpButton.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [signUpButton.heightAnchor constraintEqualToConstant:44],
         
-        // Text field constraints
-        [self.usernameTextField.topAnchor constraintEqualToAnchor:self.appIconView.bottomAnchor constant:32],
+        // Already have account label
+        [alreadyHaveLabel.topAnchor constraintEqualToAnchor:signUpButton.bottomAnchor constant:20],
+        [alreadyHaveLabel.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [alreadyHaveLabel.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        
+        // Username text field
+        [self.usernameTextField.topAnchor constraintEqualToAnchor:alreadyHaveLabel.bottomAnchor constant:8],
         [self.usernameTextField.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
         [self.usernameTextField.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
         [self.usernameTextField.heightAnchor constraintEqualToConstant:44],
         
-        // Login button constraints
+        // Login button
         [self.loginButton.topAnchor constraintEqualToAnchor:self.usernameTextField.bottomAnchor constant:16],
         [self.loginButton.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
         [self.loginButton.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
         [self.loginButton.heightAnchor constraintEqualToConstant:44],
-        [self.loginButton.bottomAnchor constraintEqualToAnchor:container.bottomAnchor]
+        
+        [continueWithoutButton.topAnchor constraintEqualToAnchor:self.loginButton.bottomAnchor constant:12],
+        [continueWithoutButton.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+        [continueWithoutButton.bottomAnchor constraintEqualToAnchor:container.bottomAnchor]
     ]];
+    [continueWithoutButton addTarget:self action:@selector(continueWithoutAccountTapped) forControlEvents:UIControlEventTouchUpInside];
 }
 
-// Rest of your implementation remains the same...
+- (void)continueWithoutAccountTapped {
+    GalleryViewController *mainVC = [[GalleryViewController alloc] init];
+    [self.navigationController pushViewController:mainVC animated:YES];
+}
+
 - (void)loginButtonTapped {
     NSString *enteredToken = [self.usernameTextField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     
