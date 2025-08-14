@@ -186,3 +186,14 @@
 "teddy bear" = "टेडी बियर";
 "hair drier" = "हेयर ड्रायर";
 "toothbrush" = "टूथब्रश";
+
+"1_week_free_trial" = "1 सप्ताह का निःशुल्क परीक्षण";
+"sign_out" = "साइन आउट";
+"sign_out_title" = "क्या आप वाकई साइन आउट करना चाहते हैं?";
+"sign_out_message" = "आपकी यूज़र आईडी इस डिवाइस पर सहेजी नहीं जाएगी";
+
+"sign_up" = "साइन अप";
+"already_have_an_account" = "पहले से खाता है?";
+"clearcam_user_id" = "Clearcam यूज़र आईडी";
+"log_in" = "लॉग इन";
+"continue_without_account" = "बिना खाता के जारी रखें";

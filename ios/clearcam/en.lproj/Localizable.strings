@@ -106,3 +106,13 @@
 "copied" = "Copied";
 "userid" = "UserID";
 
+"1_week_free_trial" = "1 Week Free Trial";
+"sign_out" = "Sign out";
+"sign_out_title" = "Are you sure you want to sign out?";
+"sign_out_message" = "Your User ID will not be remembered on this device";
+
+"sign_up" = "Sign Up";
+"already_have_an_account" = "Already have an account?";
+"clearcam_user_id" = "Clearcam User ID";
+"log_in" = "Log In";
+"continue_without_account" = "Continue without an account";
