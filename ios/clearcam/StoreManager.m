@@ -25,10 +25,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     return sharedInstance;
 }
 
-- (BOOL)isUserSubscribed {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-}
-
 #pragma mark - Upgrade Popup
 
 - (void)showUpgradePopupInViewController:(UIViewController *)presentingVC

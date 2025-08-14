@@ -11,7 +11,6 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 @property (nonatomic, strong) SKProduct *premiumProduct;
 
 + (instancetype)sharedInstance;
-- (BOOL)isUserSubscribed;
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate * _Nullable expiryDate))completion;
 - (void)verifySubscriptionWithCompletionIfSubbed:(void (^)(BOOL isActive, NSDate * _Nullable expiryDate))completion;
 - (void)showUpgradePopupInViewController:(UIViewController *)presentingVC
