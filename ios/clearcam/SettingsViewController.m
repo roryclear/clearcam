@@ -252,7 +252,7 @@
         self.liveStreamInternetEnabled = NO;
         [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
         [defaults synchronize];
-        [self showUpgradePopup];
+        [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
     }
 }
 
@@ -830,14 +830,14 @@
                 [self showThresholdInputDialog];
             } else if (indexPath.row == 5 + offset) {
                 if (!isPremium) {
-                    [self showUpgradePopup];
+                    [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
                 }
             } else if (indexPath.row == 6 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                     }];
                 } else {
-                    [self showUpgradePopup];
+                    [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
                 }
             } else if (indexPath.row == 7 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
@@ -855,19 +855,19 @@
     } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
-                [self showUpgradePopup];
+                [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
             } // Switch handles toggle when premium
         } else if (indexPath.row == 1) {
             if (isPremium) {
                 [self showDeviceNameInputDialog];
             } else {
-                [self showUpgradePopup];
+                [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
             }
         }
     } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
-                [self showUpgradePopup];
+                [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
             } // Switch handles toggle when premium
         }
     } else if (indexPath.section == 3) { // Advanced Settings
@@ -875,14 +875,16 @@
     } else if (indexPath.section == 4) { // Upgrade to Premium / Subscription
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         if (!isSubscribed && indexPath.row == 0) {
-            [self showUpgradePopup];
+            [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
         } else if ((isSubscribed && indexPath.row == 0) || (!isSubscribed && indexPath.row == 1)) {
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"restoring_purchases_title", @"Title for restoring purchases alert")
                                                                           message:NSLocalizedString(@"restoring_purchases_message", @"Message for restoring purchases alert")
                                                                    preferredStyle:UIAlertControllerStyleAlert];
             [self presentViewController:alert animated:YES completion:nil];
             
-            [[StoreManager sharedInstance] restorePurchases];
+            [[StoreManager sharedInstance] restorePurchasesWithCompletion:^(BOOL success) {
+                [self.tableView reloadData];
+            }];
             
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [self dismissViewControllerAnimated:YES completion:nil];
@@ -920,154 +922,6 @@
             });
         }];
     }
-}
-
-- (void)showUpgradePopup {
-    [[StoreManager sharedInstance] getPremiumProductInfo:^(SKProduct * _Nullable product, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (!product) {
-                NSLog(@"Error fetching product info: %@", error.localizedDescription);
-                return;
-            }
-
-            // Format price
-            NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
-            [formatter setNumberStyle:NSNumberFormatterCurrencyStyle];
-            [formatter setLocale:product.priceLocale];
-            NSString *localizedPrice = [formatter stringFromNumber:product.price] ?: NSLocalizedString(@"price_unknown", @"Fallback for unknown price");
-
-            // Detect dark mode
-            BOOL isDarkMode = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
-            UIColor *cardBackground = isDarkMode ? [UIColor colorWithWhite:0.1 alpha:1.0] : [UIColor colorWithWhite:1.0 alpha:1.0];
-            UIColor *textColor = isDarkMode ? UIColor.whiteColor : UIColor.blackColor;
-
-            // Overlay
-            UIView *overlay = [[UIView alloc] initWithFrame:self.view.bounds];
-            overlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
-            overlay.tag = 999;
-            [self.view addSubview:overlay];
-
-            // Card
-            UIView *card = [[UIView alloc] init];
-            card.translatesAutoresizingMaskIntoConstraints = NO;
-            card.backgroundColor = cardBackground;
-            card.layer.cornerRadius = 20;
-            card.clipsToBounds = YES;
-            [overlay addSubview:card];
-
-            // Title
-            UILabel *title = [[UILabel alloc] init];
-            title.translatesAutoresizingMaskIntoConstraints = NO;
-            title.text = NSLocalizedString(@"get_premium_title", @"Title for premium upgrade popup");
-            title.textColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0]; // gold
-            title.font = [UIFont boldSystemFontOfSize:24];
-            title.textAlignment = NSTextAlignmentCenter;
-
-            // Features
-            UIStackView *featureStack = [[UIStackView alloc] init];
-            featureStack.translatesAutoresizingMaskIntoConstraints = NO;
-            featureStack.axis = UILayoutConstraintAxisVertical;
-            featureStack.spacing = 8;
-
-            NSArray *features = @[
-                NSLocalizedString(@"premium_feature_1", @"Feature 1 description for premium"),
-                NSLocalizedString(@"premium_feature_2", @"Feature 2 description for premium"),
-                NSLocalizedString(@"premium_feature_3", @"Feature 3 description for premium"),
-                NSLocalizedString(@"premium_feature_4", @"Feature 4 description for premium")
-            ];
-
-            for (NSString *item in features) {
-                UILabel *label = [[UILabel alloc] init];
-                label.text = [NSString stringWithFormat:@"• %@", item];
-                label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-                label.textColor = textColor;
-                label.numberOfLines = 0;
-                [featureStack addArrangedSubview:label];
-            }
-
-            // Upgrade button
-            UIButton *upgradeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-            upgradeBtn.translatesAutoresizingMaskIntoConstraints = NO;
-
-            NSString *line1 = NSLocalizedString(@"1 week free trial", @"Free trial label");
-            NSString *line2 = [NSString stringWithFormat:NSLocalizedString(@"upgrade_button", @"Subscription price after trial"), localizedPrice];
-            NSString *fullText = [NSString stringWithFormat:@"%@\n%@", line1, line2];
-
-            NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-            paragraphStyle.alignment = NSTextAlignmentCenter;
-
-            NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc] initWithString:fullText attributes:@{
-                NSParagraphStyleAttributeName: paragraphStyle,
-                NSForegroundColorAttributeName: UIColor.blackColor
-            }];
-
-            NSRange line1Range = [fullText rangeOfString:line1];
-            [attributedTitle addAttribute:NSFontAttributeName value:[UIFont boldSystemFontOfSize:17] range:line1Range];
-
-            NSRange line2Range = [fullText rangeOfString:line2];
-            [attributedTitle addAttribute:NSFontAttributeName value:[UIFont systemFontOfSize:14] range:line2Range];
-
-            [upgradeBtn setAttributedTitle:attributedTitle forState:UIControlStateNormal];
-            upgradeBtn.titleLabel.numberOfLines = 2;
-            upgradeBtn.titleLabel.textAlignment = NSTextAlignmentCenter;
-            upgradeBtn.backgroundColor = [UIColor colorWithRed:1.0 green:0.84 blue:0 alpha:1.0];
-            upgradeBtn.layer.cornerRadius = 12;
-            [upgradeBtn addTarget:self action:@selector(handleUpgradeTap) forControlEvents:UIControlEventTouchUpInside];
-
-
-            // Cancel button
-            UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-            cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
-            [cancelBtn setTitle:NSLocalizedString(@"not_now", @"Not now button") forState:UIControlStateNormal];
-            [cancelBtn setTitleColor:textColor forState:UIControlStateNormal];
-            cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15];
-            [cancelBtn addTarget:self action:@selector(dismissUpgradePopup) forControlEvents:UIControlEventTouchUpInside];
-
-            // Disclaimer label
-            UILabel *disclaimer = [[UILabel alloc] init];
-            disclaimer.translatesAutoresizingMaskIntoConstraints = NO;
-            disclaimer.text = NSLocalizedString(@"premium_disclaimer", @"Disclaimer for premium subscription limits");
-            disclaimer.font = [UIFont systemFontOfSize:13];
-            disclaimer.textColor = [textColor colorWithAlphaComponent:0.6];
-            disclaimer.numberOfLines = 0;
-            disclaimer.textAlignment = NSTextAlignmentCenter;
-
-            // Add all to card
-            [card addSubview:title];
-            [card addSubview:featureStack];
-            [card addSubview:upgradeBtn];
-            [card addSubview:cancelBtn];
-            [card addSubview:disclaimer];
-
-            // Constraints
-            [NSLayoutConstraint activateConstraints:@[
-                [card.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
-                [card.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor],
-                [card.widthAnchor constraintEqualToConstant:320],
-
-                [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:24],
-                [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
-                [title.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
-
-                [featureStack.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:20],
-                [featureStack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
-                [featureStack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
-
-                [upgradeBtn.topAnchor constraintEqualToAnchor:featureStack.bottomAnchor constant:24],
-                [upgradeBtn.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
-                [upgradeBtn.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
-                [upgradeBtn.heightAnchor constraintEqualToConstant:48],
-
-                [cancelBtn.topAnchor constraintEqualToAnchor:upgradeBtn.bottomAnchor constant:16],
-                [cancelBtn.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
-
-                [disclaimer.topAnchor constraintEqualToAnchor:cancelBtn.bottomAnchor constant:14],
-                [disclaimer.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
-                [disclaimer.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
-                [disclaimer.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
-            ]];
-        });
-    }];
 }
 
 - (void)handleUpgradeTap {
@@ -1225,7 +1079,7 @@
         self.sendNotifEnabled = NO;
         [defaults setBool:NO forKey:@"send_notif_enabled"];
         [defaults synchronize];
-        [self showUpgradePopup];
+        [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
     }
 }
 
