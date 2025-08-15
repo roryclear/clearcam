@@ -2,11 +2,17 @@
 #import "GalleryViewController.h"
 #import "StoreManager.h"
 
-@interface LoginViewController ()
+@interface LoginViewController () <UITextFieldDelegate>
 @property (nonatomic, strong) UIImageView *appIconView;
 @end
 
 @implementation LoginViewController
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];
+    [self loginButtonTapped];
+    return YES;
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -59,6 +65,11 @@
     self.usernameTextField.backgroundColor = [UIColor secondarySystemBackgroundColor];
     self.usernameTextField.textColor = [UIColor labelColor];
     self.usernameTextField.translatesAutoresizingMaskIntoConstraints = NO;
+    self.usernameTextField.autocorrectionType = UITextAutocorrectionTypeNo;
+    self.usernameTextField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.usernameTextField.spellCheckingType = UITextSpellCheckingTypeNo;
+    self.usernameTextField.returnKeyType = UIReturnKeyGo;
+    self.usernameTextField.delegate = self;
     [container addSubview:self.usernameTextField];
     
     self.loginButton = [UIButton buttonWithType:UIButtonTypeSystem];
