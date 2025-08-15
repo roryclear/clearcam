@@ -390,11 +390,11 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (section == 0) {
-        return NSLocalizedString(@"viewer_settings", @"Header for viewer settings section");
-    } else if (section == 1) {
         return NSLocalizedString(@"camera_settings", @"Header for camera settings section");
-    } else if (section == 2) {
+    } else if (section == 1) {
         return NSLocalizedString(@"live_stream_settings", @"Header for live stream settings section");
+    } else if (section == 2) {
+        return NSLocalizedString(@"viewer_settings", @"Header for viewer settings section");
     } else if (section == 3) {
         return NSLocalizedString(@"experimental_features", @"Header for advanced settings section");
     } else if (section == 4) {
@@ -433,7 +433,7 @@
 
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
 
-    if (indexPath.section == 1) { // Camera Settings
+    if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = NSLocalizedString(@"stream_via_wifi", @"Label for stream via Wi-Fi setting");
             NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
@@ -506,7 +506,7 @@
                 cell.userInteractionEnabled = YES;
             }
         }
-    } else if (indexPath.section == 2) { // Live Stream Settings
+    } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = NSLocalizedString(@"live_stream_network", @"Label for live stream over network setting");
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -524,7 +524,7 @@
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = YES;
         }
-    } else if (indexPath.section == 0) { // Viewer Settings
+    } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
             cell.textLabel.text = NSLocalizedString(@"receive_notifications", @"Label for receive notifications setting");
             cell.detailTextLabel.text = NSLocalizedString(@"receive_notifications_description", @"Description for receive notifications setting");
@@ -628,16 +628,16 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (section == 1) { // Camera Settings
+    if (section == 0) { // Camera Settings
         NSInteger baseRows = 8; // Up to "Manage Detection Schedules"
         if (self.isPresetsSectionExpanded) {
             NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
             baseRows += presetKeys.count + 1; // Preset rows + "Add Preset"
         }
         return baseRows;
-    } else if (section == 2) { // Live Stream Settings
+    } else if (section == 1) { // Live Stream Settings
         return 2; // Live Stream over the internet and Device name
-    } else if (section == 0) { // Viewer Settings
+    } else if (section == 2) { // Viewer Settings
         return 1; // Just Receive Notifications
     } else if (section == 3) { // Advanced Settings
         return 2; // Use Own Notification Server, Use Own Inference Server
@@ -811,7 +811,7 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     BOOL isPremium = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
     
-    if (indexPath.section == 1) { // Viewer Settings
+    if (indexPath.section == 0) { // Camera Settings
         if (indexPath.row == 0) {
             // Stream via Wi-Fi - handled by switch
         } else if (indexPath.row == 1) {
@@ -858,7 +858,7 @@
                 [self.navigationController pushViewController:scheduleVC animated:YES];
             }
         }
-    } else if (indexPath.section == 2) { // Live Stream Settings
+    } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
                 [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
@@ -870,7 +870,7 @@
                 [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
             }
         }
-    } else if (indexPath.section == 0) { // Viewer Settings
+    } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
                 [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
@@ -1156,7 +1156,7 @@
 #pragma mark - UITableView Delegate
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == 1 && self.isPresetsSectionExpanded) { // Only in Camera Settings
+    if (indexPath.section == 0 && self.isPresetsSectionExpanded) { // Only in Camera Settings
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];
@@ -1169,7 +1169,7 @@
 }
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (editingStyle == UITableViewCellEditingStyleDelete && indexPath.section == 1 && self.isPresetsSectionExpanded) {
+    if (editingStyle == UITableViewCellEditingStyleDelete && indexPath.section == 0 && self.isPresetsSectionExpanded) {
         NSArray *presetKeys = [[[NSUserDefaults standardUserDefaults] objectForKey:@"yolo_presets"] allKeys];
         if (indexPath.row >= 4 && indexPath.row < 4 + presetKeys.count) {
             NSString *presetKey = presetKeys[indexPath.row - 4];
@@ -1304,3 +1304,4 @@
 }
 
 @end
+
