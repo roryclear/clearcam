@@ -94,9 +94,6 @@
 "docs" = "ドキュメント";
 "app_name" = "Clearcam";
 "home" = "ホーム";
-"camera_desc" = "映像を録画・配信し、AIで物体検出を行います";
-"gallery_desc" = "撮影されたイベントやライブ映像を表示（プレミアムが必要）";
-"settings_desc" = "カメラと検出機能の設定";
 "all" = "すべて";
 "people+vehicles" = "人＋車両";
 
