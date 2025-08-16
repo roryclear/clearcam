@@ -480,24 +480,16 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
-    [self verifySessionOrSubscription:YES completion:completion];
+[self verifySessionOrSubscription:YES completion:completion];
 }
 
 - (void)verifySessionOrSubscription:(BOOL)checkSubscription
                          completion:(void (^)(BOOL isActive, NSDate *expiryDate))completion
 {
-    if (checkSubscription) {
-        self.last_check_time = [[NSDate date] timeIntervalSince1970];
-    }
-    
+    if (checkSubscription) self.last_check_time = [[NSDate date] timeIntervalSince1970];
     static BOOL isRequestInProgress = NO;
-    if (checkSubscription && isRequestInProgress) {
-        return;
-    }
-    if (checkSubscription) {
-        isRequestInProgress = YES;
-    }
-    
+    if (checkSubscription && isRequestInProgress) return;
+    if (checkSubscription) isRequestInProgress = YES;
     NSString *sessionToken = [self retrieveSessionTokenFromKeychain];
     
     if (!sessionToken || sessionToken.length == 0) {
@@ -535,7 +527,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             }
         }
     }];
-    
     [task resume];
 }
 
