@@ -131,6 +131,15 @@
                                              selector:@selector(subscriptionStatusDidChange:)
                                                  name:StoreManagerSubscriptionStatusDidChangeNotification
                                                object:nil];
+    
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self
+                                                                          action:@selector(dismissKeyboard)];
+    tap.cancelsTouchesInView = NO;
+    [self.view addGestureRecognizer:tap];
+}
+
+- (void)dismissKeyboard {
+    [self.view endEditing:YES];
 }
 
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
