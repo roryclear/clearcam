@@ -475,65 +475,70 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
     }
 }
 
-
 - (void)verifySessionOnlyWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
+    [self verifySessionOrSubscription:NO completion:completion];
+}
+
+- (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
+    [self verifySessionOrSubscription:YES completion:completion];
+}
+
+- (void)verifySessionOrSubscription:(BOOL)checkSubscription
+                         completion:(void (^)(BOOL isActive, NSDate *expiryDate))completion
+{
+    if (checkSubscription) {
+        self.last_check_time = [[NSDate date] timeIntervalSince1970];
+    }
+    
+    static BOOL isRequestInProgress = NO;
+    if (checkSubscription && isRequestInProgress) {
+        return;
+    }
+    if (checkSubscription) {
+        isRequestInProgress = YES;
+    }
+    
     NSString *sessionToken = [self retrieveSessionTokenFromKeychain];
     
     if (!sessionToken || sessionToken.length == 0) {
-        completion(NO, nil);
+        if (checkSubscription) {
+            [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
+        } else {
+            completion(NO, nil);
+        }
         return;
     }
     
     NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", sessionToken];
     NSURL *url = [NSURL URLWithString:urlString];
     
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         
         if (!error && httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
+            if (checkSubscription) {
+                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"isSubscribed"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+                isRequestInProgress = NO;
+            }
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(YES, [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
             });
         } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                completion(NO, nil);
-            });
+            if (checkSubscription) {
+                [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(NO, nil);
+                });
+            }
         }
     }];
     
     [task resume];
 }
 
-- (void)verifySubscriptionWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
-    self.last_check_time = [[NSDate date] timeIntervalSince1970];
-    static BOOL isRequestInProgress = NO;
-
-    if (isRequestInProgress) return;
-    isRequestInProgress = YES;
-    NSString *sessionToken = [self retrieveSessionTokenFromKeychain];
-    if (sessionToken && sessionToken.length > 0) {
-        NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", sessionToken];
-        NSURL *url = [NSURL URLWithString:urlString];
-
-        NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
-                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-            if (!error && httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
-                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"isSubscribed"];
-                [[NSUserDefaults standardUserDefaults] synchronize];
-                isRequestInProgress = NO;
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    completion(YES, [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
-                });
-                return;
-            }
-            [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
-        }];
-        [task resume];
-        return;
-    }
-    [self performReceiptVerificationWithCompletion:completion requestFlag:&isRequestInProgress];
-}
 
 
 - (void)performReceiptVerificationWithCompletion:(void (^)(BOOL isActive, NSDate *expiryDate))completion
