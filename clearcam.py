@@ -771,8 +771,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             window = query.get("window", [None])[0]
             max_count = query.get("max", [None])[0]
             class_ids = query.get("class_ids", [None])[0]
-            sched_from = query.get("from", [None])[0]
-            sched_to = query.get("to", [None])[0]
+            sched_from = query.get("from", [0])[0]
+            sched_to = query.get("to", [86400])[0]
 
             if not cam_name or not window or not max_count or not class_ids:
                 self.send_error(400, "Missing parameters")
@@ -782,12 +782,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
 
-                def hms_to_seconds(hms):
-                    h, m, s = map(int, hms.split(":"))
+                def hms_to_seconds(hms,s=0):
+                    h, m= map(int, hms.split(":"))
                     return h * 3600 + m * 60 + s
 
                 if sched_from and sched_to:
-                    schedule = [hms_to_seconds(sched_from), hms_to_seconds(sched_to)]
+                    schedule = [hms_to_seconds(sched_from), hms_to_seconds(sched_to,s=59)]
                 else:
                     schedule = None
 
@@ -1536,7 +1536,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
                                     <label>of class(es)</label>
                                     <div id="checkboxContainer" class="checkbox-container">
-                                        <!-- Checkboxes will be inserted here -->
                                     </div>
                                 </div>
                                 <div class="form-group" style="width: 90%; text-align: center;">
@@ -1550,12 +1549,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
                                         <div>
                                             <label for="scheduleFrom">From</label><br>
-                                            <input type="time" id="scheduleFrom" name="schedule_from" step="1" style="text-align: center;">
+                                            <input type="time" id="scheduleFrom" name="schedule_from" step="60" style="text-align: center;">
                                         </div>
                                         <div>
                                             <label for="scheduleTo">To</label><br>
-                                            <input type="time" id="scheduleTo" name="schedule_to" step="1" style="text-align: center;">
+                                            <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
                                         </div>
+
                                     </div>
                                 </div>
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
@@ -1791,8 +1791,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   const windowSeconds = Math.round(windowMinutes * 60);
                   const checked = form.querySelectorAll('input[name="class_ids"]:checked');
                   const classIds = Array.from(checked).map(cb => cb.value).join(',');
-                  const scheduleFrom = formData.get("schedule_from");
-                  const scheduleTo = formData.get("schedule_to");
+                  const scheduleFrom = formData.get("schedule_from") || "00:00";
+                  const scheduleTo = formData.get("schedule_to") || "23:59";
 
                   const params = new URLSearchParams({{
                       cam: cameraName,
@@ -1805,7 +1805,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       params.append("from", scheduleFrom);
                       params.append("to", scheduleTo);
                   }}
-
+                  //alert(params);
                   fetch(`/add_alert?${{params.toString()}}`)
                       .then(res => {{
                           if (!res.ok) throw new Error("Failed to add alert");
