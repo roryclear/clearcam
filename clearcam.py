@@ -883,9 +883,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 "sched_from": sched[0],
                                 "sched_to": sched[1]
                             })
-                            for _ in range(100):
-                               print("sched?")
-                               print(alert.sched)
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")
                     return
