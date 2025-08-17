@@ -349,7 +349,7 @@ Path("cameras").mkdir(parents=True, exist_ok=True)
 
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[0,86399]):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
@@ -801,7 +801,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         window_seconds=window,
                         max=max_count,
                         classes=classes,
-                        sched=schedule
+                        sched=schedule,
                     )
 
                 with open(alerts_file, 'wb') as f:
@@ -874,12 +874,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     with open(alerts_file, "rb") as f:
                         raw_alerts = pickle.load(f) 
                         for key,alert in raw_alerts.items():
+                            sched = alert.sched if alert.sched else [0,84399]
                             alert_info.append({
                                 "window": alert.window,
                                 "max": alert.max,
                                 "classes": list(alert.classes),
-                                "id": str(key)
+                                "id": str(key),
+                                "sched_from": sched[0],
+                                "sched_to": sched[1]
                             })
+                            for _ in range(100):
+                               print("sched?")
+                               print(alert.sched)
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")
                     return
@@ -1726,7 +1732,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 function fetchAlerts() {{
                     fetch(`/get_alerts?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
-                        .then(alerts => {{
+                        .then(alerts => {{ 
                             const container = document.getElementById("alertsContainer");
                             if (!alerts.length) {{
                                 container.innerHTML = `<p>No alerts configured.</p><button onclick="openAlertModal()">Add New</button>`;
@@ -1739,22 +1745,43 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Occurances of</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Within</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
                                     </tr>
                                 </thead><tbody>`;
 
                             for (const alert of alerts) {{
                                 const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
+                                
+                                // window formatting
                                 const h = Math.floor(alert.window / 3600);
                                 const m = Math.floor((alert.window % 3600) / 60);
                                 const s = alert.window % 60;
                                 const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
+                                
+                                // schedule formatting
+                                const fromH = Math.floor(alert.sched_from / 3600);
+                                const fromM = Math.floor((alert.sched_from % 3600) / 60);
+
+                                let toSec = alert.sched_to;
+                                if (toSec % 60 !== 0) {{
+                                    toSec += 60 - (toSec % 60);
+                                }}
+                                if (toSec >= 86400) {{
+                                    toSec = 0;
+                                }}
+                                const toH = Math.floor(toSec / 3600);
+                                const toM = Math.floor((toSec % 3600) / 60);
+
+                                const schedStr = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
+
                                 html += `<tr>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee;">${{schedStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">
-                                    <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                        <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
                                     </td>
                                 </tr>`;
                             }}
