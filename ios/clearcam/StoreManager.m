@@ -459,19 +459,17 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)verifySubscriptionWithCompletionIfSubbed:(void (^)(BOOL isActive, NSDate *expiryDate))completion {
-    NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
     BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
     NSTimeInterval lastCheck = [StoreManager sharedInstance].last_check_time;
-    BOOL sessionExpired = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
     BOOL sessionTokenMissing = ![[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    BOOL shouldCheckRemote = sessionExpired || sessionTokenMissing || ([[NSDate date] timeIntervalSince1970] - lastCheck > 120.0);
+    BOOL shouldCheckRemote =  sessionTokenMissing || ([[NSDate date] timeIntervalSince1970] - lastCheck > 120.0);
 
     if (shouldCheckRemote) {
         [self verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
             if (completion) completion(isActive, expiryDate);
         }];
     } else {
-        if (completion) completion(isSubscribed, expiry);
+        if (completion) completion(isSubscribed, nil);
     }
 }
 
@@ -515,7 +513,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                 isRequestInProgress = NO;
             }
             dispatch_async(dispatch_get_main_queue(), ^{
-                completion(YES, [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"]);
+                completion(YES, nil);
             });
         } else {
             if (checkSubscription) {
@@ -589,7 +587,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
             NSString *sessionToken = jsonResponse[@"session_token"];
             if (sessionToken && [sessionToken isKindOfClass:[NSString class]]) {
                 [self storeSessionTokenInKeychain:sessionToken];
-                [[NSUserDefaults standardUserDefaults] setObject:[NSDate dateWithTimeIntervalSinceNow:45 * 60] forKey:@"expiry"];
             }
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
         } else {

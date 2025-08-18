@@ -56,15 +56,7 @@ NSMutableDictionary *classColorMap;
 - (void)viewDidLoad {
     NSLog(@"NSCameraUsageDescription: %@", [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSCameraUsageDescription"]);
     [super viewDidLoad];
-    NSDate *expiry = [[NSUserDefaults standardUserDefaults] objectForKey:@"expiry"];
     BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
-    BOOL sessionExpiredOrNow = !expiry || [expiry compare:[NSDate date]] != NSOrderedDescending;
-    if(isSubscribed && sessionExpiredOrNow) {
-        if (sessionExpiredOrNow) {
-            [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-            }];
-        }
-    }
     self.streamLink = @"";
     self.recordPressed = NO;
     self.last_check_time = [[NSDate date] timeIntervalSince1970];

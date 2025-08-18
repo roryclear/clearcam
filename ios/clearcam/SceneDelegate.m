@@ -38,7 +38,8 @@ willConnectToSession:(UISceneSession *)session
             });
             return;
         }
-        [[StoreManager sharedInstance] verifySessionOnlyWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+        //todo session only if logged out??
+        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 UIViewController *rootVC;
                 
