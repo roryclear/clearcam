@@ -29,7 +29,6 @@ from urllib.parse import quote
 import platform
 import ctypes
 
-
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
   new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
@@ -428,9 +427,14 @@ class VideoCapture:
   def _open_ffmpeg(self):
     if self.proc:
         self.proc.kill()
+
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
+    else:
+        ffmpeg_path = 'ffmpeg'
     
     command = [
-        "ffmpeg",
+        ffmpeg_path,
         "-i", self.src,
         "-loglevel", "quiet",
         "-reconnect", "1",
@@ -631,8 +635,12 @@ class HLSStreamer:
         self.recent_segments = deque(maxlen=4)
         self.start_time = time.time()
         # Start FFmpeg process for HLS streaming to local files
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
+        else:
+            ffmpeg_path = 'ffmpeg'
         ffmpeg_cmd = [
-            "ffmpeg",
+            ffmpeg_path,
             "-f", "rawvideo",
             "-pix_fmt", "bgr24",
             "-s", f"{self.cam.width}x{self.cam.height}",
@@ -661,17 +669,21 @@ class HLSStreamer:
     def export_last_segments(self,output_path: Path,last=False):
         if not self.recent_segments:
             print("No segments available to save.")
-            return
+            return  
 
         concat_list_path = self.current_stream_dir / "concat_list.txt"
         segments_to_use = [self.recent_segments[-1]] if last else self.recent_segments
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
+        else:
+            ffmpeg_path = 'ffmpeg'
         if last:
             # Re-encode with scaling and compression
             command = [
-                "ffmpeg",
+                ffmpeg_path,
                 "-y",
                 "-f", "concat",
                 "-safe", "0",
@@ -686,7 +698,7 @@ class HLSStreamer:
         else:
             # Just copy original
             command = [
-                "ffmpeg",
+                ffmpeg_path,
                 "-y",
                 "-f", "concat",
                 "-safe", "0",
@@ -826,7 +838,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing camera_name or rtsp")
                 return
             
-            start_cam(rtsp=rtsp,cam_name=camera_name)
+            start_cam(rtsp=rtsp,cam_name=camera_name,yolo_variant=yolo_variant)
             cams[camera_name] = rtsp
             with open("cams.pkl", 'wb') as f:
               pickle.dump(cams, f)  
@@ -2076,7 +2088,7 @@ def get_lan_ip():
         s.close()
     return ip
 
-def start_cam(rtsp,cam_name):
+def start_cam(rtsp,cam_name,yolo_variant='n'):
   if not rtsp or not cam_name: return
   args = sys.argv[:]
   script = sys.argv[0]
@@ -2091,6 +2103,7 @@ def start_cam(rtsp,cam_name):
 
   args = upsert_arg(args, "cam_name", cam_name)
   args = upsert_arg(args, "rtsp", rtsp)
+  args = upsert_arg(args, "yolo_size", yolo_variant)
   proc = subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
   active_subprocesses.append(proc)
 
@@ -2258,13 +2271,15 @@ if __name__ == "__main__":
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
+  yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
+  if not yolo_variant: yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
 
   if rtsp_url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      new_args = sys.argv + [f"--userid={userID}", f"--key={key}"]
+      new_args = sys.argv + [f"--userid={userID}", f"--key={key}",f"--yolo_size={yolo_variant}"]
       subprocess.Popen([sys.executable] + new_args, close_fds=True)
       sys.exit(0)
     else: userID = None
@@ -2272,6 +2287,7 @@ if __name__ == "__main__":
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
+  
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
   track_thresh = 0.5 #default 0.6
@@ -2290,13 +2306,12 @@ if __name__ == "__main__":
     tracker = BYTETracker(Args())
   live_link = dict()
   
-
   if rtsp_url is None:
     for camera_name in cams.keys():
-      start_cam(rtsp=cams[camera_name],cam_name=camera_name)
+      start_cam(rtsp=cams[camera_name],cam_name=camera_name,yolo_variant=yolo_variant)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), 'n')
+  
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
