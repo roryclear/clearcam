@@ -343,10 +343,12 @@ from datetime import datetime
 import os
 import threading
 
-CAMERA_BASE_DIR = Path("cameras")
-Path("cameras").mkdir(parents=True, exist_ok=True)
-CAMS_FILE = "cams.pkl"
-
+BASE = Path(__file__).parent
+CAMERA_BASE_DIR = BASE / "cameras"
+CAMS_FILE = BASE / "cams.pkl"
+NEW_DIR = BASE / "newdir"
+CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
+NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[0,86399]):
