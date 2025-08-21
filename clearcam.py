@@ -345,7 +345,7 @@ import threading
 
 CAMERA_BASE_DIR = Path("cameras")
 Path("cameras").mkdir(parents=True, exist_ok=True)
-CAMS_DIR = "cams.pkl"
+CAMS_FILE = "cams.pkl"
 
 
 class RollingClassCounter:
@@ -841,7 +841,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             start_cam(rtsp=rtsp,cam_name=camera_name,yolo_variant=yolo_variant)
             cams[camera_name] = rtsp
-            with open(CAMS_DIR, 'wb') as f:
+            with open(CAMS_FILE, 'wb') as f:
               pickle.dump(cams, f)  
 
             # Redirect back to home
@@ -917,7 +917,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 try:
                     shutil.rmtree(cam_path)
                     cams.pop(camera_name, None)
-                    with open(CAMS_DIR, 'wb') as f:
+                    with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
                 except Exception as e:
                     self.send_error(500, f"Error deleting camera: {e}")
@@ -2260,11 +2260,11 @@ if __name__ == "__main__":
   elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
   elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
 
-  if os.path.exists(CAMS_DIR):
-      with open(CAMS_DIR, 'rb') as f:
+  if os.path.exists(CAMS_FILE):
+      with open(CAMS_FILE, 'rb') as f:
         cams = pickle.load(f)
   else:
-      with open(CAMS_DIR, 'wb') as f:
+      with open(CAMS_FILE, 'wb') as f:
          pickle.dump(cams, f)  
 
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
