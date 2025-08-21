@@ -2091,24 +2091,25 @@ def get_lan_ip():
         s.close()
     return ip
 
-def start_cam(rtsp,cam_name,yolo_variant='n'):
-  if not rtsp or not cam_name: return
-  args = sys.argv[:]
-  script = sys.argv[0]
+def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, "frozen", False) else ([sys.executable, sys.argv[0]], sys.argv[1:])
 
-  def upsert_arg(args, key, value):
-      prefix = f"--{key}="
-      for i, arg in enumerate(args):
-          if arg.startswith(prefix):
-              args[i] = f"{prefix}{value}"
-              return args
-      return args + [f"{prefix}{value}"]
+def start_cam(rtsp, cam_name, yolo_variant='n'):
+    if not rtsp or not cam_name: return
+    
+    def upsert_arg(args, key, value):
+        prefix = f"--{key}="
+        for i, arg in enumerate(args):
+            if arg.startswith(prefix):
+                args[i] = f"{prefix}{value}"
+                return args
+        return args + [f"{prefix}{value}"]
 
-  args = upsert_arg(args, "cam_name", cam_name)
-  args = upsert_arg(args, "rtsp", rtsp)
-  args = upsert_arg(args, "yolo_size", yolo_variant)
-  proc = subprocess.Popen([sys.executable, script] + args[1:], close_fds=True)
-  active_subprocesses.append(proc)
+    executable, base_args = get_executable_args()
+    new_args = upsert_arg(base_args, "cam_name", cam_name)
+    new_args = upsert_arg(new_args, "rtsp", rtsp)
+    new_args = upsert_arg(new_args, "yolo_size", yolo_variant)
+    proc = subprocess.Popen(executable + new_args, close_fds=True)
+    active_subprocesses.append(proc)
 
 
 live_link = dict()
@@ -2282,9 +2283,9 @@ if __name__ == "__main__":
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      new_args = sys.argv + [f"--userid={userID}", f"--key={key}",f"--yolo_size={yolo_variant}"]
-      subprocess.Popen([sys.executable] + new_args, close_fds=True)
-      sys.exit(0)
+      executable, base_args = get_executable_args()
+      new_args = base_args + [f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"]
+      subprocess.Popen(executable + new_args, close_fds=True)
     else: userID = None
 
   if userID is not None and key is None:
