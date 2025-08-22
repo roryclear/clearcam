@@ -2283,9 +2283,7 @@ if __name__ == "__main__":
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      executable, base_args = get_executable_args()
-      new_args = base_args + [f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"]
-      subprocess.Popen(executable + new_args, close_fds=True)
+      sys.argv.extend([f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"])
     else: userID = None
 
   if userID is not None and key is None:
