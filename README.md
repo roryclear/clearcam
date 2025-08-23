@@ -24,10 +24,6 @@ https://apps.apple.com/app/clearcam/id6743237694
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 - use --yolo_size={s, m, l, or x for larger yolov8 variants}
 
-## install ios from source
-1. git clone https://github.com/roryclear/clearcam.git
-2. open ios/clearcam.xcodeproj
-
 ## python requirements
 - ffmpeg
 - tinygrad
@@ -36,6 +32,10 @@ https://apps.apple.com/app/clearcam/id6743237694
 - scipy
 - lap
 - cython_bbox
+
+## install ios from source
+1. git clone https://github.com/roryclear/clearcam.git
+2. open ios/clearcam.xcodeproj
 
 ## iOS requirements
 - iOS 15 or newer
