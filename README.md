@@ -9,11 +9,18 @@ https://apps.apple.com/app/clearcam/id6743237694
   <img src="images/front.PNG" alt="Server" width="400" />
 </p>
 
-## run NVR + inference in python
+## install and run NVR + inference with homebrew
+1. brew tap roryclear/tap
+2. brew install clearcam
+3. clearcam
+4. (optional) enter your Clearam premium userID (viewable in iOS app) to receive streams and notifications
+5. open localhost:8080 in your browser
+
+## run NVR + inference in python (from source)
 1. pip install -r requirements.txt
 2. python3 clearcam.py
 3. (optional) enter your Clearam premium userID (viewable in iOS app) to receive streams and notifications
-4. add your rtsp cameras
+4. open localhost:8080 in your browser
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 - use --yolo_size={s, m, l, or x for larger yolov8 variants}
 
