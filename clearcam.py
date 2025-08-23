@@ -316,7 +316,7 @@ def postprocess(output, max_det=300, conf_threshold=0.25, iou_threshold=0.45):
   return boxes
 
 def get_weights_location(yolo_variant: str) -> Path:
-  weights_location = Path(__file__).parents[1] / "weights" / f'yolov8{yolo_variant}.safetensors'
+  weights_location = BASE / "weights" / f'yolov8{yolo_variant}.safetensors'
   fetch(f'https://gitlab.com/r3sist/yolov8_weights/-/raw/master/yolov8{yolo_variant}.safetensors', weights_location)
   #f16
   return weights_location.with_name(f"{weights_location.stem}.safetensors")
@@ -343,7 +343,7 @@ from datetime import datetime
 import os
 import threading
 
-BASE = Path(__file__).parent
+BASE = Path.home() / "Library" / "Application Support" / "clearcam"
 CAMERA_BASE_DIR = BASE / "cameras"
 CAMS_FILE = BASE / "cams.pkl"
 NEW_DIR = BASE / "newdir"
