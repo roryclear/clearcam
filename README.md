@@ -9,6 +9,9 @@ https://apps.apple.com/app/clearcam/id6743237694
   <img src="images/front.PNG" alt="Server" width="400" />
 </p>
 
+## video demo:
+https://x.com/RoryClear/status/1959249250811785405
+
 ## install and run NVR + inference with homebrew
 1. brew tap roryclear/tap
 2. brew install clearcam
