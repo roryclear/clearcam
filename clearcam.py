@@ -351,13 +351,14 @@ CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[0,86399]):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[0,86399],camera_name=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
     self.classes = classes
     self.last_det = 0
     self.sched = sched
+    self.camera_name = camera_name
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -389,9 +390,9 @@ class RollingClassCounter:
     return time_of_day < self.sched[1] and time_of_day > self.sched[0] 
 
 class VideoCapture:
-  def __init__(self, src,camera_name="clearcampy"):
+  def __init__(self, src,camera_name="clearcamPy"):
     # objects in scene count
-    self.counter = RollingClassCounter()
+    self.counter = RollingClassCounter(camera_name=camera_name)
     self.camera_name = camera_name
     self.object_set = set()
 
@@ -416,7 +417,7 @@ class VideoCapture:
     except Exception:
         with open(alerts_dir, 'wb') as f:
             self.alert_counters = dict()
-            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7})
+            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},camera_name=camera_name)
             pickle.dump(self.alert_counters, f)
 
     self.lock = threading.Lock()
@@ -494,7 +495,8 @@ class VideoCapture:
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                           cv2.imwrite(str(filename), self.annotated_frame)
-                          if userID is not None: threading.Thread(target=send_notif, args=(userID,), daemon=True).start()
+                          text = f"Alert Detected ({getattr(alert, 'camera_name')})" if getattr(alert, 'camera_name', None) else None
+                          if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
                           alert.last_det = time.time()
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
@@ -513,7 +515,7 @@ class VideoCapture:
                 if os.path.exists(counters_dir):
                     with open(counters_dir, 'rb') as f:
                         counter = pickle.load(f)
-                    if counter is None: self.counter = RollingClassCounter()
+                    if counter is None: self.counter = RollingClassCounter(camera_name=self.camera_name)
                     counter = self.counter
                     with open(counters_dir, 'wb') as f:
                         pickle.dump(counter, f)
@@ -817,11 +819,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         max=max_count,
                         classes=classes,
                         sched=schedule,
+                        camera_name=cam_name,
                     )
 
                 with open(alerts_file, 'wb') as f:
                     pickle.dump(raw_alerts, f)
-                append_to_pickle_list(pkl_path=added_alerts_file, item=[id, RollingClassCounter(window_seconds=window, max=max_count,classes=classes, sched=schedule)])
+                append_to_pickle_list(pkl_path=added_alerts_file, item=[id, RollingClassCounter(window_seconds=window, max=max_count,classes=classes, sched=schedule,camera_name=cam_name)])
 
             except ValueError as e:
                 self.send_error(400, f"Invalid parameters: {e}")
@@ -945,7 +948,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     counter = pickle.load(f)
             except Exception:
                 with open(counters_dir, 'wb') as f:
-                    counter = RollingClassCounter()
+                    counter = RollingClassCounter(camera_name=cam_name)
                     pickle.dump(counter, f)
 
             if not counter:
@@ -1926,7 +1929,7 @@ def schedule_daily_restart(hls_streamer, restart_time):
         time.sleep(10) # todo can get away with none or less?
         hls_streamer.start()
 
-def send_notif(session_token: str):
+def send_notif(session_token: str, text=None):
     host = "www.rors.ai"
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"
@@ -1939,6 +1942,13 @@ def send_notif(session_token: str):
         f"--{boundary}--",
         ""
     ]
+    if text is not None:
+      lines.extend([
+      f"--{boundary}",
+      'Content-Disposition: form-data; name="text"',
+      "",
+      text,
+    ])
     body = "\r\n".join(lines).encode("utf-8")
     conn = http.client.HTTPSConnection(host)
     headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
