@@ -2,5 +2,4 @@ git+https://github.com/tinygrad/tinygrad.git@3b3de8df61343b65483af43efa70e9de285
 numpy==2.0.0
 opencv-python==4.10.0.84
 scipy==1.14.1
-cython_bbox==0.1.5
 lap
