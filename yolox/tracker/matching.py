@@ -3,8 +3,6 @@ import numpy as np
 import scipy
 import lap
 from scipy.spatial.distance import cdist
-
-from cython_bbox import bbox_overlaps as bbox_ious
 from yolox.tracker import kalman_filter
 import time
 
@@ -69,6 +67,23 @@ def ious(atlbrs, btlbrs):
 
     return ious
 
+def bbox_ious(boxes, query_boxes):
+    N = boxes.shape[0]
+    K = query_boxes.shape[0]
+    
+    boxes_area = ((boxes[:, 2] - boxes[:, 0] + 1) * (boxes[:, 3] - boxes[:, 1] + 1)).reshape(N, 1)
+    query_areas = ((query_boxes[:, 2] - query_boxes[:, 0] + 1) * (query_boxes[:, 3] - query_boxes[:, 1] + 1)).reshape(1, K)
+
+    ixmin = np.maximum(boxes[:, 0].reshape(N, 1), query_boxes[:, 0].reshape(1, K))
+    iymin = np.maximum(boxes[:, 1].reshape(N, 1), query_boxes[:, 1].reshape(1, K))
+    ixmax = np.minimum(boxes[:, 2].reshape(N, 1), query_boxes[:, 2].reshape(1, K))
+    iymax = np.minimum(boxes[:, 3].reshape(N, 1), query_boxes[:, 3].reshape(1, K))
+    iw = np.maximum(ixmax - ixmin + 1, 0)
+    ih = np.maximum(iymax - iymin + 1, 0)
+    intersection = iw * ih
+    union = boxes_area + query_areas - intersection
+    overlaps = np.where((iw > 0) & (ih > 0), intersection / union, np.zeros_like(intersection)) 
+    return overlaps
 
 def iou_distance(atracks, btracks):
     """
