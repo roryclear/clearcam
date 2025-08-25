@@ -73,4 +73,4 @@ In the meantime, please refer to the [How to Sign Up on iOS](#how-to-sign-up-on-
 3. Tap **Upgrade to Premium**.
 4. Complete the payment using the App Store’s secure checkout.
 5. After upgrading, return to **Settings** in Clearcam.
-6. Locate your **User ID** — you’ll use this to log in on any device, including Android.
+6. Locate your **User ID**, you’ll use this to log in on any device.
