@@ -495,7 +495,7 @@ class VideoCapture:
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                           cv2.imwrite(str(filename), self.annotated_frame)
-                          text = f"Alert Detected ({getattr(alert, 'camera_name')})" if getattr(alert, 'camera_name', None) else None
+                          text = f"Event Detected ({getattr(alert, 'camera_name')})" if getattr(alert, 'camera_name', None) else None
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
                           alert.last_det = time.time()
