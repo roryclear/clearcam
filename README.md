@@ -34,7 +34,6 @@ https://x.com/RoryClear/status/1959249250811785405
 - cv2
 - scipy
 - lap
-- cython_bbox
 
 ## install ios from source
 1. git clone https://github.com/roryclear/clearcam.git
