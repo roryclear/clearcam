@@ -91,9 +91,10 @@
     [container addSubview:continueWithoutButton];
     
     [NSLayoutConstraint activateConstraints:@[
-        [container.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-40],
-        [container.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32],
-        [container.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32],
+        [container.centerYAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.centerYAnchor constant:-40],
+        [container.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:32],
+        [container.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-32],
+
 
         [self.appIconView.topAnchor constraintEqualToAnchor:container.topAnchor],
         [self.appIconView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
