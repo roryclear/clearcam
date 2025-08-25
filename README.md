@@ -64,7 +64,7 @@ https://x.com/RoryClear/status/1959249250811785405
 
 ## How to Sign Up on Android
 
-Sign ups on android are not yet supported.  
+Sign ups on android are not yet supported. (App is not approved for Google Play Store yet)
 In the meantime, please refer to the [How to Sign Up on iOS](#how-to-sign-up-on-ios) section and use the user ID on android.
 
 ## How to Sign Up on iOS
