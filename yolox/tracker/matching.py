@@ -1,11 +1,11 @@
 import numpy as np
-import lap
+from scipy.optimize import linear_sum_assignment
 
 def linear_assignment(cost_matrix, thresh):
     if cost_matrix.size == 0:
         return np.empty((0, 2), dtype=int), tuple(range(cost_matrix.shape[0])), tuple(range(cost_matrix.shape[1]))
     matches, unmatched_a, unmatched_b = [], [], []
-    cost, x, y = lap.lapjv(cost_matrix, extend_cost=True, cost_limit=thresh)
+    x, y = lapjv(cost=cost_matrix, cost_limit=thresh)
     for ix, mx in enumerate(x):
         if mx >= 0:
             matches.append([ix, mx])
@@ -14,6 +14,26 @@ def linear_assignment(cost_matrix, thresh):
     matches = np.asarray(matches)
     return matches, unmatched_a, unmatched_b
 
+def lapjv(cost: np.ndarray, cost_limit=np.inf):
+    n_rows, n_cols = cost.shape
+    if cost_limit < np.inf:
+      n = n_rows + n_cols
+      cost_extended = np.full((n, n), cost_limit / 2.0)
+      cost_extended[n_rows:, n_cols:] = 0
+      cost_extended[:n_rows, :n_cols] = cost
+    else:
+      n = max(n_rows, n_cols)
+      cost_extended = np.zeros((n, n))
+      cost_extended[:n_rows, :n_cols] = cost
+    row_ind, col_ind = linear_sum_assignment(cost_extended)
+    x = -np.ones(n_rows, dtype=int)
+    y = -np.ones(n_cols, dtype=int)
+    for r, c in zip(row_ind, col_ind):
+      if r < n_rows and c < n_cols:
+        if cost[r, c] < cost_limit:
+          x[r] = c
+          y[c] = r
+    return x, y
 
 def ious(atlbrs, btlbrs):
     """
