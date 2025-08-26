@@ -28,7 +28,7 @@ https://x.com/RoryClear/status/1959249250811785405
 - use --yolo_size={s, m, l, or x for larger yolov8 variants}
 
 ## python requirements
-- ffmpeg
+- ffmpeg (installed on your computer)
 - tinygrad
 - numpy
 - cv2
