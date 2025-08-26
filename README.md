@@ -33,7 +33,6 @@ https://x.com/RoryClear/status/1959249250811785405
 - numpy
 - cv2
 - scipy
-- lap
 
 ## install ios from source
 1. git clone https://github.com/roryclear/clearcam.git
