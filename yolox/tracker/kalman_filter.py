@@ -1,7 +1,5 @@
 # vim: expandtab:ts=4:sw=4
 import numpy as np
-import scipy.linalg
-
 
 """
 Table for the 0.95 quantile of the chi-square distribution with N degrees of
@@ -213,58 +211,12 @@ class KalmanFilter(object):
         """
         projected_mean, projected_cov = self.project(mean, covariance)
 
-        chol_factor, lower = scipy.linalg.cho_factor(
-            projected_cov, lower=True, check_finite=False)
-        kalman_gain = scipy.linalg.cho_solve(
-            (chol_factor, lower), np.dot(covariance, self._update_mat.T).T,
-            check_finite=False).T
+        chol_factor = np.linalg.cholesky(projected_cov)
+        y = np.linalg.solve(chol_factor, np.dot(covariance, self._update_mat.T).T)
+        kalman_gain = np.linalg.solve(chol_factor.T, y).T
         innovation = measurement - projected_mean
 
         new_mean = mean + np.dot(innovation, kalman_gain.T)
         new_covariance = covariance - np.linalg.multi_dot((
             kalman_gain, projected_cov, kalman_gain.T))
         return new_mean, new_covariance
-
-    def gating_distance(self, mean, covariance, measurements,
-                        only_position=False, metric='maha'):
-        """Compute gating distance between state distribution and measurements.
-        A suitable distance threshold can be obtained from `chi2inv95`. If
-        `only_position` is False, the chi-square distribution has 4 degrees of
-        freedom, otherwise 2.
-        Parameters
-        ----------
-        mean : ndarray
-            Mean vector over the state distribution (8 dimensional).
-        covariance : ndarray
-            Covariance of the state distribution (8x8 dimensional).
-        measurements : ndarray
-            An Nx4 dimensional matrix of N measurements, each in
-            format (x, y, a, h) where (x, y) is the bounding box center
-            position, a the aspect ratio, and h the height.
-        only_position : Optional[bool]
-            If True, distance computation is done with respect to the bounding
-            box center position only.
-        Returns
-        -------
-        ndarray
-            Returns an array of length N, where the i-th element contains the
-            squared Mahalanobis distance between (mean, covariance) and
-            `measurements[i]`.
-        """
-        mean, covariance = self.project(mean, covariance)
-        if only_position:
-            mean, covariance = mean[:2], covariance[:2, :2]
-            measurements = measurements[:, :2]
-
-        d = measurements - mean
-        if metric == 'gaussian':
-            return np.sum(d * d, axis=1)
-        elif metric == 'maha':
-            cholesky_factor = np.linalg.cholesky(covariance)
-            z = scipy.linalg.solve_triangular(
-                cholesky_factor, d.T, lower=True, check_finite=False,
-                overwrite_b=True)
-            squared_maha = np.sum(z * z, axis=0)
-            return squared_maha
-        else:
-            raise ValueError('invalid distance metric')
