@@ -639,7 +639,6 @@ class HLSStreamer:
         self.current_stream_dir = self._get_new_stream_dir()
         self.recent_segments = deque(maxlen=4)
         self.start_time = time.time()
-        # Start FFmpeg process for HLS streaming to local files
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
         else:
@@ -1996,15 +1995,13 @@ def encrypt_file(input_path: Path, output_path: Path, key: str):
 
         with open(input_path, 'rb') as f:
             plaintext = f.read()
-
-        # Add MAGIC header and pad
         data = struct.pack('<Q', MAGIC_NUMBER) + plaintext
         padded = pkcs7_pad(data, AES_BLOCK_SIZE)
 
         ciphertext = encrypt_cbc(padded, key_bytes, iv)
 
         with open(output_path, 'wb') as f:
-            f.write(iv + ciphertext)  # ObjC expects IV prepended
+            f.write(iv + ciphertext)
 
         return True
 
