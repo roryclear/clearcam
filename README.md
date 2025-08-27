@@ -34,7 +34,7 @@ https://x.com/RoryClear/status/1959249250811785405
 - cv2
 - scipy
 
-## install ios from source
+## install iOS App from source
 1. git clone https://github.com/roryclear/clearcam.git
 2. open ios/clearcam.xcodeproj
 
