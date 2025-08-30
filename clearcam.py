@@ -560,6 +560,9 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
+      if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+        time.sleep(1)
+        continue
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
       if frame is not None:
