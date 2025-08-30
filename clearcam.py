@@ -351,14 +351,14 @@ CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[0,86399],camera_name=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[0,86399],cam_name=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
     self.classes = classes
     self.last_det = 0
     self.sched = sched
-    self.camera_name = camera_name
+    self.cam_name = cam_name
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -390,10 +390,10 @@ class RollingClassCounter:
     return time_of_day < self.sched[1] and time_of_day > self.sched[0] 
 
 class VideoCapture:
-  def __init__(self, src,camera_name="clearcamPy"):
+  def __init__(self, src,cam_name="clearcamPy"):
     # objects in scene count
-    self.counter = RollingClassCounter(camera_name=camera_name)
-    self.camera_name = camera_name
+    self.counter = RollingClassCounter(cam_name=cam_name)
+    self.cam_name = cam_name
     self.object_set = set()
 
     self.src = src
@@ -417,7 +417,7 @@ class VideoCapture:
     except Exception:
         with open(alerts_dir, 'wb') as f:
             self.alert_counters = dict()
-            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},camera_name=camera_name)
+            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
             pickle.dump(self.alert_counters, f)
 
     self.lock = threading.Lock()
@@ -465,7 +465,7 @@ class VideoCapture:
     last_counter_update = time.time()
     count = 0
     while self.running:
-        if not (CAMERA_BASE_DIR / self.camera_name).is_dir(): os._exit(1) # deleted cam
+        if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
         try:
             raw_bytes = self.proc.stdout.read(frame_size)
             if len(raw_bytes) != frame_size:
@@ -483,7 +483,7 @@ class VideoCapture:
             if count > 10:
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
-                  filename = CAMERA_BASE_DIR / f"{self.camera_name}/preview.jpg"
+                  filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.jpg"
                   cv2.imwrite(filename, self.annotated_frame)
               for _,alert in self.alert_counters.items():
                   if not alert.is_active(): continue
@@ -491,17 +491,17 @@ class VideoCapture:
                       if time.time() - alert.last_det >= alert.window:
                           send_det = True
                           timestamp = datetime.now().strftime("%Y-%m-%d")
-                          filepath = CAMERA_BASE_DIR / f"{self.camera_name}/event_images/{timestamp}"
+                          filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                           cv2.imwrite(str(filename), self.annotated_frame)
-                          text = f"Event Detected ({getattr(alert, 'camera_name')})" if getattr(alert, 'camera_name', None) else None
+                          text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
                           alert.last_det = time.time()
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
-                  os.makedirs(CAMERA_BASE_DIR / self.camera_name / "event_clips", exist_ok=True)
-                  mp4_filename = CAMERA_BASE_DIR / f"{self.camera_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+                  os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
+                  mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                   self.streamer.export_last_segments(Path(mp4_filename))
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   os.unlink(mp4_filename)
@@ -509,18 +509,18 @@ class VideoCapture:
                   send_det = False
               if userID and (time.time() - last_live_check) >= 5:
                   last_live_check = time.time()
-                  threading.Thread(target=check_upload_link, args=(self.camera_name,), daemon=True).start()
+                  threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
               if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-                counters_dir = CAMERA_BASE_DIR / self.camera_name / "counters.pkl"
+                counters_dir = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
                 if os.path.exists(counters_dir):
                     with open(counters_dir, 'rb') as f:
                         counter = pickle.load(f)
-                    if counter is None: self.counter = RollingClassCounter(camera_name=self.camera_name)
+                    if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name)
                     counter = self.counter
                     with open(counters_dir, 'wb') as f:
                         pickle.dump(counter, f)
                 # delete alerts
-                deleted_alerts_dir = CAMERA_BASE_DIR / self.camera_name / "deleted_alerts.pkl"
+                deleted_alerts_dir = CAMERA_BASE_DIR / self.cam_name / "deleted_alerts.pkl"
                 if deleted_alerts_dir.exists():
                   with open(deleted_alerts_dir, 'rb') as f:
                       deleted_alerts = pickle.load(f)
@@ -529,7 +529,7 @@ class VideoCapture:
                   deleted_alerts_dir.unlink()
                 
                 # add new alerts
-                added_alerts_dir = CAMERA_BASE_DIR / self.camera_name / "added_alerts.pkl"
+                added_alerts_dir = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
                 if added_alerts_dir.exists():
                   with open(added_alerts_dir, 'rb') as f:
                     added_alerts = pickle.load(f)
@@ -538,13 +538,13 @@ class VideoCapture:
                       for c in a.classes: classes.add(str(c))
                     added_alerts_dir.unlink()
                     
-              if userID and live_link[self.camera_name] and (time.time() - last_live_seg) >= 4:
+              if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
                   mp4_filename = f"segment.mp4"
                   self.streamer.export_last_segments(Path(mp4_filename),last=True)
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   Path(mp4_filename).unlink()
-                  threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.camera_name]), daemon=True).start()
+                  threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
             else:
                count+=1
             with self.lock:
@@ -617,10 +617,10 @@ class VideoCapture:
           self.proc.kill()
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="streams", segment_time=4, camera_name="clearcampy"):
-        self.camera_name = camera_name
+    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
+        self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir = CAMERA_BASE_DIR / self.camera_name / output_dir
+        self.output_dir = CAMERA_BASE_DIR / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -767,15 +767,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.base_dir = CAMERA_BASE_DIR 
         super().__init__(*args, **kwargs)
 
-    def get_camera_path(self, camera_name=None):
+    def get_camera_path(self, cam_name=None):
         """Get the path for a specific camera or all cameras"""
-        if camera_name:
-            return self.base_dir / camera_name / "streams"
+        if cam_name:
+            return self.base_dir / cam_name / "streams"
         return self.base_dir
     
     def do_GET(self):
         parsed_path = urlparse(unquote(self.path))
         query = parse_qs(parsed_path.query)
+        cam_name = query.get("cam", [None])[0]
 
         if parsed_path.path == "/list_cameras":
             available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
@@ -786,7 +787,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/add_alert":
-            cam_name = query.get("cam", [None])[0]
             window = query.get("window", [None])[0]
             max_count = query.get("max", [None])[0]
             class_ids = query.get("class_ids", [None])[0]
@@ -821,12 +821,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         max=max_count,
                         classes=classes,
                         sched=schedule,
-                        camera_name=cam_name,
+                        cam_name=cam_name,
                     )
 
                 with open(alerts_file, 'wb') as f:
                     pickle.dump(raw_alerts, f)
-                append_to_pickle_list(pkl_path=added_alerts_file, item=[id, RollingClassCounter(window_seconds=window, max=max_count,classes=classes, sched=schedule,camera_name=cam_name)])
+                append_to_pickle_list(pkl_path=added_alerts_file, item=[id, RollingClassCounter(window_seconds=window, max=max_count,classes=classes, sched=schedule,cam_name=cam_name)])
 
             except ValueError as e:
                 self.send_error(400, f"Invalid parameters: {e}")
@@ -839,15 +839,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == '/add_camera':
-            camera_name = query.get("cam_name", [None])[0]
+            cam_name = query.get("cam_name", [None])[0]
             rtsp = query.get("rtsp", [None])[0]
             
-            if not camera_name or not rtsp:
-                self.send_error(400, "Missing camera_name or rtsp")
+            if not cam_name or not rtsp:
+                self.send_error(400, "Missing cam_name or rtsp")
                 return
             
-            start_cam(rtsp=rtsp,cam_name=camera_name,yolo_variant=yolo_variant)
-            cams[camera_name] = rtsp
+            start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
+            cams[cam_name] = rtsp
             with open(CAMS_FILE, 'wb') as f:
               pickle.dump(cams, f)  
 
@@ -858,7 +858,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/delete_alert":
-            cam_name = query.get("cam", [None])[0]
             alert_id = query.get("id", [None])[0]
             
             if not cam_name or not alert_id:
@@ -882,7 +881,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_alerts":
-            cam_name = query.get("cam", [None])[0]
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
@@ -914,16 +912,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == '/delete_camera':
-            camera_name = query.get("cam_name", [None])[0]
-            if not camera_name:
+            cam_name = query.get("cam_name", [None])[0]
+            if not cam_name:
                 self.send_error(400, "Missing cam_name parameter")
                 return
 
-            cam_path = CAMERA_BASE_DIR / camera_name
+            cam_path = CAMERA_BASE_DIR / cam_name
             if cam_path.exists() and cam_path.is_dir():
                 try:
                     shutil.rmtree(cam_path)
-                    cams.pop(camera_name, None)
+                    cams.pop(cam_name, None)
                     with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
                 except Exception as e:
@@ -940,7 +938,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_counts":
-            cam_name = query.get("cam", [None])[0]
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
@@ -950,7 +947,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     counter = pickle.load(f)
             except Exception:
                 with open(counters_dir, 'wb') as f:
-                    counter = RollingClassCounter(camera_name=cam_name)
+                    counter = RollingClassCounter(cam_name=cam_name)
                     pickle.dump(counter, f)
 
             if not counter:
@@ -987,7 +984,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           sys.exit(0)
 
         if parsed_path.path == "/reset_counts":
-            cam_name = query.get("cam", [None])[0]
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
@@ -1136,25 +1132,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.end_headers()
           self.wfile.write(html.encode('utf-8'))
           return
-        
-        # Get camera name from query parameter or default to first camera
-        camera_name = query.get("cam", [None])[0]
-        if not camera_name:
-            # Try to get camera name from path if not in query
-            path_parts = parsed_path.path.strip('/').split('/')
-            if path_parts and path_parts[0] in [d.name for d in self.base_dir.iterdir() if d.is_dir()]:
-                camera_name = path_parts[0]
-        
-        # If still no camera name, use the first available camera
-        if not camera_name:
+                
+        if not cam_name:
             available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
             if available_cams:
-                camera_name = available_cams[0]
+                cam_name = available_cams[0]
             else:
                 self.send_error(404, "No cameras found")
                 return
             
-        event_image_dir = self.base_dir / camera_name / "event_images"
+        event_image_dir = self.base_dir / cam_name / "event_images"
 
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
@@ -1170,7 +1157,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 for img in event_images:
                     ts = int(img.stem)
                     image_links += f"""
-                    <a href="/?cam={camera_name}&folder={selected_dir}&start={ts}">
+                    <a href="/?cam={cam_name}&folder={selected_dir}&start={ts}">
                         <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
                     </a>
                     """
@@ -1183,7 +1170,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(image_links.encode('utf-8'))
             return
 
-        if parsed_path.path == '/' or parsed_path.path == f'/{camera_name}':
+        if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
 
@@ -1193,7 +1180,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             for img in event_images:
                 ts = int(img.stem)
                 image_links += f"""
-                <a href="/?cam={camera_name}&folder={selected_dir}&start={ts}">
+                <a href="/?cam={cam_name}&folder={selected_dir}&start={ts}">
                     <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
                 </a>
                 """
@@ -1609,7 +1596,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 const folderPicker = document.getElementById("folderPicker");
                 const video = document.getElementById("video");
                 const startTime = {start_time if start_time is not None else 'null'};
-                const cameraName = "{camera_name}";
+                const cameraName = "{cam_name}";
 
                 window.onload = function () {{
                     const container = document.getElementById('checkboxContainer');
@@ -2124,10 +2111,10 @@ def start_cam(rtsp, cam_name, yolo_variant='n'):
 
 live_link = dict()
 is_live_lock = threading.Lock()
-def check_upload_link(camera_name="clearcampy"):
+def check_upload_link(cam_name="clearcampy"):
     global live_link
     query_params = urllib.parse.urlencode({
-        "name": quote(camera_name),
+        "name": quote(cam_name),
         "session_token": userID
     })
     url = f"https://rors.ai/get_stream_upload_link?{query_params}"
@@ -2138,12 +2125,12 @@ def check_upload_link(camera_name="clearcampy"):
             if response.status == 200:
                 response_data = json.loads(response.read().decode('utf-8'))
                 upload_link = response_data.get("upload_link")
-                with is_live_lock: live_link[camera_name] = upload_link
+                with is_live_lock: live_link[cam_name] = upload_link
             else:
                 raise Exception(f"HTTP Error: {response.status}")
     except Exception as e:
         with is_live_lock:
-            if camera_name in live_link: live_link[camera_name] = None
+            if cam_name in live_link: live_link[cam_name] = None
         print(f"Error checking upload link: {e}")
 
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
@@ -2319,8 +2306,8 @@ if __name__ == "__main__":
   live_link = dict()
   
   if rtsp_url is None:
-    for camera_name in cams.keys():
-      start_cam(rtsp=cams[camera_name],cam_name=camera_name,yolo_variant=yolo_variant)
+    for cam_name in cams.keys():
+      start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   
@@ -2330,8 +2317,8 @@ if __name__ == "__main__":
     yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
     state_dict = safe_load(get_weights_location(yolo_variant))
     load_state_dict(yolo_infer, state_dict)
-    cam = VideoCapture(rtsp_url,camera_name=cam_name)
-    hls_streamer = HLSStreamer(cam,camera_name=cam_name)
+    cam = VideoCapture(rtsp_url,cam_name=cam_name)
+    hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
   
   try:
