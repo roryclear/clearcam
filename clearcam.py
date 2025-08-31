@@ -371,6 +371,10 @@ class RollingClassCounter:
     while self.window and q and now - q[0] > self.window:
         q.popleft()
 
+  def reset_counts(self):
+    for class_id, _ in self.data.items():
+       self.data[class_id] = deque() # todo, use in reset endpoint?
+
   def get_counts(self):
     max_reached = False
     now = time.time()
@@ -383,11 +387,11 @@ class RollingClassCounter:
         if self.max and len(q) >= self.max: max_reached = True
     return counts, max_reached
   
-  def is_active(self):
+  def is_active(self, offset=0):
     if not self.sched: return True
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
-    return time_of_day < self.sched[1] and time_of_day > self.sched[0] 
+    return time_of_day < self.sched[1] and time_of_day > ((self.sched[0] - self.window) + offset)
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
@@ -486,7 +490,10 @@ class VideoCapture:
                   filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.jpg"
                   cv2.imwrite(filename, self.annotated_frame)
               for _,alert in self.alert_counters.items():
-                  if not alert.is_active(): continue
+                  if not alert.is_active():
+                    alert.reset_counts()
+                    continue
+                  if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
                   if alert.get_counts()[1]:
                       if time.time() - alert.last_det >= alert.window:
                           send_det = True
@@ -562,6 +569,7 @@ class VideoCapture:
     while self.running:
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
+        with self.lock: self.last_preds = [] # to remove annotation when no alerts active
         continue
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
