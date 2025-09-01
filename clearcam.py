@@ -528,21 +528,15 @@ class VideoCapture:
                     counter = self.counter
                     with open(counters_dir, 'wb') as f:
                         pickle.dump(counter, f)
-                # delete alerts
-                deleted_alerts_dir = CAMERA_BASE_DIR / self.cam_name / "deleted_alerts.pkl"
-                if deleted_alerts_dir.exists():
-                  with open(deleted_alerts_dir, 'rb') as f:
-                      deleted_alerts = pickle.load(f)
-                      for a in deleted_alerts: 
-                        if a in self.alert_counters: del self.alert_counters[a]
-                  deleted_alerts_dir.unlink()
                 
-                # add new alerts
                 added_alerts_dir = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
                 if added_alerts_dir.exists():
                   with open(added_alerts_dir, 'rb') as f:
                     added_alerts = pickle.load(f)
                     for id,a in added_alerts:
+                      if a is None:
+                        del self.alert_counters[id]
+                        continue
                       self.alert_counters[id] = a
                       for c in a.classes: classes.add(str(c))
                     added_alerts_dir.unlink()
@@ -758,7 +752,7 @@ class HLSStreamer:
                 self.ffmpeg_proc.kill()
 
 
-def append_to_pickle_list(pkl_path, item):
+def append_to_pickle_list(pkl_path, item): # todo, still needed?
     pkl_path = Path(pkl_path)
     if pkl_path.exists():
         try:
@@ -875,14 +869,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
 
             alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-            print("RORY DELTETING ",alert_id)
             with open(alerts_file, "rb") as f:
                 raw_alerts = pickle.load(f)
-                print(raw_alerts)
                 del raw_alerts[alert_id]
             with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
-            deleted_alerts_file = CAMERA_BASE_DIR / cam_name / "deleted_alerts.pkl"
-            append_to_pickle_list(pkl_path=deleted_alerts_file,item=alert_id)
+            added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
+            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, None])
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
