@@ -359,6 +359,7 @@ class RollingClassCounter:
     self.last_det = 0
     self.sched = sched
     self.cam_name = cam_name
+    self.is_on = True
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -388,6 +389,7 @@ class RollingClassCounter:
     return counts, max_reached
   
   def is_active(self, offset=0):
+    if not self.is_on: return False
     if not self.sched: return True
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
@@ -1770,7 +1772,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const m = Math.floor((alert.window % 3600) / 60);
                                 const s = alert.window % 60;
                                 const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
-                                
+
                                 // schedule formatting
                                 const fromH = Math.floor(alert.sched_from / 3600);
                                 const fromM = Math.floor((alert.sched_from % 3600) / 60);
@@ -1784,19 +1786,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 }}
                                 const toH = Math.floor(toSec / 3600);
                                 const toM = Math.floor((toSec % 3600) / 60);
-
                                 const schedStr = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
-
+                                const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
+                                const checkedAttr = isOn ? "checked" : "";
                                 html += `<tr>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{schedStr}}</td>
-                                    <td style="padding:6px; border-bottom:1px solid #eee;">
+                                    <td style="padding:6px; border-bottom:1px solid #eee; display:flex; gap:8px; align-items:center;">
+                                        <input type="checkbox" ${{checkedAttr}}>
                                         <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
                                     </td>
                                 </tr>`;
                             }}
+
 
                             html += `</tbody></table>
                                     <div style="margin-top:10px; text-align:right;">
