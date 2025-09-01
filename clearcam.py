@@ -1794,11 +1794,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{schedStr}}</td>
-                                    <td style="padding:6px; border-bottom:1px solid #eee; display:flex; gap:8px; align-items:center;">
-                                        <input type="checkbox" ${{checkedAttr}}>
-                                        <button onclick="deleteAlert('${{alert.id}}')">Delete</button>
+                                    <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                                        <input type="checkbox" ${{checkedAttr}} style="transform:scale(1.2); cursor:pointer;">
+                                    </td>
+                                    <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                                        <button onclick="deleteAlert('${{alert.id}}')" style="padding:4px 8px;">Delete</button>
                                     </td>
                                 </tr>`;
+
                             }}
 
 
