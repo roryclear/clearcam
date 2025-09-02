@@ -1754,11 +1754,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Time Window</th>
+                                        <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;"></th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Occurrences of</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Within</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
                                     </tr>
                                 </thead><tbody>`;
 
