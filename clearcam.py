@@ -861,41 +861,25 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         
-        if parsed_path.path == "/edit_alert":
+        if parsed_path.path == "/edit_alert": # sent without is_one does delete for now
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
             if not cam_name or not alert_id:
                 self.send_error(400, "Missing cam or id")
                 return
-            is_on = str(is_on).lower() == "true"
             alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            alert = None
             with open(alerts_file, "rb") as f:
                 raw_alerts = pickle.load(f)
-                raw_alerts[alert_id].is_on = is_on
+                if is_on is not None:
+                    is_on = str(is_on).lower() == "true"
+                    raw_alerts[alert_id].is_on = is_on
+                    alert = raw_alerts[alert_id]
+                else:
+                    del raw_alerts[alert_id]
             with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
             added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
-            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, raw_alerts[alert_id]])
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status":"ok"}')
-            return
-           
-
-        if parsed_path.path == "/delete_alert":
-            alert_id = query.get("id", [None])[0]
-            
-            if not cam_name or not alert_id:
-                self.send_error(400, "Missing cam or id")
-                return
-
-            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-            with open(alerts_file, "rb") as f:
-                raw_alerts = pickle.load(f)
-                del raw_alerts[alert_id]
-            with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
-            added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
-            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, None])
+            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, alert])
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1846,7 +1830,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 }}
 
                 function deleteAlert(alertId) {{
-                    fetch(`/delete_alert?cam=${{encodeURIComponent(cameraName)}}&id=${{alertId}}`)
+                    fetch(`/edit_alert?cam=${{encodeURIComponent(cameraName)}}&id=${{alertId}}`)
                         .then(res => {{
                             if (!res.ok) throw new Error("Failed to delete alert");
                             fetchAlerts();
