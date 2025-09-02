@@ -537,9 +537,7 @@ class VideoCapture:
                       if a is None:
                         del self.alert_counters[id]
                         continue
-                      #for _ in range(20): print(self.alert_counters[id].is_on)
                       self.alert_counters[id] = a
-                      #for _ in range(20): print(self.alert_counters[id].is_on)
                       for c in a.classes: classes.add(str(c))
                     added_alerts_dir.unlink()
                     
@@ -870,8 +868,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam or id")
                 return
             is_on = str(is_on).lower() == "true"
-            for _ in range(100):
-                print("rory is_on =",is_on,type(is_on))
             alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
             with open(alerts_file, "rb") as f:
                 raw_alerts = pickle.load(f)
@@ -1845,7 +1841,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         .catch(err => {{
                             console.error("Toggle alert failed:", err);
                             alert("Failed to toggle alert status.");
-                            // Re-fetch alerts to reset the UI state
                             fetchAlerts();
                         }});
                 }}
