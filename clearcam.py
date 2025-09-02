@@ -537,7 +537,9 @@ class VideoCapture:
                       if a is None:
                         del self.alert_counters[id]
                         continue
+                      #for _ in range(20): print(self.alert_counters[id].is_on)
                       self.alert_counters[id] = a
+                      #for _ in range(20): print(self.alert_counters[id].is_on)
                       for c in a.classes: classes.add(str(c))
                     added_alerts_dir.unlink()
                     
@@ -860,6 +862,29 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Location', '/')
             self.end_headers()
             return
+        
+        if parsed_path.path == "/edit_alert":
+            alert_id = query.get("id", [None])[0]
+            is_on = query.get("is_on", [None])[0]
+            if not cam_name or not alert_id:
+                self.send_error(400, "Missing cam or id")
+                return
+            is_on = str(is_on).lower() == "true"
+            for _ in range(100):
+                print("rory is_on =",is_on,type(is_on))
+            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            with open(alerts_file, "rb") as f:
+                raw_alerts = pickle.load(f)
+                raw_alerts[alert_id].is_on = is_on
+            with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
+            added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
+            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, raw_alerts[alert_id]])
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+            return
+           
 
         if parsed_path.path == "/delete_alert":
             alert_id = query.get("id", [None])[0]
@@ -901,7 +926,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 "classes": list(alert.classes),
                                 "id": str(key),
                                 "sched_from": sched[0],
-                                "sched_to": sched[1]
+                                "sched_to": sched[1],
+                                "is_on": alert.is_on,
                             })
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")
@@ -1748,11 +1774,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Occurances of</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Within</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Threshold</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Time Window</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;"></th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
                                     </tr>
                                 </thead><tbody>`;
 
@@ -1781,21 +1807,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const schedStr = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
                                 const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
                                 const checkedAttr = isOn ? "checked" : "";
+                                
                                 html += `<tr>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{schedStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                                        <input type="checkbox" ${{checkedAttr}} style="transform:scale(1.2); cursor:pointer;">
+                                        <input type="checkbox" data-alert-id="${{alert.id}}" ${{checkedAttr}} 
+                                            onchange="toggleAlert('${{alert.id}}', this.checked)" 
+                                            style="transform:scale(1.2); cursor:pointer;">
                                     </td>
                                     <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
                                         <button onclick="deleteAlert('${{alert.id}}')" style="padding:4px 8px;">Delete</button>
                                     </td>
                                 </tr>`;
-
                             }}
-
 
                             html += `</tbody></table>
                                     <div style="margin-top:10px; text-align:right;">
@@ -1806,6 +1833,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         .catch(err => {{
                             console.error("Failed to fetch alerts:", err);
                             document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
+                        }});
+                }}
+
+                function toggleAlert(alertId, isOn) {{
+                    fetch(`/edit_alert?cam=${{encodeURIComponent(cameraName)}}&id=${{alertId}}&is_on=${{isOn}}`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to toggle alert");
+                            console.log(`Alert ${{alertId}} ${{isOn ? 'enabled' : 'disabled'}}`);
+                        }})
+                        .catch(err => {{
+                            console.error("Toggle alert failed:", err);
+                            alert("Failed to toggle alert status.");
+                            // Re-fetch alerts to reset the UI state
+                            fetchAlerts();
                         }});
                 }}
 
