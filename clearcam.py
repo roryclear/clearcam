@@ -389,7 +389,7 @@ class RollingClassCounter:
     return counts, max_reached
   
   def is_active(self, offset=0):
-    if not self.is_on: return False
+    if not getattr(self, "is_on", False): return False
     if not self.sched: return True
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
