@@ -1754,7 +1754,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Threshold</th>
+                                        <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Time Window</th>
                                         <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
@@ -1793,7 +1793,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{windowStr}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{schedStr}}</td>
-                                    <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                                    <td style="padding:6px; border-bottom:1px solid #eee; display:flex; justify-content:center; align-items:center;">
                                         <input type="checkbox" data-alert-id="${{alert.id}}" ${{checkedAttr}} 
                                             onchange="toggleAlert('${{alert.id}}', this.checked)" 
                                             style="transform:scale(1.2); cursor:pointer;">
