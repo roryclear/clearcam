@@ -790,58 +790,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(available_cams).encode("utf-8"))
             return
 
-        if parsed_path.path == "/add_alert":
-            window = query.get("window", [None])[0]
-            max_count = query.get("max", [None])[0]
-            class_ids = query.get("class_ids", [None])[0]
-            sched_from = query.get("from", [0])[0]
-            sched_to = query.get("to", [86400])[0]
-
-            if not cam_name or not window or not max_count or not class_ids:
-                self.send_error(400, "Missing parameters")
-                return
-            try:
-                window = int(window)
-                max_count = int(max_count)
-                classes = [int(c.strip()) for c in class_ids.split(",")]
-
-                def hms_to_seconds(hms,s=0):
-                    h, m= map(int, hms.split(":"))
-                    return h * 3600 + m * 60 + s
-
-                if sched_from and sched_to:
-                    schedule = [hms_to_seconds(sched_from), hms_to_seconds(sched_to,s=59)]
-                else:
-                    schedule = None
-
-                alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-                added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
-                id = str(uuid.uuid4())
-
-                with open(alerts_file, "rb") as f:
-                    raw_alerts = pickle.load(f)
-                    raw_alerts[id] = RollingClassCounter(
-                        window_seconds=window,
-                        max=max_count,
-                        classes=classes,
-                        sched=schedule,
-                        cam_name=cam_name,
-                    )
-
-                with open(alerts_file, 'wb') as f:
-                    pickle.dump(raw_alerts, f)
-                append_to_pickle_list(pkl_path=added_alerts_file, item=[id, RollingClassCounter(window_seconds=window, max=max_count,classes=classes, sched=schedule,cam_name=cam_name)])
-
-            except ValueError as e:
-                self.send_error(400, f"Invalid parameters: {e}")
-                return
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status":"ok"}')
-            return
-
         if parsed_path.path == '/add_camera':
             cam_name = query.get("cam_name", [None])[0]
             rtsp = query.get("rtsp", [None])[0]
@@ -861,17 +809,45 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         
-        if parsed_path.path == "/edit_alert": # sent without is_one does delete for now
-            alert_id = query.get("id", [None])[0]
-            is_on = query.get("is_on", [None])[0]
-            if not cam_name or not alert_id:
+    
+        if parsed_path.path == "/edit_alert":
+            if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
             alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-            alert = None
             with open(alerts_file, "rb") as f:
                 raw_alerts = pickle.load(f)
-                if is_on is not None:
+            alert = None
+            alert_id = query.get("id", [None])[0]
+            is_on = query.get("is_on", [None])[0]
+            if alert_id is None: # no id, add alert
+                window = query.get("window", [None])[0]
+                max_count = query.get("max", [None])[0]
+                class_ids = query.get("class_ids", [None])[0]
+                sched_from = query.get("from", [0])[0]
+                sched_to = query.get("to", [86400])[0]
+                window = int(window)
+                max_count = int(max_count)
+                classes = [int(c.strip()) for c in class_ids.split(",")]
+                def hms_to_seconds(hms,s=0):
+                    h, m= map(int, hms.split(":"))
+                    return h * 3600 + m * 60 + s
+
+                if sched_from and sched_to:
+                    schedule = [hms_to_seconds(sched_from), hms_to_seconds(sched_to,s=59)]
+                else:
+                    schedule = None
+                alert_id = str(uuid.uuid4())
+                alert = RollingClassCounter(
+                        window_seconds=window,
+                        max=max_count,
+                        classes=classes,
+                        sched=schedule,
+                        cam_name=cam_name,
+                    )
+                raw_alerts[alert_id] = alert
+            else:
+                if is_on is not None: # todo add other properties to edit
                     is_on = str(is_on).lower() == "true"
                     raw_alerts[alert_id].is_on = is_on
                     alert = raw_alerts[alert_id]
@@ -1864,7 +1840,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       params.append("to", scheduleTo);
                   }}
                   //alert(params);
-                  fetch(`/add_alert?${{params.toString()}}`)
+                  fetch(`/edit_alert?${{params.toString()}}`)
                       .then(res => {{
                           if (!res.ok) throw new Error("Failed to add alert");
                           return res.json();
