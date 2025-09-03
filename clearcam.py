@@ -415,6 +415,8 @@ class VideoCapture:
 
     alerts_dir = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_dir.parent.mkdir(parents=True, exist_ok=True)
+    mask_dir = CAMERA_BASE_DIR / cam_name / "mask.pkl"
+    mask_dir.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(alerts_dir, "rb") as f:
             self.alert_counters = pickle.load(f)
@@ -810,7 +812,34 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         
-    
+        if parsed_path.path == "/edit_mask":
+            if not cam_name:
+                self.send_error(400, "Missing cam or id")
+                return
+            mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
+            edited_mask_file = CAMERA_BASE_DIR / cam_name / "edited_mask.pkl"
+            if not mask_file.exists():
+                with open(mask_file, "wb") as f:
+                    pickle.dump(None, f)
+            mask_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(mask_file, "rb") as f:
+               mask = pickle.load(f)
+            is_on = query.get("is_on", [None])[0]
+            tl_x = is_on = query.get("tl_x", [None])[0]
+            tl_y = is_on = query.get("tl_y", [None])[0]
+            br_x = is_on = query.get("br_x", [None])[0]
+            br_y = is_on = query.get("br_y", [None])[0]
+
+            mask = [float(tl_x),float(tl_y),float(br_x),float(br_y)]
+            with open(mask_file, 'wb') as f: pickle.dump(mask, f)
+            append_to_pickle_list(edited_mask_file,mask)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+            return
+
         if parsed_path.path == "/edit_alert":
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
@@ -1514,6 +1543,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         <button onclick="openAlertModal()">Add Alert</button>
                     </div>
 
+                    <div id="maskControls" style="margin-top: 20px; display: flex; align-items: center; gap: 12px;">
+                        <label>
+                            <input type="checkbox" id="maskCheckbox"> Enable Mask
+                        </label>
+                        <button onclick="openMaskEditor()">Edit</button>
+                    </div>
+
                     <!-- The Modal -->
                     <div id="alertModal" class="modal">
                         <div class="modal-content" style="max-width: 400px;">
@@ -1561,6 +1597,26 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </div>
                     </div>
 
+                    <div id="maskModal" class="modal">
+                        <div class="modal-content" style="max-width: 600px;">
+                            <div class="modal-header">
+                                <h3>Edit Mask</h3>
+                                <span class="close" onclick="closeMaskModal()">&times;</span>
+                            </div>
+                            <div style="position: relative; display: inline-block; max-width: 100%;">
+                                <img id="maskPreview" src="/{cam_name}/preview.jpg"
+                                    style="width: 100%; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; user-select: none; -webkit-user-drag: none; pointer-events: none;">
+                                <div id="maskRect" 
+                                    style="position: absolute; border: 2px dashed red; top: 20px; left: 20px; width: 150px; height: 100px; cursor: move; user-select: none;">
+                                    <div class="resize-handle" style="position: absolute; width: 16px; height: 16px; background: red; cursor: nwse-resize; bottom: -8px; right: -8px; z-index: 10; border-radius: 50%;"></div>
+                                </div>
+                            </div>
+                            <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                                <button type="button" onclick="closeMaskModal()">Cancel</button>
+                                <button type="button" onclick="saveMask()">Save</button>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="counts-wrapper">
                         <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
@@ -1583,6 +1639,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 const startTime = {start_time if start_time is not None else 'null'};
                 const cameraName = "{cam_name}";
 
+                
                 window.onload = function () {{
                     const container = document.getElementById('checkboxContainer');
                     container.innerHTML = '';
@@ -1602,6 +1659,158 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         container.appendChild(label);
                     }}
                 }};
+
+                
+                const maskModal = document.getElementById("maskModal");
+                const maskRect = document.getElementById("maskRect");
+                let isDragging = false;
+                let isResizing = false;
+                let resizeHandle = null;
+                let startX, startY;
+                let startWidth, startHeight;
+                let startLeft, startTop;
+
+                function openMaskEditor() {{
+                    maskModal.style.display = "flex";
+                    setTimeout(initMaskEditor, 100);
+                }}
+
+                function closeMaskModal() {{
+                    maskModal.style.display = "none";
+                }}
+
+                function saveMask() {{
+                    const rect = maskRect.getBoundingClientRect();
+                    const preview = document.getElementById("maskPreview").getBoundingClientRect();
+
+                    // Calculate relative percentages
+                    const tl_x = ((rect.left - preview.left) / preview.width) * 100;
+                    const tl_y = ((rect.top - preview.top) / preview.height) * 100;
+                    const br_x = ((rect.right - preview.left) / preview.width) * 100;
+                    const br_y = ((rect.bottom - preview.top) / preview.height) * 100;
+
+                    // Send to backend
+                    const params = new URLSearchParams({{
+                        cam: cameraName,
+                        tl_x: tl_x.toFixed(2),
+                        tl_y: tl_y.toFixed(2),
+                        br_x: br_x.toFixed(2),
+                        br_y: br_y.toFixed(2)
+                    }});
+
+                    fetch(`/edit_mask?${{params.toString()}}`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to save mask");
+                            console.log("Mask saved successfully");
+                            closeMaskModal();
+                        }})
+                        .catch(err => {{
+                            console.error("Save mask failed:", err);
+                            alert("Failed to save mask.");
+                        }});
+                }}
+
+                function initMaskEditor() {{
+                    const handle = maskRect.querySelector('.resize-handle');
+                    
+                    // Add event listener to the handle
+                    handle.addEventListener('mousedown', function(e) {{
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Resize mode
+                        isResizing = true;
+                        resizeHandle = e.target;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        startWidth = parseInt(document.defaultView.getComputedStyle(maskRect).width, 10);
+                        startHeight = parseInt(document.defaultView.getComputedStyle(maskRect).height, 10);
+                        startLeft = parseInt(document.defaultView.getComputedStyle(maskRect).left, 10);
+                        startTop = parseInt(document.defaultView.getComputedStyle(maskRect).top, 10);
+                    }});
+                    
+                    // Mouse down event for dragging
+                    maskRect.addEventListener('mousedown', function(e) {{
+                        if (!e.target.classList.contains('resize-handle')) {{
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Drag mode
+                            isDragging = true;
+                            startX = e.clientX - parseInt(document.defaultView.getComputedStyle(maskRect).left, 10);
+                            startY = e.clientY - parseInt(document.defaultView.getComputedStyle(maskRect).top, 10);
+                        }}
+                    }});
+
+                    // Mouse move event
+                    document.addEventListener('mousemove', function(e) {{
+                        if (!isDragging && !isResizing) return;
+                        
+                        const preview = document.getElementById("maskPreview").getBoundingClientRect();
+                        
+                        if (isDragging) {{
+                            // Calculate new position
+                            let newLeft = e.clientX - startX;
+                            let newTop = e.clientY - startY;
+                            
+                            // Constrain to preview image bounds
+                            newLeft = Math.max(preview.left, Math.min(newLeft, preview.right - maskRect.offsetWidth));
+                            newTop = Math.max(preview.top, Math.min(newTop, preview.bottom - maskRect.offsetHeight));
+                            
+                            // Set new position
+                            maskRect.style.left = (newLeft - preview.left) + 'px';
+                            maskRect.style.top = (newTop - preview.top) + 'px';
+                        }} 
+                        else if (isResizing) {{
+                            const dx = e.clientX - startX;
+                            const dy = e.clientY - startY;
+                            let newWidth = startWidth + dx;
+                            let newHeight = startHeight + dy;
+                            newWidth = Math.max(20, newWidth);
+                            newHeight = Math.max(20, newHeight);
+                            const preview = document.getElementById("maskPreview").getBoundingClientRect();
+                            newWidth = Math.min(newWidth, preview.right - startLeft);
+                            newHeight = Math.min(newHeight, preview.bottom - startTop);
+                            maskRect.style.width = newWidth + 'px';
+                            maskRect.style.height = newHeight + 'px';
+                        }}
+                    }});
+
+                    // Mouse up event
+                    document.addEventListener('mouseup', function() {{
+                        isDragging = false;
+                        isResizing = false;
+                        resizeHandle = null;
+                    }});
+                }}
+                maskModal.addEventListener('shown', initMaskEditor);
+
+                // Allow dragging of the rectangle
+                (function makeDraggable(el) {{
+                    let offsetX, offsetY, isDragging = false;
+
+                    el.addEventListener("mousedown", (e) => {{
+                        if (e.target === el) {{
+                            isDragging = true;
+                            offsetX = e.offsetX;
+                            offsetY = e.offsetY;
+                            document.addEventListener("mousemove", move);
+                            document.addEventListener("mouseup", stop);
+                        }}
+                    }});
+
+                    function move(e) {{
+                        if (!isDragging) return;
+                        const parent = el.parentElement.getBoundingClientRect();
+                        el.style.left = Math.min(Math.max(0, e.clientX - parent.left - offsetX), parent.width - el.offsetWidth) + "px";
+                        el.style.top = Math.min(Math.max(0, e.clientY - parent.top - offsetY), parent.height - el.offsetHeight) + "px";
+                    }}
+
+                    function stop() {{
+                        isDragging = false;
+                        document.removeEventListener("mousemove", move);
+                        document.removeEventListener("mouseup", stop);
+                    }}
+                }})(maskRect);
+
 
                 function openAlertModal() {{
                     alertModal.style.display = "flex";
