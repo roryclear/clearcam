@@ -576,6 +576,7 @@ class VideoCapture:
           online_targets = tracker.update(preds, [1280,1280], [1280,1280])
           preds = []
           for x in online_targets:
+            if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
