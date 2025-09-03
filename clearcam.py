@@ -413,6 +413,8 @@ class VideoCapture:
     self.last_preds = []
     self.dir = None
 
+    self.mask = None
+
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
     mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
@@ -542,6 +544,12 @@ class VideoCapture:
                       self.alert_counters[id] = a
                       for c in a.classes: classes.add(str(c))
                     added_alerts_file.unlink()
+                
+                edited_mask_file = CAMERA_BASE_DIR / self.cam_name / "edited_mask.pkl"
+                if edited_mask_file.exists():
+                   with open(edited_mask_file, 'rb') as f:
+                      mask = pickle.load(f)
+                      self.mask = mask
                     
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
