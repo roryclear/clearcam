@@ -413,17 +413,17 @@ class VideoCapture:
     self.last_preds = []
     self.dir = None
 
-    alerts_dir = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-    alerts_dir.parent.mkdir(parents=True, exist_ok=True)
-    mask_dir = CAMERA_BASE_DIR / cam_name / "mask.pkl"
-    mask_dir.parent.mkdir(parents=True, exist_ok=True)
+    alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+    alerts_file.parent.mkdir(parents=True, exist_ok=True)
+    mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
+    mask_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(alerts_dir, "rb") as f:
+        with open(alerts_file, "rb") as f:
             self.alert_counters = pickle.load(f)
             for _,a in self.alert_counters.items():
               for c in a.classes: classes.add(str(c))
     except Exception:
-        with open(alerts_dir, 'wb') as f:
+        with open(alerts_file, 'wb') as f:
             self.alert_counters = dict()
             self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
             pickle.dump(self.alert_counters, f)
@@ -522,18 +522,18 @@ class VideoCapture:
                   last_live_check = time.time()
                   threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
               if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-                counters_dir = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
-                if os.path.exists(counters_dir):
-                    with open(counters_dir, 'rb') as f:
+                counters_file = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
+                if os.path.exists(counters_file):
+                    with open(counters_file, 'rb') as f:
                         counter = pickle.load(f)
                     if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name)
                     counter = self.counter
-                    with open(counters_dir, 'wb') as f:
+                    with open(counters_file, 'wb') as f:
                         pickle.dump(counter, f)
                 
-                added_alerts_dir = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
-                if added_alerts_dir.exists():
-                  with open(added_alerts_dir, 'rb') as f:
+                added_alerts_file = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
+                if added_alerts_file.exists():
+                  with open(added_alerts_file, 'rb') as f:
                     added_alerts = pickle.load(f)
                     for id,a in added_alerts:
                       if a is None:
@@ -541,7 +541,7 @@ class VideoCapture:
                         continue
                       self.alert_counters[id] = a
                       for c in a.classes: classes.add(str(c))
-                    added_alerts_dir.unlink()
+                    added_alerts_file.unlink()
                     
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
@@ -955,12 +955,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-            counters_dir = CAMERA_BASE_DIR / cam_name / "counters.pkl"
+            counters_file = CAMERA_BASE_DIR / cam_name / "counters.pkl"
             try:
-                with open(counters_dir, "rb") as f:
+                with open(counters_file, "rb") as f:
                     counter = pickle.load(f)
             except Exception:
-                with open(counters_dir, 'wb') as f:
+                with open(counters_file, 'wb') as f:
                     counter = RollingClassCounter(cam_name=cam_name)
                     pickle.dump(counter, f)
 
@@ -1001,12 +1001,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-            counters_dir = CAMERA_BASE_DIR / cam_name / "counters.pkl"
+            counters_file = CAMERA_BASE_DIR / cam_name / "counters.pkl"
 
-            with open(counters_dir, "rb") as f:
+            with open(counters_file, "rb") as f:
                 counter = pickle.load(f)
             counter = None
-            with open(counters_dir, 'wb') as f:
+            with open(counters_file, 'wb') as f:
                 pickle.dump(counter, f)
 
             self.send_response(200)
