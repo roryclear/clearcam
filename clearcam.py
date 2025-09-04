@@ -583,10 +583,12 @@ class VideoCapture:
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
         if track:
-          online_targets = tracker.update(preds, [1280,1280], [1280,1280])
+          online_targets = tracker.update(preds, [1280,1280], [1280,1280]) # todo, mask in js also hardcoded to 1280
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
+            if hasattr(self, "mask") and self.mask is not None:
+              print("obj =",x.tlwh,"mask =",self.mask[0])
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
@@ -835,10 +837,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             is_on = query.get("is_on", [None])[0]
             tl_x = is_on = query.get("tl_x", [None])[0]
             tl_y = is_on = query.get("tl_y", [None])[0]
-            br_x = is_on = query.get("br_x", [None])[0]
-            br_y = is_on = query.get("br_y", [None])[0]
+            w = is_on = query.get("w", [None])[0]
+            h = is_on = query.get("h", [None])[0]
 
-            mask = [float(tl_x),float(tl_y),float(br_x),float(br_y)]
+            mask = [float(tl_x),float(tl_y),float(w),float(h)]
             with open(mask_file, 'wb') as f: pickle.dump(mask, f)
             append_to_pickle_list(edited_mask_file,mask)
 
@@ -1691,19 +1693,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const rect = maskRect.getBoundingClientRect();
                     const preview = document.getElementById("maskPreview").getBoundingClientRect();
 
-                    // Calculate relative percentages
-                    const tl_x = ((rect.left - preview.left) / preview.width) * 100;
-                    const tl_y = ((rect.top - preview.top) / preview.height) * 100;
-                    const br_x = ((rect.right - preview.left) / preview.width) * 100;
-                    const br_y = ((rect.bottom - preview.top) / preview.height) * 100;
+                    const tl_x = ((rect.left - preview.left) / preview.width) * 1280;
+                    const tl_y = ((rect.top - preview.top) / preview.height) * 1280;
+                    const w = (rect.width / preview.width) * 1280;
+                    const h = (rect.height / preview.height) * 1280;
 
-                    // Send to backend
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         tl_x: tl_x.toFixed(2),
                         tl_y: tl_y.toFixed(2),
-                        br_x: br_x.toFixed(2),
-                        br_y: br_y.toFixed(2)
+                        w: w.toFixed(2),
+                        h: h.toFixed(2)
                     }});
 
                     fetch(`/edit_mask?${{params.toString()}}`)
@@ -1717,6 +1717,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to save mask.");
                         }});
                 }}
+
 
                 function initMaskEditor() {{
                     const handle = maskRect.querySelector('.resize-handle');
