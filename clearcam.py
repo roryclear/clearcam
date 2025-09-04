@@ -919,12 +919,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self.send_error(500, f"Failed to load mask: {e}")
                     return
-            mask_res = [{"mask":mask["dims"]}]
-
+                
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps(mask_res).encode("utf-8"))
+            self.wfile.write(json.dumps(mask).encode("utf-8"))
             return
 
         if parsed_path.path == "/get_alerts":
@@ -1712,7 +1711,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         .then(res => res.json())
                         .then(data => {{
                             if (data.length && data[0].mask) {{
-                                const [tl_x, tl_y, w, h] = data[0].mask;
+                                const [tl_x, tl_y, w, h] = data[0].dims;
                                 const previewEl = document.getElementById("maskPreview");
                                 const previewRect = previewEl.getBoundingClientRect();
 
