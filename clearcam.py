@@ -588,11 +588,11 @@ class VideoCapture:
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             if hasattr(self, "mask") and self.mask is not None:
-              print("rory mask outside =",self.mask["outside"])
-              if (x.tlwh[0]+x.tlwh[2])<self.mask["dims"][0]: continue
-              if x.tlwh[0]>=(self.mask["dims"][0]+self.mask["dims"][2]): continue
-              if (x.tlwh[1]+x.tlwh[3])<self.mask["dims"][1]: continue
-              if x.tlwh[1]>(self.mask["dims"][1]+self.mask["dims"][3]):continue
+              outside = ((x.tlwh[0]+x.tlwh[2])<self.mask["dims"][0] or\
+              x.tlwh[0]>=(self.mask["dims"][0]+self.mask["dims"][2]) or\
+              (x.tlwh[1]+x.tlwh[3])<self.mask["dims"][1] or\
+              x.tlwh[1]>(self.mask["dims"][1]+self.mask["dims"][3]))
+              if outside ^ self.mask["outside"]: continue
             #print("detected")
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
