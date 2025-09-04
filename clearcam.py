@@ -587,7 +587,7 @@ class VideoCapture:
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "mask") and self.mask is not None:
+            if hasattr(self, "mask") and self.mask is not None and self.mask["is_on"]:
               outside = ((x.tlwh[0]+x.tlwh[2])<self.mask["dims"][0] or\
               x.tlwh[0]>=(self.mask["dims"][0]+self.mask["dims"][2]) or\
               (x.tlwh[1]+x.tlwh[3])<self.mask["dims"][1] or\
@@ -1650,9 +1650,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 </div>
                             </div>
                             <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <label style="display: flex; align-items: center; gap: 6px;">
-                                    <input type="checkbox" id="outsideMaskCheckbox"> Outside Mask
-                                </label>
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <label style="display: flex; align-items: center; gap: 6px;">
+                                        <input type="checkbox" id="maskEnabledCheckbox" checked> Enabled
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 6px;">
+                                        <input type="checkbox" id="outsideMaskCheckbox"> Outside Mask
+                                    </label>
+                                </div>
                                 <div style="display: flex; gap: 10px;">
                                     <button type="button" onclick="closeMaskModal()">Cancel</button>
                                     <button type="button" onclick="saveMask()">Save</button>
@@ -1740,6 +1745,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 maskRect.style.height = height + "px";
                             }}
 
+                            // Set Enabled checkbox - check both possible response formats
+                            const maskEnabledCheckbox = document.getElementById("maskEnabledCheckbox");
+                            if (data.is_on !== undefined) {{
+                                maskEnabledCheckbox.checked = data.is_on;
+                            }} else if (data.length && data[0] && data[0].is_on !== undefined) {{
+                                maskEnabledCheckbox.checked = data[0].is_on;
+                            }} else {{
+                                maskEnabledCheckbox.checked = true;
+                            }}
+
                             // Set Outside Mask checkbox - check both possible response formats
                             const outsideMaskCheckbox = document.getElementById("outsideMaskCheckbox");
                             if (data.outside !== undefined) {{
@@ -1774,6 +1789,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const w = (rect.width / preview.width) * videoWidth;
                     const h = (rect.height / preview.height) * videoHeight;
 
+                    const is_on = document.getElementById("maskEnabledCheckbox").checked;
                     const outside = document.getElementById("outsideMaskCheckbox").checked;
 
                     const params = new URLSearchParams({{
@@ -1782,6 +1798,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         tl_y: tl_y.toFixed(2),
                         w: w.toFixed(2),
                         h: h.toFixed(2),
+                        is_on: is_on,
                         outside: outside
                     }});
 
