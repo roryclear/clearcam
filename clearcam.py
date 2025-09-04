@@ -907,6 +907,26 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"status":"ok"}')
             return
 
+        if parsed_path.path == "/get_mask":
+            if not cam_name:
+                self.send_error(400, "Missing cam parameter")
+                return
+            mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
+            if mask_file.exists():
+                try:
+                    with open(mask_file, "rb") as f:
+                        mask = pickle.load(f)
+                except Exception as e:
+                    self.send_error(500, f"Failed to load mask: {e}")
+                    return
+            mask_res = [{"mask":mask}]
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(mask_res).encode("utf-8"))
+            return
+
         if parsed_path.path == "/get_alerts":
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
@@ -1686,8 +1706,38 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                 function openMaskEditor() {{
                     maskModal.style.display = "flex";
+
+                    // Fetch saved mask
+                    fetch(`/get_mask?cam=${{encodeURIComponent(cameraName)}}`)
+                        .then(res => res.json())
+                        .then(data => {{
+                            if (data.length && data[0].mask) {{
+                                const [tl_x, tl_y, w, h] = data[0].mask;
+                                const previewEl = document.getElementById("maskPreview");
+                                const previewRect = previewEl.getBoundingClientRect();
+
+                                const videoWidth = 1280;
+                                const videoHeight = 720;
+
+                                // Convert video coords -> preview coords
+                                const left = (tl_x / videoWidth) * previewEl.clientWidth;
+                                const top = (tl_y / videoHeight) * previewEl.clientHeight;
+                                const width = (w / videoWidth) * previewEl.clientWidth;
+                                const height = (h / videoHeight) * previewEl.clientHeight;
+
+                                maskRect.style.left = left + "px";
+                                maskRect.style.top = top + "px";
+                                maskRect.style.width = width + "px";
+                                maskRect.style.height = height + "px";
+                            }}
+                        }})
+                        .catch(err => {{
+                            console.error("Failed to load mask:", err);
+                        }});
+
                     setTimeout(initMaskEditor, 100);
                 }}
+
 
                 function closeMaskModal() {{
                     maskModal.style.display = "none";
