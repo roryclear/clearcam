@@ -588,6 +588,7 @@ class VideoCapture:
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             if hasattr(self, "mask") and self.mask is not None:
+              print("rory mask outside =",self.mask["outside"])
               if (x.tlwh[0]+x.tlwh[2])<self.mask["dims"][0]: continue
               if x.tlwh[0]>=(self.mask["dims"][0]+self.mask["dims"][2]): continue
               if (x.tlwh[1]+x.tlwh[3])<self.mask["dims"][1]: continue
@@ -838,13 +839,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             mask_file.parent.mkdir(parents=True, exist_ok=True)
             with open(mask_file, "rb") as f:
                mask = pickle.load(f)
+            outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            is_on = str(is_on).lower() == "true"
+            outside = str(outside).lower() == "true"
             tl_x = query.get("tl_x", [None])[0]
             tl_y = query.get("tl_y", [None])[0]
             w = query.get("w", [None])[0]
             h = query.get("h", [None])[0]
 
-            mask = {"dims":[float(tl_x),float(tl_y),float(w),float(h)],"on":False,"outside":False}
+            mask = {"dims":[float(tl_x),float(tl_y),float(w),float(h)],"on":is_on,"outside":outside}
             with open(mask_file, 'wb') as f: pickle.dump(mask, f)
             with open(edited_mask_file, 'wb') as f: pickle.dump(mask, f)
 
@@ -1644,9 +1648,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <div class="resize-handle" style="position: absolute; width: 16px; height: 16px; background: red; cursor: nwse-resize; bottom: -8px; right: -8px; z-index: 10; border-radius: 50%;"></div>
                                 </div>
                             </div>
-                            <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                                <button type="button" onclick="closeMaskModal()">Cancel</button>
-                                <button type="button" onclick="saveMask()">Save</button>
+                            <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <label style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" id="outsideMaskCheckbox"> Outside Mask
+                                </label>
+                                <div style="display: flex; gap: 10px;">
+                                    <button type="button" onclick="closeMaskModal()">Cancel</button>
+                                    <button type="button" onclick="saveMask()">Save</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1710,10 +1719,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     fetch(`/get_mask?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
                         .then(data => {{
-                            if (data.length && data[0].mask) {{
-                                const [tl_x, tl_y, w, h] = data[0].dims;
+                            // Check if we have mask data and it's in the expected format
+                            if (data && data.dims) {{
+                                const [tl_x, tl_y, w, h] = data.dims;
                                 const previewEl = document.getElementById("maskPreview");
-                                const previewRect = previewEl.getBoundingClientRect();
 
                                 const videoWidth = 1280;
                                 const videoHeight = 720;
@@ -1729,6 +1738,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 maskRect.style.width = width + "px";
                                 maskRect.style.height = height + "px";
                             }}
+
+                            // Set Outside Mask checkbox - check both possible response formats
+                            const outsideMaskCheckbox = document.getElementById("outsideMaskCheckbox");
+                            if (data.outside !== undefined) {{
+                                outsideMaskCheckbox.checked = data.outside;
+                            }} else if (data.length && data[0] && data[0].outside !== undefined) {{
+                                outsideMaskCheckbox.checked = data[0].outside;
+                            }} else {{
+                                outsideMaskCheckbox.checked = false;
+                            }}
                         }})
                         .catch(err => {{
                             console.error("Failed to load mask:", err);
@@ -1736,7 +1755,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     setTimeout(initMaskEditor, 100);
                 }}
-
 
                 function closeMaskModal() {{
                     maskModal.style.display = "none";
@@ -1755,12 +1773,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const w = (rect.width / preview.width) * videoWidth;
                     const h = (rect.height / preview.height) * videoHeight;
 
+                    const outside = document.getElementById("outsideMaskCheckbox").checked;
+
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         tl_x: tl_x.toFixed(2),
                         tl_y: tl_y.toFixed(2),
                         w: w.toFixed(2),
-                        h: h.toFixed(2)
+                        h: h.toFixed(2),
+                        outside: outside
                     }});
 
                     fetch(`/edit_mask?${{params.toString()}}`)
