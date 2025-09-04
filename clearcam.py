@@ -588,11 +588,10 @@ class VideoCapture:
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             if hasattr(self, "mask") and self.mask is not None:
-              #print("mask and tlwh =",self.mask,x.tlwh)
-              if x.tlwh[0]>(self.mask[0][0]+self.mask[0][2]) or x.tlwh[1]>(self.mask[0][0]+self.mask[0][3]) or\
-              (x.tlwh[0]+x.tlwh[2])<self.mask[0][0] or (x.tlwh[1]+x.tlwh[3])<self.mask[0][1]:
-                #print("skipped")
-                continue
+              if (x.tlwh[0]+x.tlwh[2])<self.mask[0][0]: continue
+              if x.tlwh[0]>=(self.mask[0][0]+self.mask[0][2]): continue
+              if (x.tlwh[1]+x.tlwh[3])<self.mask[0][1]: continue
+              if x.tlwh[1]>(self.mask[0][1]+self.mask[0][3]):continue
             #print("detected")
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
@@ -1695,13 +1694,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 }}
 
                 function saveMask() {{
+                    const previewEl = document.getElementById("maskPreview");
                     const rect = maskRect.getBoundingClientRect();
-                    const preview = document.getElementById("maskPreview").getBoundingClientRect();
+                    const preview = previewEl.getBoundingClientRect();
 
-                    const tl_x = ((rect.left - preview.left) / preview.width) * 1280;
-                    const tl_y = ((rect.top - preview.top) / preview.height) * 1280;
-                    const w = (rect.width / preview.width) * 1280;
-                    const h = (rect.height / preview.height) * 1280;
+                    const videoWidth = 1280;
+                    const videoHeight = 720;
+
+                    const tl_x = ((rect.left - preview.left) / preview.width) * videoWidth;
+                    const tl_y = ((rect.top - preview.top) / preview.height) * videoHeight;
+                    const w = (rect.width / preview.width) * videoWidth;
+                    const h = (rect.height / preview.height) * videoHeight;
 
                     const params = new URLSearchParams({{
                         cam: cameraName,
@@ -1722,7 +1725,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to save mask.");
                         }});
                 }}
-
 
                 function initMaskEditor() {{
                     const handle = maskRect.querySelector('.resize-handle');
@@ -1761,28 +1763,29 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         const preview = document.getElementById("maskPreview").getBoundingClientRect();
                         
                         if (isDragging) {{
-                            // Calculate new position
-                            let newLeft = e.clientX - startX;
-                            let newTop = e.clientY - startY;
-                            
-                            // Constrain to preview image bounds
-                            newLeft = Math.max(preview.left, Math.min(newLeft, preview.right - maskRect.offsetWidth));
-                            newTop = Math.max(preview.top, Math.min(newTop, preview.bottom - maskRect.offsetHeight));
-                            
-                            // Set new position
-                            maskRect.style.left = (newLeft - preview.left) + 'px';
-                            maskRect.style.top = (newTop - preview.top) + 'px';
+                            const previewEl = document.getElementById("maskPreview");
+                            const parentRect = previewEl.getBoundingClientRect();
+
+                            let newLeft = e.clientX - startX - parentRect.left;
+                            let newTop = e.clientY - startY - parentRect.top;
+
+                            newLeft = Math.max(0, Math.min(newLeft, previewEl.clientWidth - maskRect.offsetWidth));
+                            newTop = Math.max(0, Math.min(newTop, previewEl.clientHeight - maskRect.offsetHeight));
+
+                            maskRect.style.left = newLeft + 'px';
+                            maskRect.style.top = newTop + 'px';
                         }} 
                         else if (isResizing) {{
-                            const dx = e.clientX - startX;
-                            const dy = e.clientY - startY;
-                            let newWidth = startWidth + dx;
-                            let newHeight = startHeight + dy;
+                            const previewEl = document.getElementById("maskPreview");
+                            let newWidth = startWidth + (e.clientX - startX);
+                            let newHeight = startHeight + (e.clientY - startY);
+
                             newWidth = Math.max(20, newWidth);
                             newHeight = Math.max(20, newHeight);
-                            const preview = document.getElementById("maskPreview").getBoundingClientRect();
-                            newWidth = Math.min(newWidth, preview.right - startLeft);
-                            newHeight = Math.min(newHeight, preview.bottom - startTop);
+
+                            newWidth = Math.min(newWidth, previewEl.clientWidth - parseInt(maskRect.style.left));
+                            newHeight = Math.min(newHeight, previewEl.clientHeight - parseInt(maskRect.style.top));
+
                             maskRect.style.width = newWidth + 'px';
                             maskRect.style.height = newHeight + 'px';
                         }}
