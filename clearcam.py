@@ -588,10 +588,10 @@ class VideoCapture:
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             if hasattr(self, "mask") and self.mask is not None:
-              if (x.tlwh[0]+x.tlwh[2])<self.mask[0][0]: continue
-              if x.tlwh[0]>=(self.mask[0][0]+self.mask[0][2]): continue
-              if (x.tlwh[1]+x.tlwh[3])<self.mask[0][1]: continue
-              if x.tlwh[1]>(self.mask[0][1]+self.mask[0][3]):continue
+              if (x.tlwh[0]+x.tlwh[2])<self.mask[0]: continue
+              if x.tlwh[0]>=(self.mask[0]+self.mask[2]): continue
+              if (x.tlwh[1]+x.tlwh[3])<self.mask[1]: continue
+              if x.tlwh[1]>(self.mask[1]+self.mask[3]):continue
             #print("detected")
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
@@ -846,7 +846,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             mask = [float(tl_x),float(tl_y),float(w),float(h)]
             with open(mask_file, 'wb') as f: pickle.dump(mask, f)
-            append_to_pickle_list(edited_mask_file,mask)
+            with open(edited_mask_file, 'wb') as f: pickle.dump(mask, f)
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
