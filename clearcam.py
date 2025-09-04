@@ -919,7 +919,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self.send_error(500, f"Failed to load mask: {e}")
                     return
-            mask_res = [{"mask":mask}]
+            mask_res = [{"mask":mask["dims"]}]
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
