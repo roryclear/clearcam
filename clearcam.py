@@ -839,10 +839,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             with open(mask_file, "rb") as f:
                mask = pickle.load(f)
             is_on = query.get("is_on", [None])[0]
-            tl_x = is_on = query.get("tl_x", [None])[0]
-            tl_y = is_on = query.get("tl_y", [None])[0]
-            w = is_on = query.get("w", [None])[0]
-            h = is_on = query.get("h", [None])[0]
+            tl_x = query.get("tl_x", [None])[0]
+            tl_y = query.get("tl_y", [None])[0]
+            w = query.get("w", [None])[0]
+            h = query.get("h", [None])[0]
 
             mask = {"dims":[float(tl_x),float(tl_y),float(w),float(h)],"on":False,"outside":False}
             with open(mask_file, 'wb') as f: pickle.dump(mask, f)
