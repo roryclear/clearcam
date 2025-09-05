@@ -3,7 +3,6 @@
 "live" = "라이브";
 "default_device_name" = "내 장치";
 "waiting_for_ip" = "Wi-Fi 연결 대기 중...";
-"streaming_over_wifi" = "로컬 Wi-Fi로 스트리밍 중: %@";
 "permission_denied" = "권한 거부됨";
 "notification_permission_denied" = "알림 권한이 거부되었습니다. 설정에서 활성화할 수 있습니다.";
 "ok" = "확인";

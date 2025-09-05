@@ -204,13 +204,6 @@
     self.loadedFilenames = [NSMutableSet set];
     [self setupDownloadDirectory];
     [self loadExistingVideos];
-    
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(updateIPAddressLabel)
-                                                 name:@"DeviceIPAddressDidChangeNotification"
-                                               object:nil];
-    
-    [self updateIPAddressLabel];
     [self updateTableViewBackground];
     [self setupRefreshTimer];
 }
@@ -218,25 +211,6 @@
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.navigationController setNavigationBarHidden:YES animated:NO];
-}
-
-- (void)updateIPAddressLabel {
-    BOOL streamViaWifiEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"stream_via_wifi_enabled"];
-    NSString *ipAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"DeviceIPAddress"];
-
-    if (streamViaWifiEnabled) {
-        self.ipLabel.hidden = NO;
-        self.ipLabel.text = (ipAddress.length > 0) ? [NSString stringWithFormat:NSLocalizedString(@"streaming_over_wifi", nil), ipAddress] : NSLocalizedString(@"waiting_for_ip", nil);
-        self.mainStackViewTopToSafeAreaConstraint.active = NO;
-        self.mainStackViewTopToIPLabelConstraint.active = YES;
-    } else {
-        self.ipLabel.hidden = YES;
-        self.ipLabel.text = nil;
-        self.mainStackViewTopToIPLabelConstraint.active = NO;
-        self.mainStackViewTopToSafeAreaConstraint.active = YES;
-    }
-
-    [self.view layoutIfNeeded];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -911,3 +885,4 @@
 }
 
 @end
+
