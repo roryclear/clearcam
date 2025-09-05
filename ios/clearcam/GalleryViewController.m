@@ -185,7 +185,7 @@
         [statusStack.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:8],
         [statusStack.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
 
-        [self.tabController.view.topAnchor constraintEqualToAnchor:statusStack.bottomAnchor constant:8],
+        [self.tabController.view.topAnchor constraintEqualToAnchor:statusStack.bottomAnchor constant:-2],
         [self.tabController.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tabController.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.tabController.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]

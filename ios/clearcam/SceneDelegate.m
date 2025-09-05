@@ -25,8 +25,6 @@ willConnectToSession:(UISceneSession *)session
     
     self.window.rootViewController = loadingVC;
     [self.window makeKeyAndVisible];
-    
-    // Check authentication status properly
     [self verifyAuthentication];
 }
 
@@ -38,22 +36,24 @@ willConnectToSession:(UISceneSession *)session
             });
             return;
         }
-        //todo session only if logged out??
-        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIViewController *rootVC;
-                
-                if (isActive) {
-                    rootVC = [[GalleryViewController alloc] init];
-                } else {
-                    rootVC = [[LoginViewController alloc] init];
-                    [[StoreManager sharedInstance] clearSessionTokenFromKeychain];
-                }
-                [self switchToRootViewController:rootVC];
-            });
-        }];
+        [self attemptVerifySubscriptionWithRetry:2];
     }];
 }
+
+- (void)attemptVerifySubscriptionWithRetry:(NSInteger)remainingAttempts {
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (isActive) {
+                [self switchToRootViewController:[[GalleryViewController alloc] init]];
+            } else if (remainingAttempts > 0) {
+                [self attemptVerifySubscriptionWithRetry:remainingAttempts - 1];
+            } else {
+                [self switchToRootViewController:[[LoginViewController alloc] init]];
+            }
+        });
+    }];
+}
+
 
 - (void)switchToRootViewController:(UIViewController *)rootVC {
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:rootVC];
