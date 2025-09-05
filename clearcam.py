@@ -595,7 +595,6 @@ class VideoCapture:
               (x.tlwh[1]+x.tlwh[3])<self.zone["dims"][1] or\
               x.tlwh[1]>(self.zone["dims"][1]+self.zone["dims"][3]))
               if outside ^ self.zone["outside"]: continue
-            #print("detected")
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
