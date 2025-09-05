@@ -413,12 +413,12 @@ class VideoCapture:
     self.last_preds = []
     self.dir = None
 
-    self.mask = None
+    self.zone = None
 
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
-    mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
-    mask_file.parent.mkdir(parents=True, exist_ok=True)
+    zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
+    zone_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(alerts_file, "rb") as f:
             self.alert_counters = pickle.load(f)
@@ -545,11 +545,13 @@ class VideoCapture:
                       for c in a.classes: classes.add(str(c))
                     added_alerts_file.unlink()
                 
-                edited_mask_file = CAMERA_BASE_DIR / self.cam_name / "edited_mask.pkl"
-                if edited_mask_file.exists():
-                   with open(edited_mask_file, 'rb') as f:
-                      mask = pickle.load(f)
-                      self.mask = mask
+                edited_zone_file = CAMERA_BASE_DIR / self.cam_name / "edited_zone.pkl"
+                if edited_zone_file.exists():
+                  with open(edited_zone_file, 'rb') as f:
+                    zone = pickle.load(f)
+                    self.zone = zone
+                  edited_zone_file.unlink()
+
                     
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
@@ -583,16 +585,16 @@ class VideoCapture:
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
         if track:
-          online_targets = tracker.update(preds, [1280,1280], [1280,1280]) # todo, mask in js also hardcoded to 1280
+          online_targets = tracker.update(preds, [1280,1280], [1280,1280]) # todo, zone in js also hardcoded to 1280
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "mask") and self.mask is not None and self.mask["is_on"]:
-              outside = ((x.tlwh[0]+x.tlwh[2])<self.mask["dims"][0] or\
-              x.tlwh[0]>=(self.mask["dims"][0]+self.mask["dims"][2]) or\
-              (x.tlwh[1]+x.tlwh[3])<self.mask["dims"][1] or\
-              x.tlwh[1]>(self.mask["dims"][1]+self.mask["dims"][3]))
-              if outside ^ self.mask["outside"]: continue
+            if hasattr(self, "zone") and self.zone is not None and self.zone["is_on"]:
+              outside = ((x.tlwh[0]+x.tlwh[2])<self.zone["dims"][0] or\
+              x.tlwh[0]>=(self.zone["dims"][0]+self.zone["dims"][2]) or\
+              (x.tlwh[1]+x.tlwh[3])<self.zone["dims"][1] or\
+              x.tlwh[1]>(self.zone["dims"][1]+self.zone["dims"][3]))
+              if outside ^ self.zone["outside"]: continue
             #print("detected")
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
@@ -827,19 +829,19 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         
-        if parsed_path.path == "/edit_mask":
+        if parsed_path.path == "/edit_zone":
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
-            edited_mask_file = CAMERA_BASE_DIR / cam_name / "edited_mask.pkl"
-            if not mask_file.exists():
-                with open(mask_file, "wb") as f:
+            zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
+            edited_zone_file = CAMERA_BASE_DIR / cam_name / "edited_zone.pkl"
+            if not zone_file.exists():
+                with open(zone_file, "wb") as f:
                     pickle.dump(None, f)
-            mask_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(mask_file, "rb") as f:
-               mask = pickle.load(f)
-            if mask is None: mask = {}
+            zone_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(zone_file, "rb") as f:
+               zone = pickle.load(f)
+            if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
             if is_on is not None: is_on = str(is_on).lower() == "true"
@@ -850,11 +852,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             h = query.get("h", [None])[0]
 
             
-            if tl_x is not None: mask["dims"] = [float(tl_x),float(tl_y),float(w),float(h)]
-            if is_on is not None: mask["is_on"] = is_on
-            if outside is not None: mask["outside"] = outside
-            with open(mask_file, 'wb') as f: pickle.dump(mask, f)
-            with open(edited_mask_file, 'wb') as f: pickle.dump(mask, f)
+            if tl_x is not None: zone["dims"] = [float(tl_x),float(tl_y),float(w),float(h)]
+            if is_on is not None: zone["is_on"] = is_on
+            if outside is not None: zone["outside"] = outside
+            with open(zone_file, 'wb') as f: pickle.dump(zone, f)
+            with open(edited_zone_file, 'wb') as f: pickle.dump(zone, f)
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -915,23 +917,25 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"status":"ok"}')
             return
 
-        if parsed_path.path == "/get_mask":
+        if parsed_path.path == "/get_zone":
+            zone = {}
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-            mask_file = CAMERA_BASE_DIR / cam_name / "mask.pkl"
-            if mask_file.exists():
+            zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
+            if zone_file.exists():
                 try:
-                    with open(mask_file, "rb") as f:
-                        mask = pickle.load(f)
+                    with open(zone_file, "rb") as f:
+                        zone = pickle.load(f)
                 except Exception as e:
-                    self.send_error(500, f"Failed to load mask: {e}")
+                    self.send_error(500, f"Failed to load zone: {e}")
                     return
-                
+            
+            for _ in range(100): print("zone =",zone)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps(mask).encode("utf-8"))
+            self.wfile.write(json.dumps(zone).encode("utf-8"))
             return
 
         if parsed_path.path == "/get_alerts":
@@ -1582,7 +1586,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
                         <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
-                            <button onclick="openMaskEditor()">Mask Settings</button>
+                            <button onclick="openZoneEditor()">Zone Settings</button>
                             <button onclick="openAlertModal()">Add Alert</button>
                         </div>
                     </div>
@@ -1634,16 +1638,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         </div>
                     </div>
 
-                    <div id="maskModal" class="modal">
+                    <div id="zoneModal" class="modal">
                         <div class="modal-content" style="max-width: 600px;">
                             <div class="modal-header">
-                                <h3>Edit Mask</h3>
-                                <span class="close" onclick="closeMaskModal()">&times;</span>
+                                <h3>Edit Zone</h3>
+                                <span class="close" onclick="closeZoneModal()">&times;</span>
                             </div>
                             <div style="position: relative; display: inline-block; max-width: 100%;">
-                                <img id="maskPreview" src="/{cam_name}/preview.jpg"
+                                <img id="zonePreview" src="/{cam_name}/preview.jpg"
                                     style="width: 100%; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; user-select: none; -webkit-user-drag: none; pointer-events: none;">
-                                <div id="maskRect" 
+                                <div id="zoneRect" 
                                     style="position: absolute; border: 2px dashed red; top: 20px; left: 20px; width: 150px; height: 100px; cursor: move; user-select: none;">
                                     <div class="resize-handle" style="position: absolute; width: 16px; height: 16px; background: red; cursor: nwse-resize; bottom: -8px; right: -8px; z-index: 10; border-radius: 50%;"></div>
                                 </div>
@@ -1651,15 +1655,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
                                 <div style="display: flex; flex-direction: column; gap: 10px;">
                                     <label style="display: flex; align-items: center; gap: 6px;">
-                                        <input type="checkbox" id="maskEnabledCheckbox" checked> Enabled
+                                        <input type="checkbox" id="zoneEnabledCheckbox" checked> Enabled
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px;">
-                                        <input type="checkbox" id="outsideMaskCheckbox"> Outside Mask
+                                        <input type="checkbox" id="outsideZoneCheckbox"> Outside Zone
                                     </label>
                                 </div>
                                 <div style="display: flex; gap: 10px;">
-                                    <button type="button" onclick="closeMaskModal()">Cancel</button>
-                                    <button type="button" onclick="saveMask()">Save</button>
+                                    <button type="button" onclick="closeZoneModal()">Cancel</button>
+                                    <button type="button" onclick="saveZone()">Save</button>
                                 </div>
                             </div>
                         </div>
@@ -1708,8 +1712,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 }};
 
                 
-                const maskModal = document.getElementById("maskModal");
-                const maskRect = document.getElementById("maskRect");
+                const zoneModal = document.getElementById("zoneModal");
+                const zoneRect = document.getElementById("zoneRect");
                 let isDragging = false;
                 let isResizing = false;
                 let resizeHandle = null;
@@ -1717,17 +1721,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 let startWidth, startHeight;
                 let startLeft, startTop;
 
-                function openMaskEditor() {{
-                    maskModal.style.display = "flex";
-
-                    // Fetch saved mask
-                    fetch(`/get_mask?cam=${{encodeURIComponent(cameraName)}}`)
+                function openZoneEditor() {{
+                    zoneModal.style.display = "flex";
+                    fetch(`/get_zone?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
                         .then(data => {{
-                            // Check if we have mask data and it's in the expected format
                             if (data && data.dims) {{
                                 const [tl_x, tl_y, w, h] = data.dims;
-                                const previewEl = document.getElementById("maskPreview");
+                                const previewEl = document.getElementById("zonePreview");
 
                                 const videoWidth = 1280;
                                 const videoHeight = 720;
@@ -1738,46 +1739,45 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const width = (w / videoWidth) * previewEl.clientWidth;
                                 const height = (h / videoHeight) * previewEl.clientHeight;
 
-                                maskRect.style.left = left + "px";
-                                maskRect.style.top = top + "px";
-                                maskRect.style.width = width + "px";
-                                maskRect.style.height = height + "px";
+                                zoneRect.style.left = left + "px";
+                                zoneRect.style.top = top + "px";
+                                zoneRect.style.width = width + "px";
+                                zoneRect.style.height = height + "px";
                             }}
 
-                            // Set Enabled checkbox - check both possible response formats
-                            const maskEnabledCheckbox = document.getElementById("maskEnabledCheckbox");
+                            const zoneEnabledCheckbox = document.getElementById("zoneEnabledCheckbox");
                             if (data.is_on !== undefined) {{
-                                maskEnabledCheckbox.checked = data.is_on;
+                                zoneEnabledCheckbox.checked = data.is_on;
                             }} else if (data.length && data[0] && data[0].is_on !== undefined) {{
-                                maskEnabledCheckbox.checked = data[0].is_on;
+                                zoneEnabledCheckbox.checked = data[0].is_on;
                             }} else {{
-                                maskEnabledCheckbox.checked = true;
+                                zoneEnabledCheckbox.checked = false;
                             }}
 
-                            // Set Outside Mask checkbox - check both possible response formats
-                            const outsideMaskCheckbox = document.getElementById("outsideMaskCheckbox");
+                            // Set Outside Zone checkbox - check both possible response formats
+                            const outsideZoneCheckbox = document.getElementById("outsideZoneCheckbox");
                             if (data.outside !== undefined) {{
-                                outsideMaskCheckbox.checked = data.outside;
+                                outsideZoneCheckbox.checked = data.outside;
                             }} else if (data.length && data[0] && data[0].outside !== undefined) {{
-                                outsideMaskCheckbox.checked = data[0].outside;
+                                outsideZoneCheckbox.checked = data[0].outside;
                             }} else {{
-                                outsideMaskCheckbox.checked = false;
+                                outsideZoneCheckbox.checked = false;
                             }}
                         }})
                         .catch(err => {{
-                            console.error("Failed to load mask:", err);
+                            console.error("Failed to load zone:", err);
                         }});
 
-                    setTimeout(initMaskEditor, 100);
+                    setTimeout(initZoneEditor, 100);
                 }}
 
-                function closeMaskModal() {{
-                    maskModal.style.display = "none";
+                function closeZoneModal() {{
+                    zoneModal.style.display = "none";
                 }}
 
-                function saveMask() {{
-                    const previewEl = document.getElementById("maskPreview");
-                    const rect = maskRect.getBoundingClientRect();
+                function saveZone() {{
+                    const previewEl = document.getElementById("zonePreview");
+                    const rect = zoneRect.getBoundingClientRect();
                     const preview = previewEl.getBoundingClientRect();
 
                     const videoWidth = 1280;
@@ -1788,8 +1788,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const w = (rect.width / preview.width) * videoWidth;
                     const h = (rect.height / preview.height) * videoHeight;
 
-                    const is_on = document.getElementById("maskEnabledCheckbox").checked;
-                    const outside = document.getElementById("outsideMaskCheckbox").checked;
+                    const is_on = document.getElementById("zoneEnabledCheckbox").checked;
+                    const outside = document.getElementById("outsideZoneCheckbox").checked;
 
                     const params = new URLSearchParams({{
                         cam: cameraName,
@@ -1801,20 +1801,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         outside: outside
                     }});
 
-                    fetch(`/edit_mask?${{params.toString()}}`)
+                    fetch(`/edit_zone?${{params.toString()}}`)
                         .then(res => {{
-                            if (!res.ok) throw new Error("Failed to save mask");
-                            console.log("Mask saved successfully");
-                            closeMaskModal();
+                            if (!res.ok) throw new Error("Failed to save zone");
+                            console.log("Zone saved successfully");
+                            closeZoneModal();
                         }})
                         .catch(err => {{
-                            console.error("Save mask failed:", err);
-                            alert("Failed to save mask.");
+                            console.error("Save zone failed:", err);
+                            alert("Failed to save zone.");
                         }});
                 }}
 
-                function initMaskEditor() {{
-                    const handle = maskRect.querySelector('.resize-handle');
+                function initZoneEditor() {{
+                    const handle = zoneRect.querySelector('.resize-handle');
                     
                     // Add event listener to the handle
                     handle.addEventListener('mousedown', function(e) {{
@@ -1825,21 +1825,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         resizeHandle = e.target;
                         startX = e.clientX;
                         startY = e.clientY;
-                        startWidth = parseInt(document.defaultView.getComputedStyle(maskRect).width, 10);
-                        startHeight = parseInt(document.defaultView.getComputedStyle(maskRect).height, 10);
-                        startLeft = parseInt(document.defaultView.getComputedStyle(maskRect).left, 10);
-                        startTop = parseInt(document.defaultView.getComputedStyle(maskRect).top, 10);
+                        startWidth = parseInt(document.defaultView.getComputedStyle(zoneRect).width, 10);
+                        startHeight = parseInt(document.defaultView.getComputedStyle(zoneRect).height, 10);
+                        startLeft = parseInt(document.defaultView.getComputedStyle(zoneRect).left, 10);
+                        startTop = parseInt(document.defaultView.getComputedStyle(zoneRect).top, 10);
                     }});
                     
                     // Mouse down event for dragging
-                    maskRect.addEventListener('mousedown', function(e) {{
+                    zoneRect.addEventListener('mousedown', function(e) {{
                         if (!e.target.classList.contains('resize-handle')) {{
                             e.preventDefault();
                             e.stopPropagation();
                             // Drag mode
                             isDragging = true;
-                            startX = e.clientX - parseInt(document.defaultView.getComputedStyle(maskRect).left, 10);
-                            startY = e.clientY - parseInt(document.defaultView.getComputedStyle(maskRect).top, 10);
+                            startX = e.clientX - parseInt(document.defaultView.getComputedStyle(zoneRect).left, 10);
+                            startY = e.clientY - parseInt(document.defaultView.getComputedStyle(zoneRect).top, 10);
                         }}
                     }});
 
@@ -1847,34 +1847,34 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     document.addEventListener('mousemove', function(e) {{
                         if (!isDragging && !isResizing) return;
                         
-                        const preview = document.getElementById("maskPreview").getBoundingClientRect();
+                        const preview = document.getElementById("zonePreview").getBoundingClientRect();
                         
                         if (isDragging) {{
-                            const previewEl = document.getElementById("maskPreview");
+                            const previewEl = document.getElementById("zonePreview");
                             const parentRect = previewEl.getBoundingClientRect();
 
                             let newLeft = e.clientX - startX - parentRect.left;
                             let newTop = e.clientY - startY - parentRect.top;
 
-                            newLeft = Math.max(0, Math.min(newLeft, previewEl.clientWidth - maskRect.offsetWidth));
-                            newTop = Math.max(0, Math.min(newTop, previewEl.clientHeight - maskRect.offsetHeight));
+                            newLeft = Math.max(0, Math.min(newLeft, previewEl.clientWidth - zoneRect.offsetWidth));
+                            newTop = Math.max(0, Math.min(newTop, previewEl.clientHeight - zoneRect.offsetHeight));
 
-                            maskRect.style.left = newLeft + 'px';
-                            maskRect.style.top = newTop + 'px';
+                            zoneRect.style.left = newLeft + 'px';
+                            zoneRect.style.top = newTop + 'px';
                         }} 
                         else if (isResizing) {{
-                            const previewEl = document.getElementById("maskPreview");
+                            const previewEl = document.getElementById("zonePreview");
                             let newWidth = startWidth + (e.clientX - startX);
                             let newHeight = startHeight + (e.clientY - startY);
 
                             newWidth = Math.max(20, newWidth);
                             newHeight = Math.max(20, newHeight);
 
-                            newWidth = Math.min(newWidth, previewEl.clientWidth - parseInt(maskRect.style.left));
-                            newHeight = Math.min(newHeight, previewEl.clientHeight - parseInt(maskRect.style.top));
+                            newWidth = Math.min(newWidth, previewEl.clientWidth - parseInt(zoneRect.style.left));
+                            newHeight = Math.min(newHeight, previewEl.clientHeight - parseInt(zoneRect.style.top));
 
-                            maskRect.style.width = newWidth + 'px';
-                            maskRect.style.height = newHeight + 'px';
+                            zoneRect.style.width = newWidth + 'px';
+                            zoneRect.style.height = newHeight + 'px';
                         }}
                     }});
 
@@ -1885,7 +1885,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         resizeHandle = null;
                     }});
                 }}
-                maskModal.addEventListener('shown', initMaskEditor);
+                zoneModal.addEventListener('shown', initZoneEditor);
 
                 // Allow dragging of the rectangle
                 (function makeDraggable(el) {{
@@ -1913,7 +1913,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         document.removeEventListener("mousemove", move);
                         document.removeEventListener("mouseup", stop);
                     }}
-                }})(maskRect);
+                }})(zoneRect);
 
 
                 function openAlertModal() {{
@@ -2040,7 +2040,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             container.innerHTML = `
                                 <p>No alerts configured.</p>
                                 <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
-                                    <button onclick="openMaskEditor()">Mask Settings</button>
+                                    <button onclick="openZoneEditor()">Zone Settings</button>
                                     <button onclick="openAlertModal()">Add Alert</button>
                                 </div>`;
                             return;
@@ -2101,7 +2101,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                             html += `</tbody></table>
                                 <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
-                                    <button onclick="openMaskEditor()">Mask Settings</button>
+                                    <button onclick="openZoneEditor()">Zone Settings</button>
                                     <button onclick="openAlertModal()">Add Alert</button>
                                 </div>`;
                             container.innerHTML = html;
