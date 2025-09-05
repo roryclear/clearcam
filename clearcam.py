@@ -1581,11 +1581,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <h3>Active Alerts</h3>
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
-                        <button onclick="openAlertModal()">Add Alert</button>
-                    </div>
-
-                    <div id="maskControls" style="margin-top: 20px; display: flex; align-items: center; gap: 12px;">
-                        <button onclick="openMaskEditor()">Mask Settings</button>
+                        <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
+                            <button onclick="openMaskEditor()">Mask Settings</button>
+                            <button onclick="openAlertModal()">Add Alert</button>
+                        </div>
                     </div>
 
                     <!-- The Modal -->
@@ -2037,10 +2036,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         .then(res => res.json())
                         .then(alerts => {{ 
                             const container = document.getElementById("alertsContainer");
-                            if (!alerts.length) {{
-                                container.innerHTML = `<p>No alerts configured.</p><button onclick="openAlertModal()">Add New</button>`;
-                                return;
-                            }}
+                        if (!alerts.length) {{
+                            container.innerHTML = `
+                                <p>No alerts configured.</p>
+                                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                                    <button onclick="openMaskEditor()">Mask Settings</button>
+                                    <button onclick="openAlertModal()">Add Alert</button>
+                                </div>`;
+                            return;
+                        }}
 
                             let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                                 <thead>
@@ -2096,9 +2100,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }}
 
                             html += `</tbody></table>
-                                    <div style="margin-top:10px; text-align:right;">
-                                        <button onclick="openAlertModal()">Add Alert</button>
-                                    </div>`;
+                                <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
+                                    <button onclick="openMaskEditor()">Mask Settings</button>
+                                    <button onclick="openAlertModal()">Add Alert</button>
+                                </div>`;
                             container.innerHTML = html;
                         }})
                         .catch(err => {{
