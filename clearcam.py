@@ -1658,7 +1658,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                         <input type="checkbox" id="zoneEnabledCheckbox" checked> Enabled
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px;">
-                                        <input type="checkbox" id="outsideZoneCheckbox"> Outside Zone
+                                        <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
                                     </label>
                                 </div>
                                 <div style="display: flex; gap: 10px;">
