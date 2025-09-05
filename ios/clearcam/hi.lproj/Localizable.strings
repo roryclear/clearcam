@@ -89,6 +89,8 @@
 "delete" = "हटाएं";
 "cancel" = "रद्द करें";
 "online" = "ऑनलाइन";
+"offline" = "ऑफ़लाइन"; 
+
 "experimental_features" = "प्रायोगिक विशेषताएँ";
 "docs" = "दस्तावेज़";
 "app_name" = "Clearcam";

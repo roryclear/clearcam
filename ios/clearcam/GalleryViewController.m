@@ -44,7 +44,6 @@
     self.menuButton.tintColor = [UIColor systemGrayColor];
     self.menuButton.transform = CGAffineTransformMakeRotation(M_PI_2);
     [self.contentView addSubview:self.menuButton];
-    
     self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.menuButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -96,19 +95,16 @@
     [self.navigationController setNavigationBarHidden:YES animated:NO];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    // Create header view
     self.headerView = [[UIView alloc] init];
     self.headerView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.headerView];
     
-    // Camera button
     self.cameraButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.cameraButton setImage:[UIImage systemImageNamed:@"camera.fill"] forState:UIControlStateNormal];
     self.cameraButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
     [self.cameraButton addTarget:self action:@selector(cameraTapped) forControlEvents:UIControlEventTouchUpInside];
     self.cameraButton.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // App icon
     NSArray *iconFiles = [[[NSBundle mainBundle] infoDictionary] valueForKeyPath:@"CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconFiles"];
     NSString *iconName = [iconFiles lastObject];
     UIImageView *appIconView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:iconName]];
@@ -119,14 +115,12 @@
     [appIconView.widthAnchor constraintEqualToConstant:24].active = YES;
     [appIconView.heightAnchor constraintEqualToConstant:24].active = YES;
     
-    // Settings button
     self.settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.settingsButton setImage:[UIImage systemImageNamed:@"gearshape.fill"] forState:UIControlStateNormal];
     self.settingsButton.tintColor = [[UIColor grayColor] colorWithAlphaComponent:0.9];
     [self.settingsButton addTarget:self action:@selector(settingsTapped) forControlEvents:UIControlEventTouchUpInside];
     self.settingsButton.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // IP label
     self.ipLabel = [[UILabel alloc] init];
     self.ipLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     self.ipLabel.textColor = [UIColor secondaryLabelColor];
@@ -141,7 +135,6 @@
     titleStack.spacing = 16;
     titleStack.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // Vertical stack for entire header
     UIStackView *headerStack = [[UIStackView alloc] initWithArrangedSubviews:@[titleStack, self.ipLabel]];
     headerStack.axis = UILayoutConstraintAxisVertical;
     headerStack.spacing = 8;
@@ -168,6 +161,36 @@
     self.tabController.view.translatesAutoresizingMaskIntoConstraints = NO;
     [self.tabController didMoveToParentViewController:self];
 
+    self.statusDot = [[UIView alloc] init];
+    self.statusDot.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusDot.layer.cornerRadius = 6;
+    self.statusDot.layer.masksToBounds = YES;
+    [self.statusDot.widthAnchor constraintEqualToConstant:12].active = YES;
+    [self.statusDot.heightAnchor constraintEqualToConstant:12].active = YES;
+
+    self.statusLabel = [[UILabel alloc] init];
+    self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.statusLabel.textColor = [UIColor secondaryLabelColor];
+
+    UIStackView *statusStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.statusDot, self.statusLabel]];
+    statusStack.axis = UILayoutConstraintAxisHorizontal;
+    statusStack.spacing = 6;
+    statusStack.alignment = UIStackViewAlignmentCenter;
+    statusStack.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [self.view addSubview:statusStack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [statusStack.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:8],
+        [statusStack.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+
+        [self.tabController.view.topAnchor constraintEqualToAnchor:statusStack.bottomAnchor constant:8],
+        [self.tabController.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tabController.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tabController.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    
     [NSLayoutConstraint activateConstraints:@[
         [self.headerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.headerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -206,6 +229,29 @@
     [self loadExistingVideos];
     [self updateTableViewBackground];
     [self setupRefreshTimer];
+    
+    self.statusTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
+                                                        target:self
+                                                      selector:@selector(updateInternetStatus)
+                                                      userInfo:nil
+                                                       repeats:YES];
+    [self updateInternetStatus];
+}
+
+- (void)updateInternetStatus {
+    [[StoreManager sharedInstance] checkInternetWithCompletion:^(BOOL hasInternet) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (hasInternet) {
+                self.statusDot.backgroundColor = [UIColor systemGreenColor];
+                self.statusLabel.text = NSLocalizedString(@"online", @"online status");
+                self.statusLabel.textColor = [UIColor systemGrayColor];
+            } else {
+                self.statusDot.backgroundColor = [UIColor systemRedColor];
+                self.statusLabel.text = NSLocalizedString(@"offline", @"offline status");
+                self.statusLabel.textColor = [UIColor systemGrayColor];
+            }
+        });
+    }];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -221,6 +267,8 @@
 - (void)dealloc {
     [self.refreshTimer invalidate];
     self.refreshTimer = nil;
+    [self.statusTimer invalidate];
+    self.statusTimer = nil;
 }
 
 - (void)setupRefreshTimer {

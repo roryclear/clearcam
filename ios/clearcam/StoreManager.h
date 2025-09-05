@@ -26,6 +26,7 @@ extern NSString *const StoreManagerSubscriptionStatusDidChangeNotification;
 - (void)showUpgradePopupInViewController:(UIViewController *)presentingVC;
 - (void)showUpgradePopupInViewController:(UIViewController *)presentingVC
                              completion:(void (^)(BOOL success))completion;
+- (void)checkInternetWithCompletion:(void (^)(BOOL hasInternet))completion;
 
 @end
 

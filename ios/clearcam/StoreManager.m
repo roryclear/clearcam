@@ -481,6 +481,26 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 [self verifySessionOrSubscription:YES completion:completion];
 }
 
+- (void)checkInternetWithCompletion:(void (^)(BOOL hasInternet))completion {
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/ping"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url
+                                                           cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                                                       timeoutInterval:3.0];
+    request.HTTPMethod = @"HEAD";
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession]
+                                  dataTaskWithRequest:request
+                                  completionHandler:^(NSData * _Nullable data,
+                                                      NSURLResponse * _Nullable response,
+                                                      NSError * _Nullable error) {
+        if (error) {
+            completion(NO);
+            return;
+        }
+        completion(response != nil);
+    }];
+    [task resume];
+}
+
 - (void)verifySessionOrSubscription:(BOOL)checkSubscription
                          completion:(void (^)(BOOL isActive, NSDate *expiryDate))completion
 {

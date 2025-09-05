@@ -31,7 +31,7 @@ willConnectToSession:(UISceneSession *)session
 }
 
 - (void)verifyAuthentication {
-    [self checkInternetWithCompletion:^(BOOL hasInternet) {
+    [[StoreManager sharedInstance] checkInternetWithCompletion:^(BOOL hasInternet) {
         if (!hasInternet) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self switchToRootViewController:[[GalleryViewController alloc] init]];
@@ -53,26 +53,6 @@ willConnectToSession:(UISceneSession *)session
             });
         }];
     }];
-}
-
-- (void)checkInternetWithCompletion:(void (^)(BOOL hasInternet))completion {
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/ping"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url
-                                                           cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                                       timeoutInterval:3.0];
-    request.HTTPMethod = @"HEAD";
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession]
-                                  dataTaskWithRequest:request
-                                  completionHandler:^(NSData * _Nullable data,
-                                                      NSURLResponse * _Nullable response,
-                                                      NSError * _Nullable error) {
-        if (error) {
-            completion(NO);
-            return;
-        }
-        completion(response != nil);
-    }];
-    [task resume];
 }
 
 - (void)switchToRootViewController:(UIViewController *)rootVC {

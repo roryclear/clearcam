@@ -89,6 +89,7 @@
 "delete" = "删除";
 "cancel" = "取消";
 "online" = "在线";
+"offline" = "离线";  
 "experimental_features" = "实验性功能";
 "docs" = "文档";
 "app_name" = "Clearcam";

@@ -89,6 +89,8 @@
 "delete" = "삭제";
 "cancel" = "취소";
 "online" = "온라인";
+"offline" = "오프라인";
+
 "experimental_features" = "실험적 기능";
 "docs" = "문서";
 "app_name" = "Clearcam";

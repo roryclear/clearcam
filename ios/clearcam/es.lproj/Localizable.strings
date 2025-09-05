@@ -89,6 +89,8 @@
 "delete" = "Eliminar";
 "cancel" = "Cancelar";
 "online" = "En línea";
+"offline" = "Desconectado";
+
 "experimental_features" = "Funciones experimentales";
 "docs" = "Documentación";
 "app_name" = "Clearcam";

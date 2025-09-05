@@ -89,6 +89,8 @@
 "delete" = "削除";
 "cancel" = "キャンセル";
 "online" = "オンライン";
+"offline" = "オフライン"; 
+
 "experimental_features" = "実験的機能";
 "docs" = "ドキュメント";
 "app_name" = "Clearcam";
