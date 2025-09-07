@@ -395,6 +395,20 @@ class RollingClassCounter:
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
     return time_of_day < self.sched[1] and time_of_day > ((self.sched[0] - self.window) + offset)
 
+def find_ffmpeg():
+    ffmpeg_path = shutil.which('ffmpeg')
+    if ffmpeg_path:
+        return ffmpeg_path
+    common_paths = [
+        '/opt/homebrew/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        '/usr/bin/ffmpeg'
+    ]
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+    return 'ffmpeg'
+
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
     # objects in scene count
@@ -442,10 +456,7 @@ class VideoCapture:
     if self.proc:
         self.proc.kill()
 
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
-    else:
-        ffmpeg_path = 'ffmpeg'
+    ffmpeg_path = find_ffmpeg()
     
     command = [
         ffmpeg_path,
@@ -665,10 +676,7 @@ class HLSStreamer:
         self.current_stream_dir = self._get_new_stream_dir()
         self.recent_segments = deque(maxlen=4)
         self.start_time = time.time()
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
-        else:
-            ffmpeg_path = 'ffmpeg'
+        ffmpeg_path = find_ffmpeg()
         ffmpeg_cmd = [
             ffmpeg_path,
             "-f", "rawvideo",
@@ -706,10 +714,7 @@ class HLSStreamer:
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
-        else:
-            ffmpeg_path = 'ffmpeg'
+        ffmpeg_path = find_ffmpeg()
         if last:
             # Re-encode with scaling and compression
             command = [
