@@ -4,7 +4,7 @@
 [![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/gb/app/clearcam/id6743237694)
 
 <table align="center">
-  <tr>
+  <tr valign="top">
     <td>
       <img src="images/server.PNG" alt="Server" width="400" />
     </td>
