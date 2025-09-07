@@ -3,18 +3,19 @@
 
 [![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/gb/app/clearcam/id6743237694)
 
-<table align="center">
+<table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
   <tr valign="top">
-    <td>
-      <img src="images/server.PNG" alt="Server" width="400" />
+    <td style="padding-right: 10px;">
+      <img src="images/server.PNG" alt="Server" width="400" /><br/>
       <img src="images/kg1.jpg" alt="KG1" width="400" /><br/>
       <img src="images/kg2.jpg" alt="KG2" width="400" />
     </td>
     <td>
-      <img src="images/front.PNG" alt="Front" width="400" /><br/>
+      <img src="images/front.PNG" alt="Front" width="400" />
     </td>
   </tr>
 </table>
+
 
 ## video demo:
 https://x.com/RoryClear/status/1959249250811785405
