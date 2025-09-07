@@ -33,7 +33,6 @@ https://x.com/RoryClear/status/1959249250811785405
 3. (optional) enter your Clearcam premium userID (viewable in iOS app) to receive streams and notifications
 4. open localhost:8080 in your browser
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
-- use --yolo_size={s, m, l, or x for larger yolov8 variants}
 
 ## python requirements
 - ffmpeg (installed on your computer)
