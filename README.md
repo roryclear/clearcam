@@ -1,5 +1,5 @@
-# clearcam
-# Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
+<img src="images/logo.png" alt="logo" width="400" /><br/>
+# clearcam Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
 
 [![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/gb/app/clearcam/id6743237694)
 
