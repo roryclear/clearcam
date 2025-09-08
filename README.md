@@ -1,4 +1,6 @@
-<img src="images/logo.png" alt="logo" width="100" style="display: block; margin: 0 auto;" /><br/>
+<div style="text-align: center;">
+  <img src="images/logo.png" alt="logo" width="100" />
+</div>
 # clearcam: Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
 
 [![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/gb/app/clearcam/id6743237694)
