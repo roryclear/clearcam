@@ -1,6 +1,6 @@
-<div style="text-align: center;">
+<p align="center">
   <img src="images/logo.png" alt="logo" width="100" />
-</div>
+</p>
 
 # clearcam: Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
 
