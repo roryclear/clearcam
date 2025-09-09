@@ -19,6 +19,8 @@
   </tr>
 </table>
 
+### Don't own an RTSP camera yet?
+Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m3u8 (https://kg.camera)
 
 ## video demo:
 https://x.com/RoryClear/status/1959249250811785405
