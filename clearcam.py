@@ -443,6 +443,11 @@ class VideoCapture:
             self.alert_counters = dict()
             self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
             pickle.dump(self.alert_counters, f)
+    try:
+        with open(zone_file, "rb") as f:
+            self.zone = pickle.load(f)
+    except Exception:
+        print("zone file not found")
 
     self.lock = threading.Lock()
 
