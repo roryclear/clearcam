@@ -253,7 +253,7 @@
         self.liveStreamInternetEnabled = NO;
         [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
         [defaults synchronize];
-        [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+        [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
     }
 }
 
@@ -836,14 +836,14 @@
                 [self showThresholdInputDialog];
             } else if (indexPath.row == 5 + offset) {
                 if (!isPremium) {
-                    [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+                    [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
                 }
             } else if (indexPath.row == 6 + offset) {
                 if (isPremium) {
                     [self promptForPasswordWithCompletion:^(BOOL success) {
                     }];
                 } else {
-                    [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+                    [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
                 }
             } else if (indexPath.row == 7 + offset) {
                 ScheduleManagementViewController *scheduleVC = [[ScheduleManagementViewController alloc] init];
@@ -861,19 +861,19 @@
     } else if (indexPath.section == 1) { // Live Stream Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
-                [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+                [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
             } // Switch handles toggle when premium
         } else if (indexPath.row == 1) {
             if (isPremium) {
                 [self showDeviceNameInputDialog];
             } else {
-                [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+                [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
             }
         }
     } else if (indexPath.section == 2) { // Viewer Settings
         if (indexPath.row == 0) {
             if (!isPremium) {
-                [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+                [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
             } // Switch handles toggle when premium
         }
     } else if (indexPath.section == 3) { // Advanced Settings
@@ -881,7 +881,7 @@
     } else if (indexPath.section == 4) { // Upgrade to Premium / Subscription
         BOOL isSubscribed = [[NSUserDefaults standardUserDefaults] boolForKey:@"isSubscribed"];
         if (!isSubscribed && indexPath.row == 0) {
-            [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+            [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
         } else if ((isSubscribed && indexPath.row == 0) || (!isSubscribed && indexPath.row == 1)) {
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"restoring_purchases_title", @"Title for restoring purchases alert")
                                                                           message:NSLocalizedString(@"restoring_purchases_message", @"Message for restoring purchases alert")
@@ -1079,7 +1079,7 @@
         self.sendNotifEnabled = NO;
         [defaults setBool:NO forKey:@"send_notif_enabled"];
         [defaults synchronize];
-        [[StoreManager sharedInstance] showUpgradePopupInViewController:self];
+        [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
     }
 }
 
