@@ -4,16 +4,16 @@
 
 # clearcam: Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
 
-<table>
+<table border="0" cellspacing="0" cellpadding="0">
   <tr>
-    <td>
+    <td align="center">
       <a href="https://apps.apple.com/gb/app/clearcam/id6743237694">
         <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
              alt="Download on the App Store"
              height="50"/>
       </a>
     </td>
-    <td>
+    <td align="center">
       <a href="https://play.google.com/store/apps/details?id=com.rors.clearcam">
         <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
              alt="Get it on Google Play"
@@ -22,6 +22,7 @@
     </td>
   </tr>
 </table>
+
 
 
 
