@@ -92,16 +92,7 @@ https://x.com/RoryClear/status/1959249250811785405
 - View event clips remotely.
 - End-to-end encryption on all data.
 
-## How to Sign Up on Android
+## How to Sign Up
 
-Sign ups on android are not yet supported. (App is not approved for Google Play Store yet)
-In the meantime, please refer to the [How to Sign Up on iOS](#how-to-sign-up-on-ios) section and use the user ID on android.
-
-## How to Sign Up on iOS
-
-1. **Install Clearcam** from the App Store.
-2. Open the app and go to **Settings**.
-3. Tap **Upgrade to Premium**.
-4. Complete the payment using the App Store’s secure checkout.
-5. After upgrading, return to **Settings** in Clearcam.
-6. Locate your **User ID**, you’ll use this to log in on any device.
+Visit [rors.ai] to sign up.(#https://www.rors.ai)
+or upgrade to premium in the iOS app.
