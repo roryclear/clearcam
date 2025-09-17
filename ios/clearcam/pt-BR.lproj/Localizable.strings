@@ -3,7 +3,7 @@
 "live" = "Ao Vivo";
 "default_device_name" = "Meu Dispositivo";
 "waiting_for_ip" = "Aguardando Wi-Fi...";
-"streaming_over_wifi" = "Transmitindo via Wi-Fi local em: %@";
+
 "permission_denied" = "Permissão Negada";
 "notification_permission_denied" = "Permissão de notificações negada. Ative em Configurações.";
 "ok" = "OK";
@@ -99,6 +99,7 @@
 "delete" = "Excluir";
 "cancel" = "Cancelar";
 "online" = "Online";
+"offline" = "Offline";
 
 "experimental_features" = "Recursos Experimentais";
 "docs" = "Documentação";

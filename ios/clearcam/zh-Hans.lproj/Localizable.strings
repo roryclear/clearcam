@@ -3,7 +3,6 @@
 "live" = "直播";
 "default_device_name" = "我的设备";
 "waiting_for_ip" = "等待Wi-Fi连接...";
-"streaming_over_wifi" = "正在通过本地Wi-Fi串流，地址: %@";
 "permission_denied" = "权限被拒绝";
 "notification_permission_denied" = "通知权限被拒绝。您可以在设置中启用它。";
 "ok" = "确定";
@@ -90,6 +89,7 @@
 "delete" = "删除";
 "cancel" = "取消";
 "online" = "在线";
+"offline" = "离线";  
 "experimental_features" = "实验性功能";
 "docs" = "文档";
 "app_name" = "Clearcam";

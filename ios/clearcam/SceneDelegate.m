@@ -25,55 +25,35 @@ willConnectToSession:(UISceneSession *)session
     
     self.window.rootViewController = loadingVC;
     [self.window makeKeyAndVisible];
-    
-    // Check authentication status properly
     [self verifyAuthentication];
 }
 
 - (void)verifyAuthentication {
-    [self checkInternetWithCompletion:^(BOOL hasInternet) {
+    [[StoreManager sharedInstance] checkInternetWithCompletion:^(BOOL hasInternet) {
         if (!hasInternet) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self switchToRootViewController:[[GalleryViewController alloc] init]];
             });
             return;
         }
-        //todo session only if logged out??
-        [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIViewController *rootVC;
-                
-                if (isActive) {
-                    rootVC = [[GalleryViewController alloc] init];
-                } else {
-                    rootVC = [[LoginViewController alloc] init];
-                    [[StoreManager sharedInstance] clearSessionTokenFromKeychain];
-                }
-                [self switchToRootViewController:rootVC];
-            });
-        }];
+        [self attemptVerifySubscriptionWithRetry:2];
     }];
 }
 
-- (void)checkInternetWithCompletion:(void (^)(BOOL hasInternet))completion {
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/ping"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url
-                                                           cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                                       timeoutInterval:3.0];
-    request.HTTPMethod = @"HEAD";
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession]
-                                  dataTaskWithRequest:request
-                                  completionHandler:^(NSData * _Nullable data,
-                                                      NSURLResponse * _Nullable response,
-                                                      NSError * _Nullable error) {
-        if (error) {
-            completion(NO);
-            return;
-        }
-        completion(response != nil);
+- (void)attemptVerifySubscriptionWithRetry:(NSInteger)remainingAttempts {
+    [[StoreManager sharedInstance] verifySubscriptionWithCompletion:^(BOOL isActive, NSDate *expiryDate) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (isActive) {
+                [self switchToRootViewController:[[GalleryViewController alloc] init]];
+            } else if (remainingAttempts > 0) {
+                [self attemptVerifySubscriptionWithRetry:remainingAttempts - 1];
+            } else {
+                [self switchToRootViewController:[[LoginViewController alloc] init]];
+            }
+        });
     }];
-    [task resume];
 }
+
 
 - (void)switchToRootViewController:(UIViewController *)rootVC {
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:rootVC];

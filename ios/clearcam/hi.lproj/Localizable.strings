@@ -3,7 +3,6 @@
 "live" = "लाइव";
 "default_device_name" = "मेरा डिवाइस";
 "waiting_for_ip" = "Wi-Fi का इंतज़ार कर रहे...";
-"streaming_over_wifi" = "स्थानीय Wi-Fi पर स्ट्रीमिंग: %@";
 "permission_denied" = "अनुमति अस्वीकृत";
 "notification_permission_denied" = "सूचना की अनुमति अस्वीकृत कर दी गई है। आप इसे सेटिंग्स में सक्षम कर सकते हैं।";
 "ok" = "ठीक है";
@@ -90,6 +89,8 @@
 "delete" = "हटाएं";
 "cancel" = "रद्द करें";
 "online" = "ऑनलाइन";
+"offline" = "ऑफ़लाइन"; 
+
 "experimental_features" = "प्रायोगिक विशेषताएँ";
 "docs" = "दस्तावेज़";
 "app_name" = "Clearcam";

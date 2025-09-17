@@ -3,7 +3,6 @@
 "live" = "En vivo";
 "default_device_name" = "Mi dispositivo";
 "waiting_for_ip" = "Esperando Wi-Fi...";
-"streaming_over_wifi" = "Transmitiendo por Wi-Fi local en: %@";
 "permission_denied" = "Permiso denegado";
 "notification_permission_denied" = "Permiso de notificaciones denegado. Actívalo en Ajustes.";
 "ok" = "Aceptar";
@@ -90,6 +89,8 @@
 "delete" = "Eliminar";
 "cancel" = "Cancelar";
 "online" = "En línea";
+"offline" = "Desconectado";
+
 "experimental_features" = "Funciones experimentales";
 "docs" = "Documentación";
 "app_name" = "Clearcam";
