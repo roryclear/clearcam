@@ -1939,22 +1939,75 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                 function loadStream(folder) {{
                     const url = `${{cameraName}}/streams/${{folder}}/stream.m3u8`;
-                    if (Hls.isSupported()) {{
-                        const hls = new Hls();
-                        hls.loadSource(url);
-                        hls.attachMedia(video);
-                        hls.on(Hls.Events.MANIFEST_PARSED, function() {{
-                            if (startTime !== null) video.currentTime = startTime;
-                            video.play();
-                        }});
-                    }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
-                        video.src = url;
-                        video.addEventListener('loadedmetadata', function() {{
-                            if (startTime !== null) video.currentTime = startTime;
-                            video.play();
-                        }});
+
+                    async function waitForManifest(maxRetries = 30, delay = 2000) {{
+                        for (let i = 0; i < maxRetries; i++) {{
+                            try {{
+                                const res = await fetch(url, {{ cache: "no-store" }});
+                                if (res.ok) {{
+                                    const text = await res.text();
+                                    if (text.includes("#EXTINF")) {{
+                                        return true; // playlist has segments
+                                    }}
+                                }}
+                            }} catch (err) {{
+                                console.warn("Stream not ready yet:", err);
+                            }}
+                            await new Promise(r => setTimeout(r, delay));
+                        }}
+                        return false;
                     }}
+
+                    (async () => {{
+                        const ready = await waitForManifest();
+                        if (!ready) {{
+                            console.error("Stream never became available.");
+                            return;
+                        }}
+
+                        if (Hls.isSupported()) {{
+                            const hls = new Hls({{
+                                manifestLoadingTimeOut: 20000,
+                                manifestLoadingMaxRetry: Infinity,
+                                manifestLoadingRetryDelay: 2000,
+                            }});
+
+                            hls.loadSource(url);
+                            hls.attachMedia(video);
+
+                            hls.on(Hls.Events.MANIFEST_PARSED, function () {{
+                                if (startTime !== null) video.currentTime = startTime;
+                                video.play();
+                            }});
+
+                            hls.on(Hls.Events.ERROR, function (event, data) {{
+                                if (data.fatal) {{
+                                    switch (data.type) {{
+                                        case Hls.ErrorTypes.NETWORK_ERROR:
+                                            console.warn("Network error, retrying...");
+                                            hls.startLoad();
+                                            break;
+                                        case Hls.ErrorTypes.MEDIA_ERROR:
+                                            console.warn("Media error, recovering...");
+                                            hls.recoverMediaError();
+                                            break;
+                                        default:
+                                            console.error("Fatal error, destroying HLS instance.");
+                                            hls.destroy();
+                                            break;
+                                    }}
+                                }}
+                            }});
+                        }} else if (video.canPlayType('application/vnd.apple.mpegurl')) {{
+                            video.src = url;
+                            video.addEventListener('loadedmetadata', function () {{
+                                if (startTime !== null) video.currentTime = startTime;
+                                video.play();
+                            }});
+                        }}
+                    }})();
                 }}
+
 
                 function loadEventImages(folder) {{
                     fetch(`/event_thumbs?cam=${{cameraName}}&folder=${{folder}}`)
