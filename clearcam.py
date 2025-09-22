@@ -941,7 +941,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     self.send_error(500, f"Failed to load zone: {e}")
                     return
             
-            for _ in range(100): print("zone =",zone)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1665,13 +1664,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
                                 <div style="display: flex; flex-direction: column; gap: 10px;">
                                     <label style="display: flex; align-items: center; gap: 6px;">
-                                        <input type="checkbox" id="zoneEnabledCheckbox" checked> Enabled
+                                        <input type="checkbox" id="zoneEnabledCheckbox" checked> Enable Zone
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px;">
                                         <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px;">
-                                        Threshold:
+                                        Detection Threshold:
                                         <input type="number" id="zoneThreshold" value="50" min="0" max="100" step="1" style="width: 60px;"> %
                                     </label>
                                 </div>
