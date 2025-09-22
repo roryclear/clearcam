@@ -428,7 +428,7 @@ class VideoCapture:
     self.dir = None
 
     self.zone = None
-
+    
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
     zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
@@ -567,7 +567,6 @@ class VideoCapture:
                     zone = pickle.load(f)
                     self.zone = zone
                   edited_zone_file.unlink()
-
                     
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
@@ -853,17 +852,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            threshold = query.get("threshold", [None])[0]
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
             tl_x = query.get("tl_x", [None])[0]
             tl_y = query.get("tl_y", [None])[0]
             w = query.get("w", [None])[0]
             h = query.get("h", [None])[0]
-
-            
             if tl_x is not None: zone["dims"] = [float(tl_x),float(tl_y),float(w),float(h)]
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
+            if threshold is not None: zone["threshold"] = float(threshold)
             with open(zone_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_zone_file, 'wb') as f: pickle.dump(zone, f)
 
