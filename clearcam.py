@@ -261,12 +261,6 @@ class YOLOv8:
     # TODO: postprocess needs to be in the model to be compiled to webgpu
     return postprocess(x)
 
-  def return_all_trainable_modules(self):
-    backbone_modules = [*range(10)]
-    yolov8neck_modules = [12, 15, 16, 18, 19, 21]
-    yolov8_head_weights = [(22, self.head)]
-    return [*zip(backbone_modules, self.net.return_modules()), *zip(yolov8neck_modules, self.fpn.return_modules()), *yolov8_head_weights]
-
 def convert_f16_safetensor_to_f32(input_file: Path, output_file: Path):
   with open(input_file, 'rb') as f:
     metadata_length = int.from_bytes(f.read(8), 'little')
