@@ -1669,6 +1669,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     <label style="display: flex; align-items: center; gap: 6px;">
                                         <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
                                     </label>
+                                    <label style="display: flex; align-items: center; gap: 6px;">
+                                        Threshold:
+                                        <input type="number" id="zoneThreshold" value="50" min="0" max="100" step="1" style="width: 60px;"> %
+                                    </label>
                                 </div>
                                 <div style="display: flex; gap: 10px;">
                                     <button type="button" onclick="closeZoneModal()">Cancel</button>
@@ -1677,6 +1681,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             </div>
                         </div>
                     </div>
+
 
                     <div class="counts-wrapper">
                         <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
@@ -1800,6 +1805,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const is_on = document.getElementById("zoneEnabledCheckbox").checked;
                     const outside = document.getElementById("outsideZoneCheckbox").checked;
 
+                    const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
+                    const threshold = thresholdPercent / 100;
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         tl_x: tl_x.toFixed(2),
@@ -1807,7 +1814,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         w: w.toFixed(2),
                         h: h.toFixed(2),
                         is_on: is_on,
-                        threshold: 0.9,
+                        threshold: threshold.toFixed(2),
                         outside: outside
                     }});
 
@@ -1822,6 +1829,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to save zone.");
                         }});
                 }}
+
 
                 function initZoneEditor() {{
                     const handle = zoneRect.querySelector('.resize-handle');
