@@ -2437,9 +2437,8 @@ def upload_file(file_path: Path, session_token: str):
     except Exception as e:
         print(f"Error getting upload URL: {e}")
         return False
-
     success = False
-    for attempt in range(4):
+    for attempt in range(10):
         try:
             url_parts = urllib.parse.urlparse(presigned_url)
             if url_parts.scheme == 'https':
@@ -2465,18 +2464,13 @@ def upload_file(file_path: Path, session_token: str):
                 conn.close()
         except Exception as e:
             print(f"Upload error on attempt {attempt + 1}: {e}")
-
-        if attempt < 3:
-            delay = 3 * (2 ** attempt)
-            print(f"Waiting {delay:.1f} seconds before retrying...")
-            time.sleep(delay)
+        if attempt < 3: time.sleep(10 * attempt)
 
     try:
         file_path.unlink()
         print(f"Deleted file: {file_path}")
     except Exception as e:
         print(f"Failed to delete file: {e}")
-    
     return success
 
 def get_lan_ip():
