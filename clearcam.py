@@ -427,12 +427,12 @@ class VideoCapture:
     self.last_preds = []
     self.dir = None
 
-    self.zone = None
+    self.settings = None
     
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
-    zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
-    zone_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(alerts_file, "rb") as f:
             self.alert_counters = pickle.load(f)
@@ -444,8 +444,8 @@ class VideoCapture:
             self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
             pickle.dump(self.alert_counters, f)
     try:
-        with open(zone_file, "rb") as f:
-            self.zone = pickle.load(f)
+        with open(settings_file, "rb") as f:
+            self.settings = pickle.load(f)
     except Exception:
         print("zone file not found")
 
@@ -561,12 +561,12 @@ class VideoCapture:
                       for c in a.classes: classes.add(str(c))
                     added_alerts_file.unlink()
                 
-                edited_zone_file = CAMERA_BASE_DIR / self.cam_name / "edited_zone.pkl"
-                if edited_zone_file.exists():
-                  with open(edited_zone_file, 'rb') as f:
+                edited_settings_file = CAMERA_BASE_DIR / self.cam_name / "edited_settings.pkl"
+                if edited_settings_file.exists():
+                  with open(edited_settings_file, 'rb') as f:
                     zone = pickle.load(f)
-                    self.zone = zone
-                  edited_zone_file.unlink()
+                    self.settings = zone
+                  edited_settings_file.unlink()
                     
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
@@ -600,17 +600,18 @@ class VideoCapture:
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
         if track:
-          thresh = (self.zone.get("threshold") if self.zone else 0.5) or 0.5 #todo clean!
+          thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
           online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "zone") and self.zone is not None and self.zone["is_on"]:
-              outside = ((x.tlwh[0]+x.tlwh[2])<self.zone["dims"][0] or\
-              x.tlwh[0]>=(self.zone["dims"][0]+self.zone["dims"][2]) or\
-              (x.tlwh[1]+x.tlwh[3])<self.zone["dims"][1] or\
-              x.tlwh[1]>(self.zone["dims"][1]+self.zone["dims"][3]))
-              if outside ^ self.zone["outside"]: continue
+            if hasattr(self, "settings") and self.settings is not None and self.settings["is_on"]:
+              # todo, renmae dims to zone dims or something
+              outside = ((x.tlwh[0]+x.tlwh[2])<self.settings["dims"][0] or\
+              x.tlwh[0]>=(self.settings["dims"][0]+self.settings["dims"][2]) or\
+              (x.tlwh[1]+x.tlwh[3])<self.settings["dims"][1] or\
+              x.tlwh[1]>(self.settings["dims"][1]+self.settings["dims"][3]))
+              if outside ^ self.settings["outside"]: continue
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
@@ -838,17 +839,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         
-        if parsed_path.path == "/edit_zone":
+        if parsed_path.path == "/edit_settings":
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
-            edited_zone_file = CAMERA_BASE_DIR / cam_name / "edited_zone.pkl"
-            if not zone_file.exists():
-                with open(zone_file, "wb") as f:
+            settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
+            edited_settings_file = CAMERA_BASE_DIR / cam_name / "edited_settings.pkl"
+            if not settings_file.exists():
+                with open(settings_file, "wb") as f:
                     pickle.dump(None, f)
-            zone_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(zone_file, "rb") as f:
+            settings_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(settings_file, "rb") as f:
                zone = pickle.load(f)
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
@@ -864,8 +865,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
-            with open(zone_file, 'wb') as f: pickle.dump(zone, f)
-            with open(edited_zone_file, 'wb') as f: pickle.dump(zone, f)
+            with open(settings_file, 'wb') as f: pickle.dump(zone, f)
+            with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -931,10 +932,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-            zone_file = CAMERA_BASE_DIR / cam_name / "zone.pkl"
-            if zone_file.exists():
+            settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
+            if settings_file.exists():
                 try:
-                    with open(zone_file, "rb") as f:
+                    with open(settings_file, "rb") as f:
                         zone = pickle.load(f)
                 except Exception as e:
                     self.send_error(500, f"Failed to load zone: {e}")
@@ -1595,7 +1596,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
                         <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
-                            <button onclick="openZoneEditor()">Zone Settings</button>
+                            <button onclick="openZoneEditor()">Settings</button>
                             <button onclick="openAlertModal()">Add Alert</button>
                         </div>
                     </div>
@@ -1818,7 +1819,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         outside: outside
                     }});
 
-                    fetch(`/edit_zone?${{params.toString()}}`)
+                    fetch(`/edit_settings?${{params.toString()}}`)
                         .then(res => {{
                             if (!res.ok) throw new Error("Failed to save zone");
                             console.log("Zone saved successfully");
@@ -2111,7 +2112,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             container.innerHTML = `
                                 <p>No alerts configured.</p>
                                 <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
-                                    <button onclick="openZoneEditor()">Zone Settings</button>
+                                    <button onclick="openZoneEditor()">Settings</button>
                                     <button onclick="openAlertModal()">Add Alert</button>
                                 </div>`;
                             return;
@@ -2172,7 +2173,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                             html += `</tbody></table>
                                 <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
-                                    <button onclick="openZoneEditor()">Zone Settings</button>
+                                    <button onclick="openZoneEditor()">Settings</button>
                                     <button onclick="openAlertModal()">Add Alert</button>
                                 </div>`;
                             container.innerHTML = html;
