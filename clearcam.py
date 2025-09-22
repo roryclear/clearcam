@@ -1807,6 +1807,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         w: w.toFixed(2),
                         h: h.toFixed(2),
                         is_on: is_on,
+                        threshold: 0.9,
                         outside: outside
                     }});
 
