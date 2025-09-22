@@ -2063,12 +2063,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         }});
                 }}
 
-                function hmsToSeconds(hms) {{
-                    const [h, m, s] = hms.split(":").map(Number);
-                    return h * 3600 + m * 60 + s;
-                }}
-
-
                 function fetchCounts() {{
                     fetch(`/get_counts?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
