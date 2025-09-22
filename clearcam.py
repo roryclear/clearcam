@@ -360,11 +360,9 @@ class RollingClassCounter:
     self.sched = sched
     self.cam_name = cam_name
     self.is_on = True
-    self.threshold = 0.6
 
-  def add(self, class_id, score):
+  def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
-    if getattr(self, "threshold", None) is not None and score < self.threshold: return # skip if below thresh
     now = time.time()
     self.data[class_id].append(now)
     self.cleanup(class_id, now)
@@ -616,10 +614,10 @@ class VideoCapture:
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
-              self.counter.add(int(x.class_id), x.score)
+              self.counter.add(int(x.class_id))
               for _, alert in self.alert_counters.items():
                 if not alert.get_counts()[1]:
-                    alert.add(int(x.class_id),x.score) #only add if empty, don't spam notifs
+                    alert.add(int(x.class_id)) #only add if empty, don't spam notifs
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
