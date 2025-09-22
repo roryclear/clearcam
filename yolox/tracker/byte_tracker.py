@@ -165,9 +165,9 @@ class BYTETracker(object):
         scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
         bboxes /= scale
 
-        remain_inds = scores > threshold
+        remain_inds = scores > self.args.track_thresh
         inds_low = scores > 0.1
-        inds_high = scores < threshold
+        inds_high = scores < self.args.track_thresh
 
         inds_second = np.logical_and(inds_low, inds_high)
         dets_second = bboxes[inds_second]
