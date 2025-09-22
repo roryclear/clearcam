@@ -600,7 +600,7 @@ class VideoCapture:
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
         if track:
-          online_targets = tracker.update(preds, [1280,1280], [1280,1280]) # todo, zone in js also hardcoded to 1280
+          online_targets = tracker.update(preds, [1280,1280], [1280,1280], (self.zone.get("threshold") if self.zone else 0.5) or 0.5) # todo clean!, zone in js also hardcoded to 1280
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
@@ -852,7 +852,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
-            threshold = query.get("threshold", [None])[0]
+            threshold = query.get("threshold", ["0.5"])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
             tl_x = query.get("tl_x", [None])[0]

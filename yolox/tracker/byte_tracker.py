@@ -146,13 +146,11 @@ class BYTETracker(object):
 
         self.frame_id = 0
         self.args = args
-        #self.det_thresh = args.track_thresh
-        self.det_thresh = args.track_thresh + 0.1
         self.buffer_size = int(frame_rate / 30.0 * args.track_buffer)
         self.max_time_lost = self.buffer_size
         self.kalman_filter = KalmanFilter()
 
-    def update(self, output_results, img_info, img_size):
+    def update(self, output_results, img_info, img_size, threshold=0.5):
         self.frame_id += 1
         activated_starcks = []
         refind_stracks = []
@@ -167,9 +165,9 @@ class BYTETracker(object):
         scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
         bboxes /= scale
 
-        remain_inds = scores > self.args.track_thresh
+        remain_inds = scores > threshold
         inds_low = scores > 0.1
-        inds_high = scores < self.args.track_thresh
+        inds_high = scores < threshold
 
         inds_second = np.logical_and(inds_low, inds_high)
         dets_second = bboxes[inds_second]
@@ -258,7 +256,7 @@ class BYTETracker(object):
         """ Step 4: Init new stracks"""
         for inew in u_detection:
             track = detections[inew]
-            if track.score < self.det_thresh:
+            if track.score < threshold:
                 continue
             track.activate(self.kalman_filter, self.frame_id)
             activated_starcks.append(track)
