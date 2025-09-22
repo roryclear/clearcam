@@ -600,7 +600,8 @@ class VideoCapture:
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
         if track:
-          online_targets = tracker.update(preds, [1280,1280], [1280,1280], (self.zone.get("threshold") if self.zone else 0.5) or 0.5) # todo clean!, zone in js also hardcoded to 1280
+          thresh = (self.zone.get("threshold") if self.zone else 0.5) or 0.5 #todo clean!
+          online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
