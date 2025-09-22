@@ -927,7 +927,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"status":"ok"}')
             return
 
-        if parsed_path.path == "/get_zone":
+        if parsed_path.path == "/get_settings":
             zone = {}
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
@@ -1596,7 +1596,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <div id="alertsContainer">
                         <p>Loading alerts...</p>
                         <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
-                            <button onclick="openZoneEditor()">Settings</button>
+                            <button onclick="openSettingsEditor()">Settings</button>
                             <button onclick="openAlertModal()">Add Alert</button>
                         </div>
                     </div>
@@ -1736,24 +1736,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 let startWidth, startHeight;
                 let startLeft, startTop;
 
-                function openZoneEditor() {{
+                function openSettingsEditor() {{
                     zoneModal.style.display = "flex";
-                    fetch(`/get_zone?cam=${{encodeURIComponent(cameraName)}}`)
+                    fetch(`/get_settings?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
                         .then(data => {{
                             if (data && data.dims) {{
                                 const [tl_x, tl_y, w, h] = data.dims;
                                 const previewEl = document.getElementById("zonePreview");
-
                                 const videoWidth = 1280;
                                 const videoHeight = 720;
-
-                                // Convert video coords -> preview coords
                                 const left = (tl_x / videoWidth) * previewEl.clientWidth;
                                 const top = (tl_y / videoHeight) * previewEl.clientHeight;
                                 const width = (w / videoWidth) * previewEl.clientWidth;
                                 const height = (h / videoHeight) * previewEl.clientHeight;
-
                                 zoneRect.style.left = left + "px";
                                 zoneRect.style.top = top + "px";
                                 zoneRect.style.width = width + "px";
@@ -1768,8 +1764,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }} else {{
                                 zoneEnabledCheckbox.checked = false;
                             }}
-
-                            // Set Outside Zone checkbox - check both possible response formats
                             const outsideZoneCheckbox = document.getElementById("outsideZoneCheckbox");
                             if (data.outside !== undefined) {{
                                 outsideZoneCheckbox.checked = data.outside;
@@ -1777,6 +1771,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 outsideZoneCheckbox.checked = data[0].outside;
                             }} else {{
                                 outsideZoneCheckbox.checked = false;
+                            }}
+                            const thresholdInput = document.getElementById("zoneThreshold");
+                            let rawThreshold = undefined;
+                            if (data.threshold !== undefined) {{
+                                rawThreshold = data.threshold;
+                            }} else if (data.length && data[0] && data[0].threshold !== undefined) {{
+                                rawThreshold = data[0].threshold;
+                            }}
+                            if (rawThreshold !== undefined) {{
+                                if (rawThreshold <= 1) {{
+                                    thresholdInput.value = (rawThreshold * 100).toFixed(0);
+                                }} else {{
+                                    thresholdInput.value = rawThreshold.toFixed(0);
+                                }}
                             }}
                         }})
                         .catch(err => {{
@@ -2112,7 +2120,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             container.innerHTML = `
                                 <p>No alerts configured.</p>
                                 <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
-                                    <button onclick="openZoneEditor()">Settings</button>
+                                    <button onclick="openSettingsEditor()">Settings</button>
                                     <button onclick="openAlertModal()">Add Alert</button>
                                 </div>`;
                             return;
@@ -2173,7 +2181,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                             html += `</tbody></table>
                                 <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
-                                    <button onclick="openZoneEditor()">Settings</button>
+                                    <button onclick="openSettingsEditor()">Settings</button>
                                     <button onclick="openAlertModal()">Add Alert</button>
                                 </div>`;
                             container.innerHTML = html;
