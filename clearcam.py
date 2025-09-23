@@ -882,7 +882,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
                 class_ids = query.get("class_ids", [None])[0]
-                sched = json.loads(query.get("schedule", ["[[0,86400]]"])[0]) # todo, weekly
+                sched = json.loads(query.get("sched", ["[[0,86400]]"])[0]) # todo, weekly
                 window = int(window)
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
@@ -2213,7 +2213,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         window: windowSeconds,
                         max: formData.get('max'),
                         class_ids: classIds,
-                        schedule: JSON.stringify(schedArray),
+                        sched: JSON.stringify(schedArray),
                     }});
                     fetch(`/edit_alert?${{params.toString()}}`)
                         .then(res => {{
