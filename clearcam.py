@@ -882,12 +882,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
                 class_ids = query.get("class_ids", [None])[0]
-                sched = json.loads(query.get("schedule", ["[0,86400]"])[0])
+                sched = json.loads(query.get("schedule", ["[[0,86400]]"])[0]) # todo, weekly
                 window = int(window)
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
                 if sched:
-                    schedule = [sched[0], sched[1]]
+                    schedule = [sched[0][0], sched[0][1]]
                 else:
                     schedule = None
                 alert_id = str(uuid.uuid4())
@@ -2207,13 +2207,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const windowSeconds = Math.round(windowMinutes * 60);
                     const checked = form.querySelectorAll('input[name="class_ids"]:checked');
                     const classIds = Array.from(checked).map(cb => cb.value).join(',');
-                    const scheduleFrom = formData.get("schedule_from") || "00:00";
-                    const scheduleTo = formData.get("schedule_to") || "23:59";
-                    const toSeconds = (hhmm) => {{
-                        const [h, m] = hhmm.split(":").map(Number);
-                        return h * 3600 + m * 60;
+                    const scheduleFrom = formData.get("schedule_from") || "00:00:00";
+                    const scheduleTo = formData.get("schedule_to") || "23:59:59";
+                    const toSeconds = (hhmmss) => {{
+                    const parts = hhmmss.split(":").map(Number);
+                    const [h = 0, m = 0, s = 0] = parts;
+                    return h * 3600 + m * 60 + s;
                     }};
-                    const schedArray = [toSeconds(scheduleFrom), toSeconds(scheduleTo)];
+                    const schedArray = [[toSeconds(scheduleFrom), toSeconds(scheduleTo)]];
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         window: windowSeconds,
