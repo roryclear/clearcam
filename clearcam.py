@@ -954,8 +954,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 "max": alert.max,
                                 "classes": list(alert.classes),
                                 "id": str(key),
-                                "sched_from": sched[0],
-                                "sched_to": sched[1],
+                                "sched": sched,
                                 "is_on": alert.is_on,
                             })
                 except Exception as e:
@@ -2121,18 +2120,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                             for (const alert of alerts) {{
                                 const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
-                                
-                                // window formatting
                                 const h = Math.floor(alert.window / 3600);
                                 const m = Math.floor((alert.window % 3600) / 60);
                                 const s = alert.window % 60;
                                 const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
-
-                                // schedule formatting
-                                const fromH = Math.floor(alert.sched_from / 3600);
-                                const fromM = Math.floor((alert.sched_from % 3600) / 60);
-
-                                let toSec = alert.sched_to;
+                                const fromH = Math.floor(alert.sched[0] / 3600);
+                                const fromM = Math.floor((alert.sched[0] % 3600) / 60);
+                                let toSec = alert.sched[1];
                                 if (toSec % 60 !== 0) {{
                                     toSec += 60 - (toSec % 60);
                                 }}
@@ -2144,7 +2138,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const schedStr = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
                                 const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
                                 const checkedAttr = isOn ? "checked" : "";
-                                
                                 html += `<tr>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{alert.max}}</td>
                                     <td style="padding:6px; border-bottom:1px solid #eee;">${{classNames}}</td>
