@@ -882,17 +882,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
                 class_ids = query.get("class_ids", [None])[0]
-                sched_from = query.get("from", [0])[0]
-                sched_to = query.get("to", [86400])[0]
+                sched = json.loads(query.get("schedule", ["[0,86400]"])[0])
                 window = int(window)
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
-                def hms_to_seconds(hms,s=0):
-                    h, m= map(int, hms.split(":"))
-                    return h * 3600 + m * 60 + s
-
-                if sched_from and sched_to:
-                    schedule = [hms_to_seconds(sched_from), hms_to_seconds(sched_to,s=59)]
+                if sched:
+                    schedule = [sched[0], sched[1]]
                 else:
                     schedule = None
                 alert_id = str(uuid.uuid4())
@@ -2205,44 +2200,42 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 }}
 
                 function addAlert(event) {{
-                  event.preventDefault();
-                  const form = event.target;
-                  const formData = new FormData(form);
-                  const windowMinutes = parseFloat(formData.get('window'));
-                  const windowSeconds = Math.round(windowMinutes * 60);
-                  const checked = form.querySelectorAll('input[name="class_ids"]:checked');
-                  const classIds = Array.from(checked).map(cb => cb.value).join(',');
-                  const scheduleFrom = formData.get("schedule_from") || "00:00";
-                  const scheduleTo = formData.get("schedule_to") || "23:59";
-
-                  const params = new URLSearchParams({{
-                      cam: cameraName,
-                      window: windowSeconds,
-                      max: formData.get('max'),
-                      class_ids: classIds,
-                  }});
-
-                  if (scheduleFrom && scheduleTo) {{
-                      params.append("from", scheduleFrom);
-                      params.append("to", scheduleTo);
-                  }}
-                  //alert(params);
-                  fetch(`/edit_alert?${{params.toString()}}`)
-                      .then(res => {{
-                          if (!res.ok) throw new Error("Failed to add alert");
-                          return res.json();
-                      }})
-                      .then(() => {{
-                          closeAlertModal();
-                          form.reset();
-                          fetchAlerts();
-                      }})
-                      .catch(err => {{
-                          console.error("Add alert failed:", err);
-                          alert("Failed to add alert.");
-                      }});
+                    event.preventDefault();
+                    const form = event.target;
+                    const formData = new FormData(form);
+                    const windowMinutes = parseFloat(formData.get('window'));
+                    const windowSeconds = Math.round(windowMinutes * 60);
+                    const checked = form.querySelectorAll('input[name="class_ids"]:checked');
+                    const classIds = Array.from(checked).map(cb => cb.value).join(',');
+                    const scheduleFrom = formData.get("schedule_from") || "00:00";
+                    const scheduleTo = formData.get("schedule_to") || "23:59";
+                    const toSeconds = (hhmm) => {{
+                        const [h, m] = hhmm.split(":").map(Number);
+                        return h * 3600 + m * 60;
+                    }};
+                    const schedArray = [toSeconds(scheduleFrom), toSeconds(scheduleTo)];
+                    const params = new URLSearchParams({{
+                        cam: cameraName,
+                        window: windowSeconds,
+                        max: formData.get('max'),
+                        class_ids: classIds,
+                        schedule: JSON.stringify(schedArray),
+                    }});
+                    fetch(`/edit_alert?${{params.toString()}}`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to add alert");
+                            return res.json();
+                        }})
+                        .then(() => {{
+                            closeAlertModal();
+                            form.reset();
+                            fetchAlerts();
+                        }})
+                        .catch(err => {{
+                            console.error("Add alert failed:", err);
+                            alert("Failed to add alert.");
+                        }});
                 }}
-
 
                 folderPicker.addEventListener("change", () => {{
                     const folder = folderPicker.value;
