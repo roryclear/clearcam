@@ -887,15 +887,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
                 if sched:
-                    schedule = [sched[0][0], sched[0][1]]
+                    sched = [sched[0][0], sched[0][1]]
                 else:
-                    schedule = None
+                    sched = None
                 alert_id = str(uuid.uuid4())
                 alert = RollingClassCounter(
                         window_seconds=window,
                         max=max_count,
                         classes=classes,
-                        sched=schedule,
+                        sched=sched,
                         cam_name=cam_name,
                     )
                 raw_alerts[alert_id] = alert
