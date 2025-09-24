@@ -387,7 +387,8 @@ class RollingClassCounter:
     if not self.sched: return True
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
-    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset) # todo, wed hardcoded for now
+    if not self.sched[time.localtime().tm_wday + 1]: return False
+    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
 
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
