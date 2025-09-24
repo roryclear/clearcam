@@ -1611,19 +1611,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 </div>
 
                                 <div class="form-group" style="width: 90%; text-align: center;">
-                                    <label>Days of Week</label>
-                                    <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 5px;">
-                                        <label><input type="checkbox" name="days" value="0" checked> Mon</label>
-                                        <label><input type="checkbox" name="days" value="1" checked> Tue</label>
-                                        <label><input type="checkbox" name="days" value="2" checked> Wed</label>
-                                        <label><input type="checkbox" name="days" value="3" checked> Thu</label>
-                                        <label><input type="checkbox" name="days" value="4" checked> Fri</label>
-                                        <label><input type="checkbox" name="days" value="5" checked> Sat</label>
-                                        <label><input type="checkbox" name="days" value="6" checked> Sun</label>
-                                    </div>
-                                </div>
-
-                                <div class="form-group" style="width: 90%; text-align: center;">
                                     <label>Schedule (optional)</label>
                                     <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
                                         <div>
@@ -1634,6 +1621,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                             <label for="scheduleTo">To</label><br>
                                             <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
                                         </div>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="width: 90%; text-align: center;">
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
+                                        <label><input type="checkbox" name="days" value="0" checked> Mon</label>
+                                        <label><input type="checkbox" name="days" value="1" checked> Tue</label>
+                                        <label><input type="checkbox" name="days" value="2" checked> Wed</label>
+                                        <label><input type="checkbox" name="days" value="3" checked> Thu</label>
+                                        <label><input type="checkbox" name="days" value="4" checked> Fri</label>
+                                        <label><input type="checkbox" name="days" value="5" checked> Sat</label>
+                                        <label><input type="checkbox" name="days" value="6" checked> Sun</label>
                                     </div>
                                 </div>
 
