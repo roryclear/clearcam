@@ -1601,8 +1601,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 </div>
                                 <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
                                     <label>of class(es)</label>
-                                    <div id="checkboxContainer" class="checkbox-container">
-                                    </div>
+                                    <div id="checkboxContainer" class="checkbox-container"></div>
                                 </div>
                                 <div class="form-group" style="width: 90%; text-align: center;">
                                     <label for="windowMinutes">within this time window</label>
@@ -1610,6 +1609,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                         style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
                                     <span>minutes</span>
                                 </div>
+
+                                <div class="form-group" style="width: 90%; text-align: center;">
+                                    <label>Days of Week</label>
+                                    <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 5px;">
+                                        <label><input type="checkbox" name="days" value="0" checked> Mon</label>
+                                        <label><input type="checkbox" name="days" value="1" checked> Tue</label>
+                                        <label><input type="checkbox" name="days" value="2" checked> Wed</label>
+                                        <label><input type="checkbox" name="days" value="3" checked> Thu</label>
+                                        <label><input type="checkbox" name="days" value="4" checked> Fri</label>
+                                        <label><input type="checkbox" name="days" value="5" checked> Sat</label>
+                                        <label><input type="checkbox" name="days" value="6" checked> Sun</label>
+                                    </div>
+                                </div>
+
                                 <div class="form-group" style="width: 90%; text-align: center;">
                                     <label>Schedule (optional)</label>
                                     <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
@@ -1621,9 +1634,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                             <label for="scheduleTo">To</label><br>
                                             <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
                                         </div>
-
                                     </div>
                                 </div>
+
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
                                     <button type="button" onclick="closeAlertModal()">Cancel</button>
                                     <button type="submit">Save Alert</button>
@@ -1631,6 +1644,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             </form>
                         </div>
                     </div>
+
 
                     <div id="zoneModal" class="modal">
                         <div class="modal-content" style="max-width: 600px;">
@@ -2162,7 +2176,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     }}
                                     daysStr = ranges.map(([a, b]) => {{
                                         if (a === b) return daysOfWeek[a];
-                                        else return `${{daysOfWeek[a]}}–${{daysOfWeek[b]}}`;
+                                        else return `${{daysOfWeek[a]}}-${{daysOfWeek[b]}}`;
                                     }}).join(", ");
                                 }}
                                 const schedStr = `${{timeRange}} (${{daysStr}})`;
@@ -2227,18 +2241,28 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     event.preventDefault();
                     const form = event.target;
                     const formData = new FormData(form);
+
                     const windowMinutes = parseFloat(formData.get('window'));
                     const windowSeconds = Math.round(windowMinutes * 60);
+
                     const checked = form.querySelectorAll('input[name="class_ids"]:checked');
                     const classIds = Array.from(checked).map(cb => cb.value).join(',');
+
                     const scheduleFrom = formData.get("schedule_from") || "00:00:00";
                     const scheduleTo = formData.get("schedule_to") || "23:59:59";
+
                     const toSeconds = (hhmmss) => {{
-                    const parts = hhmmss.split(":").map(Number);
-                    const [h = 0, m = 0, s = 0] = parts;
-                    return h * 3600 + m * 60 + s;
+                        const parts = hhmmss.split(":").map(Number);
+                        const [h = 0, m = 0, s = 0] = parts;
+                        return h * 3600 + m * 60 + s;
                     }};
-                    const schedArray = [[toSeconds(scheduleFrom), toSeconds(scheduleTo)],true,true,true,true,true,true,true];
+
+                    const fromSec = toSeconds(scheduleFrom);
+                    const toSec = toSeconds(scheduleTo);
+                    const dayChecks = form.querySelectorAll('input[name="days"]');
+                    const dayBools = Array.from(dayChecks).map(cb => cb.checked);
+                    const schedArray = [[fromSec, toSec], ...dayBools];
+
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         window: windowSeconds,
@@ -2246,6 +2270,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         class_ids: classIds,
                         sched: JSON.stringify(schedArray),
                     }});
+
                     fetch(`/edit_alert?${{params.toString()}}`)
                         .then(res => {{
                             if (!res.ok) throw new Error("Failed to add alert");
@@ -2261,6 +2286,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to add alert.");
                         }});
                 }}
+
 
                 folderPicker.addEventListener("change", () => {{
                     const folder = folderPicker.value;
