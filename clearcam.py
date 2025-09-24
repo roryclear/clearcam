@@ -2121,7 +2121,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const m = Math.floor((alert.window % 3600) / 60);
                                 const s = alert.window % 60;
                                 const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
-                                const fromH = Math.floor(alert.sched[0][0] / 3600); // TODO hardcoded to wed
+                                const fromH = Math.floor(alert.sched[0][0] / 3600);
                                 const fromM = Math.floor((alert.sched[0][0] % 3600) / 60);
                                 let toSec = alert.sched[0][1];
                                 if (toSec % 60 !== 0) {{
@@ -2132,7 +2132,40 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 }}
                                 const toH = Math.floor(toSec / 3600);
                                 const toM = Math.floor((toSec % 3600) / 60);
-                                const schedStr = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
+                                const timeRange = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
+
+                                const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                                const activeDays = alert.sched.slice(1).map((on, idx) => on ? daysOfWeek[idx] : null).filter(Boolean);
+                                let daysStr;
+                                if (activeDays.length === 7) {{
+                                    daysStr = "Daily";
+                                }} else {{
+                                    // compress consecutive ranges (Mon–Fri)
+                                    const indices = alert.sched.slice(1).map((on, i) => on ? i : -1).filter(i => i >= 0);
+                                    let ranges = [];
+                                    let start = null;
+                                    let prev = null;
+                                    for (const idx of indices) {{
+                                        if (start === null) {{
+                                            start = idx;
+                                            prev = idx;
+                                        }} else if (idx === prev + 1) {{
+                                            prev = idx;
+                                        }} else {{
+                                            ranges.push([start, prev]);
+                                            start = idx;
+                                            prev = idx;
+                                        }}
+                                    }}
+                                    if (start !== null) {{
+                                        ranges.push([start, prev]);
+                                    }}
+                                    daysStr = ranges.map(([a, b]) => {{
+                                        if (a === b) return daysOfWeek[a];
+                                        else return `${{daysOfWeek[a]}}–${{daysOfWeek[b]}}`;
+                                    }}).join(", ");
+                                }}
+                                const schedStr = `${{timeRange}} (${{daysStr}})`;
                                 const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
                                 const checkedAttr = isOn ? "checked" : "";
                                 html += `<tr>
@@ -2150,6 +2183,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     </td>
                                 </tr>`;
                             }}
+
 
                             html += `</tbody></table>
                                 <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
