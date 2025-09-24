@@ -345,7 +345,7 @@ CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],[0,86399],[0,86399],[0,86399],[0,86399],[0,86399],[0,86399]],cam_name=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
@@ -387,7 +387,7 @@ class RollingClassCounter:
     if not self.sched: return True
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
-    return time_of_day < self.sched[2][1] and time_of_day > ((self.sched[2][0] - self.window) + offset) # todo, wed hardcoded for now
+    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset) # todo, wed hardcoded for now
 
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
@@ -944,7 +944,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     with open(alerts_file, "rb") as f:
                         raw_alerts = pickle.load(f) 
                         for key,alert in raw_alerts.items():
-                            sched = alert.sched if alert.sched else [[0,84399],[0,84399],[0,84399],[0,84399],[0,84399],[0,84399],[0,84399]]
+                            sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
                             alert_info.append({
                                 "window": alert.window,
                                 "max": alert.max,
@@ -2120,9 +2120,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 const m = Math.floor((alert.window % 3600) / 60);
                                 const s = alert.window % 60;
                                 const windowStr = `${{String(h).padStart(2,'0')}}:${{String(m).padStart(2,'0')}}:${{String(s).padStart(2,'0')}}`;
-                                const fromH = Math.floor(alert.sched[2][0] / 3600); // TODO hardcoded to wed
-                                const fromM = Math.floor((alert.sched[2][0] % 3600) / 60);
-                                let toSec = alert.sched[2][1];
+                                const fromH = Math.floor(alert.sched[0][0] / 3600); // TODO hardcoded to wed
+                                const fromM = Math.floor((alert.sched[0][0] % 3600) / 60);
+                                let toSec = alert.sched[0][1];
                                 if (toSec % 60 !== 0) {{
                                     toSec += 60 - (toSec % 60);
                                 }}
@@ -2203,7 +2203,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const [h = 0, m = 0, s = 0] = parts;
                     return h * 3600 + m * 60 + s;
                     }};
-                    const schedArray = [[0,86399],[0,86399],[toSeconds(scheduleFrom), toSeconds(scheduleTo)],[0,86399],[0,86399],[0,86399],[0,86399]];
+                    const schedArray = [[toSeconds(scheduleFrom), toSeconds(scheduleTo)],true,true,true,true,true,true,true];
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         window: windowSeconds,
