@@ -345,7 +345,7 @@ CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399]],cam_name=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
@@ -387,6 +387,7 @@ class RollingClassCounter:
     if not self.sched: return True
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
+    if not self.sched[time.localtime().tm_wday + 1]: return False
     return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
 
 def find_ffmpeg():
@@ -882,7 +883,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
                 class_ids = query.get("class_ids", [None])[0]
-                sched = json.loads(query.get("sched", ["[[0,86400]]"])[0]) # todo, weekly
+                sched = json.loads(query.get("sched", ["[[0,86400],[0,86400],[0,86400],[0,86400],[0,86400],[0,86400],[0,86400]]"])[0]) # todo, weekly
                 window = int(window)
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
@@ -944,7 +945,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     with open(alerts_file, "rb") as f:
                         raw_alerts = pickle.load(f) 
                         for key,alert in raw_alerts.items():
-                            sched = alert.sched if alert.sched else [[0,84399]]
+                            sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
                             alert_info.append({
                                 "window": alert.window,
                                 "max": alert.max,
@@ -1600,8 +1601,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 </div>
                                 <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
                                     <label>of class(es)</label>
-                                    <div id="checkboxContainer" class="checkbox-container">
-                                    </div>
+                                    <div id="checkboxContainer" class="checkbox-container"></div>
                                 </div>
                                 <div class="form-group" style="width: 90%; text-align: center;">
                                     <label for="windowMinutes">within this time window</label>
@@ -1609,6 +1609,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                         style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
                                     <span>minutes</span>
                                 </div>
+
                                 <div class="form-group" style="width: 90%; text-align: center;">
                                     <label>Schedule (optional)</label>
                                     <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
@@ -1620,9 +1621,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                             <label for="scheduleTo">To</label><br>
                                             <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
                                         </div>
-
                                     </div>
                                 </div>
+                                <div class="form-group" style="width: 90%; text-align: center;">
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
+                                        <label><input type="checkbox" name="days" value="0" checked> Mon</label>
+                                        <label><input type="checkbox" name="days" value="1" checked> Tue</label>
+                                        <label><input type="checkbox" name="days" value="2" checked> Wed</label>
+                                        <label><input type="checkbox" name="days" value="3" checked> Thu</label>
+                                        <label><input type="checkbox" name="days" value="4" checked> Fri</label>
+                                        <label><input type="checkbox" name="days" value="5" checked> Sat</label>
+                                        <label><input type="checkbox" name="days" value="6" checked> Sun</label>
+                                    </div>
+                                </div>
+
                                 <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
                                     <button type="button" onclick="closeAlertModal()">Cancel</button>
                                     <button type="submit">Save Alert</button>
@@ -1630,6 +1642,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             </form>
                         </div>
                     </div>
+
 
                     <div id="zoneModal" class="modal">
                         <div class="modal-content" style="max-width: 600px;">
@@ -2131,7 +2144,40 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 }}
                                 const toH = Math.floor(toSec / 3600);
                                 const toM = Math.floor((toSec % 3600) / 60);
-                                const schedStr = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
+                                const timeRange = `${{String(fromH).padStart(2,'0')}}:${{String(fromM).padStart(2,'0')}} to ${{String(toH).padStart(2,'0')}}:${{String(toM).padStart(2,'0')}}`;
+
+                                const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                                const activeDays = alert.sched.slice(1).map((on, idx) => on ? daysOfWeek[idx] : null).filter(Boolean);
+                                let daysStr;
+                                if (activeDays.length === 7) {{
+                                    daysStr = "Daily";
+                                }} else {{
+                                    // compress consecutive ranges (Mon–Fri)
+                                    const indices = alert.sched.slice(1).map((on, i) => on ? i : -1).filter(i => i >= 0);
+                                    let ranges = [];
+                                    let start = null;
+                                    let prev = null;
+                                    for (const idx of indices) {{
+                                        if (start === null) {{
+                                            start = idx;
+                                            prev = idx;
+                                        }} else if (idx === prev + 1) {{
+                                            prev = idx;
+                                        }} else {{
+                                            ranges.push([start, prev]);
+                                            start = idx;
+                                            prev = idx;
+                                        }}
+                                    }}
+                                    if (start !== null) {{
+                                        ranges.push([start, prev]);
+                                    }}
+                                    daysStr = ranges.map(([a, b]) => {{
+                                        if (a === b) return daysOfWeek[a];
+                                        else return `${{daysOfWeek[a]}}-${{daysOfWeek[b]}}`;
+                                    }}).join(", ");
+                                }}
+                                const schedStr = `${{timeRange}} (${{daysStr}})`;
                                 const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
                                 const checkedAttr = isOn ? "checked" : "";
                                 html += `<tr>
@@ -2149,6 +2195,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     </td>
                                 </tr>`;
                             }}
+
 
                             html += `</tbody></table>
                                 <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
@@ -2192,18 +2239,28 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     event.preventDefault();
                     const form = event.target;
                     const formData = new FormData(form);
+
                     const windowMinutes = parseFloat(formData.get('window'));
                     const windowSeconds = Math.round(windowMinutes * 60);
+
                     const checked = form.querySelectorAll('input[name="class_ids"]:checked');
                     const classIds = Array.from(checked).map(cb => cb.value).join(',');
+
                     const scheduleFrom = formData.get("schedule_from") || "00:00:00";
                     const scheduleTo = formData.get("schedule_to") || "23:59:59";
+
                     const toSeconds = (hhmmss) => {{
-                    const parts = hhmmss.split(":").map(Number);
-                    const [h = 0, m = 0, s = 0] = parts;
-                    return h * 3600 + m * 60 + s;
+                        const parts = hhmmss.split(":").map(Number);
+                        const [h = 0, m = 0, s = 0] = parts;
+                        return h * 3600 + m * 60 + s;
                     }};
-                    const schedArray = [[toSeconds(scheduleFrom), toSeconds(scheduleTo)]];
+
+                    const fromSec = toSeconds(scheduleFrom);
+                    const toSec = toSeconds(scheduleTo);
+                    const dayChecks = form.querySelectorAll('input[name="days"]');
+                    const dayBools = Array.from(dayChecks).map(cb => cb.checked);
+                    const schedArray = [[fromSec, toSec], ...dayBools];
+
                     const params = new URLSearchParams({{
                         cam: cameraName,
                         window: windowSeconds,
@@ -2211,6 +2268,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         class_ids: classIds,
                         sched: JSON.stringify(schedArray),
                     }});
+
                     fetch(`/edit_alert?${{params.toString()}}`)
                         .then(res => {{
                             if (!res.ok) throw new Error("Failed to add alert");
@@ -2226,6 +2284,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             alert("Failed to add alert.");
                         }});
                 }}
+
 
                 folderPicker.addEventListener("change", () => {{
                     const folder = folderPicker.value;
