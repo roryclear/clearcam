@@ -807,26 +807,6 @@ class HLSStreamer:
                                 print("Restart attempt failed", e3)
                                 time.sleep(retry_delay)
                     time.sleep(0.5)
-
-            if self.ffmpeg_proc is not None and self.ffmpeg_proc.poll() is not None:
-                print("FFmpeg process exited, restarting...")
-                try:
-                    self.stop()
-                except Exception as e:
-                    print("stop() raised after ffmpeg exit:", e)
-
-                while True:
-                    recovered_frame = self.cam.get_frame()
-                    if recovered_frame is not None:
-                        while True:
-                            try:
-                                print("Restarting HLS pipeline after ffmpeg exit...")
-                                self.start()
-                                return
-                            except Exception as e4:
-                                print("Restart attempt failed, will retry:", e4)
-                                time.sleep(retry_delay)
-                    time.sleep(0.5)
             time.sleep(1 / 30)
 
     
