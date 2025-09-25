@@ -756,16 +756,79 @@ class HLSStreamer:
             time.sleep(self.segment_time / 2)
 
     def _feed_frames(self):
+        last_frame_time = time.time()
+        stall_timeout = max(5, int(self.segment_time * 2))
+        retry_delay = 5.0
         while self.running:
             frame = self.cam.get_frame()
-            if frame is not None:
+            if frame is None:
+                if time.time() - last_frame_time > stall_timeout:
+                    print("stopping ffmpeg and waiting for camera...")
+                    try:
+                        self.stop()
+                    except Exception as e:
+                        print("raised while recovering:", e)
+                    while True:
+                        recovered_frame = self.cam.get_frame()
+                        if recovered_frame is not None:
+                            while True:
+                                try:
+                                    self.start()
+                                    return
+                                except Exception as e:
+                                    print("Failed to restart HLS pipeline", e)
+                                    time.sleep(retry_delay)
+                        time.sleep(0.5)
+                time.sleep(0.5)
+                continue
+
+            last_frame_time = time.time()
+
+            try:
+                if self.ffmpeg_proc is None or self.ffmpeg_proc.stdin is None:
+                    raise BrokenPipeError("ffmpeg process missing/stdin closed")
+                self.ffmpeg_proc.stdin.write(frame.tobytes())
+            except (BrokenPipeError, OSError, ValueError) as e:
+                print("[WARN] FFmpeg write failed:", e)
                 try:
-                    self.ffmpeg_proc.stdin.write(frame.tobytes())
-                except BrokenPipeError:
-                    print("FFmpeg process died, restarting...")
-                    self.start()
-                    return
-            time.sleep(1/30)  # Match the frame rate
+                    self.stop()
+                except Exception as e2:
+                    print(e2)
+
+                while True:
+                    recovered_frame = self.cam.get_frame()
+                    if recovered_frame is not None:
+                        while True:
+                            try:
+                                print("Attempting to restart HLS pipeline after FFmpeg write failure...")
+                                self.start()
+                                return
+                            except Exception as e3:
+                                print("Restart attempt failed", e3)
+                                time.sleep(retry_delay)
+                    time.sleep(0.5)
+
+            if self.ffmpeg_proc is not None and self.ffmpeg_proc.poll() is not None:
+                print("FFmpeg process exited, restarting...")
+                try:
+                    self.stop()
+                except Exception as e:
+                    print("stop() raised after ffmpeg exit:", e)
+
+                while True:
+                    recovered_frame = self.cam.get_frame()
+                    if recovered_frame is not None:
+                        while True:
+                            try:
+                                print("Restarting HLS pipeline after ffmpeg exit...")
+                                self.start()
+                                return
+                            except Exception as e4:
+                                print("Restart attempt failed, will retry:", e4)
+                                time.sleep(retry_delay)
+                    time.sleep(0.5)
+            time.sleep(1 / 30)
+
     
     def stop(self):
         self.running = False
