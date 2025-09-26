@@ -499,7 +499,7 @@ class VideoCapture:
                 continue
             fail_count = 0
             frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-            filtered_preds = [p for p in self.last_preds if p[4] >= yolo_thresh and (classes is None or str(int(p[5])) in classes)]
+            filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
 
             if count > 10:
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
@@ -2778,15 +2778,12 @@ if __name__ == "__main__":
   
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
-  track_thresh = 0.5 #default 0.6
-  yolo_thresh = 0.5
 
   track = True #for now
   if track: 
     from yolox.tracker.byte_tracker import BYTETracker
     class Args:
         def __init__(self):
-            self.track_thresh = track_thresh
             self.track_buffer = 60 # frames, was 30
             self.mot20 = False
             self.match_thresh = 0.9
