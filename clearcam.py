@@ -450,7 +450,7 @@ class VideoCapture:
 
     # Start threads
     threading.Thread(target=self.capture_loop, daemon=True).start()
-    threading.Thread(target=self.inference_loop, daemon=True).start()
+    if not cam_name.endswith("_raw"): threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _open_ffmpeg(self):
     if self.proc:
@@ -842,7 +842,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         cam_name = query.get("cam", [None])[0]
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -859,6 +859,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
             cams[cam_name] = rtsp
+            start_cam(rtsp=rtsp,cam_name=(cam_name+"_raw"),yolo_variant=yolo_variant)
+            cams[(cam_name+"_raw")] = rtsp
+
             with open(CAMS_FILE, 'wb') as f:
               pickle.dump(cams, f)  
 
@@ -1260,6 +1263,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
+            show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["true"])[0]
+            show_detections = show_detections_param.lower() in ("true", "1", "yes")
+            show_detections_checked = "checked" if show_detections else ""
 
             event_image_path = event_image_dir / selected_dir
             event_images = sorted(event_image_path.glob("*.jpg")) if event_image_path.exists() else []
@@ -1609,6 +1615,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <video id="video" controls></video>
                     <div class="date-picker-container">
                         <input type="date" id="folderPicker" value="{selected_dir}">
+                        <label style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+                            <input type="checkbox" id="showDetections" {show_detections_checked}> Show detections
+                        </label>
                     </div>
                     <h3>Active Alerts</h3>
                     <div id="alertsContainer">
@@ -1985,8 +1994,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     if (event.target === alertModal) closeAlertModal();
                 }});
 
+                document.getElementById("showDetections").addEventListener("change", function() {{
+                    const currentTime = video.currentTime;
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('show_detections', this.checked);
+                    params.set('start', currentTime);
+                    window.location.search = params.toString();
+                }});
+
                 function loadStream(folder) {{
-                    const url = `${{cameraName}}/streams/${{folder}}/stream.m3u8`;
+                    const showDetections = document.getElementById("showDetections").checked;
+                    const streamSuffix = showDetections ? "" : "_raw";
+                    const url = `${{cameraName}}${{streamSuffix}}/streams/${{folder}}/stream.m3u8`;
 
                     async function waitForManifest(maxRetries = 30, delay = 2000) {{
                         for (let i = 0; i < maxRetries; i++) {{
