@@ -450,7 +450,7 @@ class VideoCapture:
 
     # Start threads
     threading.Thread(target=self.capture_loop, daemon=True).start()
-    threading.Thread(target=self.inference_loop, daemon=True).start()
+    if not cam_name.endswith("_raw"): threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _open_ffmpeg(self):
     if self.proc:
@@ -859,6 +859,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
             cams[cam_name] = rtsp
+            start_cam(rtsp=rtsp,cam_name=(cam_name+"_raw"),yolo_variant=yolo_variant)
+            cams[(cam_name+"_raw")] = rtsp
+
             with open(CAMS_FILE, 'wb') as f:
               pickle.dump(cams, f)  
 
