@@ -3,11 +3,12 @@ import numpy as np
 from .kalman_filter import KalmanFilter
 from yolox.tracker import matching
 from .basetrack import BaseTrack, TrackState
+from collections import defaultdict
 
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
     def __init__(self, tlwh, score, class_id):
-
+        self.occurrences = defaultdict(float)
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float64)
         self.kalman_filter = None
@@ -81,7 +82,8 @@ class STrack(BaseTrack):
         self.is_activated = True
 
         self.score = new_track.score
-        self.class_id = new_track.class_id
+        self.occurrences[new_track.class_id] += new_track.score
+        self.track_id = max(self.occurrences, key=self.occurrences.get) # use highest combined score
 
     @property
     # @jit(nopython=True)
