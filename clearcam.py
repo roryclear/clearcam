@@ -842,7 +842,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         cam_name = query.get("cam", [None])[0]
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
