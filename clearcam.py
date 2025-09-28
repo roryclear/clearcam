@@ -531,7 +531,7 @@ class VideoCapture:
                   os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
                   send_det = False
-              if userID and (time.time() - last_live_check) >= 5:
+              if not self.cam_name.endswith("_raw") and userID and (time.time() - last_live_check) >= 5:
                   last_live_check = time.time()
                   threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
               if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
