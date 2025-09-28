@@ -1006,12 +1006,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam_name parameter")
                 return
-
+            
+            cam_name_raw = cam_name + "_raw"
             cam_path = CAMERA_BASE_DIR / cam_name
+            cam_path_raw = CAMERA_BASE_DIR / cam_name_raw
             if cam_path.exists() and cam_path.is_dir():
                 try:
                     shutil.rmtree(cam_path)
+                    shutil.rmtree(cam_path_raw)
                     cams.pop(cam_name, None)
+                    cams.pop(cam_name_raw, None)
                     with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
                 except Exception as e:
