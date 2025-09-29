@@ -40,7 +40,7 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
   dw /= 2
   dh /= 2
-  image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR) if shape[::-1] != new_unpad else image
+  image = resize(image, new_unpad, interpolation=cv2.INTER_LINEAR) if shape[::-1] != new_unpad else image
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
   image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
@@ -73,6 +73,42 @@ def make_anchors(feats, strides, grid_cell_offset=0.5):
   anchor_points = anchor_points[0].cat(anchor_points[1], anchor_points[2])
   stride_tensor = stride_tensor[0].cat(stride_tensor[1], stride_tensor[2]).unsqueeze(1)
   return anchor_points, stride_tensor
+
+
+def resize(img, new_size):
+    h, w = img.shape[:2]
+    new_w, new_h = new_size
+
+    if (w, h) == (new_w, new_h): return img
+
+    y = np.linspace(0, h - 1, new_h)
+    x = np.linspace(0, w - 1, new_w)
+    xv, yv = np.meshgrid(x, y)
+
+    x0 = np.floor(xv).astype(int)
+    x1 = np.clip(x0 + 1, 0, w - 1)
+    y0 = np.floor(yv).astype(int)
+    y1 = np.clip(y0 + 1, 0, h - 1)
+
+    wx = xv - x0
+    wy = yv - y0
+
+    Ia = img[y0, x0]
+    Ib = img[y1, x0]
+    Ic = img[y0, x1]
+    Id = img[y1, x1]
+
+    wa = (1 - wx) * (1 - wy)
+    wb = (1 - wx) * wy
+    wc = wx * (1 - wy)
+    wd = wx * wy
+
+    out = (Ia * wa[..., None] +
+           Ib * wb[..., None] +
+           Ic * wc[..., None] +
+           Id * wd[..., None])
+
+    return out.astype(img.dtype)
 
 # this function is from the original implementation
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
