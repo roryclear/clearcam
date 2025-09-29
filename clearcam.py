@@ -411,10 +411,13 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     x2, y2 = pt2
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(img.shape[1]-1, x2), min(img.shape[0]-1, y2)
-    img[y1:y1+thickness, x1:x2+1] = color
-    img[y2-thickness+1:y2+1, x1:x2+1] = color
-    img[y1:y2+1, x1:x1+thickness] = color
-    img[y1:y2+1, x2-thickness+1:x2+1] = color
+    if thickness == -1:  # fill
+        img[y1:y2+1, x1:x2+1] = color
+    else:
+        img[y1:y1+thickness, x1:x2+1] = color
+        img[y2-thickness+1:y2+1, x1:x2+1] = color
+        img[y1:y2+1, x1:x1+thickness] = color
+        img[y1:y2+1, x2-thickness+1:x2+1] = color
     return img
 
 
@@ -650,8 +653,7 @@ class VideoCapture:
           frame = draw_rectangle_numpy(frame, (x1, y1), (x2, y2), color, 3)
           (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
           font_color = (0, 0, 0) if self.is_bright_color(color) else (255, 255, 255)
-          cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
-          #frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
+          frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
           cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
       return frame
 
