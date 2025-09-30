@@ -28,6 +28,7 @@ from urllib.parse import unquote
 from urllib.parse import quote
 import platform
 import ctypes
+import re
 
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
@@ -441,6 +442,51 @@ class RollingClassCounter:
     if not self.sched[time.localtime().tm_wday + 1]: return False
     return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
 
+
+def list_ffmpeg_devices():
+    system = platform.system()
+    if system == "Windows":
+        cmd = [find_ffmpeg(), "-list_devices", "true", "-f", "dshow", "-i", "dummy"]
+    elif system == "Darwin":
+        cmd = [find_ffmpeg(), "-f", "avfoundation", "-list_devices", "true", "-i", ""]
+    elif system == "Linux":
+        cmd = [find_ffmpeg(), "-f", "v4l2", "-list_devices", "true", "-i", ""]
+    else:
+        raise RuntimeError(f"Unsupported system: {system}")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        result = e
+    stderr = result.stderr
+    devices = []
+    if system == "Windows":
+        section = False
+        for line in stderr.splitlines():
+            if "DirectShow video devices" in line:
+                section = True
+                continue
+            if "DirectShow audio devices" in line:
+                section = False
+            if section and '"' in line:
+                devices.append(line.strip().split('"')[1])
+    elif system == "Darwin":
+        section = False
+        for line in stderr.splitlines():
+            if "AVFoundation video devices" in line:
+                section = True
+                continue
+            if "AVFoundation audio devices" in line:
+                section = False
+            if section:
+                m = re.search(r'\[(\d+)\]\s+(.*)', line)
+                if m:
+                    devices.append((m.group(1), m.group(2)))
+    elif system == "Linux":
+        for line in stderr.splitlines():
+            if "/dev/video" in line:
+                devices.append(line.strip())
+    return devices
+
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
     if ffmpeg_path:
@@ -528,20 +574,19 @@ class VideoCapture:
     
     command = [
         ffmpeg_path,
-        "-i", self.src,
+        "-f", "avfoundation",
+        "-framerate", "30",  # Use -framerate instead of -r for input
+        "-i", "1",
+        "-video_size", "1920x1080",  # Force 1080p
         "-loglevel", "quiet",
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "2",
-        "-an",  # No audio
+        "-an",
         "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
+        "-pix_fmt", "yuv420p", 
         "-vf", f"scale={self.width}:{self.height}",
-        "-timeout", "5000000",
-        "-rw_timeout", "15000000",
+        "-r", "30",  # Output frame rate
         "-"
     ]
-    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -749,14 +794,13 @@ class HLSStreamer:
         ffmpeg_cmd = [
             ffmpeg_path,
             "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
+            "-pix_fmt", "yuv420p",
             "-s", f"{self.cam.width}x{self.cam.height}",
             "-use_wallclock_as_timestamps", "1",
             "-fflags", "+genpts",
             "-i", "-",
             "-loglevel", "quiet",
             "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
             "-crf", "21",
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),
@@ -2708,6 +2752,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    print("devices =",list_ffmpeg_devices())
     """Threaded HTTP server with centralized cleanup management"""
     def __init__(self, server_address, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
