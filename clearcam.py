@@ -40,10 +40,10 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
   dw /= 2
   dh /= 2
-  image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR) if shape[::-1] != new_unpad else image
+  image = resize(image, new_unpad, interpolation=cv2.INTER_LINEAR) if shape[::-1] != new_unpad else image
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-  image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
+  image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
   return Tensor(image)
 
 def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
@@ -73,6 +73,57 @@ def make_anchors(feats, strides, grid_cell_offset=0.5):
   anchor_points = anchor_points[0].cat(anchor_points[1], anchor_points[2])
   stride_tensor = stride_tensor[0].cat(stride_tensor[1], stride_tensor[2]).unsqueeze(1)
   return anchor_points, stride_tensor
+
+def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)):
+    if img.ndim == 2:
+        h, w = img.shape
+        c = 1
+    else:
+        h, w, c = img.shape
+    new_h = h + top + bottom
+    new_w = w + left + right
+    if c == 1:
+        out = np.full((new_h, new_w), value if not isinstance(value, tuple) else value[0], dtype=img.dtype)
+    else:
+        out = np.full((new_h, new_w, c), value, dtype=img.dtype)
+    out[top:top+h, left:left+w, ...] = img
+    return out
+
+
+def resize(img, new_size):
+    h, w = img.shape[:2]
+    new_w, new_h = new_size
+
+    if (w, h) == (new_w, new_h): return img
+
+    y = np.linspace(0, h - 1, new_h)
+    x = np.linspace(0, w - 1, new_w)
+    xv, yv = np.meshgrid(x, y)
+
+    x0 = np.floor(xv).astype(int)
+    x1 = np.clip(x0 + 1, 0, w - 1)
+    y0 = np.floor(yv).astype(int)
+    y1 = np.clip(y0 + 1, 0, h - 1)
+
+    wx = xv - x0
+    wy = yv - y0
+
+    Ia = img[y0, x0]
+    Ib = img[y1, x0]
+    Ic = img[y0, x1]
+    Id = img[y1, x1]
+
+    wa = (1 - wx) * (1 - wy)
+    wb = (1 - wx) * wy
+    wc = wx * (1 - wy)
+    wd = wx * wy
+
+    out = (Ia * wa[..., None] +
+           Ib * wb[..., None] +
+           Ic * wc[..., None] +
+           Id * wd[..., None])
+
+    return out.astype(img.dtype)
 
 # this function is from the original implementation
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -404,6 +455,23 @@ def find_ffmpeg():
             return path
     return 'ffmpeg'
 
+import numpy as np
+
+def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
+    x1, y1 = pt1
+    x2, y2 = pt2
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(img.shape[1]-1, x2), min(img.shape[0]-1, y2)
+    if thickness == -1:  # fill
+        img[y1:y2+1, x1:x2+1] = color
+    else:
+        img[y1:y1+thickness, x1:x2+1] = color
+        img[y2-thickness+1:y2+1, x1:x2+1] = color
+        img[y1:y2+1, x1:x1+thickness] = color
+        img[y1:y2+1, x2-thickness+1:x2+1] = color
+    return img
+
+
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
     # objects in scene count
@@ -633,10 +701,10 @@ class VideoCapture:
           x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
           label = f"{class_labels[int(cls)]}:{conf:.2f}"
           color = color_dict[class_labels[int(cls)]]
-          cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+          frame = draw_rectangle_numpy(frame, (x1, y1), (x2, y2), color, 3)
           (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
           font_color = (0, 0, 0) if self.is_bright_color(color) else (255, 255, 255)
-          cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
+          frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
           cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
       return frame
 
