@@ -2413,16 +2413,32 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                 folderPicker.addEventListener("change", () => {{
                     const folder = folderPicker.value;
-                    loadStream(folder);
-                    loadEventImages(folder);
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('date', folder);
+                    window.location.search = params.toString();
                 }});
 
-                loadStream(folderPicker.value);
-                loadEventImages(folderPicker.value);
+                function getCurrentDate() {{
+                    const params = new URLSearchParams(window.location.search);
+                    return params.get('date') || folderPicker.value;
+                }}
+
+                
+                function getQueryParam(name) {{
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get(name);
+                }}
+
+                const initialDate = getQueryParam('date') || "{selected_dir}";
+                folderPicker.value = initialDate;
+
+
+                loadStream(getCurrentDate());
+                loadEventImages(getCurrentDate());
                 fetchAlerts();
                 fetchCounts();
                 setInterval(fetchCounts, 5000);
-                setInterval(() => loadEventImages(folderPicker.value), 5000);
+                setInterval(() => loadEventImages(getCurrentDate()), 5000);
             </script>
             </body>
             </html>
