@@ -614,7 +614,7 @@ class VideoCapture:
     last_preview_time = None
     last_counter_update = time.time()
     count = 0
-    while self.running:
+    while self.running and not cam_name.endswith("_raw"): # todo, add back _raw
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
         try:
             raw_bytes = self.proc.stdout.read(frame_size)
@@ -2941,9 +2941,10 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
-    yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-    state_dict = safe_load(get_weights_location(yolo_variant))
-    load_state_dict(yolo_infer, state_dict)
+    if not cam_name.endswith("_raw"):
+      yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+      state_dict = safe_load(get_weights_location(yolo_variant))
+      load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
