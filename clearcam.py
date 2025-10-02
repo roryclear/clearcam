@@ -2787,7 +2787,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Threaded HTTP server with centralized cleanup management"""
+    print("devices =",list_ffmpeg_devices())
     def __init__(self, server_address, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
