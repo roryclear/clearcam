@@ -28,6 +28,7 @@ from urllib.parse import unquote
 from urllib.parse import quote
 import platform
 import ctypes
+import re
 
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
@@ -441,6 +442,50 @@ class RollingClassCounter:
     if not self.sched[time.localtime().tm_wday + 1]: return False
     return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
 
+def list_ffmpeg_devices():
+    system = platform.system()
+    if system == "Windows":
+        cmd = [find_ffmpeg(), "-list_devices", "true", "-f", "dshow", "-i", "dummy"]
+    elif system == "Darwin":
+        cmd = [find_ffmpeg(), "-f", "avfoundation", "-list_devices", "true", "-i", ""]
+    elif system == "Linux":
+        cmd = [find_ffmpeg(), "-f", "v4l2", "-list_devices", "true", "-i", ""]
+    else:
+        raise RuntimeError(f"Unsupported system: {system}")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        result = e
+    stderr = result.stderr
+    devices = []
+    if system == "Windows":
+        section = False
+        for line in stderr.splitlines():
+            if "DirectShow video devices" in line:
+                section = True
+                continue
+            if "DirectShow audio devices" in line:
+                section = False
+            if section and '"' in line:
+                devices.append(line.strip().split('"')[1])
+    elif system == "Darwin":
+        section = False
+        for line in stderr.splitlines():
+            if "AVFoundation video devices" in line:
+                section = True
+                continue
+            if "AVFoundation audio devices" in line:
+                section = False
+            if section:
+                m = re.search(r'\[(\d+)\]\s+(.*)', line)
+                if m:
+                    devices.append((m.group(1), m.group(2)))
+    elif system == "Linux":
+        for line in stderr.splitlines():
+            if "/dev/video" in line:
+                devices.append(line.strip())
+    return devices
+
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
     if ffmpeg_path:
@@ -541,7 +586,23 @@ class VideoCapture:
         "-rw_timeout", "15000000",
         "-"
     ]
-    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+
+    command_webcam = [
+        ffmpeg_path,
+        "-f", "avfoundation",
+        "-framerate", "30",
+        "-i", "0", # mac webcam
+        "-video_size", "1280x720",  # todo needed?
+        "-loglevel", "quiet",
+        "-an",
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24", 
+        "-vf", f"scale={self.width}:{self.height}",
+        "-r", "30",  # Output frame rate
+        "-"
+    ]
+    self.proc = subprocess.Popen(command_webcam, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -643,7 +704,7 @@ class VideoCapture:
             with self.lock:
                 self.raw_frame = frame.copy()
                 self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-            time.sleep(1 / 30)
+            #time.sleep(1 / 30) # todo, only use for stream, not wired
         except Exception as e:
             print("Error in capture_loop:", e)
             self._open_ffmpeg()
