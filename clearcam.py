@@ -480,7 +480,7 @@ class VideoCapture:
     self.object_set = set()
 
     self.src = src
-    self.width = 1280  # Reduced resolution for better performance
+    self.width = 1280 # todo 1080?
     self.height = 720
     self.proc = None
     self.running = True
@@ -756,7 +756,6 @@ class HLSStreamer:
             "-i", "-",
             "-loglevel", "quiet",
             "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
             "-crf", "21",
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),
