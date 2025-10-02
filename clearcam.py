@@ -704,7 +704,10 @@ class VideoCapture:
             with self.lock:
                 self.raw_frame = frame.copy()
                 self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-            time.sleep(1 / 300) # todo, 1/30 fps for streams
+            if self.src.isdigit(): 
+                time.sleep(1/300)
+            else:
+               time.sleep(1/30)
         except Exception as e:
             print("Error in capture_loop:", e)
             self._open_ffmpeg()
