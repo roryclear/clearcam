@@ -587,22 +587,22 @@ class VideoCapture:
         "-"
     ]
 
-
-    command_webcam = [
-        ffmpeg_path,
-        "-f", "avfoundation",
-        "-framerate", "30",
-        "-i", "0", # mac webcam
-        "-video_size", "1280x720",  # todo needed?
-        "-loglevel", "quiet",
-        "-an",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24", 
-        "-vf", f"scale={self.width}:{self.height}",
-        "-r", "30",  # Output frame rate
-        "-"
-    ]
-    self.proc = subprocess.Popen(command_webcam, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if self.src.isdigit():
+        command = [
+            ffmpeg_path,
+            "-f", "avfoundation",
+            "-framerate", "30",
+            "-i", self.src, # mac webcam
+            "-video_size", "1280x720",  # todo needed?
+            "-loglevel", "quiet",
+            "-an",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24", 
+            "-vf", f"scale={self.width}:{self.height}",
+            "-r", "30",  # Output frame rate
+            "-"
+        ]
+    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -704,7 +704,7 @@ class VideoCapture:
             with self.lock:
                 self.raw_frame = frame.copy()
                 self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-            #time.sleep(1 / 30) # todo, only use for stream, not wired
+            time.sleep(1 / 300) # todo, 1/30 fps for streams
         except Exception as e:
             print("Error in capture_loop:", e)
             self._open_ffmpeg()
