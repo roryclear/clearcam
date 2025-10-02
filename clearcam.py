@@ -614,7 +614,7 @@ class VideoCapture:
     last_preview_time = None
     last_counter_update = time.time()
     count = 0
-    while self.running and not cam_name.endswith("_raw"): # todo, add back _raw
+    while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
         try:
             raw_bytes = self.proc.stdout.read(frame_size)
@@ -630,7 +630,7 @@ class VideoCapture:
             frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
             filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
 
-            if count > 10:
+            if count > 10 and not cam_name.endswith("_raw"): # todo clean
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
                   filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.jpg"
@@ -704,9 +704,7 @@ class VideoCapture:
             with self.lock:
                 self.raw_frame = frame.copy()
                 self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-            if self.src.isdigit(): 
-                time.sleep(1/300)
-            else:
+            if not self.src.isdigit(): 
                time.sleep(1/30)
         except Exception as e:
             print("Error in capture_loop:", e)
