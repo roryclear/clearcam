@@ -717,6 +717,7 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
+      time.sleep(0.03) # todo, needed for perf...33fps max?
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
