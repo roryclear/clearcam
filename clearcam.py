@@ -717,13 +717,14 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
-      time.sleep(0.03) # todo, needed for perf...33fps max?
+      time.sleep(0.034) # todo, needed for perf...33fps max?
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
         continue
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
+      
       if frame is not None:
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
@@ -754,7 +755,7 @@ class VideoCapture:
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
-        print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        print(f"\r{self.cam_name} FPS: {fps:.2f}", end="", flush=True)
   
   def is_bright_color(self,color):
     r, g, b = color
@@ -820,9 +821,9 @@ class HLSStreamer:
             "-fflags", "+genpts",
             "-i", "-",
             "-loglevel", "quiet",
-            "-c:v", "libx264",
-            "-crf", "21",
-            "-preset", "veryfast",
+            "-c:v", "h264_videotoolbox",  # Hardware encoding here
+            "-b:v", "2000k",
+            "-preset", "fast",
             "-g", str(30 * self.segment_time),
             "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
             "-f", "hls",
@@ -991,8 +992,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
             cams[cam_name] = rtsp
-            start_cam(rtsp=rtsp,cam_name=(cam_name+"_raw"),yolo_variant=yolo_variant)
-            cams[(cam_name+"_raw")] = rtsp
+            if not rtsp.isdigit(): # todo, two feeds from one camera tanks perf, share frames?
+                start_cam(rtsp=rtsp,cam_name=(cam_name+"_raw"),yolo_variant=yolo_variant)
+                cams[(cam_name+"_raw")] = rtsp
 
             with open(CAMS_FILE, 'wb') as f:
               pickle.dump(cams, f)  
