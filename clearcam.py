@@ -28,6 +28,7 @@ from urllib.parse import unquote
 from urllib.parse import quote
 import platform
 import ctypes
+import zlib
 
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
@@ -441,6 +442,27 @@ class RollingClassCounter:
     if not self.sched[time.localtime().tm_wday + 1]: return False
     return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
 
+def write_png(filename, array):
+    array = array[..., ::-1]  # BGR to RGB
+    height, width, _ = array.shape
+    png_signature = b"\x89PNG\r\n\x1a\n"
+    def chunk(chunk_type, data):
+        return (struct.pack("!I", len(data)) +
+                chunk_type +
+                data +
+                struct.pack("!I", zlib.crc32(chunk_type + data) & 0xffffffff))
+    ihdr = struct.pack("!IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    raw_data = b"".join(b"\x00" + array[y].tobytes() for y in range(height))
+    compressed = zlib.compress(raw_data, 9)
+    png_bytes = (
+        png_signature +
+        chunk(b"IHDR", ihdr) +
+        chunk(b"IDAT", compressed) +
+        chunk(b"IEND", b"")
+    )
+    with open(filename, "wb") as f:
+        f.write(png_bytes)
+
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
     if ffmpeg_path:
@@ -572,8 +594,8 @@ class VideoCapture:
             if count > 10:
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
-                  filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.jpg"
-                  cv2.imwrite(filename, self.annotated_frame)
+                  filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+                  write_png(filename, self.annotated_frame)
               for _,alert in self.alert_counters.items():
                   if not alert.is_active():
                     alert.reset_counts()
@@ -585,8 +607,8 @@ class VideoCapture:
                           timestamp = datetime.now().strftime("%Y-%m-%d")
                           filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
-                          filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
-                          cv2.imwrite(str(filename), self.annotated_frame)
+                          filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
+                          write_png(str(filename), self.annotated_frame)
                           text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
@@ -1242,7 +1264,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       container.innerHTML = cams.map(cam => `
                           <div class="camera-card">
                               <a href="/?cam=${{cam}}">
-                                  <img src="/${{cam}}/preview.jpg" alt="${{cam}} preview">
+                                  <img src="/${{cam}}/preview.png" alt="${{cam}} preview">
                                   <div>${{cam}}</div>
                               </a>
                               <button onclick="deleteCamera('${{cam}}')">Delete</button>
@@ -1308,7 +1330,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             event_image_path = event_image_dir / selected_dir
             event_images = sorted(
-                event_image_path.glob("*.jpg"),
+                event_image_path.glob("*.png"),
                 key=lambda p: int(p.stem),
                 reverse=True
             ) if event_image_path.exists() else []
@@ -1339,7 +1361,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             show_detections_checked = "checked" if show_detections else ""
 
             event_image_path = event_image_dir / selected_dir
-            event_images = sorted(event_image_path.glob("*.jpg")) if event_image_path.exists() else []
+            event_images = sorted(event_image_path.glob("*.png")) if event_image_path.exists() else []
             image_links = ""
             for img in event_images:
                 ts = int(img.stem)
@@ -1765,7 +1787,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 <span class="close" onclick="closeZoneModal()">&times;</span>
                             </div>
                             <div style="position: relative; display: inline-block; max-width: 100%;">
-                                <img id="zonePreview" src="/{cam_name}/preview.jpg"
+                                <img id="zonePreview" src="/{cam_name}/preview.png"
                                     style="width: 100%; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; user-select: none; -webkit-user-drag: none; pointer-events: none;">
                                 <div id="zoneRect" 
                                     style="position: absolute; border: 2px dashed red; top: 20px; left: 20px; width: 150px; height: 100px; cursor: move; user-select: none;">
@@ -2460,7 +2482,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache')
         elif file_path.suffix == '.ts':
             self.send_header('Content-Type', 'video/MP2T')
-        elif file_path.suffix == '.jpg':
+        elif file_path.suffix == '.png':
             self.send_header('Content-Type', 'image/jpeg')
         self.end_headers()
 
