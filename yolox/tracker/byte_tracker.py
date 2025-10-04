@@ -83,7 +83,7 @@ class STrack(BaseTrack):
 
         self.score = new_track.score
         self.occurrences[new_track.class_id] += new_track.score
-        self.track_id = max(self.occurrences, key=self.occurrences.get) # use highest combined score
+        self.class_id = max(self.occurrences, key=self.occurrences.get) # use highest combined score
 
     @property
     # @jit(nopython=True)
