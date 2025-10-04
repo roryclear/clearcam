@@ -40,7 +40,7 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
   dw /= 2
   dh /= 2
-  image = resize(image, new_unpad, interpolation=cv2.INTER_LINEAR) if shape[::-1] != new_unpad else image
+  image = resize(image, new_unpad) if shape[::-1] != new_unpad else image
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
   image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
