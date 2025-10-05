@@ -30,8 +30,8 @@ import platform
 import ctypes
 import zlib
 
+@TinyJit
 def resize(img, new_size):
-    img = Tensor(img)
     img = img.permute(2,0,1)
     img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
     img = img.permute(1, 2, 0)
@@ -48,6 +48,7 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
   dw /= 2
   dh /= 2
+  image = Tensor(image)
   image = resize(image, new_unpad)
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
