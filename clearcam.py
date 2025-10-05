@@ -30,13 +30,13 @@ import platform
 import ctypes
 import zlib
 
-@TinyJit
 def resize(img, new_size):
     img = img.permute(2,0,1)
     img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
     img = img.permute(1, 2, 0)
     return img
 
+@TinyJit
 def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
   new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
@@ -48,7 +48,6 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
   dw /= 2
   dh /= 2
-  image = Tensor(image)
   image = resize(image, new_unpad)
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
@@ -642,6 +641,7 @@ class VideoCapture:
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
       if frame is not None:
+        frame = Tensor(frame)
         pre = preprocess(frame)
         preds = do_inf(pre).numpy()
         if track:
