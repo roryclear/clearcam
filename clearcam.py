@@ -41,10 +41,10 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
   dw /= 2
   dh /= 2
-  image = resize(image, new_unpad) if shape[::-1] != new_unpad else image
+  image = Tensor(image)
+  image = resize(image, new_unpad) if shape[::-1] != new_unpad else image # todo resize is np
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-  image = Tensor(image)
   image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
   return image
 
@@ -81,10 +81,10 @@ def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)):
 
 
 def resize(img, new_size):
+    img = img.numpy()
     h, w = img.shape[:2]
     new_w, new_h = new_size
-
-    if (w, h) == (new_w, new_h): return img
+    if (w, h) == (new_w, new_h): return Tensor(img)
 
     y = np.linspace(0, h - 1, new_h)
     x = np.linspace(0, w - 1, new_w)
@@ -113,7 +113,7 @@ def resize(img, new_size):
            Ic * wc[..., None] +
            Id * wd[..., None])
 
-    return out.astype(img.dtype)
+    return Tensor(out.astype(img.dtype))
 
 # this function is from the original implementation
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -491,8 +491,8 @@ class VideoCapture:
     self.object_set = set()
 
     self.src = src
-    self.width = 1280 # todo 1080?
-    self.height = 720
+    self.width = 1920 # todo 1080?
+    self.height = 1080
     self.proc = None
     self.running = True
 
