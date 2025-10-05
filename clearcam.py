@@ -44,8 +44,9 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
   image = resize(image, new_unpad) if shape[::-1] != new_unpad else image
   top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+  image = Tensor(image)
   image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
-  return Tensor(image)
+  return image
 
 def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
   lt, rb = distance.chunk(2, dim)
@@ -76,19 +77,7 @@ def make_anchors(feats, strides, grid_cell_offset=0.5):
   return anchor_points, stride_tensor
 
 def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)):
-    if img.ndim == 2:
-        h, w = img.shape
-        c = 1
-    else:
-        h, w, c = img.shape
-    new_h = h + top + bottom
-    new_w = w + left + right
-    if c == 1:
-        out = np.full((new_h, new_w), value if not isinstance(value, tuple) else value[0], dtype=img.dtype)
-    else:
-        out = np.full((new_h, new_w, c), value, dtype=img.dtype)
-    out[top:top+h, left:left+w, ...] = img
-    return out
+    return img.pad(((top,top),(left,left),(0,0)))
 
 
 def resize(img, new_size):
