@@ -195,3 +195,5 @@
 "clearcam_user_id" = "ClearcamユーザーID";
 "log_in" = "ログイン";
 "continue_without_account" = "アカウントなしで続ける";
+
+"alerts" = "アラート";

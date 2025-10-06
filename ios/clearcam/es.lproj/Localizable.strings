@@ -195,3 +195,5 @@
 "clearcam_user_id" = "ID de usuario de Clearcam";
 "log_in" = "Iniciar sesión";
 "continue_without_account" = "Continuar sin cuenta";
+
+"alerts" = "Alertas";

@@ -224,13 +224,11 @@
     [cell.contentView addSubview:greenDot];
     [cell.contentView addSubview:onlineLabel];
 
-    UILabel *alertsLabel = [[UILabel alloc] initWithFrame:CGRectMake(tableView.frame.size.width - 140, 25, 80, 25)];
-    alertsLabel.text = NSLocalizedString(@"alerts_on", "alerts on");
-    alertsLabel.font = [UIFont systemFontOfSize:13];
-    alertsLabel.textColor = [UIColor secondaryLabelColor];
-    alertsLabel.textAlignment = NSTextAlignmentRight;
-
-    UISwitch *alertSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(tableView.frame.size.width - 70, 20, 0, 0)];
+    // Alerts toggle section - switch centered with label beneath
+    CGFloat toggleSectionWidth = 80;
+    CGFloat toggleSectionX = tableView.frame.size.width - toggleSectionWidth - 15;
+    
+    UISwitch *alertSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(toggleSectionX + (toggleSectionWidth - 51)/2, 35, 0, 0)];
     alertSwitch.tag = indexPath.row;
     [alertSwitch addTarget:self action:@selector(alertSwitchToggled:) forControlEvents:UIControlEventValueChanged];
 
@@ -240,8 +238,14 @@
     }
     [alertSwitch setOn:alertsOn animated:NO];
 
-    [cell.contentView addSubview:alertsLabel];
+    UILabel *alertsLabel = [[UILabel alloc] initWithFrame:CGRectMake(toggleSectionX, 75, toggleSectionWidth, 15)];
+    alertsLabel.text = NSLocalizedString(@"alerts", nil);
+    alertsLabel.font = [UIFont systemFontOfSize:13];
+    alertsLabel.textColor = [UIColor secondaryLabelColor];
+    alertsLabel.textAlignment = NSTextAlignmentCenter;
+
     [cell.contentView addSubview:alertSwitch];
+    [cell.contentView addSubview:alertsLabel];
 
     cell.backgroundColor = [UIColor systemBackgroundColor];
 
