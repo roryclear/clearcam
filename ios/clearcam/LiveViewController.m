@@ -231,7 +231,8 @@
     alertsLabel.textAlignment = NSTextAlignmentRight;
 
     UISwitch *alertSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(tableView.frame.size.width - 70, 20, 0, 0)];
-    alertSwitch.userInteractionEnabled = NO;
+    alertSwitch.tag = indexPath.row;
+    [alertSwitch addTarget:self action:@selector(alertSwitchToggled:) forControlEvents:UIControlEventValueChanged];
 
     BOOL alertsOn = NO;
     if (indexPath.row < self.alertsOnStates.count) {
@@ -246,6 +247,74 @@
 
     return cell;
 }
+
+- (void)alertSwitchToggled:(UISwitch *)sender {
+    NSInteger index = sender.tag;
+    if (index >= self.deviceNames.count) return;
+
+    NSString *deviceName = self.deviceNames[index];
+    BOOL newState = sender.isOn;
+    
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken) {
+        NSLog(@"No session token available.");
+        [sender setOn:!newState animated:YES];
+        return;
+    }
+
+    NSDictionary *body = @{
+        @"session_token": sessionToken,
+        @"device_name": [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]], // url encoding
+        @"alerts_on": @(newState)
+    };
+
+    NSError *jsonError;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
+    if (jsonError) {
+        NSLog(@"JSON encode error: %@", jsonError);
+        [sender setOn:!newState animated:YES];
+        return;
+    }
+
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/toggle_alerts"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    request.HTTPBody = jsonData;
+
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Toggle request failed: %@", error);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [sender setOn:!newState animated:YES];
+            });
+            return;
+        }
+
+        NSError *parseError;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseError];
+        if (parseError || ![json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"JSON parse error: %@", parseError);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [sender setOn:!newState animated:YES];
+            });
+            return;
+        }
+
+        BOOL success = [json[@"success"] boolValue];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                NSLog(@"Toggle updated successfully for %@: %@", deviceName, newState ? @"ON" : @"OFF");
+                self.alertsOnStates[index] = @(newState);
+            } else {
+                NSLog(@"Toggle update failed: %@", json[@"message"]);
+                [sender setOn:!newState animated:YES];
+            }
+        });
+    }];
+    [task resume];
+}
+
 
 #pragma mark - UITableViewDelegate
 
