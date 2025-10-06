@@ -848,11 +848,11 @@ NSMutableDictionary *classColorMap;
                                       completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (error) {
-            NSLog(@"❌ Upload failed: %@", error);
+            NSLog(@"Upload failed: %@", error);
         } else if (httpResponse.statusCode >= 200 && httpResponse.statusCode < 300) {
-            NSLog(@"✅ Uploaded segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
+            NSLog(@"Uploaded segment.mp4.aes: %.2f KB", (float)fileData.length / 1024.0);
         } else {
-            NSLog(@"❌ Upload failed with status %ld", (long)httpResponse.statusCode);
+            NSLog(@"Upload failed with status %ld", (long)httpResponse.statusCode);
         }
     }] resume];
 }
