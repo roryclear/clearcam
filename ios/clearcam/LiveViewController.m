@@ -4,6 +4,7 @@
 
 @interface LiveViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) NSMutableArray<NSString *> *deviceNames;
+@property (nonatomic, strong) NSMutableArray<NSNumber *> *alertsOnStates;
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @end
@@ -14,6 +15,7 @@
     [super viewDidLoad];
     self.title = @"Live Cameras";
     self.deviceNames = [NSMutableArray array];
+    self.alertsOnStates = [NSMutableArray array];
 
 
     self.session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
@@ -128,22 +130,32 @@
         if (jsonError) return;
         
         NSArray<NSString *> *deviceNames = json[@"device_names"];
+        NSArray<NSNumber *> *alertsOnArray = json[@"alerts_on"];
+
         if (deviceNames) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.deviceNames removeAllObjects];
-                for (NSString *deviceName in deviceNames) {
-                    NSString *decodedName = [deviceName stringByRemovingPercentEncoding];
+                [self.alertsOnStates removeAllObjects];
+                
+                for (NSInteger i = 0; i < deviceNames.count; i++) {
+                    NSString *decodedName = [deviceNames[i] stringByRemovingPercentEncoding];
                     if (decodedName) {
                         [self.deviceNames addObject:decodedName];
+                        // If alerts_on array is valid and has a matching index
+                        BOOL alertsOn = NO;
+                        if (alertsOnArray && i < alertsOnArray.count) {
+                            alertsOn = [alertsOnArray[i] boolValue];
+                        }
+                        [self.alertsOnStates addObject:@(alertsOn)];
                     }
                 }
                 [self.tableView reloadData];
                 [self updateTableViewBackground];
             });
         }
+
     }];
     [task resume];
-    //[self updateTableViewBackground];
 }
 
 #pragma mark - UITableViewDataSource
@@ -212,8 +224,26 @@
     [cell.contentView addSubview:greenDot];
     [cell.contentView addSubview:onlineLabel];
 
+    UILabel *alertsLabel = [[UILabel alloc] initWithFrame:CGRectMake(tableView.frame.size.width - 140, 25, 80, 25)];
+    alertsLabel.text = NSLocalizedString(@"alerts_on", "alerts on");
+    alertsLabel.font = [UIFont systemFontOfSize:13];
+    alertsLabel.textColor = [UIColor secondaryLabelColor];
+    alertsLabel.textAlignment = NSTextAlignmentRight;
+
+    UISwitch *alertSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(tableView.frame.size.width - 70, 20, 0, 0)];
+    alertSwitch.userInteractionEnabled = NO;
+
+    BOOL alertsOn = NO;
+    if (indexPath.row < self.alertsOnStates.count) {
+        alertsOn = [self.alertsOnStates[indexPath.row] boolValue];
+    }
+    [alertSwitch setOn:alertsOn animated:NO];
+
+    [cell.contentView addSubview:alertsLabel];
+    [cell.contentView addSubview:alertSwitch];
+
     cell.backgroundColor = [UIColor systemBackgroundColor];
-    
+
     return cell;
 }
 
