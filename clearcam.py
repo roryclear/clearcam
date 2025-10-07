@@ -776,8 +776,9 @@ class HLSStreamer:
                 "-safe", "0",
                 "-i", str(concat_list_path),
                 "-loglevel", "quiet",
-                "-vf", "scale=-2:240,fps=24",
+                "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
                 "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", # needed for android playback
                 "-preset", "veryslow",
                 "-crf", "32",
                 "-an",
@@ -791,7 +792,9 @@ class HLSStreamer:
                 "-f", "concat",
                 "-safe", "0",
                 "-i", str(concat_list_path),
-                "-c", "copy",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",  # needed for android
+                "-an",  # No audio
                 str(output_path)
             ]
         try:
