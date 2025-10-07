@@ -217,19 +217,21 @@ suspend fun deleteStreamLink(userId: String, cameraName: String) {
     }
 }
 
+data class DeviceInfo(val name: String, val alertsOn: Boolean)
 suspend fun fetchCameraNames(userId: String): List<String> = withContext(Dispatchers.IO) {
     try {
-        val url = URL("https://rors.ai/get_live_devices?session_token=$userId")
+        val url = URL("https://rors.ai/get_live_devicesv2?session_token=$userId")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
 
         if (connection.responseCode == 200) {
             val response = connection.inputStream.bufferedReader().use { it.readText() }
             val jsonObject = JSONObject(response)
-            val namesArray = jsonObject.getJSONArray("device_names")
+            val devicesArray = jsonObject.getJSONArray("devices")
 
-            (0 until namesArray.length()).map { i ->
-                namesArray.getString(i)
+            (0 until devicesArray.length()).map { i ->
+                val deviceObject = devicesArray.getJSONObject(i)
+                deviceObject.getString("name")
             }
         } else {
             emptyList()
