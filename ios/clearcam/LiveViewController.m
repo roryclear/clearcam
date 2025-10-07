@@ -110,16 +110,12 @@
         });
         return;
     }
-    
     NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_live_devices"];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_live_devicesv2"];
     components.queryItems = @[
         [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
     ];
-    
     NSURL *url = components.URL;
-    NSLog(@"Final URL: %@", url);
-    
     NSURLSessionDataTask *task = [self.session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.refreshControl endRefreshing];
@@ -128,32 +124,31 @@
         NSError *jsonError;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError) return;
-        
-        NSArray<NSString *> *deviceNames = json[@"device_names"];
-        NSArray<NSNumber *> *alertsOnArray = json[@"alerts_on"];
-
-        if (deviceNames) {
+        NSArray<NSDictionary *> *devices = json[@"devices"];
+        if (devices) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.deviceNames removeAllObjects];
                 [self.alertsOnStates removeAllObjects];
                 
-                for (NSInteger i = 0; i < deviceNames.count; i++) {
-                    NSString *decodedName = [deviceNames[i] stringByRemovingPercentEncoding];
-                    if (decodedName) {
-                        [self.deviceNames addObject:decodedName];
-                        // If alerts_on array is valid and has a matching index
-                        BOOL alertsOn = NO;
-                        if (alertsOnArray && i < alertsOnArray.count) {
-                            alertsOn = [alertsOnArray[i] boolValue];
+                for (NSDictionary *device in devices) {
+                    NSString *name = device[@"name"];
+                    if (name) {
+                        NSString *decodedName = [name stringByRemovingPercentEncoding];
+                        if (decodedName) {
+                            [self.deviceNames addObject:decodedName];
+                            BOOL alertsOn = NO;
+                            NSNumber *alertsOnValue = device[@"alerts_on"];
+                            if (alertsOnValue) {
+                                alertsOn = [alertsOnValue boolValue];
+                            }
+                            [self.alertsOnStates addObject:@(alertsOn)];
                         }
-                        [self.alertsOnStates addObject:@(alertsOn)];
                     }
                 }
                 [self.tableView reloadData];
                 [self updateTableViewBackground];
             });
         }
-
     }];
     [task resume];
 }
