@@ -194,3 +194,5 @@
 "clearcam_user_id" = "Clearcam 用户ID";
 "log_in" = "登录";
 "continue_without_account" = "继续使用（无账户）";
+
+"alerts" = "警报";

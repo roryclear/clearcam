@@ -394,6 +394,7 @@ class RollingClassCounter:
     return counts, max_reached
   
   def is_active(self, offset=0):
+    if not alerts_on: return False
     if not getattr(self, "is_on", False): return False
     if not self.sched: return True
     now = time.localtime()
@@ -775,8 +776,9 @@ class HLSStreamer:
                 "-safe", "0",
                 "-i", str(concat_list_path),
                 "-loglevel", "quiet",
-                "-vf", "scale=-2:240,fps=24",
+                "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
                 "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", # needed for android playback
                 "-preset", "veryslow",
                 "-crf", "32",
                 "-an",
@@ -790,7 +792,9 @@ class HLSStreamer:
                 "-f", "concat",
                 "-safe", "0",
                 "-i", str(concat_list_path),
-                "-c", "copy",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",  # needed for android
+                "-an",  # No audio
                 str(output_path)
             ]
         try:
@@ -2658,9 +2662,11 @@ def start_cam(rtsp, cam_name, yolo_variant='n'):
 
 
 live_link = dict()
+alerts_on = True
 is_live_lock = threading.Lock()
 def check_upload_link(cam_name="clearcampy"):
     global live_link
+    global alerts_on
     query_params = urllib.parse.urlencode({
         "name": quote(cam_name),
         "session_token": userID
@@ -2673,7 +2679,10 @@ def check_upload_link(cam_name="clearcampy"):
             if response.status == 200:
                 response_data = json.loads(response.read().decode('utf-8'))
                 upload_link = response_data.get("upload_link")
-                with is_live_lock: live_link[cam_name] = upload_link
+                alerts_on_res = response_data.get("alerts_on")
+                with is_live_lock:
+                   live_link[cam_name] = upload_link
+                   alerts_on = (alerts_on_res == 1)
             else:
                 raise Exception(f"HTTP Error: {response.status}")
     except Exception as e:

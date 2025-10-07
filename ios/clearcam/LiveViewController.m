@@ -4,6 +4,7 @@
 
 @interface LiveViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) NSMutableArray<NSString *> *deviceNames;
+@property (nonatomic, strong) NSMutableArray<NSNumber *> *alertsOnStates;
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @end
@@ -14,6 +15,7 @@
     [super viewDidLoad];
     self.title = @"Live Cameras";
     self.deviceNames = [NSMutableArray array];
+    self.alertsOnStates = [NSMutableArray array];
 
 
     self.session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
@@ -128,22 +130,32 @@
         if (jsonError) return;
         
         NSArray<NSString *> *deviceNames = json[@"device_names"];
+        NSArray<NSNumber *> *alertsOnArray = json[@"alerts_on"];
+
         if (deviceNames) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.deviceNames removeAllObjects];
-                for (NSString *deviceName in deviceNames) {
-                    NSString *decodedName = [deviceName stringByRemovingPercentEncoding];
+                [self.alertsOnStates removeAllObjects];
+                
+                for (NSInteger i = 0; i < deviceNames.count; i++) {
+                    NSString *decodedName = [deviceNames[i] stringByRemovingPercentEncoding];
                     if (decodedName) {
                         [self.deviceNames addObject:decodedName];
+                        // If alerts_on array is valid and has a matching index
+                        BOOL alertsOn = NO;
+                        if (alertsOnArray && i < alertsOnArray.count) {
+                            alertsOn = [alertsOnArray[i] boolValue];
+                        }
+                        [self.alertsOnStates addObject:@(alertsOn)];
                     }
                 }
                 [self.tableView reloadData];
                 [self updateTableViewBackground];
             });
         }
+
     }];
     [task resume];
-    //[self updateTableViewBackground];
 }
 
 #pragma mark - UITableViewDataSource
@@ -212,10 +224,101 @@
     [cell.contentView addSubview:greenDot];
     [cell.contentView addSubview:onlineLabel];
 
-    cell.backgroundColor = [UIColor systemBackgroundColor];
+    // Alerts toggle section - switch centered with label beneath
+    CGFloat toggleSectionWidth = 80;
+    CGFloat toggleSectionX = tableView.frame.size.width - toggleSectionWidth - 15;
     
+    UISwitch *alertSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(toggleSectionX + (toggleSectionWidth - 51)/2, 35, 0, 0)];
+    alertSwitch.tag = indexPath.row;
+    [alertSwitch addTarget:self action:@selector(alertSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+
+    BOOL alertsOn = NO;
+    if (indexPath.row < self.alertsOnStates.count) {
+        alertsOn = [self.alertsOnStates[indexPath.row] boolValue];
+    }
+    [alertSwitch setOn:alertsOn animated:NO];
+
+    UILabel *alertsLabel = [[UILabel alloc] initWithFrame:CGRectMake(toggleSectionX, 75, toggleSectionWidth, 15)];
+    alertsLabel.text = NSLocalizedString(@"alerts", nil);
+    alertsLabel.font = [UIFont systemFontOfSize:13];
+    alertsLabel.textColor = [UIColor secondaryLabelColor];
+    alertsLabel.textAlignment = NSTextAlignmentCenter;
+
+    [cell.contentView addSubview:alertSwitch];
+    [cell.contentView addSubview:alertsLabel];
+
+    cell.backgroundColor = [UIColor systemBackgroundColor];
+
     return cell;
 }
+
+- (void)alertSwitchToggled:(UISwitch *)sender {
+    NSInteger index = sender.tag;
+    if (index >= self.deviceNames.count) return;
+
+    NSString *deviceName = self.deviceNames[index];
+    BOOL newState = sender.isOn;
+    
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken) {
+        NSLog(@"No session token available.");
+        [sender setOn:!newState animated:YES];
+        return;
+    }
+
+    NSDictionary *body = @{
+        @"session_token": sessionToken,
+        @"device_name": [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]], // url encoding
+        @"alerts_on": @(newState)
+    };
+
+    NSError *jsonError;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
+    if (jsonError) {
+        NSLog(@"JSON encode error: %@", jsonError);
+        [sender setOn:!newState animated:YES];
+        return;
+    }
+
+    NSURL *url = [NSURL URLWithString:@"https://rors.ai/toggle_alerts"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    request.HTTPBody = jsonData;
+
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"Toggle request failed: %@", error);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [sender setOn:!newState animated:YES];
+            });
+            return;
+        }
+
+        NSError *parseError;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseError];
+        if (parseError || ![json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"JSON parse error: %@", parseError);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [sender setOn:!newState animated:YES];
+            });
+            return;
+        }
+
+        BOOL success = [json[@"success"] boolValue];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                NSLog(@"Toggle updated successfully for %@: %@", deviceName, newState ? @"ON" : @"OFF");
+                self.alertsOnStates[index] = @(newState);
+            } else {
+                NSLog(@"Toggle update failed: %@", json[@"message"]);
+                [sender setOn:!newState animated:YES];
+            }
+        });
+    }];
+    [task resume];
+}
+
 
 #pragma mark - UITableViewDelegate
 

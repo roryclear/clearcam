@@ -136,9 +136,7 @@
             NSURL *localURL = [NSURL fileURLWithPath:tempPath];
             [[NSFileManager defaultManager] removeItemAtURL:localURL error:nil];
 
-            if ([decryptedData writeToURL:localURL atomically:YES]) {
-                NSLog(@"✅ New segment saved: %@", fileName);
-                
+            if ([decryptedData writeToURL:localURL atomically:YES]) {   
                 //thumbnail save
                 AVAsset *videoAsset = [AVAsset assetWithURL:localURL];
                 AVAssetImageGenerator *imageGenerator = [[AVAssetImageGenerator alloc] initWithAsset:videoAsset];
