@@ -118,45 +118,63 @@
     ];
     
     NSURL *url = components.URL;
-    NSLog(@"Final URL: %@", url);
-    
     NSURLSessionDataTask *task = [self.session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.refreshControl endRefreshing];
         });
-        if (error) return;
-        NSError *jsonError;
-        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-        if (jsonError) return;
         
-        NSArray<NSString *> *deviceNames = json[@"device_names"];
-        NSArray<NSNumber *> *alertsOnArray = json[@"alerts_on"];
-
-        if (deviceNames) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.deviceNames removeAllObjects];
-                [self.alertsOnStates removeAllObjects];
-                
-                for (NSInteger i = 0; i < deviceNames.count; i++) {
-                    NSString *decodedName = [deviceNames[i] stringByRemovingPercentEncoding];
-                    if (decodedName) {
-                        [self.deviceNames addObject:decodedName];
-                        // If alerts_on array is valid and has a matching index
-                        BOOL alertsOn = NO;
-                        if (alertsOnArray && i < alertsOnArray.count) {
-                            alertsOn = [alertsOnArray[i] boolValue];
-                        }
-                        [self.alertsOnStates addObject:@(alertsOn)];
-                    }
+        if (error) return;
+        if (!data) return;
+        
+        NSError *jsonError;
+        id jsonObj = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError) return;
+        NSArray *devices = nil;
+        if ([jsonObj isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *json = (NSDictionary *)jsonObj;
+            if ([json[@"devices"] isKindOfClass:[NSArray class]]) {
+                devices = json[@"devices"];
+            } else if ([json[@"device_names"] isKindOfClass:[NSArray class]] &&
+                       [json[@"alerts_on"] isKindOfClass:[NSArray class]]) {
+                NSArray *names = json[@"device_names"];
+                NSArray *alerts = json[@"alerts_on"];
+                NSMutableArray *converted = [NSMutableArray array];
+                for (NSInteger i = 0; i < names.count; i++) {
+                    NSString *name = names[i];
+                    BOOL alertsOn = (i < alerts.count) ? [alerts[i] boolValue] : NO;
+                    [converted addObject:@{@"name": name, @"alerts_on": @(alertsOn)}];
                 }
-                [self.tableView reloadData];
-                [self updateTableViewBackground];
-            });
+                devices = converted;
+            }
         }
-
+        
+        if (![devices isKindOfClass:[NSArray class]]) return;
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.deviceNames removeAllObjects];
+            [self.alertsOnStates removeAllObjects];
+            
+            for (NSDictionary *device in devices) {
+                NSString *name = device[@"name"];
+                NSNumber *alertsOnValue = device[@"alerts_on"];
+                
+                if ([name isKindOfClass:[NSString class]]) {
+                    NSString *decodedName = [name stringByRemovingPercentEncoding];
+                    [self.deviceNames addObject:decodedName ?: name];
+                    
+                    BOOL alertsOn = [alertsOnValue boolValue];
+                    [self.alertsOnStates addObject:@(alertsOn)];
+                }
+            }
+            
+            [self.tableView reloadData];
+            [self updateTableViewBackground];
+        });
     }];
+    
     [task resume];
 }
+
 
 #pragma mark - UITableViewDataSource
 
