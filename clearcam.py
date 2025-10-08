@@ -524,9 +524,9 @@ class VideoCapture:
               inputs.extend(["-i", raw_cams[i]])
               filter_chains.append(f"[{i}:v]{scale_filter}[v{i}]")
           if num_feeds == 2:
-              filter_complex = ";".join(filter_chains) + ";[v0]pad=iw*2:ih[v0p];[v0p][v1]overlay=w"
+              filter_complex = ";".join(filter_chains) + f";[v0]pad={self.width}:{self.height}[base];" f"[base][v1]overlay=x={(self.width//2)}:y=0"
           elif num_feeds == 3:
-              filter_complex = ";".join(filter_chains) + ";[v0]pad=iw*2:ih*2[v0p];[v0p][v1]overlay=w[t];[t][v2]overlay=0:h"
+              filter_complex = ";".join(filter_chains)+ ";[v0]pad=iw*2:ih[v0p];[v0p][v1]overlay=x=iw/2:y=0"
           else:
               filter_complex = ";".join(filter_chains) + ";[v0]pad=iw*2:ih*2[v0p];[v0p][v1]overlay=w[x];[x][v2]overlay=0:h[y];[y][v3]overlay=w:h"
           
