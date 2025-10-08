@@ -17,8 +17,8 @@
                       contentType:(NSString *)contentType
                              body:(id)body
                 completionHandler:(void (^)(NSData *data, NSHTTPURLResponse *response, NSError *error))completion;
-+ (void)sendDeviceTokenToServer;
-+ (void)sendDeleteDeviceTokenToServer;
++ (void)sendDeviceTokenToServerWithCompletion:(void (^)(BOOL success))completion;
++ (void)sendDeleteDeviceTokenToServerWithCompletion:(void (^)(BOOL success))completion;
 @property (nonatomic, assign) NSInteger segment_length;
 @property (nonatomic, strong) NSDate *last_req_time;
 @property (nonatomic, strong) PortScanner *scanner;

@@ -273,16 +273,38 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     BOOL hasRequestedPermission = [defaults boolForKey:@"hasRequestedNotificationPermission"];
     
-    self.receiveNotifEnabled = sender.on;
-    [defaults setBool:self.receiveNotifEnabled forKey:@"receive_notif_enabled"];
-    [defaults synchronize];
-
-    if (sender.on) {
+    // Store the intended state but don't update UI yet
+    BOOL intendedState = sender.on;
+    
+    // Immediately revert the toggle to its previous state
+    sender.on = !intendedState;
+    
+    if (intendedState) {
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
         [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (settings.authorizationStatus == UNAuthorizationStatusAuthorized) {
-                    [FileServer sendDeviceTokenToServer]; // Send token when toggled ON
+                    [FileServer sendDeviceTokenToServerWithCompletion:^(BOOL success) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (success) {
+                                self.receiveNotifEnabled = YES;
+                                [defaults setBool:YES forKey:@"receive_notif_enabled"];
+                                [defaults synchronize];
+                                sender.on = YES;
+                            } else {
+                                self.receiveNotifEnabled = NO;
+                                [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                                [defaults synchronize];
+                                sender.on = NO;
+                                
+                                UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"error", @"Error title")
+                                                                                              message:@"no connection"
+                                                                                       preferredStyle:UIAlertControllerStyleAlert];
+                                [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
+                                [self presentViewController:alert animated:YES completion:nil];
+                            }
+                        });
+                    }];
                 } else if (!hasRequestedPermission) {
                     [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
                                           completionHandler:^(BOOL granted, NSError * _Nullable error) {
@@ -292,7 +314,27 @@
                                 [defaults setBool:YES forKey:@"hasRequestedNotificationPermission"];
                                 [defaults synchronize];
                                 
-                                [FileServer sendDeviceTokenToServer]; // Send token after granting permission
+                                [FileServer sendDeviceTokenToServerWithCompletion:^(BOOL success) {
+                                    dispatch_async(dispatch_get_main_queue(), ^{
+                                        if (success) {
+                                            self.receiveNotifEnabled = YES;
+                                            [defaults setBool:YES forKey:@"receive_notif_enabled"];
+                                            [defaults synchronize];
+                                            sender.on = YES;
+                                        } else {
+                                            self.receiveNotifEnabled = NO;
+                                            [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                                            [defaults synchronize];
+                                            sender.on = NO;
+                                            
+                                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"error", @"Error title")
+                                                                                                          message:@"no connection"
+                                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                                            [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
+                                            [self presentViewController:alert animated:YES completion:nil];
+                                        }
+                                    });
+                                }];
                             } else {
                                 self.receiveNotifEnabled = NO;
                                 [defaults setBool:NO forKey:@"receive_notif_enabled"];
@@ -327,8 +369,29 @@
         [center removeAllPendingNotificationRequests];
         [center removeAllDeliveredNotifications];
         
-        // Delete device token from server
-        [FileServer sendDeleteDeviceTokenToServer];
+        // Delete device token from server with completion
+        [FileServer sendDeleteDeviceTokenToServerWithCompletion:^(BOOL success) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (success) {
+                    self.receiveNotifEnabled = NO;
+                    [defaults setBool:NO forKey:@"receive_notif_enabled"];
+                    [defaults synchronize];
+                    sender.on = NO;
+                } else {
+                    // If deletion failed, revert to ON state
+                    self.receiveNotifEnabled = YES;
+                    [defaults setBool:YES forKey:@"receive_notif_enabled"];
+                    [defaults synchronize];
+                    sender.on = YES;
+                    
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"error", @"Error title")
+                                                                                  message:@"no connection"
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
+                    [alert addAction:[UIAlertAction actionWithTitle:NSLocalizedString(@"ok", @"OK button") style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:alert animated:YES completion:nil];
+                }
+            });
+        }];
     }
 }
 
@@ -903,7 +966,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)performSignOut {
+- (void)performSignOut { // todo, delete notif token
     [[StoreManager sharedInstance] clearSessionTokenFromKeychain];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults removeObjectForKey:@"isSubscribed"];
@@ -911,7 +974,6 @@
     [defaults removeObjectForKey:@"hasRequestedNotificationPermission"];
     [defaults removeObjectForKey:@"subscriptionReceipt"];
     [defaults synchronize];
-    [FileServer sendDeleteDeviceTokenToServer];
     LoginViewController *loginVC = [[LoginViewController alloc] init];
     UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:loginVC];
     UIWindow *window = [[[UIApplication sharedApplication] windows] firstObject];
