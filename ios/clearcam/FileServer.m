@@ -704,7 +704,7 @@
     return framesForURL;
 }
 
-+ (void)sendDeviceTokenToServerWithCompletion:(void (^)(BOOL success))completion {
++ (void)sendDeviceTokenToServerWithDelete:(BOOL)deleteToken completion:(void (^)(BOOL success))completion {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *deviceToken = [defaults stringForKey:@"device_token"];
     if (!deviceToken || deviceToken.length == 0) {
@@ -716,7 +716,10 @@
         if (completion) completion(NO);
         return;
     }
-    [FileServer performPostRequestWithURL:@"https://rors.ai/add_device"
+    
+    NSString *endpoint = deleteToken ? @"https://rors.ai/delete_device" : @"https://rors.ai/add_device";
+    
+    [FileServer performPostRequestWithURL:endpoint
                                        method:@"POST"
                                   contentType:@"application/json"
                                          body:@{@"device_token": deviceToken, @"session_token": sessionToken}
@@ -726,26 +729,8 @@
     }];
 }
 
-+ (void)sendDeleteDeviceTokenToServerWithCompletion:(void (^)(BOOL success))completion {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *deviceToken = [defaults stringForKey:@"device_token"];
-    if (!deviceToken || deviceToken.length == 0) {
-        if (completion) completion(NO);
-        return;
-    }
-    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken || sessionToken.length == 0) {
-        if (completion) completion(NO);
-        return;
-    }
-    [FileServer performPostRequestWithURL:@"https://rors.ai/delete_device"
-                                       method:@"POST"
-                                  contentType:@"application/json"
-                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
-                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) {
-        BOOL success = (error == nil && response.statusCode >= 200 && response.statusCode < 300);
-        if (completion) completion(success);
-    }];
++ (void)sendDeviceTokenToServerWithCompletion:(void (^)(BOOL success))completion {
+    [self sendDeviceTokenToServerWithDelete:NO completion:completion];
 }
 
 + (void)performPostRequestWithURL:(NSString *)urlString

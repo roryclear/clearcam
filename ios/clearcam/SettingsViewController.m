@@ -364,13 +364,10 @@
             });
         }];
     } else {
-        // Clear any pending notifications when turning off
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
         [center removeAllPendingNotificationRequests];
         [center removeAllDeliveredNotifications];
-        
-        // Delete device token from server with completion
-        [FileServer sendDeleteDeviceTokenToServerWithCompletion:^(BOOL success) {
+        [FileServer sendDeviceTokenToServerWithDelete:YES completion:^(BOOL success) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (success) {
                     self.receiveNotifEnabled = NO;
