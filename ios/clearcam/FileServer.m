@@ -717,6 +717,20 @@
                             completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) { if (error) return; }];
 }
 
++ (void)sendDeleteDeviceTokenToServer {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *deviceToken = [defaults stringForKey:@"device_token"];
+    if (!deviceToken || deviceToken.length == 0) return;
+    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (!sessionToken || sessionToken.length == 0) return;
+    [FileServer performPostRequestWithURL:@"https://rors.ai/delete_device"
+                                       method:@"POST"
+                                  contentType:@"application/json"
+                                         body:@{@"device_token": deviceToken, @"session_token": sessionToken}
+                            completionHandler:^(NSData *data, NSHTTPURLResponse *response, NSError *error) { if (error) return; }];
+}
+
+
 + (void)performPostRequestWithURL:(NSString *)urlString
                            method:(NSString *)method
                       contentType:(NSString *)contentType

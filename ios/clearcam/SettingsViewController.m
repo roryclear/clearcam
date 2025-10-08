@@ -328,38 +328,8 @@
         [center removeAllDeliveredNotifications];
         
         // Delete device token from server
-        [self deleteDeviceTokenFromServer];
+        [FileServer sendDeleteDeviceTokenToServer];
     }
-}
-
-- (void)deleteDeviceTokenFromServer {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *deviceToken = [defaults stringForKey:@"device_token"];
-    
-    if (!deviceToken || deviceToken.length == 0) return;
-    
-    // Retrieve session token from Keychain
-    NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
-    if (!sessionToken || sessionToken.length == 0) return;
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/delete_device"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = @"DELETE";
-    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    
-    NSDictionary *body = @{
-        @"device_token": deviceToken,
-        @"session_token": sessionToken
-    };
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
-    request.HTTPBody = jsonData;
-    
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
-                                                                 completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) return;
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-    }];
-    
-    [task resume];
 }
 
 - (void)subscriptionStatusDidChange:(NSNotification *)notification {
@@ -941,7 +911,7 @@
     [defaults removeObjectForKey:@"hasRequestedNotificationPermission"];
     [defaults removeObjectForKey:@"subscriptionReceipt"];
     [defaults synchronize];
-    [self deleteDeviceTokenFromServer];
+    [FileServer sendDeleteDeviceTokenToServer];
     LoginViewController *loginVC = [[LoginViewController alloc] init];
     UINavigationController *navController = [[UINavigationController alloc] initWithRootViewController:loginVC];
     UIWindow *window = [[[UIApplication sharedApplication] windows] firstObject];
