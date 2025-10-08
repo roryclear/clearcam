@@ -497,32 +497,48 @@ class VideoCapture:
     self.lock = threading.Lock()
 
     self._open_ffmpeg()
-
     # Start threads
     threading.Thread(target=self.capture_loop, daemon=True).start()
     if not cam_name.endswith("_raw"): threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _open_ffmpeg(self):
-    if self.proc:
-        self.proc.kill()
-
     ffmpeg_path = find_ffmpeg()
-    
-    command = [
-        ffmpeg_path,
-        "-i", self.src,
-        "-loglevel", "quiet",
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "2",
-        "-an",  # No audio
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-vf", f"scale={self.width}:{self.height}",
-        "-timeout", "5000000",
-        "-rw_timeout", "15000000",
-        "-"
-    ]
+    if not self.src:
+      for _ in range(10): print("NO SRC")
+      self.src = "https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m3u8"
+      command = [
+          ffmpeg_path,
+          "-i", self.src,
+          "-loglevel", "quiet",
+          "-reconnect", "1",
+          "-reconnect_streamed", "1",
+          "-reconnect_delay_max", "2",
+          "-an",  # No audio
+          "-f", "rawvideo",
+          "-pix_fmt", "bgr24",
+          "-vf", f"scale={self.width//2}:{self.height//2},split=4[a][b][c][d];[a]pad=iw*2:ih*2[a1];[a1][b]overlay=w[x];[x][c]overlay=0:h[y];[y][d]overlay=w:h",
+          "-timeout", "5000000",
+          "-rw_timeout", "15000000",
+          "-"
+      ]
+    else:
+      if self.proc:
+          self.proc.kill()
+      command = [
+          ffmpeg_path,
+          "-i", self.src,
+          "-loglevel", "quiet",
+          "-reconnect", "1",
+          "-reconnect_streamed", "1",
+          "-reconnect_delay_max", "2",
+          "-an",  # No audio
+          "-f", "rawvideo",
+          "-pix_fmt", "bgr24",
+          "-vf", f"scale={self.width}:{self.height}",
+          "-timeout", "5000000",
+          "-rw_timeout", "15000000",
+          "-"
+      ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def capture_loop(self):
@@ -2824,6 +2840,7 @@ if __name__ == "__main__":
       with open(CAMS_FILE, 'wb') as f:
          pickle.dump(cams, f)  
 
+
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
@@ -2839,6 +2856,10 @@ if __name__ == "__main__":
       while len(key) < 1: key = input("enter a password for encryption: ")
       sys.argv.extend([f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"])
     else: userID = None
+    cam_multi = VideoCapture(None,cam_name="multi_raw")
+    hls_streamer_multi = HLSStreamer(cam_multi,cam_name="multi_raw")
+    cam_multi.streamer = hls_streamer_multi
+    hls_streamer_multi.start()
 
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
@@ -2858,7 +2879,7 @@ if __name__ == "__main__":
 
     tracker = BYTETracker(Args())
   live_link = dict()
-  
+
   if rtsp_url is None:
     for cam_name in cams.keys():
       start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant)
