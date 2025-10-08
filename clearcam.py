@@ -504,23 +504,47 @@ class VideoCapture:
   def _open_ffmpeg(self):
     ffmpeg_path = find_ffmpeg()
     if not self.src:
-      for _ in range(10): print("NO SRC")
-      self.src = "https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m3u8"
-      command = [
-          ffmpeg_path,
-          "-i", self.src,
-          "-loglevel", "quiet",
-          "-reconnect", "1",
-          "-reconnect_streamed", "1",
-          "-reconnect_delay_max", "2",
-          "-an",  # No audio
-          "-f", "rawvideo",
-          "-pix_fmt", "bgr24",
-          "-vf", f"scale={self.width//2}:{self.height//2},split=4[a][b][c][d];[a]pad=iw*2:ih*2[a1];[a1][b]overlay=w[x];[x][c]overlay=0:h[y];[y][d]overlay=w:h",
-          "-timeout", "5000000",
-          "-rw_timeout", "15000000",
-          "-"
-      ]
+      for _ in range(10): 
+        print("NO SRC")
+      cams = {}
+      raw_cams = []
+      if os.path.exists(CAMS_FILE):
+        with open(CAMS_FILE, 'rb') as f:
+          cams = pickle.load(f)
+      for k in cams.keys(): 
+        if k.endswith("_raw"): raw_cams.append(cams[k])
+      self.src = "https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m3u8" #needed?
+      num_feeds = len(raw_cams)
+
+      if 2 <= num_feeds <= 4:
+          scale_filter = f"scale={self.width//2}:{self.height//2}"
+          inputs = []
+          filter_chains = []
+          for i in range(num_feeds):
+              inputs.extend(["-i", raw_cams[i]])
+              filter_chains.append(f"[{i}:v]{scale_filter}[v{i}]")
+          if num_feeds == 2:
+              filter_complex = ";".join(filter_chains) + ";[v0]pad=iw*2:ih[v0p];[v0p][v1]overlay=w"
+          elif num_feeds == 3:
+              filter_complex = ";".join(filter_chains) + ";[v0]pad=iw*2:ih*2[v0p];[v0p][v1]overlay=w[t];[t][v2]overlay=0:h"
+          else:
+              filter_complex = ";".join(filter_chains) + ";[v0]pad=iw*2:ih*2[v0p];[v0p][v1]overlay=w[x];[x][v2]overlay=0:h[y];[y][v3]overlay=w:h"
+          
+          command = [
+              ffmpeg_path,
+              *inputs,
+              "-loglevel", "quiet",
+              "-reconnect", "1", 
+              "-reconnect_streamed", "1",
+              "-reconnect_delay_max", "2",
+              "-an",  # No audio
+              "-f", "rawvideo",
+              "-pix_fmt", "bgr24",
+              "-filter_complex", filter_complex,
+              "-timeout", "5000000",
+              "-rw_timeout", "15000000",
+              "-"
+          ]
     else:
       if self.proc:
           self.proc.kill()
