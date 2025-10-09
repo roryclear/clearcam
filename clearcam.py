@@ -1240,10 +1240,27 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       object-fit: contain;
                       background: black;
                   }}
+                  .multi-view-wrapper {{
+                      margin-top: 10px;
+                      text-align: left;
+                  }}
+                  .multi-view-wrapper button {{
+                      padding: 6px 12px;
+                      background: #007bff;
+                      color: white;
+                      border: none;
+                      border-radius: 4px;
+                      cursor: pointer;
+                  }}
+                  .multi-view-wrapper button:hover {{
+                      background: #0056b3;
+                  }}
               </style>
           </head>
           <body>
-              <div id="cameraList" class="camera-grid">
+              <div id="cameraList" class="camera-grid"></div>
+              <div class="multi-view-wrapper">
+                  <button onclick="toggleMultiView()">Multi View</button>
               </div>
 
               <div class="form-section">
@@ -1254,7 +1271,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   </form>
                   <div class="shutdown-wrapper">
                       <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
-                      <button onclick="toggleMultiView()">Multi View</button>
                   </div>
               </div>
 
