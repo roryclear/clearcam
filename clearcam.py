@@ -500,7 +500,7 @@ class VideoCapture:
 
     # Start threads
     threading.Thread(target=self.capture_loop, daemon=True).start()
-    if not cam_name.endswith("_raw"): threading.Thread(target=self.inference_loop, daemon=True).start()
+    threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _open_ffmpeg(self):
     if self.proc:
@@ -581,7 +581,7 @@ class VideoCapture:
                   os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
                   send_det = False
-              if not self.cam_name.endswith("_raw") and userID and (time.time() - last_live_check) >= 5:
+              if userID and (time.time() - last_live_check) >= 5:
                   last_live_check = time.time()
                   threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
               if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
@@ -895,7 +895,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         cam_name = query.get("cam", [None])[0]
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -912,8 +912,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
             cams[cam_name] = rtsp
-            start_cam(rtsp=rtsp,cam_name=(cam_name+"_raw"),yolo_variant=yolo_variant)
-            cams[(cam_name+"_raw")] = rtsp
 
             with open(CAMS_FILE, 'wb') as f:
               pickle.dump(cams, f)  
@@ -1060,15 +1058,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name parameter")
                 return
             
-            cam_name_raw = cam_name + "_raw"
             cam_path = CAMERA_BASE_DIR / cam_name
-            cam_path_raw = CAMERA_BASE_DIR / cam_name_raw
             if cam_path.exists() and cam_path.is_dir():
                 try:
                     shutil.rmtree(cam_path)
-                    shutil.rmtree(cam_path_raw)
                     cams.pop(cam_name, None)
-                    cams.pop(cam_name_raw, None)
                     with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
                 except Exception as e:
