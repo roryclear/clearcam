@@ -1376,7 +1376,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                       container.classList.add('active');
                       const cams = window.currentCameras;
-                      const today = new Date().toISOString().split('T')[0];
+                      const today = new Date().toLocaleDateString('en-CA');
                       const base = "http://localhost:8080";
 
                       const count = cams.length;
