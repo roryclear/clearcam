@@ -753,7 +753,6 @@ class HLSStreamer:
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
         threading.Thread(target=self._feed_frames, daemon=True).start()
-        threading.Thread(target=self._track_segments, daemon=True).start()
 
 
     def export_last_segments(self,output_path: Path,last=False):
@@ -803,13 +802,6 @@ class HLSStreamer:
         except subprocess.CalledProcessError as e:
             print(f"Failed to save video: {e}")
     
-    def _track_segments(self):
-        while self.running:
-            segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
-            self.recent_segments.clear()
-            self.recent_segments.extend(segment_files[-4:]) # last 3 for now
-            time.sleep(self.segment_time / 2)
-
     def _feed_frames(self):
         last_frame_time = time.time()
         stall_timeout = 10
