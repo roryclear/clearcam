@@ -1203,6 +1203,43 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   .shutdown-wrapper {{
                       margin-top: 20px;
                   }}
+
+                  /* Multi-view overlay grid */
+                  #multiView {{
+                      display: none;
+                      position: fixed;
+                      top: 0;
+                      left: 0;
+                      width: 100%;
+                      height: 100vh;
+                      background: black;
+                      z-index: 9999;
+                      padding: 10px;
+                      box-sizing: border-box;
+                      justify-content: center;
+                      align-items: center;
+                      grid-gap: 10px;
+                  }}
+                  #multiView.active {{
+                      display: grid;
+                      justify-items: center;
+                      align-items: center;
+                  }}
+                  #multiView .video-wrapper {{
+                      position: relative;
+                      width: 100%;
+                      aspect-ratio: 16 / 9;
+                      background: #000;
+                      display: flex;
+                      justify-content: center;
+                      align-items: center;
+                  }}
+                  #multiView video {{
+                      width: 100%;
+                      height: 100%;
+                      object-fit: contain;
+                      background: black;
+                  }}
               </style>
           </head>
           <body>
@@ -1216,10 +1253,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       <button type="submit">Add Camera</button>
                   </form>
                   <div class="shutdown-wrapper">
-                  <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
+                      <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
+                      <button onclick="toggleMultiView()">Multi View</button>
                   </div>
               </div>
 
+              <div id="multiView"></div>
+
+              <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
               <script>
                   async function fetchCameras() {{
                       const res = await fetch('/list_cameras');
@@ -1234,9 +1275,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                               <button onclick="deleteCamera('${{cam}}')">Delete</button>
                           </div>
                       `).join('');
+                      window.currentCameras = cams;
                   }}
 
-                  
                   async function deleteCamera(cam) {{
                       if (!confirm(`Are you sure you want to delete ${{cam}}?`)) return;
                       const res = await fetch(`/delete_camera?cam_name=${{cam}}`);
@@ -1257,11 +1298,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       }}
                   }}
 
-                  // Refresh list every 5 seconds
-                  fetchCameras();
-                  setInterval(fetchCameras, 5000);
-
-                  // Submit form via fetch, no full-page reload
                   document.getElementById("addCameraForm").addEventListener("submit", async (e) => {{
                       e.preventDefault();
                       const form = e.target;
@@ -1270,6 +1306,63 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       form.reset();
                       fetchCameras(); // Immediately refresh
                   }});
+
+                  // --- MULTI VIEW LOGIC ---
+                  function toggleMultiView() {{
+                      const container = document.getElementById('multiView');
+                      if (container.classList.contains('active')) {{
+                          container.innerHTML = '';
+                          container.classList.remove('active');
+                          document.exitFullscreen?.();
+                          return;
+                      }}
+
+                      if (!window.currentCameras || window.currentCameras.length === 0) {{
+                          alert("No cameras available.");
+                          return;
+                      }}
+
+                      container.classList.add('active');
+                      const cams = window.currentCameras;
+                      const today = new Date().toISOString().split('T')[0]; // yyyy-mm-dd
+                      const base = "http://localhost:8080";
+
+                      // Determine grid size
+                      const count = cams.length;
+                      const cols = Math.ceil(Math.sqrt(count));
+                      const rows = Math.ceil(count / cols);
+                      container.style.gridTemplateColumns = `repeat(${{cols}}, 1fr)`;
+                      container.style.gridTemplateRows = `repeat(${{rows}}, auto)`;
+
+                      // Create video elements
+                      cams.forEach(cam => {{
+                          const encoded = encodeURIComponent(cam);
+                          const videoUrl = `${{base}}/${{encoded}}/streams/${{today}}/stream.m3u8`;
+
+                          const wrapper = document.createElement('div');
+                          wrapper.className = 'video-wrapper';
+                          const vid = document.createElement('video');
+                          vid.autoplay = true;
+                          vid.muted = true;
+                          vid.playsInline = true;
+                          wrapper.appendChild(vid);
+                          container.appendChild(wrapper);
+
+                          if (vid.canPlayType('application/vnd.apple.mpegurl')) {{
+                              vid.src = videoUrl;
+                          }} else if (Hls.isSupported()) {{
+                              const hls = new Hls();
+                              hls.loadSource(videoUrl);
+                              hls.attachMedia(vid);
+                          }}
+                      }});
+
+                      if (container.requestFullscreen) container.requestFullscreen();
+                  }}
+
+                  // Refresh list every 5 seconds
+                  fetchCameras();
+                  setInterval(fetchCameras, 5000);
               </script>
           </body>
           </html>
