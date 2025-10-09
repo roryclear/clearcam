@@ -694,8 +694,8 @@ class VideoCapture:
   def get_frame(self):
       with self.lock:
           if self.annotated_frame is not None:
-              return self.annotated_frame.copy()
-      return None
+              return self.annotated_frame.copy(), self.raw_frame.copy()
+      return None, None
 
   def release(self):
       self.running = False
@@ -707,25 +707,30 @@ class HLSStreamer:
         self.cam_name = cam_name
         self.cam = video_capture
         self.output_dir = CAMERA_BASE_DIR / self.cam_name / output_dir
+        self.output_dir_raw = CAMERA_BASE_DIR / (f"{self.cam_name}_raw") / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
+        self.ffmpeg_proc_raw = None
         self.start_time = time.time()
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.output_dir_raw.mkdir(parents=True, exist_ok=True)
     
     def _get_new_stream_dir(self):
         timestamp = datetime.now().strftime("%Y-%m-%d")
         stream_dir = self.output_dir / timestamp
+        stream_dir_raw = self.output_dir_raw / timestamp
         self.cam.dir = stream_dir
-        if stream_dir.exists():
-            shutil.rmtree(stream_dir)
+        if stream_dir.exists(): shutil.rmtree(stream_dir)
+        if stream_dir_raw.exists(): shutil.rmtree(stream_dir_raw)
         stream_dir.mkdir(exist_ok=True)
-        return stream_dir
+        stream_dir_raw.mkdir(exist_ok=True)
+        return stream_dir, stream_dir_raw
         
     def start(self):
         self.running = True
-        self.current_stream_dir = self._get_new_stream_dir()
+        self.current_stream_dir, self.current_stream_dir_raw = self._get_new_stream_dir()
         self.recent_segments = deque(maxlen=4)
         self.start_time = time.time()
         ffmpeg_path = find_ffmpeg()
@@ -751,7 +756,30 @@ class HLSStreamer:
             str(self.current_stream_dir / "stream.m3u8")
         ]
 
+        ffmpeg_cmd_raw = [
+            ffmpeg_path,
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", f"{self.cam.width}x{self.cam.height}",
+            "-use_wallclock_as_timestamps", "1",
+            "-fflags", "+genpts",
+            "-i", "-",
+            "-loglevel", "quiet",
+            "-c:v", "libx264",
+            "-crf", "21",
+            "-preset", "veryfast",
+            "-g", str(30 * self.segment_time),
+            "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
+            "-f", "hls",
+            "-hls_time", str(self.segment_time),
+            "-hls_list_size", "0",
+            "-hls_flags", "delete_segments",
+            "-hls_allow_cache", "0",
+            str(self.current_stream_dir_raw / "stream.m3u8")
+        ]
+
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+        self.ffmpeg_proc_raw = subprocess.Popen(ffmpeg_cmd_raw, stdin=subprocess.PIPE)
         threading.Thread(target=self._feed_frames, daemon=True).start()
         threading.Thread(target=self._track_segments, daemon=True).start()
 
@@ -815,7 +843,7 @@ class HLSStreamer:
         stall_timeout = 10
         
         while self.running:
-            frame = self.cam.get_frame()
+            frame, raw_frame = self.cam.get_frame()
             if frame is None:
                 if time.time() - last_frame_time > stall_timeout:
                     print("Camera feed stalled, attempting recovery...")
@@ -829,7 +857,9 @@ class HLSStreamer:
                 if self.ffmpeg_proc is None or self.ffmpeg_proc.poll() is not None:
                     raise BrokenPipeError("FFmpeg process not running") 
                 self.ffmpeg_proc.stdin.write(frame.tobytes())
+                self.ffmpeg_proc_raw.stdin.write(raw_frame.tobytes())
                 self.ffmpeg_proc.stdin.flush()
+                self.ffmpeg_proc_raw.stdin.flush()
                 
             except (BrokenPipeError, OSError, ValueError) as e:
                 print(f"HLS write failed: {e}, restarting...")
@@ -858,10 +888,13 @@ class HLSStreamer:
         self.running = False
         if self.ffmpeg_proc:
             self.ffmpeg_proc.terminate()
+            self.ffmpeg_proc_raw.terminate()
             try:
                 self.ffmpeg_proc.wait(timeout=5)
+                self.ffmpeg_proc_raw.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
+                self.ffmpeg_proc_raw.kill()
 
 
 def append_to_pickle_list(pkl_path, item): # todo, still needed?
@@ -895,7 +928,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         cam_name = query.get("cam", [None])[0]
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1058,11 +1091,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name parameter")
                 return
             
+            cam_name_raw = cam_name + "_raw"
             cam_path = CAMERA_BASE_DIR / cam_name
+            cam_path_raw = CAMERA_BASE_DIR / cam_name_raw
             if cam_path.exists() and cam_path.is_dir():
                 try:
                     shutil.rmtree(cam_path)
+                    shutil.rmtree(cam_path_raw)
                     cams.pop(cam_name, None)
+                    cams.pop(cam_name_raw, None) # todo needed?
                     with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
                 except Exception as e:
