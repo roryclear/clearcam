@@ -1308,12 +1308,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   }});
 
                   // --- MULTI VIEW LOGIC ---
+                  function closeMultiView() {{
+                      const container = document.getElementById('multiView');
+                      container.innerHTML = '';
+                      container.classList.remove('active');
+                      if (document.fullscreenElement) document.exitFullscreen();
+                  }}
+
                   function toggleMultiView() {{
                       const container = document.getElementById('multiView');
                       if (container.classList.contains('active')) {{
-                          container.innerHTML = '';
-                          container.classList.remove('active');
-                          document.exitFullscreen?.();
+                          closeMultiView();
                           return;
                       }}
 
@@ -1324,17 +1329,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                       container.classList.add('active');
                       const cams = window.currentCameras;
-                      const today = new Date().toISOString().split('T')[0]; // yyyy-mm-dd
+                      const today = new Date().toISOString().split('T')[0];
                       const base = "http://localhost:8080";
 
-                      // Determine grid size
                       const count = cams.length;
                       const cols = Math.ceil(Math.sqrt(count));
                       const rows = Math.ceil(count / cols);
                       container.style.gridTemplateColumns = `repeat(${{cols}}, 1fr)`;
                       container.style.gridTemplateRows = `repeat(${{rows}}, auto)`;
 
-                      // Create video elements
                       cams.forEach(cam => {{
                           const encoded = encodeURIComponent(cam);
                           const videoUrl = `${{base}}/${{encoded}}/streams/${{today}}/stream.m3u8`;
@@ -1359,6 +1362,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                       if (container.requestFullscreen) container.requestFullscreen();
                   }}
+
+                  // Close multi-view on ESC or background click
+                  document.addEventListener('keydown', e => {{
+                      if (e.key === 'Escape') {{
+                          const mv = document.getElementById('multiView');
+                          if (mv.classList.contains('active')) closeMultiView();
+                      }}
+                  }});
+
+                  document.getElementById('multiView').addEventListener('click', e => {{
+                      if (e.target.id === 'multiView') closeMultiView();
+                  }});
 
                   // Refresh list every 5 seconds
                   fetchCameras();
