@@ -457,6 +457,9 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
     # objects in scene count
+    self.output_dir = CAMERA_BASE_DIR / cam_name / "streams"
+    self.current_stream_dir = self._get_new_stream_dir()
+
     self.counter = RollingClassCounter(cam_name=cam_name)
     self.cam_name = cam_name
     self.object_set = set()
@@ -502,6 +505,15 @@ class VideoCapture:
     threading.Thread(target=self.capture_loop, daemon=True).start()
     threading.Thread(target=self.inference_loop, daemon=True).start()
 
+  def _get_new_stream_dir(self):
+      timestamp = datetime.now().strftime("%Y-%m-%d")
+      stream_dir = self.output_dir / timestamp
+      self.dir = stream_dir
+      if stream_dir.exists(): shutil.rmtree(stream_dir)
+      stream_dir.mkdir(parents=True, exist_ok=True)
+      return stream_dir
+
+
   def _open_ffmpeg(self):
     if self.proc:
         self.proc.kill()
@@ -524,6 +536,23 @@ class VideoCapture:
         "-"
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    hls_dir = Path(self.output_dir)
+    hls_dir.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        ffmpeg_path,
+        "-i", self.src,
+        "-c", "copy",
+        "-f", "hls",
+        "-hls_time", "4",
+        "-hls_list_size", "0",
+        "-hls_flags", "+append_list",
+        "-hls_playlist_type", "event",
+        "-hls_segment_filename", str(self._get_new_stream_dir() / "stream_%06d.ts"),
+        str(self._get_new_stream_dir() / "stream.m3u8")
+    ]
+    self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -677,13 +706,14 @@ class VideoCapture:
       self.running = False
       if self.proc:
           self.proc.kill()
+      if self.hls_proc:
+         self.hls_proc.kill()
 
 class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir = CAMERA_BASE_DIR / self.cam_name / output_dir
-        self.output_dir_raw = CAMERA_BASE_DIR / (f"{self.cam_name}_raw") / output_dir
+        self.output_dir = CAMERA_BASE_DIR / (f"{self.cam_name}") / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -691,7 +721,7 @@ class HLSStreamer:
         self.start_time = time.time()
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.output_dir_raw.mkdir(parents=True, exist_ok=True)
+
 
     def export_last_segments(self, output_path: Path, last=False, source=None): # todo, annotated clips are probably important
         ffmpeg_path = find_ffmpeg()
@@ -2431,7 +2461,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if requested_path.startswith("cameras/"):
             requested_path = requested_path[len("cameras/"):]
         file_path = self.base_dir / requested_path
-
         if not file_path.exists():
             self.send_error(404)
             return
