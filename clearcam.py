@@ -555,7 +555,7 @@ class VideoCapture:
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
                   filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
-                  write_png(filename, self.annotated_frame)
+                  write_png(filename, self.raw_frame)
               for _,alert in self.alert_counters.items():
                   if not alert.is_active():
                     alert.reset_counts()
@@ -568,7 +568,7 @@ class VideoCapture:
                           filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
-                          write_png(str(filename), self.annotated_frame)
+                          write_png(str(filename), self.raw_frame)
                           text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
@@ -576,7 +576,7 @@ class VideoCapture:
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                   os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                   mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-                  self.streamer.export_last_segments(Path(mp4_filename))
+                  self.streamer.export_last_segments(Path(mp4_filename),source=self.src)
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
@@ -616,7 +616,7 @@ class VideoCapture:
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
                   mp4_filename = f"segment.mp4"
-                  self.streamer.export_last_segments(Path(mp4_filename),last=True)
+                  self.streamer.export_last_segments(Path(mp4_filename),last=True, source=self.src)
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   Path(mp4_filename).unlink()
                   threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
@@ -624,7 +624,6 @@ class VideoCapture:
                count+=1
             with self.lock:
                 self.raw_frame = frame.copy()
-                self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
             time.sleep(1 / 30)
         except Exception as e:
             print("Error in capture_loop:", e)
@@ -673,29 +672,6 @@ class VideoCapture:
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
         print(f"\rFPS: {fps:.2f}", end="", flush=True)
-  
-  def is_bright_color(self,color):
-    r, g, b = color
-    brightness = (r * 299 + g * 587 + b * 114) / 1000
-    return brightness > 127
-
-  def draw_predictions(self, frame, preds):
-      for x1, y1, x2, y2, conf, cls in preds:
-          x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-          label = f"{class_labels[int(cls)]}:{conf:.2f}"
-          color = color_dict[class_labels[int(cls)]]
-          frame = draw_rectangle_numpy(frame, (x1, y1), (x2, y2), color, 3)
-          (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-          font_color = (0, 0, 0) if self.is_bright_color(color) else (255, 255, 255)
-          frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
-          cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
-      return frame
-
-  def get_frame(self):
-      with self.lock:
-          if self.annotated_frame is not None:
-              return self.annotated_frame.copy(), self.raw_frame.copy()
-      return None, None
 
   def release(self):
       self.running = False
@@ -716,185 +692,50 @@ class HLSStreamer:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
-    
-    def _get_new_stream_dir(self):
-        timestamp = datetime.now().strftime("%Y-%m-%d")
-        stream_dir = self.output_dir / timestamp
-        stream_dir_raw = self.output_dir_raw / timestamp
-        self.cam.dir = stream_dir
-        if stream_dir.exists(): shutil.rmtree(stream_dir)
-        if stream_dir_raw.exists(): shutil.rmtree(stream_dir_raw)
-        stream_dir.mkdir(exist_ok=True)
-        stream_dir_raw.mkdir(exist_ok=True)
-        return stream_dir, stream_dir_raw
-        
-    def start(self):
-        self.running = True
-        self.current_stream_dir, self.current_stream_dir_raw = self._get_new_stream_dir()
-        self.recent_segments = deque(maxlen=4)
-        self.start_time = time.time()
+
+    def export_last_segments(self, output_path: Path, last=False, source=None): # todo, annotated clips are probably important
         ffmpeg_path = find_ffmpeg()
-        ffmpeg_cmd = [
-            ffmpeg_path,
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{self.cam.width}x{self.cam.height}",
-            "-use_wallclock_as_timestamps", "1",
-            "-fflags", "+genpts",
-            "-i", "-",
-            "-loglevel", "quiet",
-            "-c:v", "libx264",
-            "-crf", "21",
-            "-preset", "veryfast",
-            "-g", str(30 * self.segment_time),
-            "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
-            "-f", "hls",
-            "-hls_time", str(self.segment_time),
-            "-hls_list_size", "0",
-            "-hls_flags", "delete_segments",
-            "-hls_allow_cache", "0",
-            str(self.current_stream_dir / "stream.m3u8")
-        ]
-
-        ffmpeg_cmd_raw = [
-            ffmpeg_path,
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{self.cam.width}x{self.cam.height}",
-            "-use_wallclock_as_timestamps", "1",
-            "-fflags", "+genpts",
-            "-i", "-",
-            "-loglevel", "quiet",
-            "-c:v", "libx264",
-            "-crf", "21",
-            "-preset", "veryfast",
-            "-g", str(30 * self.segment_time),
-            "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
-            "-f", "hls",
-            "-hls_time", str(self.segment_time),
-            "-hls_list_size", "0",
-            "-hls_flags", "delete_segments",
-            "-hls_allow_cache", "0",
-            str(self.current_stream_dir_raw / "stream.m3u8")
-        ]
-
-        self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        self.ffmpeg_proc_raw = subprocess.Popen(ffmpeg_cmd_raw, stdin=subprocess.PIPE)
-        threading.Thread(target=self._feed_frames, daemon=True).start()
-        threading.Thread(target=self._track_segments, daemon=True).start()
-
-
-    def export_last_segments(self,output_path: Path,last=False):
-        if not self.recent_segments:
-            print("No segments available to save.")
-            return  
-
-        concat_list_path = self.current_stream_dir / "concat_list.txt"
-        segments_to_use = [self.recent_segments[-1]] if last else self.recent_segments
-        with open(concat_list_path, "w") as f:
-            f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        ffmpeg_path = find_ffmpeg()
+        
         if last:
-            # Re-encode with scaling and compression
+            # Export last 15 seconds from source with re-encoding for mobile
             command = [
                 ffmpeg_path,
                 "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
+                "-i", source,  # Use the original source URL
                 "-loglevel", "quiet",
-                "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
+                "-ss", "00:00:15",  # Go back 15 seconds from live position
+                "-t", "15",  # Capture 15 seconds
+                "-vf", "scale=-2:240,fps=24,format=yuv420p",
                 "-c:v", "libx264",
-                "-pix_fmt", "yuv420p", # needed for android playback
+                "-pix_fmt", "yuv420p",
                 "-preset", "veryslow",
                 "-crf", "32",
                 "-an",
                 str(output_path)
             ]
         else:
-            # Just copy original
+            # Export last 15 seconds without heavy re-encoding
             command = [
                 ffmpeg_path,
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",  # needed for android
-                "-an",  # No audio
+                "-y", 
+                "-i", source,
+                "-loglevel", "quiet",
+                "-ss", "00:00:15",
+                "-t", "15",
+                "-c:v", "copy",  # Just copy the stream if possible
+                "-an",
                 str(output_path)
             ]
+        
         try:
-            subprocess.run(command, check=True)
-            print(f"Saved detection clip to: {output_path}")
+            subprocess.run(command, check=True, timeout=30)  # Add timeout
+            print(f"Saved clip to: {output_path}")
         except subprocess.CalledProcessError as e:
             print(f"Failed to save video: {e}")
+        except subprocess.TimeoutExpired:
+            print(f"Export timed out: {output_path}")
     
-    def _track_segments(self):
-        while self.running:
-            segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
-            self.recent_segments.clear()
-            self.recent_segments.extend(segment_files[-4:]) # last 3 for now
-            time.sleep(self.segment_time / 2)
-
-    def _feed_frames(self):
-        last_frame_time = time.time()
-        stall_timeout = 10
-        
-        while self.running:
-            frame, raw_frame = self.cam.get_frame()
-            if frame is None:
-                if time.time() - last_frame_time > stall_timeout:
-                    print("Camera feed stalled, attempting recovery...")
-                    self._safe_restart()
-                time.sleep(0.1)
-                continue
-
-            last_frame_time = time.time()
-
-            try:
-                if self.ffmpeg_proc is None or self.ffmpeg_proc.poll() is not None:
-                    raise BrokenPipeError("FFmpeg process not running") 
-                self.ffmpeg_proc.stdin.write(frame.tobytes())
-                self.ffmpeg_proc_raw.stdin.write(raw_frame.tobytes())
-                self.ffmpeg_proc.stdin.flush()
-                self.ffmpeg_proc_raw.stdin.flush()
-                
-            except (BrokenPipeError, OSError, ValueError) as e:
-                print(f"HLS write failed: {e}, restarting...")
-                self._safe_restart()
-                
-            time.sleep(1 / 30)
-
-    def _safe_restart(self):
-        try:
-            self.stop()
-        except Exception as e:
-            print(f"Error during stop: {e}")
-        time.sleep(2)
-        while True:  # 3 second timeout
-            if self.cam.get_frame() is not None:
-                break
-            time.sleep(1)    
-        try:
-            self.start()
-            print("HLS streamer restarted successfully")
-        except Exception as e:
-            print(f"Failed to restart HLS: {e}")
-
-    
-    def stop(self):
-        self.running = False
-        if self.ffmpeg_proc:
-            self.ffmpeg_proc.terminate()
-            self.ffmpeg_proc_raw.terminate()
-            try:
-                self.ffmpeg_proc.wait(timeout=5)
-                self.ffmpeg_proc_raw.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.ffmpeg_proc.kill()
-                self.ffmpeg_proc_raw.kill()
 
 
 def append_to_pickle_list(pkl_path, item): # todo, still needed?
@@ -2626,10 +2467,6 @@ def schedule_daily_restart(hls_streamer, restart_time):
         print(f"Next stream restart scheduled in {delta//3600}h {(delta%3600)//60}m")
         time.sleep(delta)
         
-        print("\nPerforming scheduled stream restart...")
-        hls_streamer.stop()
-        time.sleep(10) # todo can get away with none or less?
-        hls_streamer.start()
 
 def send_notif(session_token: str, text=None):
     host = "www.rors.ai"
@@ -3042,7 +2879,6 @@ if __name__ == "__main__":
           raise
     
     if rtsp_url:
-      hls_streamer.start()
       restart_time = (0, 0)
       threading.Thread(
         target=schedule_daily_restart,
@@ -3057,6 +2893,5 @@ if __name__ == "__main__":
 
   except KeyboardInterrupt:
     if rtsp_url:
-      hls_streamer.stop()
       cam.release()
       server.shutdown()
