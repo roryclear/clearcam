@@ -651,7 +651,7 @@ class VideoCapture:
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
                   mp4_filename = f"segment.mp4"
-                  self.streamer.export_last_segments(Path(mp4_filename),last=True)
+                  self.streamer.export_clip(Path(mp4_filename), live=True)
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   Path(mp4_filename).unlink()
                   threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
@@ -798,81 +798,48 @@ class HLSStreamer:
         threading.Thread(target=self._feed_frames, daemon=True).start()
         threading.Thread(target=self._track_segments, daemon=True).start()
 
-
-    def export_last_segments(self,output_path: Path,last=False):
-        if not self.recent_segments:
-            print("No segments available to save.")
-            return  
-
-        concat_list_path = self.current_stream_dir / "concat_list.txt"
-        segments_to_use = [self.recent_segments[-1]] if last else self.recent_segments
-        with open(concat_list_path, "w") as f:
-            f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        ffmpeg_path = find_ffmpeg()
-        if last:
-            # Re-encode with scaling and compression
-            command = [
-                ffmpeg_path,
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
-                "-loglevel", "quiet",
-                "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p", # needed for android playback
-                "-preset", "veryslow",
-                "-crf", "32",
-                "-an",
-                str(output_path)
-            ]
-        else:
-            # Just copy original
-            command = [
-                ffmpeg_path,
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",  # needed for android
-                "-an",  # No audio
-                str(output_path)
-            ]
-        try:
-            subprocess.run(command, check=True)
-            print(f"Saved detection clip to: {output_path}")
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to save video: {e}")
-    
-
-    def export_clip(self,output_path: Path,last=False):
+    def export_clip(self,output_path: Path,live=False):
         if not self.recent_segments_raw:
             print("No segments available to save.")
             return  
 
         concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
-        segments_to_use = [self.recent_segments_raw[-1]] if last else self.recent_segments_raw
+        segments_to_use = [self.recent_segments_raw[-1]] if live else self.recent_segments_raw
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
 
         concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         ffmpeg_path = find_ffmpeg()
-
-        # Just copy original
-        command = [
-            ffmpeg_path,
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list_path),
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",  # needed for android
-            "-an",  # No audio
-            str(output_path)
-        ]
+        
+        if live:
+          command = [
+              ffmpeg_path,
+              "-y",
+              "-f", "concat",
+              "-safe", "0",
+              "-i", str(concat_list_path),
+              "-loglevel", "quiet",
+              "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
+              "-c:v", "libx264",
+              "-pix_fmt", "yuv420p", # needed for android playback
+              "-preset", "veryslow",
+              "-crf", "32",
+              "-an",
+              str(output_path)
+          ]
+        else:
+          command = [
+              ffmpeg_path,
+              "-y",
+              "-f", "concat",
+              "-safe", "0",
+              "-i", str(concat_list_path),
+              "-c:v", "libx264",
+              "-pix_fmt", "yuv420p",  # needed for android
+              "-an",  # No audio
+              str(output_path)
+          ]
         try:
             subprocess.run(command, check=True)
             print(f"Saved detection clip to: {output_path}")
