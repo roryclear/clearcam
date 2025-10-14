@@ -597,7 +597,8 @@ class VideoCapture:
                           filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
-                          write_png(str(filename), self.raw_frame)
+                          self.annotated_frame = self.draw_predictions(self.raw_frame.copy(), filtered_preds)
+                          write_png(str(filename), self.annotated_frame)
                           text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
@@ -659,6 +660,23 @@ class VideoCapture:
             self._open_ffmpeg()
             time.sleep(1)
   
+
+  def is_bright_color(self,color):
+    r, g, b = color
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 127
+
+  def draw_predictions(self, frame, preds):
+      for x1, y1, x2, y2, conf, cls in preds:
+          x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+          label = f"{class_labels[int(cls)]}:{conf:.2f}"
+          color = color_dict[class_labels[int(cls)]]
+          frame = draw_rectangle_numpy(frame, (x1, y1), (x2, y2), color, 3)
+          (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+          font_color = (0, 0, 0) if self.is_bright_color(color) else (255, 255, 255)
+          frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
+          cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
+      return frame
 
   def inference_loop(self):
     prev_time = time.time()
