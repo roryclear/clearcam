@@ -456,6 +456,9 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
+    self.output_dir = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
+    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}_raw' / "streams"
+    self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name)
     self.cam_name = cam_name
@@ -465,6 +468,7 @@ class VideoCapture:
     self.width = 1920 # todo 1080?
     self.height = 1080
     self.proc = None
+    self.hls_proc = None
     self.running = True
 
     self.raw_frame = None
@@ -502,9 +506,22 @@ class VideoCapture:
     threading.Thread(target=self.capture_loop, daemon=True).start()
     threading.Thread(target=self.inference_loop, daemon=True).start()
 
+  def _get_new_stream_dir(self):
+      timestamp = datetime.now().strftime("%Y-%m-%d")
+      stream_dir_raw = self.output_dir_raw / timestamp
+      stream_dir = self.output_dir / timestamp
+      self.dir = stream_dir_raw
+      if stream_dir.exists(): shutil.rmtree(stream_dir)
+      if stream_dir.exists(): shutil.rmtree(stream_dir_raw)
+      stream_dir.mkdir(parents=True, exist_ok=True)
+      stream_dir_raw.mkdir(parents=True, exist_ok=True)
+      return stream_dir_raw
+
   def _open_ffmpeg(self):
     if self.proc:
         self.proc.kill()
+    if self.hls_proc:
+        self.hls_proc.kill()
 
     ffmpeg_path = find_ffmpeg()
     
@@ -524,6 +541,21 @@ class VideoCapture:
         "-"
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    command = [
+        ffmpeg_path,
+        "-i", self.src,
+        "-c", "copy",
+        "-f", "hls",
+        "-hls_time", "4",
+        "-hls_list_size", "0",
+        "-hls_flags", "+append_list",
+        "-hls_playlist_type", "event",
+        "-an",  # No audio
+        "-hls_segment_filename", str(self._get_new_stream_dir() / "stream_%06d.ts"),
+        str(self._get_new_stream_dir() / "stream.m3u8")
+    ]
+    self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -576,7 +608,7 @@ class VideoCapture:
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                   os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                   mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-                  self.streamer.export_last_segments(Path(mp4_filename))
+                  self.streamer.export_clip(Path(mp4_filename))
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
@@ -616,7 +648,7 @@ class VideoCapture:
               if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                   last_live_seg = time.time()
                   mp4_filename = f"segment.mp4"
-                  self.streamer.export_last_segments(Path(mp4_filename),last=True)
+                  self.streamer.export_clip(Path(mp4_filename), live=True)
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   Path(mp4_filename).unlink()
                   threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
@@ -701,6 +733,8 @@ class VideoCapture:
       self.running = False
       if self.proc:
           self.proc.kill()
+      if self.hls_proc:
+         self.hls_proc.kill()
 
 class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
@@ -732,6 +766,7 @@ class HLSStreamer:
         self.running = True
         self.current_stream_dir, self.current_stream_dir_raw = self._get_new_stream_dir()
         self.recent_segments = deque(maxlen=4)
+        self.recent_segments_raw = deque(maxlen=4) # todo, relies on other stream
         self.start_time = time.time()
         ffmpeg_path = find_ffmpeg()
         ffmpeg_cmd = [
@@ -756,86 +791,67 @@ class HLSStreamer:
             str(self.current_stream_dir / "stream.m3u8")
         ]
 
-        ffmpeg_cmd_raw = [
-            ffmpeg_path,
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{self.cam.width}x{self.cam.height}",
-            "-use_wallclock_as_timestamps", "1",
-            "-fflags", "+genpts",
-            "-i", "-",
-            "-loglevel", "quiet",
-            "-c:v", "libx264",
-            "-crf", "21",
-            "-preset", "veryfast",
-            "-g", str(30 * self.segment_time),
-            "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
-            "-f", "hls",
-            "-hls_time", str(self.segment_time),
-            "-hls_list_size", "0",
-            "-hls_flags", "delete_segments",
-            "-hls_allow_cache", "0",
-            str(self.current_stream_dir_raw / "stream.m3u8")
-        ]
-
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        self.ffmpeg_proc_raw = subprocess.Popen(ffmpeg_cmd_raw, stdin=subprocess.PIPE)
         threading.Thread(target=self._feed_frames, daemon=True).start()
         threading.Thread(target=self._track_segments, daemon=True).start()
 
-
-    def export_last_segments(self,output_path: Path,last=False):
-        if not self.recent_segments:
+    def export_clip(self,output_path: Path,live=False):
+        if not self.recent_segments_raw:
             print("No segments available to save.")
             return  
 
-        concat_list_path = self.current_stream_dir / "concat_list.txt"
-        segments_to_use = [self.recent_segments[-1]] if last else self.recent_segments
+        concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
+        segments_to_use = [self.recent_segments_raw[-1]] if live else self.recent_segments_raw
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
+
+        concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         ffmpeg_path = find_ffmpeg()
-        if last:
-            # Re-encode with scaling and compression
-            command = [
-                ffmpeg_path,
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
-                "-loglevel", "quiet",
-                "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p", # needed for android playback
-                "-preset", "veryslow",
-                "-crf", "32",
-                "-an",
-                str(output_path)
-            ]
+        
+        if live:
+          command = [
+              ffmpeg_path,
+              "-y",
+              "-f", "concat",
+              "-safe", "0",
+              "-i", str(concat_list_path),
+              "-loglevel", "quiet",
+              "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
+              "-c:v", "libx264",
+              "-pix_fmt", "yuv420p", # needed for android playback
+              "-preset", "veryslow",
+              "-crf", "32",
+              "-an",
+              str(output_path)
+          ]
         else:
-            # Just copy original
-            command = [
-                ffmpeg_path,
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",  # needed for android
-                "-an",  # No audio
-                str(output_path)
-            ]
+          command = [
+              ffmpeg_path,
+              "-y",
+              "-f", "concat",
+              "-safe", "0",
+              "-i", str(concat_list_path),
+              "-c:v", "libx264",
+              "-pix_fmt", "yuv420p",  # needed for android
+              "-an",  # No audio
+              str(output_path)
+          ]
         try:
             subprocess.run(command, check=True)
             print(f"Saved detection clip to: {output_path}")
         except subprocess.CalledProcessError as e:
             print(f"Failed to save video: {e}")
-    
+
     def _track_segments(self):
         while self.running:
             segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
             self.recent_segments.clear()
             self.recent_segments.extend(segment_files[-4:]) # last 3 for now
+
+            segment_files = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
+            self.recent_segments_raw.clear()
+            self.recent_segments_raw.extend(segment_files[-4:]) # last 3 for now
             time.sleep(self.segment_time / 2)
 
     def _feed_frames(self):
@@ -857,9 +873,7 @@ class HLSStreamer:
                 if self.ffmpeg_proc is None or self.ffmpeg_proc.poll() is not None:
                     raise BrokenPipeError("FFmpeg process not running") 
                 self.ffmpeg_proc.stdin.write(frame.tobytes())
-                self.ffmpeg_proc_raw.stdin.write(raw_frame.tobytes())
                 self.ffmpeg_proc.stdin.flush()
-                self.ffmpeg_proc_raw.stdin.flush()
                 
             except (BrokenPipeError, OSError, ValueError) as e:
                 print(f"HLS write failed: {e}, restarting...")
@@ -888,13 +902,10 @@ class HLSStreamer:
         self.running = False
         if self.ffmpeg_proc:
             self.ffmpeg_proc.terminate()
-            self.ffmpeg_proc_raw.terminate()
             try:
                 self.ffmpeg_proc.wait(timeout=5)
-                self.ffmpeg_proc_raw.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
-                self.ffmpeg_proc_raw.kill()
 
 
 def append_to_pickle_list(pkl_path, item): # todo, still needed?
@@ -1478,7 +1489,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                       cams.forEach(cam => {{
                           const encoded = encodeURIComponent(cam);
-                          const videoUrl = `${{base}}/${{encoded}}/streams/${{today}}/stream.m3u8`;
+                          const videoUrl = `${{base}}/${{encoded}}_raw/streams/${{today}}/stream.m3u8`;
 
                           const wrapper = document.createElement('div');
                           wrapper.className = 'video-wrapper';
@@ -1571,7 +1582,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
-            show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["true"])[0]
+            show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["false"])[0]
             show_detections = show_detections_param.lower() in ("true", "1", "yes")
             show_detections_checked = "checked" if show_detections else ""
 
@@ -2389,7 +2400,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     switch (data.type) {{
                                         case Hls.ErrorTypes.NETWORK_ERROR:
                                             console.warn("Network error, retrying...");
-                                            hls.startLoad();
+                                            hls.startLoad(-1);
                                             break;
                                         case Hls.ErrorTypes.MEDIA_ERROR:
                                             console.warn("Media error, recovering...");
@@ -3024,7 +3035,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         try:
             total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
             size_gb = total_size / (1000 ** 3)
-            if size_gb > 30:  # 30GB threshold
+            if size_gb > 60:  # 60GB threshold
                 self._cleanup_oldest_files()
         except Exception as e:
             print(f"Error checking storage: {e}")
