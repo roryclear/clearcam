@@ -551,6 +551,7 @@ class VideoCapture:
         "-hls_list_size", "0",
         "-hls_flags", "+append_list",
         "-hls_playlist_type", "event",
+        "-an",  # No audio
         "-hls_segment_filename", str(self._get_new_stream_dir() / "stream_%06d.ts"),
         str(self._get_new_stream_dir() / "stream.m3u8")
     ]
@@ -3034,7 +3035,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         try:
             total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
             size_gb = total_size / (1000 ** 3)
-            if size_gb > 30:  # 30GB threshold
+            if size_gb > 60:  # 60GB threshold
                 self._cleanup_oldest_files()
         except Exception as e:
             print(f"Error checking storage: {e}")
