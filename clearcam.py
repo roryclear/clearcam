@@ -2826,6 +2826,7 @@ def start_cam(rtsp, cam_name, yolo_variant='n'):
     new_args = upsert_arg(base_args, "cam_name", cam_name)
     new_args = upsert_arg(new_args, "rtsp", rtsp)
     new_args = upsert_arg(new_args, "yolo_size", yolo_variant)
+    new_args = upsert_arg(new_args, "nodraw", nodraw)
     proc = subprocess.Popen(executable + new_args, close_fds=True)
     active_subprocesses.append(proc)
 
@@ -2998,6 +2999,7 @@ if __name__ == "__main__":
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
+  nodraw = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--nodraw=")), None)
   yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
   if not yolo_variant: yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
 
@@ -3040,9 +3042,16 @@ if __name__ == "__main__":
     yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
     state_dict = safe_load(get_weights_location(yolo_variant))
     load_state_dict(yolo_infer, state_dict)
+
+    cam_name_raw = f'{cam_name}_raw'
+
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
+    if nodraw != "None": # todo
+      cam_raw = VideoCapture(rtsp_url,cam_name=cam_name_raw)
+      hls_streamer_raw = HLSStreamer(cam_raw,cam_name=cam_name_raw)
+      cam_raw.streamer = hls_streamer_raw
   
   try:
     try:
