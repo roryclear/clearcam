@@ -1187,6 +1187,97 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           <html>
           <head>
               <style>
+                    #eventImagesContainer {{
+                        display: flex;
+                        flex-wrap: wrap;
+                        justify-content: center;
+                        gap: 14px;
+                    }}
+
+                    #eventImagesContainer .image-item {{
+                        position: relative;
+                        display: inline-block;
+                    }}
+
+                    #eventImagesContainer img {{
+                        width: 220px;
+                        height: auto;
+                        border-radius: 10px;
+                        border: 1px solid #ccc;
+                        transition: transform 0.2s;
+                    }}
+
+                    #eventImagesContainer .image-item:hover img {{
+                        transform: scale(1.05);
+                    }}
+
+                    #eventImagesContainer .image-actions {{
+                        position: absolute;
+                        bottom: 10px;
+                        left: 0;
+                        right: 0;
+                        display: flex;
+                        justify-content: center;
+                        gap: 8px;
+                        opacity: 0;
+                        transition: opacity 0.3s ease;
+                    }}
+
+                    #eventImagesContainer .image-item:hover .image-actions {{
+                        opacity: 1;
+                    }}
+
+                    #eventImagesContainer .image-actions button {{
+                        background-color: rgba(0, 0, 0, 0.7);
+                        color: white;
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-size: 0.8rem;
+                        cursor: pointer;
+                        transition: background-color 0.2s;
+                    }}
+
+                    #eventImagesContainer .image-actions button:hover {{
+                        background-color: rgba(0, 0, 0, 0.9);
+                    }}
+
+                    /* Image preview modal */
+                    #imagePreviewModal {{
+                        display: none;
+                        position: fixed;
+                        z-index: 1000;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0, 0, 0, 0.9);
+                        justify-content: center;
+                        align-items: center;
+                    }}
+
+                    #imagePreviewModal img {{
+                        max-width: 90%;
+                        max-height: 90%;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                    }}
+
+                    .close-preview {{
+                        position: absolute;
+                        top: 20px;
+                        right: 30px;
+                        color: white;
+                        font-size: 40px;
+                        font-weight: bold;
+                        cursor: pointer;
+                        z-index: 1001;
+                    }}
+
+                    .close-preview:hover {{
+                        color: #ccc;
+                    }}
+
                   .camera-grid {{
                       display: flex;
                       flex-wrap: wrap;
@@ -1458,10 +1549,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if event_images:
                 for img in event_images:
                     ts = int(img.stem)
+                    image_url = f"/{img.relative_to(self.base_dir.parent)}"
                     image_links += f"""
-                    <a href="/?cam={cam_name}&folder={selected_dir}&start={ts}">
-                        <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
-                    </a>
+                    <div class="image-item">
+                        <img src="{image_url}" alt="Event" />
+                        <div class="image-actions">
+                            <button onclick="viewImage('{image_url}')">View</button>
+                            <button onclick="playVideoAtTime({ts})">Play</button>
+                        </div>
+                    </div>
                     """
             else:
                 image_links = '<p style="text-align:center; color:#666;">No alerts detected yet.</p>'
@@ -1946,6 +2042,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     <div id="eventImagesContainer">
                         {image_links}
                     </div>
+                    <div id="imagePreviewModal" class="modal">
+                        <span class="close-preview" onclick="closeImagePreview()">&times;</span>
+                        <img id="previewImage" src="" alt="Preview">
+                    </div>
                 </div>
 
                 <script>
@@ -1977,6 +2077,31 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     }}
                 }};
 
+                function viewImage(imageSrc) {{
+                    const previewModal = document.getElementById("imagePreviewModal");
+                    const previewImage = document.getElementById("previewImage");
+                    previewImage.src = imageSrc;
+                    previewModal.style.display = "flex";
+                }}
+                function closeImagePreview() {{
+                    document.getElementById("imagePreviewModal").style.display = "none";
+                }}
+                function playVideoAtTime(timestamp) {{
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('start', timestamp);
+                    window.location.search = params.toString();
+                }}
+                window.addEventListener("click", function(event) {{
+                    const modal = document.getElementById("imagePreviewModal");
+                    if (event.target === modal) {{
+                        closeImagePreview();
+                    }}
+                }});
+                document.addEventListener('keydown', function(event) {{
+                    if (event.key === 'Escape') {{
+                        closeImagePreview();
+                    }}
+                }});
                 
                 const zoneModal = document.getElementById("zoneModal");
                 const zoneRect = document.getElementById("zoneRect");
