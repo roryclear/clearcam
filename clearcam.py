@@ -1492,7 +1492,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                       cams.forEach(cam => {{
                           const encoded = encodeURIComponent(cam);
-                          const videoUrl = `${{base}}/${{encoded}}/streams/${{today}}/stream.m3u8`;
+                          const videoUrl = `${{base}}/${{encoded}}_raw/streams/${{today}}/stream.m3u8`;
 
                           const wrapper = document.createElement('div');
                           wrapper.className = 'video-wrapper';
@@ -2403,7 +2403,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                     switch (data.type) {{
                                         case Hls.ErrorTypes.NETWORK_ERROR:
                                             console.warn("Network error, retrying...");
-                                            hls.startLoad();
+                                            hls.startLoad(-1);
                                             break;
                                         case Hls.ErrorTypes.MEDIA_ERROR:
                                             console.warn("Media error, recovering...");
