@@ -3089,8 +3089,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             try:
                 shutil.rmtree(oldest_recording)
                 event_images_dir = largest_cam / "event_images" / oldest_recording.name
+                event_images_dir_raw = f'{largest_cam}_raw' / "event_images" / oldest_recording.name
                 if event_images_dir.exists():
                     shutil.rmtree(event_images_dir)
+                    shutil.rmtree(event_images_dir_raw)
                 print(f"Deleted oldest recording: {oldest_recording}")
             except Exception as e:
                 print(f"Error deleting recording {oldest_recording}: {e}")
