@@ -456,7 +456,8 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
-    self.output_dir = CAMERA_BASE_DIR / f'{cam_name}_raw' / "streams"
+    self.output_dir = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
+    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}_raw' / "streams"
     self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name)
@@ -507,19 +508,14 @@ class VideoCapture:
 
   def _get_new_stream_dir(self):
       timestamp = datetime.now().strftime("%Y-%m-%d")
+      stream_dir_raw = self.output_dir_raw / timestamp
       stream_dir = self.output_dir / timestamp
-      self.dir = stream_dir
+      self.dir = stream_dir_raw
       if stream_dir.exists(): shutil.rmtree(stream_dir)
+      if stream_dir.exists(): shutil.rmtree(stream_dir_raw)
       stream_dir.mkdir(parents=True, exist_ok=True)
-      return stream_dir
-
-  def _get_new_stream_dir_raw(self):
-      timestamp = datetime.now().strftime("%Y-%m-%d")
-      stream_dir = self.output_dir_raw / timestamp
-      self.dir = stream_dir
-      if stream_dir.exists(): shutil.rmtree(stream_dir)
-      stream_dir.mkdir(parents=True, exist_ok=True)
-      return stream_dir
+      stream_dir_raw.mkdir(parents=True, exist_ok=True)
+      return stream_dir_raw
 
   def _open_ffmpeg(self):
     if self.proc:
