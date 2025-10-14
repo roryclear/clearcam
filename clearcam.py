@@ -1585,7 +1585,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
-            show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["true"])[0]
+            show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["false"])[0]
             show_detections = show_detections_param.lower() in ("true", "1", "yes")
             show_detections_checked = "checked" if show_detections else ""
 
