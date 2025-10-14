@@ -513,6 +513,14 @@ class VideoCapture:
       stream_dir.mkdir(parents=True, exist_ok=True)
       return stream_dir
 
+  def _get_new_stream_dir_raw(self):
+      timestamp = datetime.now().strftime("%Y-%m-%d")
+      stream_dir = self.output_dir_raw / timestamp
+      self.dir = stream_dir
+      if stream_dir.exists(): shutil.rmtree(stream_dir)
+      stream_dir.mkdir(parents=True, exist_ok=True)
+      return stream_dir
+
   def _open_ffmpeg(self):
     if self.proc:
         self.proc.kill()
@@ -603,7 +611,7 @@ class VideoCapture:
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                   os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                   mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-                  self.streamer.export_last_segments(Path(mp4_filename))
+                  self.streamer.export_clip(Path(mp4_filename))
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
                   os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
@@ -761,6 +769,7 @@ class HLSStreamer:
         self.running = True
         self.current_stream_dir, self.current_stream_dir_raw = self._get_new_stream_dir()
         self.recent_segments = deque(maxlen=4)
+        self.recent_segments_raw = deque(maxlen=4) # todo, relies on other stream
         self.start_time = time.time()
         ffmpeg_path = find_ffmpeg()
         ffmpeg_cmd = [
@@ -837,11 +846,48 @@ class HLSStreamer:
         except subprocess.CalledProcessError as e:
             print(f"Failed to save video: {e}")
     
+
+    def export_clip(self,output_path: Path,last=False):
+        if not self.recent_segments_raw:
+            print("No segments available to save.")
+            return  
+
+        concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
+        segments_to_use = [self.recent_segments_raw[-1]] if last else self.recent_segments_raw
+        with open(concat_list_path, "w") as f:
+            f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
+
+        concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg_path = find_ffmpeg()
+
+        # Just copy original
+        command = [
+            ffmpeg_path,
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list_path),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",  # needed for android
+            "-an",  # No audio
+            str(output_path)
+        ]
+        try:
+            subprocess.run(command, check=True)
+            print(f"Saved detection clip to: {output_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to save video: {e}")
+
     def _track_segments(self):
         while self.running:
             segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
             self.recent_segments.clear()
             self.recent_segments.extend(segment_files[-4:]) # last 3 for now
+
+            segment_files = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
+            self.recent_segments_raw.clear()
+            self.recent_segments_raw.extend(segment_files[-4:]) # last 3 for now
             time.sleep(self.segment_time / 2)
 
     def _feed_frames(self):
