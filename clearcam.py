@@ -2366,6 +2366,50 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     window.location.search = params.toString();
                 }});
 
+                function initDetectionSettings() {{
+                const urlParams = new URLSearchParams(window.location.search);
+                const showDetections = urlParams.get('show_detections') === 'true';
+                
+                if (showDetections) {{
+                    // Send initial request
+                    fetch(`/edit_settings?cam=${{encodeURIComponent(cameraName)}}&show_dets=1`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to update detection settings");
+                            console.log("Detection settings updated successfully");
+                        }})
+                        .catch(err => {{
+                            console.error("Failed to update detection settings:", err);
+                        }});
+                    
+                    // Set up interval to send request every 30 seconds
+                    window.detectionInterval = setInterval(() => {{
+                        fetch(`/edit_settings?cam=${{encodeURIComponent(cameraName)}}&show_dets=1`)
+                            .then(res => {{
+                                if (!res.ok) throw new Error("Failed to refresh detection settings");
+                                console.log("Detection settings refreshed");
+                            }})
+                            .catch(err => {{
+                                console.error("Failed to refresh detection settings:", err);
+                            }});
+                    }}, 30000); // 30 seconds
+                }}
+            }}
+
+            document.getElementById("showDetections").addEventListener("change", function() {{
+                const currentTime = video.currentTime;
+                const params = new URLSearchParams(window.location.search);
+                params.set('show_detections', this.checked);
+                window.location.search = params.toString();
+            }});
+
+            window.addEventListener('beforeunload', function() {{
+                if (window.detectionInterval) {{
+                    clearInterval(window.detectionInterval);
+                }}
+            }});
+
+            initDetectionSettings();
+
                 function loadStream(folder) {{
                     const showDetections = document.getElementById("showDetections").checked;
                     const streamSuffix = showDetections ? "" : "_raw";
