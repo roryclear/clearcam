@@ -664,10 +664,20 @@ class VideoCapture:
             self._open_ffmpeg()
             time.sleep(1)
   
-
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
+      show_dets = (self.settings.get("show_dets") if self.settings else None) or None
+      if show_dets:
+        show_dets = int(show_dets)
+        if (time.time() - show_dets) < 120 and not self.streamer.feeding_frames:
+           self.streamer.feeding_frames = True
+           self.streamer._stop_event.clear()
+           self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
+           self.streamer.feeding_frames_thread.start()
+        elif self.streamer.feeding_frames:
+           self.streamer.feeding_frames = False
+           self.streamer._stop_event.set()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
@@ -684,7 +694,7 @@ class VideoCapture:
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "settings") and self.settings is not None and self.settings["is_on"]:
+            if hasattr(self, "settings") and self.settings is not None and self.settings.get("is_on"):
               # todo, renmae dims to zone dims or something
               outside = ((x.tlwh[0]+x.tlwh[2])<self.settings["dims"][0] or\
               x.tlwh[0]>=(self.settings["dims"][0]+self.settings["dims"][2]) or\
@@ -748,8 +758,8 @@ class HLSStreamer:
         self.ffmpeg_proc = None
         self.ffmpeg_proc_raw = None
         self.start_time = time.time()
-        self.feeding_frames = True
-        self.feeding_frames_thread = threading.Thread(target=self._feed_frames, daemon=True)
+        self.feeding_frames = False
+        self._stop_event = threading.Event()
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
     
@@ -794,7 +804,6 @@ class HLSStreamer:
         ]
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        if self.feeding_frames and not self.feeding_frames_thread.is_alive(): self.feeding_frames_thread.start()
         threading.Thread(target=self._track_segments, daemon=True).start()
 
     def export_clip(self,output_path: Path,live=False):
@@ -860,7 +869,7 @@ class HLSStreamer:
         last_frame_time = time.time()
         stall_timeout = 10
         
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             frame, raw_frame = self.cam.get_frame()
             if frame is None:
                 if time.time() - last_frame_time > stall_timeout:
@@ -926,7 +935,8 @@ def append_to_pickle_list(pkl_path, item): # todo, still needed?
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.base_dir = CAMERA_BASE_DIR 
+        self.base_dir = CAMERA_BASE_DIR
+        self.show_dets = None
         super().__init__(*args, **kwargs)
 
     def get_camera_path(self, cam_name=None):
@@ -974,6 +984,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
             edited_settings_file = CAMERA_BASE_DIR / cam_name / "edited_settings.pkl"
+            settings_file.parent.mkdir(parents=True, exist_ok=True)
             if not settings_file.exists():
                 with open(settings_file, "wb") as f:
                     pickle.dump(None, f)
@@ -983,6 +994,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            show_dets = query.get("show_dets", [self.show_dets])[0]
+            if show_dets is not None: self.show_dets = str(int(time.time())) # 2 mins
             threshold = query.get("threshold", ["0.5"])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
@@ -994,6 +1007,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
+            if self.show_dets is not None: zone["show_dets"] = self.show_dets
             with open(settings_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
 
@@ -2351,6 +2365,50 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     params.set('start', currentTime);
                     window.location.search = params.toString();
                 }});
+
+                function initDetectionSettings() {{
+                const urlParams = new URLSearchParams(window.location.search);
+                const showDetections = urlParams.get('show_detections') === 'true';
+                
+                if (showDetections) {{
+                    // Send initial request
+                    fetch(`/edit_settings?cam=${{encodeURIComponent(cameraName)}}&show_dets=1`)
+                        .then(res => {{
+                            if (!res.ok) throw new Error("Failed to update detection settings");
+                            console.log("Detection settings updated successfully");
+                        }})
+                        .catch(err => {{
+                            console.error("Failed to update detection settings:", err);
+                        }});
+                    
+                    // Set up interval to send request every 30 seconds
+                    window.detectionInterval = setInterval(() => {{
+                        fetch(`/edit_settings?cam=${{encodeURIComponent(cameraName)}}&show_dets=1`)
+                            .then(res => {{
+                                if (!res.ok) throw new Error("Failed to refresh detection settings");
+                                console.log("Detection settings refreshed");
+                            }})
+                            .catch(err => {{
+                                console.error("Failed to refresh detection settings:", err);
+                            }});
+                    }}, 30000); // 30 seconds
+                }}
+            }}
+
+            document.getElementById("showDetections").addEventListener("change", function() {{
+                const currentTime = video.currentTime;
+                const params = new URLSearchParams(window.location.search);
+                params.set('show_detections', this.checked);
+                window.location.search = params.toString();
+            }});
+
+            window.addEventListener('beforeunload', function() {{
+                if (window.detectionInterval) {{
+                    clearInterval(window.detectionInterval);
+                }}
+            }});
+
+            initDetectionSettings();
 
                 function loadStream(folder) {{
                     const showDetections = document.getElementById("showDetections").checked;
