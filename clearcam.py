@@ -670,7 +670,9 @@ class VideoCapture:
     while self.running:
       show_dets = (self.settings.get("show_dets") if self.settings else None) or None
       if show_dets:
-        if not self.streamer.feeding_frames_thread.is_alive(): self.streamer.feeding_frames_thread.start()
+        show_dets = int(show_dets)
+        if show_dets == 1 and not self.streamer.feeding_frames_thread.is_alive(): self.streamer.feeding_frames_thread.start()
+        if show_dets == 0 and self.streamer.feeding_frames_thread.is_alive(): self.streamer.feeding_frames_thread._stop()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
