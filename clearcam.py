@@ -587,7 +587,7 @@ class VideoCapture:
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
                   filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
-                  write_png(filename, self.annotated_frame)
+                  write_png(filename, self.raw_frame)
               for _,alert in self.alert_counters.items():
                   if not alert.is_active():
                     alert.reset_counts()
@@ -600,6 +600,7 @@ class VideoCapture:
                           filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
+                          self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                           write_png(str(filename), self.annotated_frame)
                           text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
@@ -656,7 +657,7 @@ class VideoCapture:
                count+=1
             with self.lock:
                 self.raw_frame = frame.copy()
-                self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
             time.sleep(1 / 30)
         except Exception as e:
             print("Error in capture_loop:", e)
@@ -747,7 +748,8 @@ class HLSStreamer:
         self.ffmpeg_proc = None
         self.ffmpeg_proc_raw = None
         self.start_time = time.time()
-
+        self.feeding_frames = True
+        self.feeding_frames_thread = threading.Thread(target=self._feed_frames, daemon=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
     
@@ -792,7 +794,7 @@ class HLSStreamer:
         ]
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        threading.Thread(target=self._feed_frames, daemon=True).start()
+        if self.feeding_frames and not self.feeding_frames_thread.is_alive(): self.feeding_frames_thread.start()
         threading.Thread(target=self._track_segments, daemon=True).start()
 
     def export_clip(self,output_path: Path,live=False):
