@@ -657,7 +657,7 @@ class VideoCapture:
                count+=1
             with self.lock:
                 self.raw_frame = frame.copy()
-                if self.streamer.feeding_frames_thread.is_alive(): self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
             time.sleep(1 / 30)
         except Exception as e:
             print("Error in capture_loop:", e)
@@ -671,8 +671,14 @@ class VideoCapture:
       show_dets = (self.settings.get("show_dets") if self.settings else None) or None
       if show_dets:
         show_dets = int(show_dets)
-        if show_dets == 1 and not self.streamer.feeding_frames_thread.is_alive(): self.streamer.feeding_frames_thread.start()
-        if show_dets == 0 and self.streamer.feeding_frames_thread.is_alive(): self.streamer.feeding_frames_thread._stop()
+        if show_dets == 1 and not self.streamer.feeding_frames:
+           self.streamer.feeding_frames = True
+           self.streamer._stop_event.clear()
+           self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
+           self.streamer.feeding_frames_thread.start()
+        if show_dets == 0 and self.streamer.feeding_frames:
+           self.streamer.feeding_frames = False
+           self.streamer._stop_event.set()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
@@ -754,7 +760,7 @@ class HLSStreamer:
         self.ffmpeg_proc_raw = None
         self.start_time = time.time()
         self.feeding_frames = False
-        self.feeding_frames_thread = threading.Thread(target=self._feed_frames, daemon=True)
+        self._stop_event = threading.Event()
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
     
@@ -799,7 +805,6 @@ class HLSStreamer:
         ]
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        if self.feeding_frames and not self.feeding_frames_thread.is_alive(): self.feeding_frames_thread.start()
         threading.Thread(target=self._track_segments, daemon=True).start()
 
     def export_clip(self,output_path: Path,live=False):
@@ -865,7 +870,7 @@ class HLSStreamer:
         last_frame_time = time.time()
         stall_timeout = 10
         
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             frame, raw_frame = self.cam.get_frame()
             if frame is None:
                 if time.time() - last_frame_time > stall_timeout:
