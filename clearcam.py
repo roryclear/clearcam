@@ -664,7 +664,6 @@ class VideoCapture:
             self._open_ffmpeg()
             time.sleep(1)
   
-
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
@@ -695,7 +694,7 @@ class VideoCapture:
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "settings") and self.settings is not None and self.settings["is_on"]:
+            if hasattr(self, "settings") and self.settings is not None and self.settings.get("is_on"):
               # todo, renmae dims to zone dims or something
               outside = ((x.tlwh[0]+x.tlwh[2])<self.settings["dims"][0] or\
               x.tlwh[0]>=(self.settings["dims"][0]+self.settings["dims"][2]) or\
@@ -985,6 +984,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
             edited_settings_file = CAMERA_BASE_DIR / cam_name / "edited_settings.pkl"
+            settings_file.parent.mkdir(parents=True, exist_ok=True)
             if not settings_file.exists():
                 with open(settings_file, "wb") as f:
                     pickle.dump(None, f)
