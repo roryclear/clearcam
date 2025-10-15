@@ -671,12 +671,12 @@ class VideoCapture:
       show_dets = (self.settings.get("show_dets") if self.settings else None) or None
       if show_dets:
         show_dets = int(show_dets)
-        if show_dets == 1 and not self.streamer.feeding_frames:
+        if (time.time() - show_dets) < 120 and not self.streamer.feeding_frames:
            self.streamer.feeding_frames = True
            self.streamer._stop_event.clear()
            self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
            self.streamer.feeding_frames_thread.start()
-        if show_dets == 0 and self.streamer.feeding_frames:
+        elif self.streamer.feeding_frames:
            self.streamer.feeding_frames = False
            self.streamer._stop_event.set()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
@@ -936,7 +936,8 @@ def append_to_pickle_list(pkl_path, item): # todo, still needed?
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.base_dir = CAMERA_BASE_DIR 
+        self.base_dir = CAMERA_BASE_DIR
+        self.show_dets = None
         super().__init__(*args, **kwargs)
 
     def get_camera_path(self, cam_name=None):
@@ -993,7 +994,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
-            show_dets = query.get("show_dets", [None])[0]
+            show_dets = query.get("show_dets", [self.show_dets])[0]
+            if show_dets is not None: self.show_dets = str(int(time.time())) # 2 mins
             threshold = query.get("threshold", ["0.5"])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
@@ -1005,7 +1007,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
-            zone["show_dets"] = show_dets
+            zone["show_dets"] = self.show_dets
             with open(settings_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
 
