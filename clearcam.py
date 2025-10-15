@@ -657,7 +657,7 @@ class VideoCapture:
                count+=1
             with self.lock:
                 self.raw_frame = frame.copy()
-                if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                if self.streamer.feeding_frames_thread.is_alive(): self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
             time.sleep(1 / 30)
         except Exception as e:
             print("Error in capture_loop:", e)
@@ -668,6 +668,9 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
+      show_dets = (self.settings.get("show_dets") if self.settings else None) or None
+      if show_dets:
+        if not self.streamer.feeding_frames_thread.is_alive(): self.streamer.feeding_frames_thread.start()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
@@ -748,7 +751,7 @@ class HLSStreamer:
         self.ffmpeg_proc = None
         self.ffmpeg_proc_raw = None
         self.start_time = time.time()
-        self.feeding_frames = True
+        self.feeding_frames = False
         self.feeding_frames_thread = threading.Thread(target=self._feed_frames, daemon=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
@@ -983,6 +986,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            show_dets = query.get("show_dets", [None])[0]
             threshold = query.get("threshold", ["0.5"])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
@@ -994,6 +998,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
+            zone["show_dets"] = show_dets
             with open(settings_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
 
