@@ -1007,7 +1007,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
-            zone["show_dets"] = self.show_dets
+            if self.show_dets is not None: zone["show_dets"] = self.show_dets
             with open(settings_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
 
