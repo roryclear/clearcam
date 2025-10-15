@@ -1480,53 +1480,75 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       if (document.fullscreenElement) document.exitFullscreen();
                   }}
 
-                  function toggleMultiView() {{
-                      const container = document.getElementById('multiView');
-                      if (container.classList.contains('active')) {{
-                          closeMultiView();
-                          return;
-                      }}
+                    function toggleMultiView() {{
+                        const container = document.getElementById('multiView');
+                        if (container.classList.contains('active')) {{
+                            closeMultiView();
+                            return;
+                        }}
 
-                      if (!window.currentCameras || window.currentCameras.length === 0) {{
-                          alert("No cameras available.");
-                          return;
-                      }}
+                        if (!window.currentCameras || window.currentCameras.length === 0) {{
+                            alert("No cameras available.");
+                            return;
+                        }}
 
-                      container.classList.add('active');
-                      const cams = window.currentCameras;
-                      const today = new Date().toLocaleDateString('en-CA');
-                      const base = "http://localhost:8080";
+                        container.classList.add('active');
+                        const cams = window.currentCameras;
+                        const base = "http://localhost:8080";
+                        const today = new Date().toLocaleDateString('en-CA');
 
-                      const count = cams.length;
-                      const cols = Math.ceil(Math.sqrt(count));
-                      const rows = Math.ceil(count / cols);
-                      container.style.gridTemplateColumns = `repeat(${{cols}}, 1fr)`;
-                      container.style.gridTemplateRows = `repeat(${{rows}}, auto)`;
+                        const count = cams.length;
+                        const cols = Math.ceil(Math.sqrt(count));
+                        const rows = Math.ceil(count / cols);
+                        container.style.gridTemplateColumns = `repeat(${{cols}}, 1fr)`;
+                        container.style.gridTemplateRows = `repeat(${{rows}}, auto)`;
 
-                      cams.forEach(cam => {{
-                          const encoded = encodeURIComponent(cam);
-                          const videoUrl = `${{base}}/${{encoded}}_raw/streams/${{today}}/stream.m3u8`;
+                        cams.forEach(cam => {{
+                            const encoded = encodeURIComponent(cam);
+                            const videoUrl = `${{base}}/${{encoded}}_raw/streams/${{today}}/stream.m3u8`;
 
-                          const wrapper = document.createElement('div');
-                          wrapper.className = 'video-wrapper';
-                          const vid = document.createElement('video');
-                          vid.autoplay = true;
-                          vid.muted = true;
-                          vid.playsInline = true;
-                          wrapper.appendChild(vid);
-                          container.appendChild(wrapper);
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'video-wrapper';
+                            const vid = document.createElement('video');
+                            vid.autoplay = true;
+                            vid.muted = true;
+                            vid.playsInline = true;
+                            wrapper.appendChild(vid);
+                            container.appendChild(wrapper);
 
-                          if (vid.canPlayType('application/vnd.apple.mpegurl')) {{
-                              vid.src = videoUrl;
-                          }} else if (Hls.isSupported()) {{
-                              const hls = new Hls();
-                              hls.loadSource(videoUrl);
-                              hls.attachMedia(vid);
-                          }}
-                      }});
+                            // Use the same approach as your main player
+                            if (Hls.isSupported()) {{
+                                const hls = new Hls({{
+                                    enableWorker: true,
+                                    lowLatencyMode: true,
+                                    backBufferLength: 90
+                                }});
 
-                      if (container.requestFullscreen) container.requestFullscreen();
-                  }}
+                                hls.loadSource(videoUrl);
+                                hls.attachMedia(vid);
+
+                                hls.on(Hls.Events.MANIFEST_PARSED, function() {{
+                                    console.log(`Stream loaded for ${{cam}}`);
+                                    // Just play from the beginning for now
+                                    vid.play();
+                                }});
+
+                                // Keep trying to seek to live position
+                                const seekToLive = () => {{
+                                    if (vid.duration && vid.duration > 0 && vid.currentTime < vid.duration - 10) {{
+                                        vid.currentTime = vid.duration - 2;
+                                    }}
+                                }};
+                                
+                                setInterval(seekToLive, 3000);
+
+                            }} else if (vid.canPlayType('application/vnd.apple.mpegurl')) {{
+                                vid.src = videoUrl;
+                            }}
+                        }});
+
+                        if (container.requestFullscreen) container.requestFullscreen();
+                    }}
 
                   // Close multi-view on ESC or background click
                   document.addEventListener('keydown', e => {{
