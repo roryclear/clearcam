@@ -639,15 +639,32 @@
 - (UIImage *)generateThumbnailForVideoAtPath:(NSString *)videoPath {
     NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
     AVAsset *asset = [AVAsset assetWithURL:videoURL];
+    NSArray *artworks = [AVMetadataItem metadataItemsFromArray:asset.metadata
+                                                       withKey:AVMetadataCommonKeyArtwork
+                                                      keySpace:AVMetadataKeySpaceCommon];
+    
+    for (AVMetadataItem *item in artworks) {
+        if ([item.value isKindOfClass:[NSData class]]) {
+            NSData *imageData = (NSData *)item.value;
+            UIImage *embeddedThumbnail = [UIImage imageWithData:imageData];
+            if (embeddedThumbnail) {
+                return embeddedThumbnail;
+            }
+        }
+    }
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
     CMTime duration = asset.duration;
     Float64 durationInSeconds = CMTimeGetSeconds(duration);
-    Float64 middleTime = durationInSeconds / 1.75;
+    Float64 middleTime = durationInSeconds / 2.0;
     CMTime time = CMTimeMakeWithSeconds(middleTime, 600);
     NSError *error = nil;
     CGImageRef imageRef = [generator copyCGImageAtTime:time actualTime:NULL error:&error];
-    if (!imageRef) return nil;
+    if (!imageRef) {
+        UIImage *videoImage = [UIImage systemImageNamed:@"video"];
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:40];
+        return [videoImage imageByApplyingSymbolConfiguration:config];
+    }
     UIImage *thumbnail = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
     return thumbnail;
@@ -788,6 +805,8 @@
                 VideoTableViewCell *updateCell = [tableView cellForRowAtIndexPath:indexPath];
                 if (updateCell) {
                     updateCell.thumbnailView.image = thumbnail;
+                    updateCell.thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
+                    updateCell.thumbnailView.tintColor = nil;
                 }
             });
         });
@@ -799,9 +818,7 @@
         cell.thumbnailView.contentMode = UIViewContentModeCenter;
         cell.thumbnailView.tintColor = [UIColor systemGrayColor];
     }
-    
     [cell.menuButton addTarget:self action:@selector(menuTapped:forEvent:) forControlEvents:UIControlEventTouchUpInside];
-    
     return cell;
 }
 

@@ -609,10 +609,14 @@ class VideoCapture:
               if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
                   os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                   mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+                  temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
                   self.streamer.export_clip(Path(mp4_filename))
+                  # img preview?
+                  subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+                  os.replace(temp_output, mp4_filename)
                   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                  os.unlink(mp4_filename)
                   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+                  os.unlink(mp4_filename)
                   send_det = False
               if userID and (time.time() - last_live_check) >= 5:
                   last_live_check = time.time()
