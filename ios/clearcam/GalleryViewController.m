@@ -7,11 +7,15 @@
 #import "ViewController.h"
 #import "FileServer.h"
 #import "SettingsViewController.h"
+#import <QuickLook/QuickLook.h>
 
 @interface VideoTableViewCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UIButton *menuButton;
 @property (nonatomic, strong) UILabel *titleLabel;
+@end
+
+@interface GalleryViewController () <UITableViewDelegate, UITableViewDataSource, QLPreviewControllerDataSource, QLPreviewControllerDelegate>
 @end
 
 @implementation VideoTableViewCell
@@ -84,6 +88,7 @@
 @property (nonatomic, strong) NSTimer *refreshTimer;
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) FileServer *fileServer;
+@property (nonatomic, strong) NSURL *previewItemURL;
 @end
 
 @implementation GalleryViewController
@@ -337,10 +342,49 @@
     }
 }
 
+- (NSInteger)numberOfPreviewItemsInPreviewController:(QLPreviewController *)controller {
+    return self.previewItemURL ? 1 : 0;
+}
+
+- (id<QLPreviewItem>)previewController:(QLPreviewController *)controller previewItemAtIndex:(NSInteger)index {
+    return self.previewItemURL;
+}
+
+- (void)handleLongPress:(UILongPressGestureRecognizer *)gesture {
+    if (gesture.state == UIGestureRecognizerStateBegan) {
+        CGPoint point = [gesture locationInView:self.tableView];
+        NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:point];
+        if (!indexPath) return;
+
+        NSString *sectionTitle = self.sectionTitles[indexPath.section];
+        NSString *filePath = self.groupedVideos[sectionTitle][indexPath.row];
+
+        // Generate a temporary thumbnail for preview
+        UIImage *thumbnail = [self generateThumbnailForVideoAtPath:filePath];
+        if (!thumbnail) return;
+
+        // Save the thumbnail to a temporary file so Quick Look can open it
+        NSString *tempDir = NSTemporaryDirectory();
+        NSString *tempPath = [tempDir stringByAppendingPathComponent:@"preview_thumbnail.jpg"];
+        NSData *imageData = UIImageJPEGRepresentation(thumbnail, 0.9);
+        [imageData writeToFile:tempPath atomically:YES];
+
+        self.previewItemURL = [NSURL fileURLWithPath:tempPath];
+
+        QLPreviewController *previewController = [[QLPreviewController alloc] init];
+        previewController.dataSource = self;
+        previewController.delegate = self;
+
+        [self presentViewController:previewController animated:YES completion:nil];
+    }
+}
+
 
 - (void)setupEventsViewController {
     // Move all the existing table view setup to the events view controller
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPress:)];
+    [self.tableView addGestureRecognizer:longPress];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
@@ -950,4 +994,3 @@
 }
 
 @end
-
