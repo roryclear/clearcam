@@ -54,32 +54,47 @@ fun saveVideoThumbnail(videoPath: String, cameraName: String, context: Context):
 }
 
 fun getVideoThumbnail(videoPath: String): Bitmap? {
+    val retriever = MediaMetadataRetriever()
     return try {
-        val retriever = MediaMetadataRetriever()
         retriever.setDataSource(videoPath)
 
-        val duration = retriever.extractMetadata(
-            MediaMetadataRetriever.METADATA_KEY_DURATION
-        )?.toLong() ?: 0L
-        val midpoint = duration / 2
+        // First try to get the embedded thumbnail (attached picture)
+        val embeddedPicture = retriever.embeddedPicture
+        if (embeddedPicture != null) {
+            BitmapFactory.decodeByteArray(embeddedPicture, 0, embeddedPicture.size)?.let { bitmap ->
+                // Scale down if needed for efficiency
+                ThumbnailUtils.extractThumbnail(
+                    bitmap,
+                    1280,
+                    720,
+                    ThumbnailUtils.OPTIONS_RECYCLE_INPUT
+                )
+            }
+        } else {
+            // Fallback: extract frame from video at midpoint
+            val duration = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_DURATION
+            )?.toLong() ?: 0L
+            val midpoint = duration / 2
 
-        val bitmap = retriever.getFrameAtTime(
-            midpoint * 1000,
-            MediaMetadataRetriever.OPTION_CLOSEST
-        )
-
-        retriever.release()
-
-        bitmap?.let {
-            ThumbnailUtils.extractThumbnail(
-                it,
-                320,
-                180,
-                ThumbnailUtils.OPTIONS_RECYCLE_INPUT
+            val bitmap = retriever.getFrameAtTime(
+                midpoint * 1000,
+                MediaMetadataRetriever.OPTION_CLOSEST
             )
+
+            bitmap?.let {
+                ThumbnailUtils.extractThumbnail(
+                    it,
+                    1280,
+                    720,
+                    ThumbnailUtils.OPTIONS_RECYCLE_INPUT
+                )
+            }
         }
     } catch (e: Exception) {
         null
+    } finally {
+        retriever.release()
     }
 }
 
