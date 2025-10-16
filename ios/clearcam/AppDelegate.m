@@ -89,6 +89,7 @@
     }
 }
 
+
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
 didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void (^)(void))completionHandler {
@@ -116,6 +117,20 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
         if (application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground) self.pendingNotification = userInfo;
         completionHandler(UIBackgroundFetchResultNoData);
     }
+}
+
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+    const unsigned char *dataBuffer = (const unsigned char *)[deviceToken bytes];
+    if (!dataBuffer) {
+        return;
+    }
+    
+    NSMutableString *token = [NSMutableString stringWithCapacity:(deviceToken.length * 2)];
+    for (int i = 0; i < deviceToken.length; i++) {
+        [token appendFormat:@"%02x", dataBuffer[i]];
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:token forKey:@"device_token"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 @synthesize persistentContainer = _persistentContainer;
