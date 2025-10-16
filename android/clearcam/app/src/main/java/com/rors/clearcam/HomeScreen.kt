@@ -1,5 +1,5 @@
 package com.rors.clearcam
-
+import androidx.compose.foundation.gestures.detectTapGestures
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -70,6 +70,9 @@ import java.io.FileOutputStream
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 
 
 private const val APP_VIDEO_DIR = "videos"
@@ -1146,7 +1149,6 @@ fun EventVideoSection(
     }
 }
 
-
 @Composable
 fun EventVideoListItem(
     video: EventVideo,
@@ -1213,6 +1215,45 @@ fun EventVideoListItem(
                     showDecryptionDialog = true
                 }
             }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        // Regular tap - play video
+                        if (video.isDecrypted) {
+                            onClick()
+                        } else {
+                            showDecryptionDialog = true
+                        }
+                    },
+                    onLongPress = {
+                        // Long press - save thumbnail and open with system viewer
+                        if (video.isDecrypted && thumbnailBitmap != null) {
+                            // Save thumbnail to temp file and open with system viewer
+                            val tempFile = File.createTempFile("thumbnail_", ".jpg", context.cacheDir)
+                            tempFile.outputStream().use { stream ->
+                                thumbnailBitmap!!.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                            }
+
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.provider",
+                                tempFile
+                            )
+
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "image/jpeg")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No image viewer app found", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
+            }
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1238,7 +1279,8 @@ fun EventVideoListItem(
                             brush = Brush.verticalGradient(
                                 colors = listOf(Color(0xFF3A3A3A), Color(0xFF1A1A1A))
                             )
-                        ))
+                        )
+                )
             }
 
             Icon(
