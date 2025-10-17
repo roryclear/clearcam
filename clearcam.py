@@ -1273,41 +1273,50 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         background-color: rgba(0, 0, 0, 0.9);
                     }}
 
-                    /* Image preview modal */
-                    #imagePreviewModal {{
-                        display: none;
-                        position: fixed;
-                        z-index: 1000;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        height: 100%;
-                        background-color: rgba(0, 0, 0, 0.9);
-                        justify-content: center;
-                        align-items: center;
-                    }}
+                 #imagePreviewModal {{
+                    display: none;
+                    position: fixed;
+                    z-index: 1000;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(0, 0, 0, 0.9);
+                    justify-content: center;
+                    align-items: center;
+                    overflow: auto;
+                }}
 
-                    #imagePreviewModal img {{
-                        max-width: 90%;
-                        max-height: 90%;
-                        border-radius: 8px;
-                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-                    }}
+                #previewImage {{
+                    max-width: 90vw;
+                    max-height: 90vh;
+                    object-fit: contain;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                }}
 
-                    .close-preview {{
-                        position: absolute;
-                        top: 20px;
-                        right: 30px;
-                        color: white;
-                        font-size: 40px;
-                        font-weight: bold;
-                        cursor: pointer;
-                        z-index: 1001;
-                    }}
+                .close-preview {{
+                    position: absolute;
+                    top: 20px;
+                    right: 30px;
+                    color: white;
+                    font-size: 40px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    z-index: 1001;
+                    background: rgba(0, 0, 0, 0.5);
+                    width: 50px;
+                    height: 50px;
+                    border-radius: 50%;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    line-height: 1;
+                }}
 
-                    .close-preview:hover {{
-                        color: #ccc;
-                    }}
+                .close-preview:hover {{
+                    background: rgba(0, 0, 0, 0.8);
+                }}
 
                   .camera-grid {{
                       display: flex;
@@ -2112,11 +2121,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const previewModal = document.getElementById("imagePreviewModal");
                     const previewImage = document.getElementById("previewImage");
                     previewImage.src = imageSrc;
+                    
+                    // Force reasonable size
+                    previewImage.style.maxWidth = '70%';
+                    previewImage.style.maxHeight = '70%';
+                    previewImage.style.width = 'auto';
+                    previewImage.style.height = 'auto';
+                    
                     previewModal.style.display = "flex";
                 }}
+
                 function closeImagePreview() {{
                     document.getElementById("imagePreviewModal").style.display = "none";
                 }}
+
                 function playVideoAtTime(timestamp) {{
                     const params = new URLSearchParams(window.location.search);
                     params.set('start', timestamp);
