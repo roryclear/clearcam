@@ -749,7 +749,7 @@ class VideoCapture:
       if self.proc:
           self.proc.kill()
       if self.hls_proc:
-         self.hls_proc.kill()
+         self.hls_proc.kill()    
 
 class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
@@ -2827,7 +2827,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             shutil.copyfileobj(f, self.wfile)
 
 
-def schedule_daily_restart(hls_streamer, restart_time):
+def schedule_daily_restart(hls_streamer, videocapture, restart_time):
     """Schedule daily restarts at a specific time"""
     while True:
         now = datetime.now().time()
@@ -2845,6 +2845,7 @@ def schedule_daily_restart(hls_streamer, restart_time):
         time.sleep(delta)
         
         print("\nPerforming scheduled stream restart...")
+        videocapture._open_ffmpeg() #restart 
         hls_streamer.stop()
         time.sleep(10) # todo can get away with none or less?
         hls_streamer.start()
@@ -3266,7 +3267,7 @@ if __name__ == "__main__":
       restart_time = (0, 0)
       threading.Thread(
         target=schedule_daily_restart,
-        args=(hls_streamer, restart_time),
+        args=(hls_streamer, cam, restart_time),
         daemon=True
       ).start()
 
