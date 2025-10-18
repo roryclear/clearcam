@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -118,18 +119,36 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge
                 )
 
+                val activity = LocalContext.current as? Activity // todo
+
                 Switch(
                     checked = notificationsEnabled.value,
                     onCheckedChange = { enabled ->
-                        notificationsEnabled.value = enabled
-                        coroutineScope.launch {
-                            context.dataStore.edit { preferences ->
-                                preferences[booleanPreferencesKey("notifications_enabled")] = enabled
-                            }
-                        }
                         if (enabled) {
-                            requestNotificationPermissionAndRegister(context, userId)
+                            // Temporarily disable switch until confirmation
+                            notificationsEnabled.value = false
+
+                            requestNotificationPermissionAndRegister(activity, context, userId) { success ->
+                                // Must switch back to main thread for UI update
+                                coroutineScope.launch(Dispatchers.Main) {
+                                    if (success) {
+                                        notificationsEnabled.value = true
+                                        context.dataStore.edit { prefs ->
+                                            prefs[booleanPreferencesKey("notifications_enabled")] = true
+                                        }
+                                    } else {
+                                        notificationsEnabled.value = false
+                                        Toast.makeText(context, "No connection. Could not enable notifications.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         } else {
+                            notificationsEnabled.value = false
+                            coroutineScope.launch {
+                                context.dataStore.edit { prefs ->
+                                    prefs[booleanPreferencesKey("notifications_enabled")] = false
+                                }
+                            }
                             disableNotifications(context)
                         }
                     }
@@ -173,7 +192,13 @@ private fun disableNotifications(context: Context) {
     }
 }
 
-private fun requestNotificationPermissionAndRegister(context: Context, userId: String) {
+private fun requestNotificationPermissionAndRegister(
+    activity: Activity?,
+    context: Context,
+    userId: String,
+    onResult: (Boolean) -> Unit
+) {
+    // Step 1: permission check (only if activity is available)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
@@ -181,36 +206,27 @@ private fun requestNotificationPermissionAndRegister(context: Context, userId: S
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!hasPermission) {
-            val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
-                context as Activity,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-
-            if (shouldShowRationale) {
-                // Could show a dialog here if you want
-                Log.d("Settings", "Notification permission rationale should be shown")
-                return
-            } else {
+            if (activity != null) {
                 ActivityCompat.requestPermissions(
-                    context,
+                    activity,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                     1001
                 )
             }
+            onResult(false)
+            return
         }
     }
 
-    // Get FCM token and send to server
+    // Step 2: Get FCM token safely
     FirebaseMessaging.getInstance().token
         .addOnCompleteListener { task ->
             if (!task.isSuccessful) {
-                Log.w("FCM", "Fetching FCM token failed", task.exception)
+                onResult(false)
                 return@addOnCompleteListener
             }
 
             val token = task.result
-            Log.d("FCM Token", token)
-
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val url = URL("https://rors.ai/add_device")
@@ -236,14 +252,11 @@ private fun requestNotificationPermissionAndRegister(context: Context, userId: S
                     }
 
                     val responseCode = connection.responseCode
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        Log.d("FCM", "Token successfully sent to server")
-                    } else {
-                        Log.e("FCM", "Server returned $responseCode")
-                    }
+                    onResult(responseCode == HttpURLConnection.HTTP_OK)
                 } catch (e: Exception) {
-                    Log.e("FCM", "Failed to send token to server", e)
+                    onResult(false)
                 }
             }
         }
 }
+
