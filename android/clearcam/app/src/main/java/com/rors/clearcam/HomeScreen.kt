@@ -205,7 +205,7 @@ fun addDecryptionKey(context: Context, key: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(userId: String) {
-    var cameraNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var cameraDevices by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
     var eventVideos by remember { mutableStateOf<List<EventVideo>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -241,11 +241,15 @@ fun HomeScreen(userId: String) {
                 val newestTime = getNewestCreationTimeFromFiles(videosDir)
                 val newVideos = fetchEventVideos(userId, newestTime / 1000)
                 val camerasJson = camerasDeferred.await()
-                cameraNames = if (camerasJson != null) {
+                cameraDevices = if (camerasJson != null) {
                     val devicesArray = camerasJson.optJSONArray("devices")
                     if (devicesArray != null) {
                         (0 until devicesArray.length()).map { i ->
-                            devicesArray.getJSONObject(i).optString("name", "Unknown")
+                            val deviceObj = devicesArray.getJSONObject(i)
+                            mapOf(
+                                "name" to deviceObj.optString("name", "Unknown"),
+                                "alerts_on" to deviceObj.optInt("alerts_on", 0)
+                            )
                         }
                     } else {
                         emptyList()
@@ -371,7 +375,7 @@ fun HomeScreen(userId: String) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Spacer(modifier = Modifier.width(48.dp)) // Left placeholder (optional)
+                Spacer(modifier = Modifier.width(48.dp))
 
                 IconButton(onClick = { showSettings = true }) {
                     Icon(
@@ -420,7 +424,7 @@ fun HomeScreen(userId: String) {
 
                 else -> {
                     CameraHorizontalList(
-                        cameraNames = cameraNames,
+                        cameraDevices = cameraDevices,
                         userId = userId,
                         onCameraClick = { cameraName ->
                             currentCameraName = cameraName
@@ -945,7 +949,7 @@ fun LiveStreamPlayer(
 
 @Composable
 fun CameraHorizontalList(
-    cameraNames: List<String>,
+    cameraDevices: List<Map<String, Any>>,
     userId: String,
     onCameraClick: (String) -> Unit,
     onRefresh: () -> Unit
@@ -973,7 +977,7 @@ fun CameraHorizontalList(
             }
         }
 
-        if (cameraNames.isEmpty()) {
+        if (cameraDevices.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1007,8 +1011,14 @@ fun CameraHorizontalList(
                     .padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                cameraNames.forEach { name ->
-                    CameraCard(name = name, onClick = { onCameraClick(name) })
+                cameraDevices.forEach { device ->
+                    val cameraName = device["name"] as? String ?: "Unknown"
+                    val alertsOn = device["alerts_on"] as? Int ?: 0
+                    CameraCard(
+                        name = cameraName,
+                        alertsOn = alertsOn,
+                        onClick = { onCameraClick(cameraName) }
+                    )
                 }
             }
         }
@@ -1018,6 +1028,7 @@ fun CameraHorizontalList(
 @Composable
 fun CameraCard(
     name: String,
+    alertsOn: Int,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1064,14 +1075,23 @@ fun CameraCard(
                 .align(Alignment.Center)
         )
 
-        Text(
-            text = URLDecoder.decode(name, StandardCharsets.UTF_8.name()),
-            color = Color.White,
-            style = MaterialTheme.typography.titleMedium,
+        // Camera name and alerts status
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(12.dp)
-        )
+        ) {
+            Text(
+                text = URLDecoder.decode(name, StandardCharsets.UTF_8.name()),
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = if (alertsOn == 1) "Alerts: ON" else "Alerts: OFF",
+                color = if (alertsOn == 1) Color.Green else Color.Red,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
     }
 }
 
