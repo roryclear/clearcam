@@ -908,6 +908,7 @@ class HLSStreamer:
             time.sleep(1)    
         try:
             self.start()
+            self.cam._open_ffmpeg()
             print("HLS streamer restarted successfully")
         except Exception as e:
             print(f"Failed to restart HLS: {e}")
