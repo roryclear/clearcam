@@ -1065,7 +1065,6 @@ fun CameraCard(
                     )
             )
         }
-
         Icon(
             imageVector = Icons.Default.PlayArrow,
             contentDescription = "Play",
@@ -1074,23 +1073,33 @@ fun CameraCard(
                 .size(48.dp)
                 .align(Alignment.Center)
         )
-
-        // Camera name and alerts status
-        Column(
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(12.dp)
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = URLDecoder.decode(name, StandardCharsets.UTF_8.name()),
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium
             )
-            Text(
-                text = if (alertsOn == 1) "Alerts: ON" else "Alerts: OFF",
-                color = if (alertsOn == 1) Color.Green else Color.Red,
-                style = MaterialTheme.typography.labelSmall
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Alerts",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Switch(
+                    checked = alertsOn == 1,
+                    onCheckedChange = null, // No interaction for now
+                )
+            }
         }
     }
 }
