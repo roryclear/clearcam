@@ -237,14 +237,23 @@ fun HomeScreen(userId: String) {
         coroutineScope.launch {
             try {
                 if (!videosDir.exists()) videosDir.mkdirs()
-
-                val camerasDeferred = async { fetchCameraNames(userId) }
+                val camerasDeferred = async { fetchCameraJson(userId) }
                 val newestTime = getNewestCreationTimeFromFiles(videosDir)
                 val newVideos = fetchEventVideos(userId, newestTime / 1000)
-
-                cameraNames = camerasDeferred.await()
+                val camerasJson = camerasDeferred.await()
+                cameraNames = if (camerasJson != null) {
+                    val devicesArray = camerasJson.optJSONArray("devices")
+                    if (devicesArray != null) {
+                        (0 until devicesArray.length()).map { i ->
+                            devicesArray.getJSONObject(i).optString("name", "Unknown")
+                        }
+                    } else {
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
                 val decryptionKeys = getDecryptionKeys(context).toMutableList()
-
                 videosDir.listFiles()?.forEach { file ->
                     if (file.name.endsWith(".aes")) {
                         val outputFilename = file.name.removeSuffix(".aes")
