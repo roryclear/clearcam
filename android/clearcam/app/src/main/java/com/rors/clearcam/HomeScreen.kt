@@ -1017,6 +1017,7 @@ fun CameraHorizontalList(
                     CameraCard(
                         name = cameraName,
                         alertsOn = alertsOn,
+                        userId = userId,
                         onClick = { onCameraClick(cameraName) }
                     )
                 }
@@ -1029,14 +1030,82 @@ fun CameraHorizontalList(
 fun CameraCard(
     name: String,
     alertsOn: Int,
+    userId: String, // Add userId parameter
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
     var thumbnailBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var currentAlertsState by remember { mutableStateOf(alertsOn) }
+    var isLoading by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Update local state when props change
+    LaunchedEffect(alertsOn) {
+        currentAlertsState = alertsOn
+    }
 
     LaunchedEffect(name) {
         thumbnailBitmap = withContext(Dispatchers.IO) {
             getLiveStreamThumbnail(name, context)
+        }
+    }
+
+    suspend fun toggleAlerts(newState: Int) {
+        if (isLoading) return
+
+        isLoading = true
+        try {
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    val url = URL("https://rors.ai/toggle_alerts")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.apply {
+                        requestMethod = "POST"
+                        setRequestProperty("Content-Type", "application/json")
+                        doOutput = true
+                        connectTimeout = 15000
+                        readTimeout = 15000
+                    }
+
+                    val encodedDeviceName = URLEncoder.encode(name, "UTF-8")
+
+                    val body = """
+                    {
+                        "session_token": "$userId",
+                        "device_name": "$encodedDeviceName",
+                        "alerts_on": $newState
+                    }
+                """.trimIndent()
+
+                    OutputStreamWriter(connection.outputStream).use { writer ->
+                        writer.write(body)
+                        writer.flush()
+                    }
+
+                    val responseCode = connection.responseCode
+                    responseCode == HttpURLConnection.HTTP_OK
+                } catch (e: Exception) {
+                    false
+                }
+            }
+
+            if (success) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Alerts ${if (newState == 1) "enabled" else "disabled"}", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                currentAlertsState = alertsOn
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Failed to update alerts", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            currentAlertsState = alertsOn
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Network error", Toast.LENGTH_SHORT).show()
+            }
+        } finally {
+            isLoading = false
         }
     }
 
@@ -1065,6 +1134,7 @@ fun CameraCard(
                     )
             )
         }
+
         Icon(
             imageVector = Icons.Default.PlayArrow,
             contentDescription = "Play",
@@ -1073,6 +1143,8 @@ fun CameraCard(
                 .size(48.dp)
                 .align(Alignment.Center)
         )
+
+        // Camera name and toggle switch
         Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -1086,18 +1158,35 @@ fun CameraCard(
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium
             )
+
+            // Alerts label and toggle switch
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Alerts",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
+                } else {
+                    Text(
+                        text = "Alerts",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
                 Switch(
-                    checked = alertsOn == 1,
-                    onCheckedChange = null, // No interaction for now
+                    checked = currentAlertsState == 1,
+                    onCheckedChange = { newState ->
+                        val newAlertsState = if (newState) 1 else 0
+                        currentAlertsState = newAlertsState
+                        coroutineScope.launch {
+                            toggleAlerts(newAlertsState)
+                        }
+                    },
+                    enabled = !isLoading
                 )
             }
         }
