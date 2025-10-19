@@ -573,6 +573,9 @@ class VideoCapture:
             raw_bytes = self.proc.stdout.read(frame_size)
             if len(raw_bytes) != frame_size:
                 fail_count += 1
+            else:
+                fail_count = 0
+            if fail_count > 5:
                 print(f"FFmpeg frame read failed (count={fail_count}), restarting stream...")
                 if fail_count > 5:
                     self._open_ffmpeg()
