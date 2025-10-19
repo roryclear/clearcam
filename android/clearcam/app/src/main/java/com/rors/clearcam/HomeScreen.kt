@@ -214,6 +214,7 @@ fun HomeScreen(userId: String) {
     var showLiveStream by remember { mutableStateOf(false) }
     var currentCameraName by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
+    var isOnline by remember { mutableStateOf(true) } // Add online status state
 
     if (showSettings) {
         SettingsScreen(onBackPressed = { showSettings = false })
@@ -228,6 +229,36 @@ fun HomeScreen(userId: String) {
     val scrollState = rememberScrollState()
     var isRefreshing by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0f) }
+
+    // Function to check internet status
+    fun checkInternetStatus() {
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val url = URL("https://rors.ai/ping")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.apply {
+                        requestMethod = "GET"
+                        connectTimeout = 10000
+                        readTimeout = 10000
+                    }
+                    connection.connect()
+                    // If we get here without exception, we're online
+                    isOnline = true
+                }
+            } catch (e: Exception) {
+                isOnline = false
+            }
+        }
+    }
+
+    // Auto-refresh internet status every 10 seconds
+    LaunchedEffect(userId) {
+        while (true) {
+            checkInternetStatus()
+            delay(10000L)
+        }
+    }
 
     fun loadVideosFromStorage() {
         eventVideos = loadAllVideos(videosDir)
@@ -319,12 +350,14 @@ fun HomeScreen(userId: String) {
 
     LaunchedEffect(userId) {
         refreshData()
+        checkInternetStatus() // Check status on initial load
     }
 
     LaunchedEffect(userId) {
         while (true) {
             delay(10000L)
             refreshData()
+            checkInternetStatus() // Check status with each refresh
         }
     }
 
@@ -387,6 +420,35 @@ fun HomeScreen(userId: String) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Online/Offline Status Indicator - Centered
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center // Changed to Center
+            ) {
+                // Status dot
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isOnline) Color(0xFF34C759) // iOS systemGreen equivalent
+                            else Color(0xFFFF3B30) // iOS systemRed equivalent
+                        )
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Status text
+                Text(
+                    text = if (isOnline) "online" else "offline",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF8E8E93) // iOS systemGray equivalent
+                )
+            }
+
             if (refreshTrigger > 0) {
                 Box(
                     modifier = Modifier
@@ -430,7 +492,10 @@ fun HomeScreen(userId: String) {
                             currentCameraName = cameraName
                             showLiveStream = true
                         },
-                        onRefresh = { refreshData() }
+                        onRefresh = {
+                            refreshData()
+                            checkInternetStatus()
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
