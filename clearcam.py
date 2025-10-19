@@ -556,6 +556,62 @@ class VideoCapture:
         str(self._get_new_stream_dir() / "stream.m3u8")
     ]
     self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    self.monitor_hls_proc = threading.Thread(target=self.monitor_hls_stream, daemon=True).start()
+
+
+  def monitor_hls_stream(self):
+      last_segment_time = time.time()
+      stream_dir = self.output_dir / datetime.now().strftime("%Y-%m-%d")
+
+      while self.running:
+          try:
+              # Look for latest .ts file
+              if stream_dir.exists():
+                  ts_files = list(stream_dir.glob("*.ts"))
+                  if ts_files:
+                      newest = max(ts_files, key=os.path.getmtime)
+                      mod_time = os.path.getmtime(newest)
+
+                      if mod_time > last_segment_time:
+                          last_segment_time = mod_time
+                      else:
+                          # No update for 10 seconds → restart HLS
+                          if time.time() - last_segment_time > 10:
+                              print("⚠ HLS stalled — restarting...")
+                              self.restart_hls_only()
+                              last_segment_time = time.time()
+              time.sleep(5)
+          except Exception as e:
+              print("Error in monitor_hls_stream:", e)
+              time.sleep(5)
+
+
+  def restart_hls_only(self):
+      try:
+          if self.hls_proc:
+              self.hls_proc.kill()
+          print("Restarting HLS ffmpeg...")
+          self._start_hls_ffmpeg()  # New method with ONLY the HLS portion
+      except Exception as e:
+          print("Failed to restart HLS:", e)
+
+  def _start_hls_ffmpeg(self):
+      ffmpeg_path = find_ffmpeg()
+      stream_dir = self._get_new_stream_dir()
+      command = [
+          ffmpeg_path,
+          "-i", self.src,
+          "-c", "copy",
+          "-f", "hls",
+          "-hls_time", "4",
+          "-hls_list_size", "6",
+          "-hls_flags", "delete_segments",
+          "-hls_playlist_type", "event",
+          "-an",
+          "-hls_segment_filename", str(stream_dir / "stream_%06d.ts"),
+          str(stream_dir / "stream.m3u8")
+      ]
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
