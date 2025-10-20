@@ -610,7 +610,7 @@ class VideoCapture:
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
                           alert.last_det = time.time()
-              if (send_det and userID is not None) and time.time() - last_det >= 7.5: #send 15ish second clip after
+              if (send_det and userID is not None) and time.time() - last_det >= 10: #send 15ish second clip after
                   os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                   mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                   temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
