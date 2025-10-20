@@ -525,6 +525,30 @@ class VideoCapture:
 
     ffmpeg_path = find_ffmpeg()
     
+    """Start the RTSP re-streaming"""
+    command = [
+        ffmpeg_path,
+        '-i', rtsp_url,
+        '-c', 'copy',
+        '-f', 'rtsp',
+        '-rtsp_transport', 'tcp',
+        f'rtsp://localhost:{554}/{cam_name}'
+    ]
+    
+    try:
+        self.process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE
+        )
+        print(f"Re-streaming started: {rtsp_url} -> rtsp://localhost:{554}/{cam_name}")
+    except Exception as e:
+        print(f"Error starting re-stream: {e}")
+
+    self.src = f"rtsp://localhost:{554}/{cam_name}"
+    time.sleep(10)
+
     command = [
         ffmpeg_path,
         "-i", self.src,
