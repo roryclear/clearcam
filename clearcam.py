@@ -585,6 +585,7 @@ class VideoCapture:
             raw_bytes = self.proc.stdout.read(frame_size)
             if len(raw_bytes) != frame_size:
                 fail_count += 1
+                time.sleep(30)
             else:
                 fail_count = 0
             if fail_count > 5:
