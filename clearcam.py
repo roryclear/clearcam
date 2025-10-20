@@ -517,12 +517,21 @@ class VideoCapture:
       stream_dir_raw.mkdir(parents=True, exist_ok=False)
       return stream_dir_raw
 
+  def _safe_kill_process(self, proc):
+    if proc:
+      try:
+        proc.terminate()
+        proc.wait(timeout=5)
+      except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+      except Exception:
+        pass
+
   def _open_ffmpeg(self):
     path = self._get_new_stream_dir()
-    if self.proc:
-        self.proc.kill()
-    if self.hls_proc:
-        self.hls_proc.kill()
+    self._safe_kill_process(self.proc)
+    self._safe_kill_process(self.hls_proc)
 
     ffmpeg_path = find_ffmpeg()
     
@@ -536,11 +545,13 @@ class VideoCapture:
         "-hls_flags", "+append_list",
         "-hls_playlist_type", "event",
         "-an",  # No audio
-        "-hls_segment_filename", str(self._get_new_stream_dir() / "stream_%06d.ts"),
+        "-hls_segment_filename", str(path/ "stream_%06d.ts"),
         str(path / "stream.m3u8")
     ]
     self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     time.sleep(30)
+
     command = [
         ffmpeg_path,
         "-i", str(path / "stream.m3u8"),
