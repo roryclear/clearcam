@@ -518,56 +518,14 @@ class VideoCapture:
       return stream_dir_raw
 
   def _open_ffmpeg(self):
+    path = self._get_new_stream_dir()
     if self.proc:
         self.proc.kill()
     if self.hls_proc:
         self.hls_proc.kill()
-    if hasattr(self, 'restream_process') and self.restream_process:
-        self.restream_process.kill()
 
     ffmpeg_path = find_ffmpeg()
     
-    """Start the RTMP re-streaming"""
-    command = [
-        ffmpeg_path,
-        '-i', self.src,
-        '-c', 'copy',
-        '-f', 'flv',
-        '-re',
-        f'rtmp://localhost:1935/live/{self.cam_name}'
-    ]
-    
-    try:
-        self.restream_process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE
-        )
-        print(f"RTMP re-streaming started: {self.src} -> rtmp://localhost:1935/live/{self.cam_name}")
-    except Exception as e:
-        print(f"Error starting RTMP re-stream: {e}")
-
-    self.src = f"rtmp://localhost:1935/live/{self.cam_name}"
-    time.sleep(3)
-
-    command = [
-        ffmpeg_path,
-        "-i", self.src,
-        "-loglevel", "quiet",
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "2",
-        "-an",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-vf", f"scale={self.width}:{self.height}",
-        "-timeout", "5000000",
-        "-rw_timeout", "15000000",
-        "-"
-    ]
-    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
     command = [
         ffmpeg_path,
         "-i", self.src,
@@ -579,9 +537,26 @@ class VideoCapture:
         "-hls_playlist_type", "event",
         "-an",  # No audio
         "-hls_segment_filename", str(self._get_new_stream_dir() / "stream_%06d.ts"),
-        str(self._get_new_stream_dir() / "stream.m3u8")
+        str(path / "stream.m3u8")
     ]
     self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(30)
+    command = [
+        ffmpeg_path,
+        "-i", str(path / "stream.m3u8"),
+        "-loglevel", "quiet",
+        "-reconnect", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "2",
+        "-an",  # No audio
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-vf", f"scale={self.width}:{self.height}",
+        "-timeout", "5000000",
+        "-rw_timeout", "15000000",
+        "-"
+    ]
+    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
