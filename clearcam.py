@@ -522,32 +522,34 @@ class VideoCapture:
         self.proc.kill()
     if self.hls_proc:
         self.hls_proc.kill()
+    if hasattr(self, 'restream_process') and self.restream_process:
+        self.restream_process.kill()
 
     ffmpeg_path = find_ffmpeg()
     
-    """Start the RTSP re-streaming"""
+    """Start the RTMP re-streaming"""
     command = [
         ffmpeg_path,
         '-i', self.src,
         '-c', 'copy',
-        '-f', 'rtsp',
-        '-rtsp_transport', 'tcp',
-        f'rtsp://localhost:{554}/{cam_name}'
+        '-f', 'flv',
+        '-re',
+        f'rtmp://localhost:1935/live/{self.cam_name}'
     ]
     
     try:
-        self.process = subprocess.Popen(
+        self.restream_process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE
         )
-        print(f"Re-streaming started: {self.src} -> rtsp://localhost:{554}/{cam_name}")
+        print(f"RTMP re-streaming started: {self.src} -> rtmp://localhost:1935/live/{self.cam_name}")
     except Exception as e:
-        print(f"Error starting re-stream: {e}")
+        print(f"Error starting RTMP re-stream: {e}")
 
-    self.src = f"rtsp://localhost:{554}/{cam_name}"
-    time.sleep(10)
+    self.src = f"rtmp://localhost:1935/live/{self.cam_name}"
+    time.sleep(3)
 
     command = [
         ffmpeg_path,
@@ -556,7 +558,7 @@ class VideoCapture:
         "-reconnect", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "2",
-        "-an",  # No audio
+        "-an",
         "-f", "rawvideo",
         "-pix_fmt", "bgr24",
         "-vf", f"scale={self.width}:{self.height}",
