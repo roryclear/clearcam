@@ -511,10 +511,8 @@ class VideoCapture:
       stream_dir_raw = self.output_dir_raw / timestamp
       stream_dir = self.output_dir / timestamp
       self.dir = stream_dir_raw
-      if stream_dir.exists(): shutil.rmtree(stream_dir)
-      if stream_dir_raw.exists(): shutil.rmtree(stream_dir_raw)
-      stream_dir.mkdir(parents=True, exist_ok=False)
-      stream_dir_raw.mkdir(parents=True, exist_ok=False)
+      stream_dir.mkdir(parents=True, exist_ok=True)
+      stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
   def _safe_kill_process(self, proc):
