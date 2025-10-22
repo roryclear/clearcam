@@ -511,23 +511,48 @@ class VideoCapture:
       stream_dir_raw = self.output_dir_raw / timestamp
       stream_dir = self.output_dir / timestamp
       self.dir = stream_dir_raw
-      if stream_dir.exists(): shutil.rmtree(stream_dir)
-      if stream_dir_raw.exists(): shutil.rmtree(stream_dir_raw)
-      stream_dir.mkdir(parents=True, exist_ok=False)
-      stream_dir_raw.mkdir(parents=True, exist_ok=False)
+      stream_dir.mkdir(parents=True, exist_ok=True)
+      stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
+  def _safe_kill_process(self, proc):
+    if proc:
+      try:
+        proc.terminate()
+        proc.wait(timeout=5)
+      except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+      except Exception:
+        pass
+
   def _open_ffmpeg(self):
-    if self.proc:
-        self.proc.kill()
-    if self.hls_proc:
-        self.hls_proc.kill()
+    path = self._get_new_stream_dir()
+    self._safe_kill_process(self.proc)
+    self._safe_kill_process(self.hls_proc)
 
     ffmpeg_path = find_ffmpeg()
     
     command = [
         ffmpeg_path,
         "-i", self.src,
+        "-c", "copy",
+        "-f", "hls",
+        "-hls_time", "4",
+        "-hls_list_size", "0",
+        "-hls_flags", "+append_list",
+        "-hls_playlist_type", "event",
+        "-an",  # No audio
+        "-hls_segment_filename", str(path/ "stream_%06d.ts"),
+        str(path / "stream.m3u8")
+    ]
+    self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    time.sleep(30)
+
+    command = [
+        ffmpeg_path,
+        "-i", str(path / "stream.m3u8"),
         "-loglevel", "quiet",
         "-reconnect", "1",
         "-reconnect_streamed", "1",
@@ -541,21 +566,6 @@ class VideoCapture:
         "-"
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-    command = [
-        ffmpeg_path,
-        "-i", self.src,
-        "-c", "copy",
-        "-f", "hls",
-        "-hls_time", "4",
-        "-hls_list_size", "0",
-        "-hls_flags", "+append_list",
-        "-hls_playlist_type", "event",
-        "-an",  # No audio
-        "-hls_segment_filename", str(self._get_new_stream_dir() / "stream_%06d.ts"),
-        str(self._get_new_stream_dir() / "stream.m3u8")
-    ]
-    self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -573,6 +583,7 @@ class VideoCapture:
             raw_bytes = self.proc.stdout.read(frame_size)
             if len(raw_bytes) != frame_size:
                 fail_count += 1
+                time.sleep(30)
             else:
                 fail_count = 0
             if fail_count > 5:
@@ -609,7 +620,7 @@ class VideoCapture:
                           if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                           last_det = time.time()
                           alert.last_det = time.time()
-              if (send_det and userID is not None) and time.time() - last_det >= 15: #send 15ish second clip after
+              if (send_det and userID is not None) and time.time() - last_det >= 10: #send 15ish second clip after
                   os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                   mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                   temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
@@ -3121,7 +3132,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         try:
             total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
             size_gb = total_size / (1000 ** 3)
-            if size_gb > 60:  # 60GB threshold
+            if size_gb > 40:  # 60GB threshold
                 self._cleanup_oldest_files()
         except Exception as e:
             print(f"Error checking storage: {e}")
