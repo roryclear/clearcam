@@ -24,8 +24,6 @@
 </table>
 
 
-
-
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
   <tr valign="top">
     <td style="padding-right: 10px;">
@@ -35,6 +33,10 @@
     </td>
     <td>
       <img src="images/front.PNG" alt="Front" width="400" />
+    </td>
+    <td>
+      <img src="images/ios_live.PNG" alt="iOS Live" width="200" />
+      <img src="images/ios_events.PNG" alt="iOS Events" width="200" />
     </td>
   </tr>
 </table>
