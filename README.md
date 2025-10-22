@@ -32,9 +32,15 @@
 <img src="images/kg2.jpg" alt="KG2" width="400" />
 </td>
 <td>
-<img src="images/front.PNG" alt="Front" width="400" /><br/>
-<img src="images/ios_live.PNG" alt="iOS Live" width="190" style="display: inline-block; margin-right: 10px;" />
-<img src="images/ios_events.PNG" alt="iOS Events" width="190" style="display: inline-block;" />
+<img src="images/front.PNG" alt="Front" width="400" />
+</td>
+</tr>
+<tr>
+<td>
+<img src="images/ios_live.PNG" alt="iOS Live" width="400" />
+</td>
+<td>
+<img src="images/ios_events.PNG" alt="iOS Events" width="400" />
 </td>
 </tr>
 </table>
