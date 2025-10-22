@@ -45,7 +45,7 @@ Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m
 ## video demo:
 https://x.com/RoryClear/status/1959249250811785405
 
-## install and run NVR + inference with homebrew
+## install and run NVR + inference with homebrew (old release)
 1. brew tap roryclear/tap
 2. brew install clearcam
 3. clearcam
