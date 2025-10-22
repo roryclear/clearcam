@@ -32,11 +32,7 @@
 <img src="images/kg2.jpg" alt="KG2" width="400" />
 </td>
 <td>
-<img src="images/front.PNG" alt="Front" width="400" />
-</td>
-</tr>
-<tr>
-<td colspan="2" align="center">
+<img src="images/front.PNG" alt="Front" width="400" /><br/>
 <img src="images/ios_live.PNG" alt="iOS Live" width="200" style="margin-right: 10px;" />
 <img src="images/ios_events.PNG" alt="iOS Events" width="200" />
 </td>
