@@ -536,7 +536,7 @@ class VideoCapture:
     command = [
         ffmpeg_path,
         "-re",
-        "-rtsp_transport","tcp",
+        *(["-rtsp_transport", "tcp"] if self.src.startswith("rtsp") else []),
         "-i", self.src,
         "-c", "copy",
         "-f", "hls",
