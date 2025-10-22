@@ -3062,22 +3062,19 @@ def check_upload_link(cam_name="clearcampy"):
     })
     url = f"https://rors.ai/get_stream_upload_link?{query_params}"
     
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req) as response:
-            if response.status == 200:
-                response_data = json.loads(response.read().decode('utf-8'))
-                upload_link = response_data.get("upload_link")
-                alerts_on_res = response_data.get("alerts_on")
-                with is_live_lock:
-                   live_link[cam_name] = upload_link
-                   alerts_on = (alerts_on_res == 1)
-            else:
-                raise Exception(f"HTTP Error: {response.status}")
-    except Exception as e:
-        with is_live_lock:
-            if cam_name in live_link: live_link[cam_name] = None
-        print(f"Error checking upload link: {e}")
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req) as response:
+        if response.status == 200:
+            response_data = json.loads(response.read().decode('utf-8'))
+            upload_link = response_data.get("upload_link")
+            alerts_on_res = response_data.get("alerts_on")
+            with is_live_lock:
+               live_link[cam_name] = upload_link
+               alerts_on = (alerts_on_res == 1)
+        else:
+            with is_live_lock:
+                if cam_name in live_link: 
+                    live_link[cam_name] = None
 
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
     try:
