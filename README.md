@@ -33,8 +33,8 @@
 </td>
 <td>
 <img src="images/front.PNG" alt="Front" width="400" /><br/>
-<img src="images/ios_live.PNG" alt="iOS Live" width="200" style="margin-right: 10px;" />
-<img src="images/ios_events.PNG" alt="iOS Events" width="200" />
+<img src="images/ios_live.PNG" alt="iOS Live" width="200" style="display: inline-block; margin-right: 10px;" />
+<img src="images/ios_events.PNG" alt="iOS Events" width="200" style="display: inline-block;" />
 </td>
 </tr>
 </table>
