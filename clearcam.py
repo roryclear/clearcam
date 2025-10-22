@@ -535,6 +535,8 @@ class VideoCapture:
     
     command = [
         ffmpeg_path,
+        "-re",
+        "-rtsp_transport","tcp",
         "-i", self.src,
         "-c", "copy",
         "-f", "hls",
@@ -584,6 +586,7 @@ class VideoCapture:
             if len(raw_bytes) != frame_size:
                 fail_count += 1
                 time.sleep(30)
+                continue
             else:
                 fail_count = 0
             if fail_count > 5:
@@ -786,8 +789,6 @@ class HLSStreamer:
         stream_dir = self.output_dir / timestamp
         stream_dir_raw = self.output_dir_raw / timestamp
         self.cam.dir = stream_dir
-        if stream_dir.exists(): shutil.rmtree(stream_dir)
-        if stream_dir_raw.exists(): shutil.rmtree(stream_dir_raw)
         stream_dir.mkdir(exist_ok=True)
         stream_dir_raw.mkdir(exist_ok=True)
         return stream_dir, stream_dir_raw
