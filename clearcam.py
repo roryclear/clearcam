@@ -1745,14 +1745,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         min-width: 120px;
                     }}
 
-                    .time-inputs {{
-                        display: flex;
-                        gap: 12px;
-                        flex-wrap: nowrap;
-                        justify-content: center;
-                        flex: 1 1 100%;
-                    }}
-
                     input[type="date"],
                     input[type="time"] {{
                         padding: 6px 10px;
@@ -1830,12 +1822,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         overflow: auto;
                     }}
 
-                    .modal-content {{
-                        max-height: 80vh;
-                        overflow-y: auto;
-                        display: flex;
-                        flex-direction: column;
-                    }}
                     .form-group.checkbox-group {{
                         flex: 1;
                         min-height: 0; /* Important for flex children */
@@ -2089,7 +2075,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         {image_links}
                     </div>
                     <div id="imagePreviewModal" class="modal">
-                        <span class="close-preview" onclick="closeImagePreview()">&times;</span>
+                        <span class="close" onclick="closeImagePreview()">&times;</span>
                         <img id="previewImage" src="" alt="Preview">
                     </div>
                 </div>
