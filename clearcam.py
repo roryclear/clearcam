@@ -805,7 +805,6 @@ class HLSStreamer:
             "-crf", "21",
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),
-            "-vf", "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='%{localtime}':x=w-tw-10:y=10:fontsize=32:fontcolor=white:box=1:boxcolor=black",
             "-f", "hls",
             "-hls_time", str(self.segment_time),
             "-hls_list_size", "0",
@@ -1224,106 +1223,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           <html>
           <head>
               <style>
-                    #eventImagesContainer {{
-                        display: flex;
-                        flex-wrap: wrap;
-                        justify-content: center;
-                        gap: 14px;
-                    }}
-
-                    #eventImagesContainer .image-item {{
-                        position: relative;
-                        display: inline-block;
-                    }}
-
-                    #eventImagesContainer img {{
-                        width: 220px;
-                        height: auto;
-                        border-radius: 10px;
-                        border: 1px solid #ccc;
-                        transition: transform 0.2s;
-                    }}
-
-                    #eventImagesContainer .image-item:hover img {{
-                        transform: scale(1.05);
-                    }}
-
-                    #eventImagesContainer .image-actions {{
-                        position: absolute;
-                        bottom: 10px;
-                        left: 0;
-                        right: 0;
-                        display: flex;
-                        justify-content: center;
-                        gap: 8px;
-                        opacity: 0;
-                        transition: opacity 0.3s ease;
-                    }}
-
-                    #eventImagesContainer .image-item:hover .image-actions {{
-                        opacity: 1;
-                    }}
-
-                    #eventImagesContainer .image-actions button {{
-                        background-color: rgba(0, 0, 0, 0.7);
-                        color: white;
-                        border: none;
-                        padding: 6px 12px;
-                        border-radius: 4px;
-                        font-size: 0.8rem;
-                        cursor: pointer;
-                        transition: background-color 0.2s;
-                    }}
-
-                    #eventImagesContainer .image-actions button:hover {{
-                        background-color: rgba(0, 0, 0, 0.9);
-                    }}
-
-                 #imagePreviewModal {{
-                    display: none;
-                    position: fixed;
-                    z-index: 1000;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                    height: 100%;
-                    background-color: rgba(0, 0, 0, 0.9);
-                    justify-content: center;
-                    align-items: center;
-                    overflow: auto;
-                }}
-
-                #previewImage {{
-                    max-width: 90vw;
-                    max-height: 90vh;
-                    object-fit: contain;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-                }}
-
-                .close-preview {{
-                    position: absolute;
-                    top: 20px;
-                    right: 30px;
-                    color: white;
-                    font-size: 40px;
-                    font-weight: bold;
-                    cursor: pointer;
-                    z-index: 1001;
-                    background: rgba(0, 0, 0, 0.5);
-                    width: 50px;
-                    height: 50px;
-                    border-radius: 50%;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    line-height: 1;
-                }}
-
-                .close-preview:hover {{
-                    background: rgba(0, 0, 0, 0.8);
-                }}
-
                   .camera-grid {{
                       display: flex;
                       flex-wrap: wrap;
@@ -1491,7 +1390,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       fetchCameras(); // Immediately refresh
                   }});
 
-                  // --- MULTI VIEW LOGIC ---
                   function closeMultiView() {{
                       const container = document.getElementById('multiView');
                       container.innerHTML = '';
