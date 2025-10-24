@@ -30,6 +30,11 @@ import platform
 import ctypes
 import zlib
 
+from transformers import BlipProcessor, BlipForConditionalGeneration
+from PIL import Image
+import torch
+import random
+
 def resize(img, new_size):
     img = img.permute(2,0,1)
     img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
@@ -474,6 +479,13 @@ class VideoCapture:
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
     settings_file.parent.mkdir(parents=True, exist_ok=True)
+    self.saved_preds = set()
+
+
+    self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+    self.model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(self.device)
+    self.processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+
     try:
         with open(alerts_file, "rb") as f:
             self.alert_counters = pickle.load(f)
@@ -609,6 +621,17 @@ class VideoCapture:
                           filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
+                          
+                          
+                          new_preds = []
+                          for x in filtered_preds:
+                             if x[-1] not in self.saved_preds:
+                                self.saved_preds.add(x[-1])
+                                new_preds.append(x)
+                          pred_imgs = self.get_prediction_crops(frame.copy(), new_preds)
+                          for x in pred_imgs: write_png(f"{self.get_pred_desc(x)}.png",x)
+                          
+
                           self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                           write_png(str(filename), self.annotated_frame)
                           text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
@@ -714,7 +737,7 @@ class VideoCapture:
               (x.tlwh[1]+x.tlwh[3])<self.settings["dims"][1] or\
               x.tlwh[1]>(self.settings["dims"][1]+self.settings["dims"][3]))
               if outside ^ self.settings["outside"]: continue
-            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
@@ -736,7 +759,7 @@ class VideoCapture:
     return brightness > 127
 
   def draw_predictions(self, frame, preds):
-      for x1, y1, x2, y2, conf, cls in preds:
+      for x1, y1, x2, y2, conf, cls, track_id in preds:
           x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
           label = f"{class_labels[int(cls)]}:{conf:.2f}"
           color = color_dict[class_labels[int(cls)]]
@@ -746,6 +769,32 @@ class VideoCapture:
           frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
           cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
       return frame
+
+
+  def get_prediction_crops(self, frame, preds, expand_factor=2):
+      h, w = frame.shape[:2]
+      crops = []
+      for x1, y1, x2, y2, conf, cls, track_id in preds:
+          x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+          box_w = x2 - x1
+          box_h = y2 - y1
+          cx = x1 + box_w // 2
+          cy = y1 + box_h // 2
+          new_w = box_w * expand_factor
+          new_h = box_h * expand_factor
+          new_x1 = max(0, cx - new_w // 2)
+          new_y1 = max(0, cy - new_h // 2)
+          new_x2 = min(w, cx + new_w // 2)
+          new_y2 = min(h, cy + new_h // 2)
+          crop = frame[new_y1:new_y2, new_x1:new_x2]
+          crops.append(crop)
+      return crops
+  
+  def get_pred_desc(self, image):
+    inputs = self.processor(image, return_tensors="pt").to(self.device)
+    output = self.model.generate(**inputs, max_length=30)
+    return self.processor.decode(output[0], skip_special_tokens=True)
+
 
   def get_frame(self):
       with self.lock:
