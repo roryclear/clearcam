@@ -604,6 +604,14 @@ class VideoCapture:
             frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
             filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
 
+            new_preds = []
+            for x in filtered_preds:
+                if x[-1] not in self.saved_preds and (((x[2] - x[0]) > 100) or ((x[3] - x[1]) > 100)):
+                  self.saved_preds.add(x[-1])
+                  new_preds.append(x)
+            pred_imgs = self.get_prediction_crops(frame.copy(), new_preds)
+            for x in pred_imgs: write_png(f"{self.get_pred_desc(x)}.png",x)
+
             if count > 10:
               if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
                   last_preview_time = time.time()
@@ -621,16 +629,6 @@ class VideoCapture:
                           filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                           filepath.mkdir(parents=True, exist_ok=True)
                           filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
-                          
-                          
-                          new_preds = []
-                          for x in filtered_preds:
-                             if x[-1] not in self.saved_preds:
-                                self.saved_preds.add(x[-1])
-                                new_preds.append(x)
-                          pred_imgs = self.get_prediction_crops(frame.copy(), new_preds)
-                          for x in pred_imgs:
-                            if x.shape[0] > 200 and x.shape[1] > 200: write_png(f"{self.get_pred_desc(x)}.png",x)
                           
 
                           self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
