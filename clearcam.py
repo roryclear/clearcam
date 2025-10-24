@@ -629,7 +629,8 @@ class VideoCapture:
                                 self.saved_preds.add(x[-1])
                                 new_preds.append(x)
                           pred_imgs = self.get_prediction_crops(frame.copy(), new_preds)
-                          for x in pred_imgs: write_png(f"{self.get_pred_desc(x)}.png",x)
+                          for x in pred_imgs:
+                            if x.shape[0] > 200 and x.shape[1] > 200: write_png(f"{self.get_pred_desc(x)}.png",x)
                           
 
                           self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
@@ -792,7 +793,14 @@ class VideoCapture:
   
   def get_pred_desc(self, image):
     inputs = self.processor(image, return_tensors="pt").to(self.device)
-    output = self.model.generate(**inputs, max_length=30)
+    output = self.model.generate(
+    **inputs,
+    max_length=20,
+    num_beams=3,         # reduce creative exploration
+    do_sample=False,     # disables randomness
+    repetition_penalty=1.2,
+    length_penalty=1.0,
+    )
     return self.processor.decode(output[0], skip_special_tokens=True)
 
 
