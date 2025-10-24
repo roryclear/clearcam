@@ -113,14 +113,6 @@ def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
 def get_variant_multiples(variant):
   return {'n':(0.33, 0.25, 2.0), 's':(0.33, 0.50, 2.0), 'm':(0.67, 0.75, 1.5), 'l':(1.0, 1.0, 1.0), 'x':(1, 1.25, 1.0) }.get(variant, None)
 
-def label_predictions(all_predictions):
-  class_index_count = defaultdict(int)
-  for pred in all_predictions:
-    class_id = int(pred[-1])
-    if pred[-2] != 0: class_index_count[class_id] += 1
-
-  return dict(class_index_count)
-
 #this is taken from https://github.com/tinygrad/tinygrad/pull/784/files by dc-dc-dc (Now 2 models use upsampling)
 class Upsample:
   def __init__(self, scale_factor:int, mode: str = "nearest") -> None:
@@ -2843,23 +2835,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
 
 def schedule_daily_restart(hls_streamer, videocapture, restart_time):
-    """Schedule daily restarts at a specific time"""
     while True:
         now = datetime.now().time()
-        target = time_obj(restart_time[0], restart_time[1])  # (hour, minute)
-        
-        # Calculate seconds until next restart
+        target = time_obj(restart_time[0], restart_time[1])
         if now >= target:
-            # If time already passed today, schedule for tomorrow
             delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
         else:
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
-        
-        print(f"Next stream restart scheduled in {delta//3600}h {(delta%3600)//60}m")
         time.sleep(delta)
-        
-        print("\nPerforming scheduled stream restart...")
         videocapture._open_ffmpeg() #restart 
         hls_streamer.stop()
         time.sleep(10) # todo can get away with none or less?
