@@ -790,6 +790,7 @@ class VideoCapture:
       return crops
   
   def get_pred_desc(self, image):
+    image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)) 
     inputs = self.processor(image, return_tensors="pt").to(self.device)
     output = self.model.generate(
     **inputs,
