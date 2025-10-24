@@ -951,7 +951,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def get_camera_path(self, cam_name=None):
-        """Get the path for a specific camera or all cameras"""
         if cam_name:
             return self.base_dir / cam_name / "streams"
         return self.base_dir
@@ -3084,7 +3083,6 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Threaded HTTP server with centralized cleanup management"""
     def __init__(self, server_address, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
@@ -3177,7 +3175,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             print(f"Error in cleanup process: {e}")
 
     def server_close(self):
-        """Clean shutdown"""
         if hasattr(self, 'cleanup_stop_event'):
             self.cleanup_stop_event.set()
         if hasattr(self, 'cleanup_thread') and self.cleanup_thread:
