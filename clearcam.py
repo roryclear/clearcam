@@ -606,7 +606,7 @@ class VideoCapture:
 
             new_preds = []
             for x in filtered_preds:
-                if x[-1] not in self.saved_preds and (((x[2] - x[0]) > 100) or ((x[3] - x[1]) > 100)):
+                if x[-1] not in self.saved_preds and (((x[2] - x[0]) > 200) and ((x[3] - x[1]) > 200)) and x[-2] == 2: # car only
                   self.saved_preds.add(x[-1])
                   new_preds.append(x)
             pred_imgs = self.get_prediction_crops(frame.copy(), new_preds)
