@@ -574,104 +574,100 @@ class VideoCapture:
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
         try:
-            raw_bytes = self.proc.stdout.read(frame_size)
-            if len(raw_bytes) != frame_size:
-                fail_count += 1
-                time.sleep(30)
-                continue
-            else:
-                fail_count = 0
+          raw_bytes = self.proc.stdout.read(frame_size)
+          if len(raw_bytes) != frame_size:
+            fail_count += 1
             if fail_count > 5:
-                print(f"FFmpeg frame read failed (count={fail_count}), restarting stream...")
-                if fail_count > 5:
-                    self._open_ffmpeg()
-                    fail_count = 0
-                time.sleep(0.5)
-                continue
+              print(f"FFmpeg frame read failed (count={fail_count}), restarting stream...")
+              self._open_ffmpeg()
+              fail_count = 0
+            time.sleep(0.5)
+            continue
+          else:
             fail_count = 0
-            frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-            filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
+          frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
 
-            if count > 10:
-              if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
-                  last_preview_time = time.time()
-                  filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
-                  write_png(filename, self.raw_frame)
-              for _,alert in self.alert_counters.items():
-                  if not alert.is_active():
-                    alert.reset_counts()
-                    continue
-                  if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
-                  if alert.get_counts()[1]:
-                      if time.time() - alert.last_det >= alert.window:
-                          send_det = True
-                          timestamp = datetime.now().strftime("%Y-%m-%d")
-                          filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
-                          filepath.mkdir(parents=True, exist_ok=True)
-                          filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
-                          self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-                          write_png(str(filename), self.annotated_frame)
-                          text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
-                          if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                          last_det = time.time()
-                          alert.last_det = time.time()
-              if (send_det and userID is not None) and time.time() - last_det >= 10: #send 15ish second clip after
-                  os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
-                  mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-                  temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-                  self.streamer.export_clip(Path(mp4_filename))
-                  # img preview?
-                  subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
-                  os.replace(temp_output, mp4_filename)
-                  encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                  threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
-                  os.unlink(mp4_filename)
-                  send_det = False
-              if userID and (time.time() - last_live_check) >= 5:
-                  last_live_check = time.time()
-                  threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
-              if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-                counters_file = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
-                if os.path.exists(counters_file):
-                    with open(counters_file, 'rb') as f:
-                        counter = pickle.load(f)
-                    if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name)
-                    counter = self.counter
-                    with open(counters_file, 'wb') as f:
-                        pickle.dump(counter, f)
-                
-                added_alerts_file = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
-                if added_alerts_file.exists():
-                  with open(added_alerts_file, 'rb') as f:
-                    added_alerts = pickle.load(f)
-                    for id,a in added_alerts:
-                      if a is None:
-                        del self.alert_counters[id]
-                        continue
-                      self.alert_counters[id] = a
-                      for c in a.classes: classes.add(str(c))
-                    added_alerts_file.unlink()
-                
-                edited_settings_file = CAMERA_BASE_DIR / self.cam_name / "edited_settings.pkl"
-                if edited_settings_file.exists():
-                  with open(edited_settings_file, 'rb') as f:
-                    zone = pickle.load(f)
-                    self.settings = zone
-                  edited_settings_file.unlink()
-                    
-              if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
-                  last_live_seg = time.time()
-                  mp4_filename = f"segment.mp4"
-                  self.streamer.export_clip(Path(mp4_filename), live=True)
-                  encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                  Path(mp4_filename).unlink()
-                  threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
-            else:
-               count+=1
-            with self.lock:
-                self.raw_frame = frame.copy()
-                if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-            time.sleep(1 / 30)
+          if count > 10:
+            if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
+                last_preview_time = time.time()
+                filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+                write_png(filename, self.raw_frame)
+            for _,alert in self.alert_counters.items():
+                if not alert.is_active():
+                  alert.reset_counts()
+                  continue
+                if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
+                if alert.get_counts()[1]:
+                    if time.time() - alert.last_det >= alert.window:
+                        send_det = True
+                        timestamp = datetime.now().strftime("%Y-%m-%d")
+                        filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
+                        filepath.mkdir(parents=True, exist_ok=True)
+                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
+                        self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                        write_png(str(filename), self.annotated_frame)
+                        text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
+                        if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                        last_det = time.time()
+                        alert.last_det = time.time()
+            if (send_det and userID is not None) and time.time() - last_det >= 10: #send 15ish second clip after
+                os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
+                mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+                temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+                self.streamer.export_clip(Path(mp4_filename))
+                # img preview?
+                subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+                os.replace(temp_output, mp4_filename)
+                encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+                os.unlink(mp4_filename)
+                send_det = False
+            if userID and (time.time() - last_live_check) >= 5:
+                last_live_check = time.time()
+                threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
+            if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
+              counters_file = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
+              if os.path.exists(counters_file):
+                  with open(counters_file, 'rb') as f:
+                      counter = pickle.load(f)
+                  if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name)
+                  counter = self.counter
+                  with open(counters_file, 'wb') as f:
+                      pickle.dump(counter, f)
+              
+              added_alerts_file = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
+              if added_alerts_file.exists():
+                with open(added_alerts_file, 'rb') as f:
+                  added_alerts = pickle.load(f)
+                  for id,a in added_alerts:
+                    if a is None:
+                      del self.alert_counters[id]
+                      continue
+                    self.alert_counters[id] = a
+                    for c in a.classes: classes.add(str(c))
+                  added_alerts_file.unlink()
+              
+              edited_settings_file = CAMERA_BASE_DIR / self.cam_name / "edited_settings.pkl"
+              if edited_settings_file.exists():
+                with open(edited_settings_file, 'rb') as f:
+                  zone = pickle.load(f)
+                  self.settings = zone
+                edited_settings_file.unlink()
+                  
+            if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+                last_live_seg = time.time()
+                mp4_filename = f"segment.mp4"
+                self.streamer.export_clip(Path(mp4_filename), live=True)
+                encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                Path(mp4_filename).unlink()
+                threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
+          else:
+              count+=1
+          with self.lock:
+              self.raw_frame = frame.copy()
+              if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+          time.sleep(1 / 30)
         except Exception as e:
             print("Error in capture_loop:", e)
             self._open_ffmpeg()
