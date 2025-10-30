@@ -29,7 +29,7 @@ class STrack(BaseTrack):
     def multi_predict(stracks):
         if len(stracks) > 0:
             multi_mean = np.asarray([st.mean.copy() for st in stracks])
-            multi_covariance = np.asarray([st.covariance for st in stracks])
+            multi_covariance = [st.covariance for st in stracks]
             for i, st in enumerate(stracks):
                 if st.state != TrackState.Tracked:
                     multi_mean[i][7] = 0
