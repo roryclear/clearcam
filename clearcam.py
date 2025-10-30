@@ -532,7 +532,6 @@ class VideoCapture:
         "-i", self.src,
         "-c", "copy",
         "-f", "hls",
-        "-hls_time", "4",
         "-hls_list_size", "0",
         "-hls_flags", "+append_list",
         "-hls_playlist_type", "event",
@@ -542,7 +541,7 @@ class VideoCapture:
     ]
     self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    time.sleep(30)
+    time.sleep(10)
 
     command = [
         ffmpeg_path,
@@ -611,7 +610,7 @@ class VideoCapture:
                         if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                         last_det = time.time()
                         alert.last_det = time.time()
-            if (send_det and userID is not None) and time.time() - last_det >= 10: #send 15ish second clip after
+            if (send_det and userID is not None) and time.time() - last_det >= 2: #send 15ish second clip after
                 os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                 mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                 temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
@@ -784,8 +783,8 @@ class HLSStreamer:
     def start(self):
         self.running = True
         self.current_stream_dir, self.current_stream_dir_raw = self._get_new_stream_dir()
-        self.recent_segments = deque(maxlen=4)
-        self.recent_segments_raw = deque(maxlen=4) # todo, relies on other stream
+        self.recent_segments_raw = deque()
+        self.recent_segments_raw_live = deque()
         self.start_time = time.time()
         ffmpeg_path = find_ffmpeg()
         ffmpeg_cmd = [
@@ -818,7 +817,7 @@ class HLSStreamer:
             return  
 
         concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
-        segments_to_use = [self.recent_segments_raw[-1]] if live else self.recent_segments_raw
+        segments_to_use = self.recent_segments_raw_live if live else self.recent_segments_raw # last 5 seconds
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
 
@@ -843,6 +842,7 @@ class HLSStreamer:
               str(output_path)
           ]
         else:
+          with open(self.current_stream_dir_raw / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
           command = [
               ffmpeg_path,
               "-y",
@@ -860,16 +860,18 @@ class HLSStreamer:
         except subprocess.CalledProcessError as e:
             print(f"Failed to save video: {e}")
 
-    def _track_segments(self):
+    def _track_segments(self): # todo shouldn't need a loop here?
         while self.running:
-            segment_files = sorted(self.current_stream_dir.glob("*.ts"), key=os.path.getmtime)
-            self.recent_segments.clear()
-            self.recent_segments.extend(segment_files[-4:]) # last 3 for now
-
-            segment_files = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
+            cutoff = time.time() - 20
+            live_cutoff = time.time() - 5
+            segment_files_raw = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
+            recent_raw = [f for f in segment_files_raw if os.path.getmtime(f) >= cutoff]
+            recent_raw_live = [f for f in segment_files_raw if os.path.getmtime(f) >= (live_cutoff)]
             self.recent_segments_raw.clear()
-            self.recent_segments_raw.extend(segment_files[-4:]) # last 3 for now
-            time.sleep(self.segment_time / 2)
+            self.recent_segments_raw.extend(recent_raw)
+            self.recent_segments_raw_live.clear()
+            self.recent_segments_raw_live.extend(recent_raw_live)
+            time.sleep(1)
 
     def _feed_frames(self):
         last_frame_time = time.time()
