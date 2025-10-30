@@ -121,7 +121,7 @@ class STrack(BaseTrack):
     @staticmethod
     # @jit(nopython=True)
     def tlbr_to_tlwh(tlbr):
-        ret = np.asarray(tlbr).copy()
+        ret = tlbr
         ret[2:] -= ret[:2]
         return ret
 
