@@ -817,8 +817,6 @@ class HLSStreamer:
         segments_to_use = self.recent_segments_raw_live if live else self.recent_segments_raw # last 5 seconds
         with open(concat_list_path, "w") as f:
             f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
-
-        concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         ffmpeg_path = find_ffmpeg()
         
