@@ -809,12 +809,9 @@ class HLSStreamer:
         ]
 
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-        threading.Thread(target=self._track_segments, daemon=True).start()
 
     def export_clip(self,output_path: Path,live=False):
-        if not self.recent_segments_raw:
-            print("No segments available to save.")
-            return  
+        self._track_segments()
 
         concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
         segments_to_use = self.recent_segments_raw_live if live else self.recent_segments_raw # last 5 seconds
@@ -861,17 +858,15 @@ class HLSStreamer:
             print(f"Failed to save video: {e}")
 
     def _track_segments(self): # todo shouldn't need a loop here?
-        while self.running:
-            cutoff = time.time() - 20
-            live_cutoff = time.time() - 5
-            segment_files_raw = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
-            recent_raw = [f for f in segment_files_raw if os.path.getmtime(f) >= cutoff]
-            recent_raw_live = [f for f in segment_files_raw if os.path.getmtime(f) >= (live_cutoff)]
-            self.recent_segments_raw.clear()
-            self.recent_segments_raw.extend(recent_raw)
-            self.recent_segments_raw_live.clear()
-            self.recent_segments_raw_live.extend(recent_raw_live)
-            time.sleep(1)
+      cutoff = time.time() - 20
+      live_cutoff = time.time() - 5
+      segment_files_raw = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
+      recent_raw = [f for f in segment_files_raw if os.path.getmtime(f) >= cutoff]
+      recent_raw_live = [f for f in segment_files_raw if os.path.getmtime(f) >= (live_cutoff)]
+      self.recent_segments_raw.clear()
+      self.recent_segments_raw.extend(recent_raw)
+      self.recent_segments_raw_live.clear()
+      self.recent_segments_raw_live.extend(recent_raw_live)
 
     def _feed_frames(self):
         last_frame_time = time.time()
