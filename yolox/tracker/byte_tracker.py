@@ -10,7 +10,7 @@ class STrack(BaseTrack):
     def __init__(self, tlwh, score, class_id):
         self.occurrences = defaultdict(float)
         # wait activate
-        self._tlwh = np.asarray(tlwh, dtype=np.float64)
+        self._tlwh = tlwh
         self.kalman_filter = None
         self.mean, self.covariance = None, None
         self.is_activated = False
@@ -91,8 +91,7 @@ class STrack(BaseTrack):
         """Get current position in bounding box format `(top left x, top left y,
                 width, height)`.
         """
-        if self.mean is None:
-            return self._tlwh.copy()
+        if self.mean is None: return self._tlwh
         ret = self.mean[:4].copy()
         ret[2] *= ret[3]
         ret[:2] -= ret[2:] / 2
@@ -114,7 +113,7 @@ class STrack(BaseTrack):
         """Convert bounding box to format `(center x, center y, aspect ratio,
         height)`, where the aspect ratio is `width / height`.
         """
-        ret = np.asarray(tlwh).copy()
+        ret = tlwh
         ret[:2] += ret[2:] / 2
         ret[2] /= ret[3]
         return ret
