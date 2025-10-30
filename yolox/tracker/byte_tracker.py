@@ -119,25 +119,12 @@ class STrack(BaseTrack):
         ret[2] /= ret[3]
         return ret
 
-    def to_xyah(self):
-        return self.tlwh_to_xyah(self.tlwh)
-
     @staticmethod
     # @jit(nopython=True)
     def tlbr_to_tlwh(tlbr):
         ret = np.asarray(tlbr).copy()
         ret[2:] -= ret[:2]
         return ret
-
-    @staticmethod
-    # @jit(nopython=True)
-    def tlwh_to_tlbr(tlwh):
-        ret = np.asarray(tlwh).copy()
-        ret[2:] += ret[:2]
-        return ret
-
-    def __repr__(self):
-        return 'OT_{}_({}-{})'.format(self.track_id, self.start_frame, self.end_frame)
 
 
 class BYTETracker(object):
