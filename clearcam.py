@@ -3025,7 +3025,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=60)  # Check every 10 min
+            self.cleanup_stop_event.wait(timeout=600)  # Check every 10 min
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
