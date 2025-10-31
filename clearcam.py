@@ -340,7 +340,7 @@ from datetime import datetime
 import os
 import threading
 
-BASE = Path.home() / "Library" / "Application Support" / "clearcam"
+BASE = Path(__file__).parent / "data"
 CAMERA_BASE_DIR = BASE / "cameras"
 CAMS_FILE = BASE / "cams.pkl"
 NEW_DIR = BASE / "newdir"
@@ -801,7 +801,7 @@ class HLSStreamer:
             "-preset", "veryfast",
             "-g", str(30 * self.segment_time),
             "-f", "hls",
-            "-hls_time", str(self.segment_time),
+            "-hls_time", "1",
             "-hls_list_size", "0",
             "-hls_flags", "delete_segments",
             "-hls_allow_cache", "0",
@@ -3058,7 +3058,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       recordings.sort(key=lambda x: x[1])
       oldest_recording = recordings[0][0]
       shutil.rmtree(oldest_recording)
-      event_images_dir = largest_cam / "event_images" / oldest_recording.name
+      event_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("event_images") / Path(oldest_recording.name) # todo, remove _raw
       if event_images_dir.exists(): shutil.rmtree(event_images_dir)
       print(f"Deleted oldest recording: {oldest_recording}")
 
