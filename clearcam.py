@@ -3051,20 +3051,15 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       recordings = []
       for rec_dir in streams_dir.iterdir():
         if rec_dir.is_dir(): recordings.append((rec_dir, rec_dir.stat().st_ctime))
-              
       if not recordings:
         shutil.rmtree(largest_cam)
         print(f"Deleted camera folder with empty streams: {largest_cam}")
         return
-          
       recordings.sort(key=lambda x: x[1])
       oldest_recording = recordings[0][0]
       shutil.rmtree(oldest_recording)
       event_images_dir = largest_cam / "event_images" / oldest_recording.name
-      event_images_dir_raw = f'{largest_cam}_raw' / "event_images" / oldest_recording.name
-      if event_images_dir.exists():
-          shutil.rmtree(event_images_dir)
-          shutil.rmtree(event_images_dir_raw)
+      if event_images_dir.exists(): shutil.rmtree(event_images_dir)
       print(f"Deleted oldest recording: {oldest_recording}")
 
     def server_close(self):
