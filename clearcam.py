@@ -950,6 +950,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed_path.query)
         cam_name = query.get("cam", [None])[0]
 
+        if parsed_path.path == "/set_max_storage":
+          max_gb = float(query.get("max", [None])[0])
+          self.server.max_gb = max_gb
+          self.send_response(200)
+          self.send_header("Content-Type", "application/json")
+          self.end_headers()
+          return
+        
+        if parsed_path.path == "/get_max_storage":
+          res = {"max_gb":self.server.max_gb}
+          self.send_response(200)
+          self.send_header("Content-Type", "application/json")
+          self.end_headers()
+          self.wfile.write(json.dumps(res).encode("utf-8"))
+          return
+
         if parsed_path.path == "/list_cameras":
             available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
             self.send_response(200)
@@ -1327,6 +1343,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                       <input type="text" name="rtsp" placeholder="RTSP Link" required>
                       <button type="submit">Add Camera</button>
                   </form>
+                  <div class="max-storage-control" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
+                      <label for="maxStorageInput" style="margin-bottom: 4px;">Set Max Storage (GB):</label>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                          <input type="number" id="maxStorageInput" min="1" style="width: 120px;">
+                          <button type="button" id="setMaxStorageBtn">Set</button>
+                      </div>
+                  </div>
                   <div class="shutdown-wrapper">
                       <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
                   </div>
@@ -1371,6 +1394,38 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                           alert("Shutdown failed.");
                       }}
                   }}
+
+                  async function fetchMaxStorage() {{
+                    try {{
+                        const res = await fetch('/get_max_storage');
+                        const data = await res.json();
+                        const input = document.getElementById('maxStorageInput');
+                        if (input && data.max_gb !== undefined) {{
+                            input.value = data.max_gb;
+                        }}
+                    }} catch (e) {{
+                        console.error("Failed to fetch max storage:", e);
+                    }}
+                  }}
+
+                  async function setMaxStorage() {{
+                      const input = document.getElementById('maxStorageInput');
+                      const newVal = parseFloat(input.value);
+                      if (!newVal || isNaN(newVal)) {{
+                          alert("Please enter a valid number");
+                          return;
+                      }}
+                      if (!confirm(`Set max storage to ${{newVal}} GB?`)) return;
+                      await fetch(`/set_max_storage?max=${{newVal}}`);
+                      fetchMaxStorage();
+                  }}
+
+                  document.getElementById('setMaxStorageBtn').addEventListener('click', setMaxStorage);
+
+                  // Refresh storage field every 10 seconds
+                  fetchMaxStorage();
+                  setInterval(fetchMaxStorage, 10000);
+
 
                   document.getElementById("addCameraForm").addEventListener("submit", async (e) => {{
                       e.preventDefault();
@@ -2963,6 +3018,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
+        self.max_gb = 40
         self._setup_cleanup_thread()
 
     def _setup_cleanup_thread(self):
@@ -2981,13 +3037,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=600)  # Check every 10 min
+            self.cleanup_stop_event.wait(timeout=60)  # Check every 10 min
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
       size_gb = total_size / (1000 ** 3)
-      if size_gb > 40:  # 40GB threshold
-          self._cleanup_oldest_files()
+      if size_gb > self.max_gb: self._cleanup_oldest_files()
 
     def _cleanup_oldest_files(self):
       camera_dirs = []
