@@ -940,6 +940,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.show_dets = None
         super().__init__(*args, **kwargs)
 
+    def send_200(self, body=None):
+      self.send_response(200)
+      self.send_header("Content-Type", "application/json")
+      self.end_headers()
+      self.wfile.write(json.dumps(body).encode("utf-8"))
+
     def get_camera_path(self, cam_name=None):
         if cam_name:
             return self.base_dir / cam_name / "streams"
@@ -953,25 +959,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/set_max_storage":
           max_gb = float(query.get("max", [None])[0])
           self.server.max_gb = max_gb
-          self.send_response(200)
-          self.send_header("Content-Type", "application/json")
-          self.end_headers()
+          self.send_200()
           return
         
         if parsed_path.path == "/get_max_storage":
-          res = {"max_gb":self.server.max_gb}
-          self.send_response(200)
-          self.send_header("Content-Type", "application/json")
-          self.end_headers()
-          self.wfile.write(json.dumps(res).encode("utf-8"))
+          self.send_200(body={"max_gb":self.server.max_gb})
           return
 
         if parsed_path.path == "/list_cameras":
             available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(available_cams).encode("utf-8"))
+            self.send_200(available_cams)
             return
 
         if parsed_path.path == '/add_camera':
@@ -1091,10 +1088,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     self.send_error(500, f"Failed to load zone: {e}")
                     return
             
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(zone).encode("utf-8"))
+            self.send_200(zone)
             return
 
         if parsed_path.path == "/get_alerts":
@@ -1122,10 +1116,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     self.send_error(500, f"Failed to load alerts: {e}")
                     return
 
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(alert_info).encode("utf-8"))
+            self.send_200(alert_info)
             return
 
         if parsed_path.path == '/delete_camera':
@@ -1185,10 +1176,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if int(k) < len(class_labels)
             }
 
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(labeled_counts).encode("utf-8"))
+            self.send_200(labeled_counts)
             return
         
         if parsed_path.path == "/shutdown": 
