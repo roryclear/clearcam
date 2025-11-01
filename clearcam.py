@@ -837,6 +837,7 @@ class HLSStreamer:
               "-an",
               str(output_path)
           ]
+          subprocess.run(command, check=True)
         else:
           with open(self.current_stream_dir_raw / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
           command = [
@@ -850,6 +851,7 @@ class HLSStreamer:
             "-an",  # No audio
             str(output_path)
           ]
+          subprocess.run(command, check=True)
           if output_path.stat().st_size >= 10*1024*1024: # max size 10MB, # todo, calculate time from ts files
             result = subprocess.run([ffmpeg_path.replace("ffmpeg", "ffprobe"), "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", str(output_path)], capture_output=True, text=True, check=True)
@@ -871,12 +873,6 @@ class HLSStreamer:
             ]
             subprocess.run(compress_cmd, check=True)
             os.replace(temp_output, output_path)
-
-        try:
-          subprocess.run(command, check=True)
-          print(f"Saved detection clip to: {output_path}")
-        except subprocess.CalledProcessError as e:
-          print(f"Failed to save video: {e}")
 
     def _track_segments(self): # todo shouldn't need a loop here?
       cutoff = time.time() - 20
