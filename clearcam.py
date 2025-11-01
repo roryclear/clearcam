@@ -615,12 +615,6 @@ class VideoCapture:
                 mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                 temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
                 self.streamer.export_clip(Path(mp4_filename))
-                # make sure less than 10MB for upload
-                comp = 3
-                while os.path.getsize(mp4_filename) >= 10*1024*1024:
-                    subprocess.run(["ffmpeg", "-y", "-i", mp4_filename, "-vcodec", "libx264", "-crf", str(comp + 21), "-preset", "medium", "-acodec", "aac", "-b:a", "128k", temp_output], check=True)
-                    os.replace(temp_output, mp4_filename)
-                    comp += 3
 
                 # img preview?
                 subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
@@ -846,21 +840,43 @@ class HLSStreamer:
         else:
           with open(self.current_stream_dir_raw / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
           command = [
+            ffmpeg_path,
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list_path),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",  # needed for android
+            "-an",  # No audio
+            str(output_path)
+          ]
+          if output_path.stat().st_size >= 10*1024*1024: # max size 10MB, # todo, calculate time from ts files
+            result = subprocess.run([ffmpeg_path.replace("ffmpeg", "ffprobe"), "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", str(output_path)], capture_output=True, text=True, check=True)
+            duration = float(result.stdout.strip())
+            target_bitrate = int((10*1024*1024 * 8) / duration)
+            target_bitrate_k = target_bitrate // 1000
+            temp_output = output_path.with_stem(output_path.stem + "_compressed")
+            compress_cmd = [
               ffmpeg_path,
               "-y",
-              "-f", "concat",
-              "-safe", "0",
-              "-i", str(concat_list_path),
+              "-i", str(output_path),
               "-c:v", "libx264",
-              "-pix_fmt", "yuv420p",  # needed for android
-              "-an",  # No audio
-              str(output_path)
-          ]
+              "-b:v", f"{target_bitrate_k}k",
+              "-maxrate", f"{target_bitrate_k}k",
+              "-bufsize", f"{target_bitrate_k * 2}k",
+              "-pix_fmt", "yuv420p",
+              "-an",
+              str(temp_output)
+            ]
+            subprocess.run(compress_cmd, check=True)
+            os.replace(temp_output, output_path)
+
         try:
-            subprocess.run(command, check=True)
-            print(f"Saved detection clip to: {output_path}")
+          subprocess.run(command, check=True)
+          print(f"Saved detection clip to: {output_path}")
         except subprocess.CalledProcessError as e:
-            print(f"Failed to save video: {e}")
+          print(f"Failed to save video: {e}")
 
     def _track_segments(self): # todo shouldn't need a loop here?
       cutoff = time.time() - 20
