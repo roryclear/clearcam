@@ -603,9 +603,9 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.png"
+                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
-                        write_png(str(filename), self.annotated_frame)
+                        cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                         text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                         if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                         last_det = time.time()
@@ -847,32 +847,37 @@ class HLSStreamer:
             "-safe", "0",
             "-i", str(concat_list_path),
             "-c:v", "libx264",
+            "-crf", "18",
             "-pix_fmt", "yuv420p",  # needed for android
             "-an",  # No audio
             str(output_path)
           ]
           subprocess.run(command, check=True)
-          if output_path.stat().st_size >= 10*1024*1024: # max size 10MB, # todo, calculate time from ts files
-            result = subprocess.run([ffmpeg_path.replace("ffmpeg", "ffprobe"), "-v", "error", "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", str(output_path)], capture_output=True, text=True, check=True)
-            duration = float(result.stdout.strip())
-            target_bitrate = int((10*1024*1024 * 8) / duration)
-            target_bitrate_k = target_bitrate // 1000
+          comp = 5
+          file_size = 10*1024*1024
+          with open(output_path, "rb") as f:
+            file_data = f.read()
+            file_size = len(file_data)
+          while file_size >= 9*1024*1024: # max size 10MB, # todo, calculate time from ts files
             temp_output = output_path.with_stem(output_path.stem + "_compressed")
-            compress_cmd = [
+            command = [
               ffmpeg_path,
               "-y",
-              "-i", str(output_path),
+              "-f", "concat",
+              "-safe", "0",
+              "-i", str(concat_list_path),
               "-c:v", "libx264",
-              "-b:v", f"{target_bitrate_k}k",
-              "-maxrate", f"{target_bitrate_k}k",
-              "-bufsize", f"{target_bitrate_k * 2}k",
-              "-pix_fmt", "yuv420p",
-              "-an",
+              "-crf", str(18 + comp),
+              "-pix_fmt", "yuv420p",  # needed for android
+              "-an",  # No audio
               str(temp_output)
             ]
-            subprocess.run(compress_cmd, check=True)
+            subprocess.run(command, check=True)
             os.replace(temp_output, output_path)
+            with open(output_path, "rb") as f:
+              file_data = f.read()
+            file_size = len(file_data)
+            comp += 5
 
     def _track_segments(self): # todo shouldn't need a loop here?
       cutoff = time.time() - 20
