@@ -615,6 +615,13 @@ class VideoCapture:
                 mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                 temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
                 self.streamer.export_clip(Path(mp4_filename))
+                # make sure less than 10MB for upload
+                comp = 3
+                while os.path.getsize(mp4_filename) >= 10*1024*1024:
+                    subprocess.run(["ffmpeg", "-y", "-i", mp4_filename, "-vcodec", "libx264", "-crf", str(comp + 21), "-preset", "medium", "-acodec", "aac", "-b:a", "128k", temp_output], check=True)
+                    os.replace(temp_output, mp4_filename)
+                    comp += 3
+
                 # img preview?
                 subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
                 os.replace(temp_output, mp4_filename)
