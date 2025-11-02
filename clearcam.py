@@ -704,11 +704,7 @@ class VideoCapture:
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             if hasattr(self, "settings") and self.settings is not None and self.settings.get("is_on"):
-              # todo, renmae dims to zone dims or something
-              outside = point_not_in_polygon(x.tlwh[0], x.tlwh[1], self.settings["coords"])
-              if outside: outside = point_not_in_polygon((x.tlwh[0]+x.tlwh[2]), x.tlwh[1], self.settings["coords"])
-              if outside: outside = point_not_in_polygon((x.tlwh[0]), (x.tlwh[1]+x.tlwh[3]), self.settings["coords"])
-              if outside: outside = point_not_in_polygon((x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3]), self.settings["coords"])
+              outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
               if outside ^ self.settings["outside"]: continue
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
@@ -959,22 +955,25 @@ def append_to_pickle_list(pkl_path, item): # todo, still needed?
         pickle.dump(data, f)
 
 
-def point_not_in_polygon(x, y, poly):
+def point_not_in_polygon(coords, poly):
     n = len(poly)
-    inside = False
-    p1x, p1y = poly[0]
-    for i in range(1, n + 1):
+    for j in range(len(coords)):
+      inside = False
+      p1x, p1y = poly[0]
+      for i in range(1, n + 1):
         p2x, p2y = poly[i % n]
-        if y > min(p1y, p2y):
-            if y <= max(p1y, p2y):
-                if x <= max(p1x, p2x):
-                    if p1y != p2y:
-                        x_intersect = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                    if p1x == p2x or x <= x_intersect:
-                        inside = not inside       
+        if coords[j][1] > min(p1y, p2y):
+          if coords[j][1] <= max(p1y, p2y):
+            if coords[j][0] <= max(p1x, p2x):
+              if p1y != p2y:
+                x_intersect = (coords[j][1] - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+              else:
+                x_intersect = p1x
+              if p1x == p2x or coords[j][0] <= x_intersect: inside = not inside
         p1x, p1y = p2x, p2y
-    return not inside
-
+      if inside:
+        return False
+    return True
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
