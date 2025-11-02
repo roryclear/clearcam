@@ -2133,15 +2133,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     fetch(`/get_settings?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
                         .then(data => {{
-                            if (data && data.dims) {{
-                                const [tl_x, tl_y, w, h] = data.dims;
+                            if (data && data.coords) {{
                                 const previewEl = document.getElementById("zonePreview");
                                 const videoWidth = 1280;
                                 const videoHeight = 720;
-                                const left = (tl_x / videoWidth) * previewEl.clientWidth;
-                                const top = (tl_y / videoHeight) * previewEl.clientHeight;
-                                const width = (w / videoWidth) * previewEl.clientWidth;
-                                const height = (h / videoHeight) * previewEl.clientHeight;
+                                const xCoords = data.coords.map(coord => coord[0]);
+                                const yCoords = data.coords.map(coord => coord[1]);
+                                const minX = Math.min(...xCoords);
+                                const maxX = Math.max(...xCoords);
+                                const minY = Math.min(...yCoords);
+                                const maxY = Math.max(...yCoords);
+
+                                const left = (minX / videoWidth) * previewEl.clientWidth;
+                                const top = (minY / videoHeight) * previewEl.clientHeight;
+
+                                const width = ((maxX - minX) / videoWidth) * previewEl.clientWidth;
+                                const height = ((maxY - minY) / videoHeight) * previewEl.clientHeight;
                                 zoneRect.style.left = left + "px";
                                 zoneRect.style.top = top + "px";
                                 zoneRect.style.width = width + "px";
