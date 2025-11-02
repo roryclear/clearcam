@@ -705,10 +705,10 @@ class VideoCapture:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
             if hasattr(self, "settings") and self.settings is not None and self.settings.get("is_on"):
               # todo, renmae dims to zone dims or something
-              outside = ((x.tlwh[0]+x.tlwh[2])<self.settings["dims"][0] or\
-              x.tlwh[0]>=(self.settings["dims"][0]+self.settings["dims"][2]) or\
-              (x.tlwh[1]+x.tlwh[3])<self.settings["dims"][1] or\
-              x.tlwh[1]>(self.settings["dims"][1]+self.settings["dims"][3]))
+              outside = point_not_in_polygon(x.tlwh[0], x.tlwh[1], self.settings["coords"])
+              if outside: outside = point_not_in_polygon((x.tlwh[0]+x.tlwh[2]), x.tlwh[1], self.settings["coords"])
+              if outside: outside = point_not_in_polygon((x.tlwh[0]), (x.tlwh[1]+x.tlwh[3]), self.settings["coords"])
+              if outside: outside = point_not_in_polygon((x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3]), self.settings["coords"])
               if outside ^ self.settings["outside"]: continue
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
@@ -958,6 +958,23 @@ def append_to_pickle_list(pkl_path, item): # todo, still needed?
     with open(pkl_path, 'wb') as f:
         pickle.dump(data, f)
 
+
+def point_not_in_polygon(x, y, poly):
+    n = len(poly)
+    inside = False
+    p1x, p1y = poly[0]
+    for i in range(1, n + 1):
+        p2x, p2y = poly[i % n]
+        if y > min(p1y, p2y):
+            if y <= max(p1y, p2y):
+                if x <= max(p1x, p2x):
+                    if p1y != p2y:
+                        x_intersect = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                    if p1x == p2x or x <= x_intersect:
+                        inside = not inside       
+        p1x, p1y = p2x, p2y
+    return not inside
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
@@ -1036,11 +1053,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             threshold = query.get("threshold", ["0.5"])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
-            tl_x = query.get("tl_x", [None])[0]
-            tl_y = query.get("tl_y", [None])[0]
+
+            coords_json = query.get("coords", [None])[0]
+            if coords_json is not None:
+              coords = json.loads(coords_json)
+              if isinstance(coords, list) and len(coords) >= 3: zone["coords"] = [[float(x), float(y)] for x, y in coords]
+
             w = query.get("w", [None])[0]
             h = query.get("h", [None])[0]
-            if tl_x is not None: zone["dims"] = [float(tl_x),float(tl_y),float(w),float(h)]
             if is_on is not None: zone["is_on"] = is_on
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
@@ -2181,8 +2201,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                     const tl_x = ((rect.left - preview.left) / preview.width) * videoWidth;
                     const tl_y = ((rect.top - preview.top) / preview.height) * videoHeight;
-                    const w = (rect.width / preview.width) * videoWidth;
-                    const h = (rect.height / preview.height) * videoHeight;
+                    const tr_x = ((rect.right - preview.left) / preview.width) * videoWidth;
+                    const tr_y = tl_y;
+                    const br_x = tr_x;
+                    const br_y = ((rect.bottom - preview.top) / preview.height) * videoHeight;
+                    const bl_x = tl_x;
+                    const bl_y = br_y;
+
+                    const coords = [[tl_x, tl_y], [tr_x, tr_y], [br_x, br_y], [bl_x, bl_y]];
 
                     const is_on = document.getElementById("zoneEnabledCheckbox").checked;
                     const outside = document.getElementById("outsideZoneCheckbox").checked;
@@ -2191,10 +2217,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     const threshold = thresholdPercent / 100;
                     const params = new URLSearchParams({{
                         cam: cameraName,
-                        tl_x: tl_x.toFixed(2),
-                        tl_y: tl_y.toFixed(2),
-                        w: w.toFixed(2),
-                        h: h.toFixed(2),
+                        coords: JSON.stringify(coords),
                         is_on: is_on,
                         threshold: threshold.toFixed(2),
                         outside: outside
