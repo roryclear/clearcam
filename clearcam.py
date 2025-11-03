@@ -1891,9 +1891,8 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
             conn = http.client.HTTPConnection(url_parts.netloc)
         
         with file_path.open('rb') as f:
-            file_data = f.read()
             headers = {'Content-Type': 'application/octet-stream'}
-            conn.request("PUT", url_parts.path + "?" + url_parts.query, body=file_data, headers=headers)
+            conn.request("PUT", url_parts.path + "?" + url_parts.query, body=f, headers=headers)
             response = conn.getresponse()
             if 200 <= response.status < 300:
                 return True
