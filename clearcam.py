@@ -2149,57 +2149,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 zoneModal.style.display = "none";
             }}
 
-            function saveZone() {{
-                const previewEl = document.getElementById("zonePreview");
-                const points = Array.from(document.querySelectorAll('.polygon-point'));
-                
-                if (points.length < 3) {{
-                    alert("Please create a polygon with at least 3 points");
-                    return;
-                }}
-
-                const videoWidth = 1280;
-                const videoHeight = 720;
-                const previewRect = previewEl.getBoundingClientRect();
-
-                const coords = points.map(point => {{
-                    const pointRect = point.getBoundingClientRect();
-                    const centerX = pointRect.left + pointRect.width / 2;
-                    const centerY = pointRect.top + pointRect.height / 2;
-                    
-                    const x = ((centerX - previewRect.left) / previewRect.width) * videoWidth;
-                    const y = ((centerY - previewRect.top) / previewRect.height) * videoHeight;
-                    
-                    return [x, y];
-                }});
-
-                const is_on = document.getElementById("zoneEnabledCheckbox").checked;
-                const outside = document.getElementById("outsideZoneCheckbox").checked;
-
-                const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
-                const threshold = thresholdPercent / 100;
-                const params = new URLSearchParams({{
-                    cam: cameraName,
-                    coords: JSON.stringify(coords),
-                    is_on: is_on,
-                    threshold: threshold.toFixed(2),
-                    outside: outside
-                }});
-
-                fetch(`/edit_settings?${{params.toString()}}`)
-                    .then(res => {{
-                        if (!res.ok) throw new Error("Failed to save zone");
-                        console.log("Zone saved successfully");
-                        closeZoneModal();
-                    }})
-                    .catch(err => {{
-                        console.error("Save zone failed:", err);
-                        alert("Failed to save zone.");
-                    }});
-                }}
-
                 // Global variables for polygon editing
-                                // Global variables for polygon editing
+                // Global variables for polygon editing
                 let polygonSvg = null;
                 let polygonPath = null;
                 let firstPoint = null;
