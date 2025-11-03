@@ -720,7 +720,6 @@ function closeZoneModal() {
         polygonPath.setAttribute('stroke', '#00ff00');
         const previewEl = document.getElementById("zonePreview");
         previewEl.removeEventListener('click', handlePreviewClick);
-        enablePointDragging();
         isPolygonComplete = true;
         updatePolygonLine();
     }
@@ -765,14 +764,6 @@ function closeZoneModal() {
         return point;
     }
 
-    function enablePointDragging() {
-        const points = Array.from(document.querySelectorAll('.polygon-point'));
-        points.forEach(point => {
-            makePointDraggable(point);
-            point.style.cursor = 'move';
-        });
-    }
-
     function removePoint(point) {
         // If removing the first point, update the firstPoint reference
         if (point === firstPoint) {
@@ -799,14 +790,6 @@ function closeZoneModal() {
                 polygonPath.setAttribute('fill', 'none');
                 polygonPath.setAttribute('stroke', '#ff0000');
             }
-            
-            // Disable dragging on remaining points
-            const remainingPoints = Array.from(document.querySelectorAll('.polygon-point'));
-            remainingPoints.forEach(p => {
-                p.style.cursor = 'crosshair';
-                // Remove existing drag listeners
-                p.replaceWith(p.cloneNode(true));
-            });
         }
         
         // Reset instruction text
@@ -814,62 +797,6 @@ function closeZoneModal() {
         if (instruction) {
             instruction.innerHTML = 'Click on the image to make a detection zone.';
         }
-    }
-
-    function makePointDraggable(point) {
-        let isDragging = false;
-        let startX, startY, startLeft, startTop;
-        
-        function dragPoint(e) {
-            if (!isDragging) return;
-            
-            const previewEl = document.getElementById("zonePreview");
-            const previewRect = previewEl.getBoundingClientRect();
-            
-            const deltaX = e.clientX - startX;
-            const deltaY = e.clientY - startY;
-            
-            let newLeft = startLeft + deltaX;
-            let newTop = startTop + deltaY;
-            
-            // Constrain to preview area
-            newLeft = Math.max(0, Math.min(newLeft, previewRect.width - 12));
-            newTop = Math.max(0, Math.min(newTop, previewRect.height - 12));
-            
-            point.style.left = newLeft + 'px';
-            point.style.top = newTop + 'px';
-            
-            // Force synchronous layout update before updating polygon line
-            point.offsetHeight; // This triggers a reflow
-            
-            updatePolygonLine();
-        }
-        
-        function stopDragPoint() {
-            isDragging = false;
-            document.removeEventListener('mousemove', dragPoint);
-            document.removeEventListener('mouseup', stopDragPoint);
-            document.removeEventListener('mouseleave', stopDragPoint);
-        }
-        
-        point.addEventListener('mousedown', (e) => {
-            // Only allow dragging if polygon is complete
-            if (!isPolygonComplete) return;
-            
-            e.preventDefault();
-            e.stopPropagation();
-            isDragging = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            
-            const style = window.getComputedStyle(point);
-            startLeft = parseInt(style.left);
-            startTop = parseInt(style.top);
-            
-            document.addEventListener('mousemove', dragPoint);
-            document.addEventListener('mouseup', stopDragPoint);
-            document.addEventListener('mouseleave', stopDragPoint);
-        });
     }
 
     function updatePolygonLine() {
@@ -966,14 +893,10 @@ function closeZoneModal() {
         }
     }
 
-    // Add some CSS styles for the polygon editor
     const polygonStyles = `
         .polygon-point:hover {
-            transform: scale(1.2);
+            transform: scale(1.2);  // Keep this if you want, but remove if it suggests draggability
             box-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-        .polygon-line path {
-            transition: all 0.2s ease;
         }
     `;
 
