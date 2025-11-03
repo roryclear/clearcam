@@ -761,12 +761,6 @@ function closeZoneModal() {
             });
         }
         
-        // Add delete on right-click (always available)
-        point.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            removePoint(point);
-        });
-        
         overlay.appendChild(point);
         return point;
     }
@@ -818,7 +812,7 @@ function closeZoneModal() {
         // Reset instruction text
         const instruction = document.querySelector('#zoneModal .modal-content div:nth-child(3)');
         if (instruction) {
-            instruction.innerHTML = 'Click on the image to add points. Right-click to remove points. Click on the first point (blue) to complete the polygon.';
+            instruction.innerHTML = 'Click on the image to make a detection zone.';
         }
     }
 
@@ -968,7 +962,7 @@ function closeZoneModal() {
         // Reset instruction text
         const instruction = document.querySelector('#zoneModal .modal-content div:nth-child(3)');
         if (instruction) {
-            instruction.innerHTML = 'Click on the image to add points. Right-click to remove points. Click on the first point (blue) to complete the polygon.';
+            instruction.innerHTML = 'Click on the image to add points.';
         }
     }
 
