@@ -974,6 +974,7 @@ def point_not_in_polygon(coords, poly):
       if inside:
         return False
     return True
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
@@ -1564,7 +1565,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             event_image_path = event_image_dir / selected_dir
             event_images = sorted(
-                event_image_path.glob("*.png"),
+                event_image_path.glob("*.jpg"),
                 key=lambda p: int(p.stem),
                 reverse=True
             ) if event_image_path.exists() else []
@@ -1600,7 +1601,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             show_detections_checked = "checked" if show_detections else ""
 
             event_image_path = event_image_dir / selected_dir
-            event_images = sorted(event_image_path.glob("*.png")) if event_image_path.exists() else []
+            event_images = sorted(event_image_path.glob("*.jpg")) if event_image_path.exists() else []
             image_links = ""
             for img in event_images:
                 ts = int(img.stem)
