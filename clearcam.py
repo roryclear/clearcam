@@ -1056,7 +1056,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
-              if isinstance(coords, list) and len(coords) >= 3: zone["coords"] = [[float(x), float(y)] for x, y in coords]
+              for _ in range(100): print(coords)
+              if isinstance(coords, list) and len(coords) >= 3:
+                 zone["coords"] = [[float(x), float(y)] for x, y in coords]
+                 for _ in range(100): print("FUCK",zone["coords"])
 
             w = query.get("w", [None])[0]
             h = query.get("h", [None])[0]
@@ -1625,6 +1628,19 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
                 <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
                 <style>
+                    .polygon-point {{
+                        transition: all 0.2s ease;
+                    }}
+
+                    .polygon-point:hover {{
+                        transform: scale(1.2);
+                        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+                    }}
+
+                    .polygon-line path {{
+                        transition: all 0.2s ease;
+                    }}
+
                     body {{
                         font-family: 'Inter', sans-serif;
                         margin: 0;
@@ -2003,38 +2019,39 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
 
                     <div id="zoneModal" class="modal">
-                        <div class="modal-content" style="max-width: 600px;">
-                            <div class="modal-header">
-                                <h3>Edit Zone</h3>
-                                <span class="close" onclick="closeZoneModal()">&times;</span>
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <h3>Edit Zone</h3>
+                            <span class="close" onclick="closeZoneModal()">&times;</span>
+                        </div>
+                        <div style="position: relative; display: inline-block; max-width: 100%;">
+                            <img id="zonePreview" src="/{cam_name}/preview.png"
+                                style="width: 100%; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; user-select: none; -webkit-user-drag: none; cursor: crosshair;">
+                            <div id="polygonOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+                        </div>
+                        <div style="margin: 10px 0; text-align: center; color: #666; font-size: 0.9rem;">
+                            Click on the image to add points. Right-click to remove points. Click on the first point (blue) to complete the polygon.
+                        </div>
+                        <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <label style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" id="zoneEnabledCheckbox" checked> Enable Zone
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px;">
+                                    Detection Threshold:
+                                    <input type="number" id="zoneThreshold" value="50" min="0" max="100" step="1" style="width: 60px;"> %
+                                </label>
                             </div>
-                            <div style="position: relative; display: inline-block; max-width: 100%;">
-                                <img id="zonePreview" src="/{cam_name}/preview.png"
-                                    style="width: 100%; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; user-select: none; -webkit-user-drag: none; pointer-events: none;">
-                                <div id="zoneRect" 
-                                    style="position: absolute; border: 2px dashed red; top: 20px; left: 20px; width: 150px; height: 100px; cursor: move; user-select: none;">
-                                    <div class="resize-handle" style="position: absolute; width: 16px; height: 16px; background: red; cursor: nwse-resize; bottom: -8px; right: -8px; z-index: 10; border-radius: 50%;"></div>
-                                </div>
-                            </div>
-                            <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <div style="display: flex; flex-direction: column; gap: 10px;">
-                                    <label style="display: flex; align-items: center; gap: 6px;">
-                                        <input type="checkbox" id="zoneEnabledCheckbox" checked> Enable Zone
-                                    </label>
-                                    <label style="display: flex; align-items: center; gap: 6px;">
-                                        <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
-                                    </label>
-                                    <label style="display: flex; align-items: center; gap: 6px;">
-                                        Detection Threshold:
-                                        <input type="number" id="zoneThreshold" value="50" min="0" max="100" step="1" style="width: 60px;"> %
-                                    </label>
-                                </div>
-                                <div style="display: flex; gap: 10px;">
-                                    <button type="button" onclick="closeZoneModal()">Cancel</button>
-                                    <button type="button" onclick="saveZone()">Save</button>
-                                </div>
+                            <div style="display: flex; gap: 10px;">
+                                <button type="button" onclick="clearPolygon()">Clear</button>
+                                <button type="button" onclick="closeZoneModal()">Cancel</button>
+                                <button type="button" onclick="saveZone()">Save</button>
                             </div>
                         </div>
+                    </div>
                     </div>
 
 
@@ -2128,31 +2145,83 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 let startWidth, startHeight;
                 let startLeft, startTop;
 
+            function closeZoneModal() {{
+                zoneModal.style.display = "none";
+            }}
+
+            function saveZone() {{
+                const previewEl = document.getElementById("zonePreview");
+                const points = Array.from(document.querySelectorAll('.polygon-point'));
+                
+                if (points.length < 3) {{
+                    alert("Please create a polygon with at least 3 points");
+                    return;
+                }}
+
+                const videoWidth = 1280;
+                const videoHeight = 720;
+                const previewRect = previewEl.getBoundingClientRect();
+
+                const coords = points.map(point => {{
+                    const pointRect = point.getBoundingClientRect();
+                    const centerX = pointRect.left + pointRect.width / 2;
+                    const centerY = pointRect.top + pointRect.height / 2;
+                    
+                    const x = ((centerX - previewRect.left) / previewRect.width) * videoWidth;
+                    const y = ((centerY - previewRect.top) / previewRect.height) * videoHeight;
+                    
+                    return [x, y];
+                }});
+
+                const is_on = document.getElementById("zoneEnabledCheckbox").checked;
+                const outside = document.getElementById("outsideZoneCheckbox").checked;
+
+                const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
+                const threshold = thresholdPercent / 100;
+                const params = new URLSearchParams({{
+                    cam: cameraName,
+                    coords: JSON.stringify(coords),
+                    is_on: is_on,
+                    threshold: threshold.toFixed(2),
+                    outside: outside
+                }});
+
+                fetch(`/edit_settings?${{params.toString()}}`)
+                    .then(res => {{
+                        if (!res.ok) throw new Error("Failed to save zone");
+                        console.log("Zone saved successfully");
+                        closeZoneModal();
+                    }})
+                    .catch(err => {{
+                        console.error("Save zone failed:", err);
+                        alert("Failed to save zone.");
+                    }});
+                }}
+
+                // Global variables for polygon editing
+                                // Global variables for polygon editing
+                let polygonSvg = null;
+                let polygonPath = null;
+                let firstPoint = null;
+                let isPolygonComplete = false;
+
                 function openSettingsEditor() {{
                     zoneModal.style.display = "flex";
+                    
+                    // Initialize the zone editor first
+                    initZoneEditor();
+                    
+                    // Then load the settings
                     fetch(`/get_settings?cam=${{encodeURIComponent(cameraName)}}`)
                         .then(res => res.json())
                         .then(data => {{
+                            console.log("Received settings data:", data);
+                            const previewEl = document.getElementById("zonePreview");
+                            
                             if (data && data.coords) {{
-                                const previewEl = document.getElementById("zonePreview");
-                                const videoWidth = 1280;
-                                const videoHeight = 720;
-                                const xCoords = data.coords.map(coord => coord[0]);
-                                const yCoords = data.coords.map(coord => coord[1]);
-                                const minX = Math.min(...xCoords);
-                                const maxX = Math.max(...xCoords);
-                                const minY = Math.min(...yCoords);
-                                const maxY = Math.max(...yCoords);
-
-                                const left = (minX / videoWidth) * previewEl.clientWidth;
-                                const top = (minY / videoHeight) * previewEl.clientHeight;
-
-                                const width = ((maxX - minX) / videoWidth) * previewEl.clientWidth;
-                                const height = ((maxY - minY) / videoHeight) * previewEl.clientHeight;
-                                zoneRect.style.left = left + "px";
-                                zoneRect.style.top = top + "px";
-                                zoneRect.style.width = width + "px";
-                                zoneRect.style.height = height + "px";
+                                console.log("Loading coords:", data.coords);
+                                // Load existing polygon coordinates
+                                loadPolygon(data.coords, previewEl);
                             }}
 
                             const zoneEnabledCheckbox = document.getElementById("zoneEnabledCheckbox");
@@ -2163,6 +2232,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }} else {{
                                 zoneEnabledCheckbox.checked = false;
                             }}
+                            
                             const outsideZoneCheckbox = document.getElementById("outsideZoneCheckbox");
                             if (data.outside !== undefined) {{
                                 outsideZoneCheckbox.checked = data.outside;
@@ -2171,6 +2241,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             }} else {{
                                 outsideZoneCheckbox.checked = false;
                             }}
+                            
                             const thresholdInput = document.getElementById("zoneThreshold");
                             let rawThreshold = undefined;
                             if (data.threshold !== undefined) {{
@@ -2189,8 +2260,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         .catch(err => {{
                             console.error("Failed to load zone:", err);
                         }});
-
-                    setTimeout(initZoneEditor, 100);
                 }}
 
                 function closeZoneModal() {{
@@ -2199,22 +2268,27 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
                 function saveZone() {{
                     const previewEl = document.getElementById("zonePreview");
-                    const rect = zoneRect.getBoundingClientRect();
-                    const preview = previewEl.getBoundingClientRect();
+                    const points = Array.from(document.querySelectorAll('.polygon-point'));
+                    
+                    if (points.length < 3) {{
+                        alert("Please create a polygon with at least 3 points");
+                        return;
+                    }}
 
                     const videoWidth = 1280;
                     const videoHeight = 720;
+                    const previewRect = previewEl.getBoundingClientRect();
 
-                    const tl_x = ((rect.left - preview.left) / preview.width) * videoWidth;
-                    const tl_y = ((rect.top - preview.top) / preview.height) * videoHeight;
-                    const tr_x = ((rect.right - preview.left) / preview.width) * videoWidth;
-                    const tr_y = tl_y;
-                    const br_x = tr_x;
-                    const br_y = ((rect.bottom - preview.top) / preview.height) * videoHeight;
-                    const bl_x = tl_x;
-                    const bl_y = br_y;
-
-                    const coords = [[tl_x, tl_y], [tr_x, tr_y], [br_x, br_y], [bl_x, bl_y]];
+                    const coords = points.map(point => {{
+                        const pointRect = point.getBoundingClientRect();
+                        const centerX = pointRect.left + pointRect.width / 2;
+                        const centerY = pointRect.top + pointRect.height / 2;
+                        
+                        const x = ((centerX - previewRect.left) / previewRect.width) * videoWidth;
+                        const y = ((centerY - previewRect.top) / previewRect.height) * videoHeight;
+                        
+                        return [x, y];
+                    }});
 
                     const is_on = document.getElementById("zoneEnabledCheckbox").checked;
                     const outside = document.getElementById("outsideZoneCheckbox").checked;
@@ -2241,108 +2315,347 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         }});
                 }}
 
-
                 function initZoneEditor() {{
-                    const handle = zoneRect.querySelector('.resize-handle');
+                    const previewEl = document.getElementById("zonePreview");
                     
-                    // Add event listener to the handle
-                    handle.addEventListener('mousedown', function(e) {{
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Resize mode
-                        isResizing = true;
-                        resizeHandle = e.target;
-                        startX = e.clientX;
-                        startY = e.clientY;
-                        startWidth = parseInt(document.defaultView.getComputedStyle(zoneRect).width, 10);
-                        startHeight = parseInt(document.defaultView.getComputedStyle(zoneRect).height, 10);
-                        startLeft = parseInt(document.defaultView.getComputedStyle(zoneRect).left, 10);
-                        startTop = parseInt(document.defaultView.getComputedStyle(zoneRect).top, 10);
-                    }});
+                    // Clear any existing polygon
+                    clearPolygon();
                     
-                    // Mouse down event for dragging
-                    zoneRect.addEventListener('mousedown', function(e) {{
-                        if (!e.target.classList.contains('resize-handle')) {{
-                            e.preventDefault();
+                    // Initialize SVG overlay
+                    initPolygonOverlay();
+                    
+                    // Add click event listener for adding points
+                    previewEl.addEventListener('click', handlePreviewClick);
+                }}
+
+                function initPolygonOverlay() {{
+                    const overlay = document.getElementById("polygonOverlay");
+                    overlay.innerHTML = '';
+                    
+                    // Create SVG element
+                    polygonSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    polygonSvg.style.width = '100%';
+                    polygonSvg.style.height = '100%';
+                    polygonSvg.style.position = 'absolute';
+                    polygonSvg.style.top = '0';
+                    polygonSvg.style.left = '0';
+                    polygonSvg.style.pointerEvents = 'none';
+                    
+                    polygonPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    polygonPath.setAttribute('fill', 'none');
+                    polygonPath.setAttribute('stroke', '#ff0000');
+                    polygonPath.setAttribute('stroke-width', '2');
+                    polygonPath.setAttribute('stroke-linejoin', 'round');
+                    
+                    polygonSvg.appendChild(polygonPath);
+                    overlay.appendChild(polygonSvg);
+                }}
+
+                function handlePreviewClick(e) {{
+                    const previewEl = document.getElementById("zonePreview");
+                    const rect = previewEl.getBoundingClientRect();
+                    
+                    // Calculate position relative to preview element
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    // Check if we're clicking on the first point (to close polygon)
+                    if (firstPoint && isClickOnPoint(firstPoint, x, y)) {{
+                        // Complete the polygon
+                        completePolygon();
+                        return;
+                    }}
+                    
+                    // Create a new point
+                    createPoint(x, y);
+                    
+                    // Update the polygon visualization
+                    updatePolygonLine();
+                }}
+
+                function isClickOnPoint(point, clickX, clickY) {{
+                    const pointRect = point.getBoundingClientRect();
+                    const previewRect = document.getElementById("zonePreview").getBoundingClientRect();
+                    const pointX = parseInt(point.style.left) + 6; // Center of point
+                    const pointY = parseInt(point.style.top) + 6;
+                    
+                    // Check if click is within the point's area
+                    const distance = Math.sqrt(Math.pow(clickX - pointX, 2) + Math.pow(clickY - pointY, 2));
+                    return distance <= 10; // Increased tolerance for easier clicking
+                }}
+
+                function completePolygon() {{
+                    console.log("Completing polygon"); // Debug log
+                    polygonPath.setAttribute('fill', 'rgba(0, 255, 0, 0.3)');
+                    polygonPath.setAttribute('stroke', '#00ff00');
+                    const previewEl = document.getElementById("zonePreview");
+                    previewEl.removeEventListener('click', handlePreviewClick);
+                    enablePointDragging();
+                    isPolygonComplete = true;
+                    updatePolygonLine();
+                }}
+
+                function createPoint(x, y) {{
+                    const overlay = document.getElementById("polygonOverlay");
+                    const point = document.createElement('div');
+                    point.className = 'polygon-point';
+                    point.style.position = 'absolute';
+                    point.style.left = (x - 6) + 'px';
+                    point.style.top = (y - 6) + 'px';
+                    point.style.width = '12px';
+                    point.style.height = '12px';
+                    point.style.backgroundColor = '#ff0000';
+                    point.style.borderRadius = '50%';
+                    point.style.cursor = 'crosshair';
+                    point.style.zIndex = '20';
+                    point.style.border = '2px solid #ffffff';
+                    point.style.boxShadow = '0 0 3px rgba(0,0,0,0.5)';
+                    point.style.pointerEvents = 'auto';
+                    
+                    // Store first point reference
+                    if (!firstPoint) {{
+                        firstPoint = point;
+                        // Make first point visually distinct
+                        point.style.backgroundColor = '#0000ff';
+                        point.style.border = '2px solid #ffffff';
+                        point.style.cursor = 'pointer'; // Make first point more clickable
+                    }}
+                    
+                    // Add click listener to first point for completion
+                    if (firstPoint === point) {{
+                        point.addEventListener('click', function(e) {{
                             e.stopPropagation();
-                            // Drag mode
-                            isDragging = true;
-                            startX = e.clientX - parseInt(document.defaultView.getComputedStyle(zoneRect).left, 10);
-                            startY = e.clientY - parseInt(document.defaultView.getComputedStyle(zoneRect).top, 10);
-                        }}
+                            if (!isPolygonComplete) {{
+                                completePolygon();
+                            }}
+                        }});
+                    }}
+                    
+                    // Add delete on right-click (always available)
+                    point.addEventListener('contextmenu', (e) => {{
+                        e.preventDefault();
+                        removePoint(point);
                     }});
+                    
+                    overlay.appendChild(point);
+                    return point;
+                }}
 
-                    // Mouse move event
-                    document.addEventListener('mousemove', function(e) {{
-                        if (!isDragging && !isResizing) return;
-                        
-                        const preview = document.getElementById("zonePreview").getBoundingClientRect();
-                        
-                        if (isDragging) {{
-                            const previewEl = document.getElementById("zonePreview");
-                            const parentRect = previewEl.getBoundingClientRect();
-
-                            let newLeft = e.clientX - startX - parentRect.left;
-                            let newTop = e.clientY - startY - parentRect.top;
-
-                            newLeft = Math.max(0, Math.min(newLeft, previewEl.clientWidth - zoneRect.offsetWidth));
-                            newTop = Math.max(0, Math.min(newTop, previewEl.clientHeight - zoneRect.offsetHeight));
-
-                            zoneRect.style.left = newLeft + 'px';
-                            zoneRect.style.top = newTop + 'px';
-                        }} 
-                        else if (isResizing) {{
-                            const previewEl = document.getElementById("zonePreview");
-                            let newWidth = startWidth + (e.clientX - startX);
-                            let newHeight = startHeight + (e.clientY - startY);
-
-                            newWidth = Math.max(20, newWidth);
-                            newHeight = Math.max(20, newHeight);
-
-                            newWidth = Math.min(newWidth, previewEl.clientWidth - parseInt(zoneRect.style.left));
-                            newHeight = Math.min(newHeight, previewEl.clientHeight - parseInt(zoneRect.style.top));
-
-                            zoneRect.style.width = newWidth + 'px';
-                            zoneRect.style.height = newHeight + 'px';
-                        }}
-                    }});
-
-                    // Mouse up event
-                    document.addEventListener('mouseup', function() {{
-                        isDragging = false;
-                        isResizing = false;
-                        resizeHandle = null;
+                function enablePointDragging() {{
+                    const points = Array.from(document.querySelectorAll('.polygon-point'));
+                    points.forEach(point => {{
+                        makePointDraggable(point);
+                        point.style.cursor = 'move';
                     }});
                 }}
-                zoneModal.addEventListener('shown', initZoneEditor);
 
-                // Allow dragging of the rectangle
-                (function makeDraggable(el) {{
-                    let offsetX, offsetY, isDragging = false;
-
-                    el.addEventListener("mousedown", (e) => {{
-                        if (e.target === el) {{
-                            isDragging = true;
-                            offsetX = e.offsetX;
-                            offsetY = e.offsetY;
-                            document.addEventListener("mousemove", move);
-                            document.addEventListener("mouseup", stop);
+                function removePoint(point) {{
+                    // If removing the first point, update the firstPoint reference
+                    if (point === firstPoint) {{
+                        const points = Array.from(document.querySelectorAll('.polygon-point'));
+                        if (points.length > 1) {{
+                            firstPoint = points[1]; // Second point becomes first
+                            firstPoint.style.backgroundColor = '#0000ff';
+                        }} else {{
+                            firstPoint = null;
                         }}
-                    }});
+                    }}
+                    
+                    point.remove();
+                    updatePolygonLine();
+                    
+                    // If polygon was complete, re-enable editing
+                    if (isPolygonComplete) {{
+                        isPolygonComplete = false;
+                        const previewEl = document.getElementById("zonePreview");
+                        previewEl.addEventListener('click', handlePreviewClick);
+                        
+                        // Reset visual style
+                        if (polygonPath) {{
+                            polygonPath.setAttribute('fill', 'none');
+                            polygonPath.setAttribute('stroke', '#ff0000');
+                        }}
+                        
+                        // Disable dragging on remaining points
+                        const remainingPoints = Array.from(document.querySelectorAll('.polygon-point'));
+                        remainingPoints.forEach(p => {{
+                            p.style.cursor = 'crosshair';
+                            // Remove existing drag listeners
+                            p.replaceWith(p.cloneNode(true));
+                        }});
+                    }}
+                    
+                    // Reset instruction text
+                    const instruction = document.querySelector('#zoneModal .modal-content div:nth-child(3)');
+                    if (instruction) {{
+                        instruction.innerHTML = 'Click on the image to add points. Right-click to remove points. Click on the first point (blue) to complete the polygon.';
+                    }}
+                }}
 
-                    function move(e) {{
+                function makePointDraggable(point) {{
+                    let isDragging = false;
+                    let startX, startY, startLeft, startTop;
+                    
+                    function dragPoint(e) {{
                         if (!isDragging) return;
-                        const parent = el.parentElement.getBoundingClientRect();
-                        el.style.left = Math.min(Math.max(0, e.clientX - parent.left - offsetX), parent.width - el.offsetWidth) + "px";
-                        el.style.top = Math.min(Math.max(0, e.clientY - parent.top - offsetY), parent.height - el.offsetHeight) + "px";
+                        
+                        const previewEl = document.getElementById("zonePreview");
+                        const previewRect = previewEl.getBoundingClientRect();
+                        
+                        const deltaX = e.clientX - startX;
+                        const deltaY = e.clientY - startY;
+                        
+                        let newLeft = startLeft + deltaX;
+                        let newTop = startTop + deltaY;
+                        
+                        // Constrain to preview area
+                        newLeft = Math.max(0, Math.min(newLeft, previewRect.width - 12));
+                        newTop = Math.max(0, Math.min(newTop, previewRect.height - 12));
+                        
+                        point.style.left = newLeft + 'px';
+                        point.style.top = newTop + 'px';
+                        
+                        // Force synchronous layout update before updating polygon line
+                        point.offsetHeight; // This triggers a reflow
+                        
+                        updatePolygonLine();
                     }}
-
-                    function stop() {{
+                    
+                    function stopDragPoint() {{
                         isDragging = false;
-                        document.removeEventListener("mousemove", move);
-                        document.removeEventListener("mouseup", stop);
+                        document.removeEventListener('mousemove', dragPoint);
+                        document.removeEventListener('mouseup', stopDragPoint);
+                        document.removeEventListener('mouseleave', stopDragPoint);
                     }}
-                }})(zoneRect);
+                    
+                    point.addEventListener('mousedown', (e) => {{
+                        // Only allow dragging if polygon is complete
+                        if (!isPolygonComplete) return;
+                        
+                        e.preventDefault();
+                        e.stopPropagation();
+                        isDragging = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        
+                        const style = window.getComputedStyle(point);
+                        startLeft = parseInt(style.left);
+                        startTop = parseInt(style.top);
+                        
+                        document.addEventListener('mousemove', dragPoint);
+                        document.addEventListener('mouseup', stopDragPoint);
+                        document.addEventListener('mouseleave', stopDragPoint);
+                    }});
+                }}
+
+                function updatePolygonLine() {{
+                    const previewEl = document.getElementById("zonePreview");
+                    const points = Array.from(document.querySelectorAll('.polygon-point'));
+                    
+                    if (points.length === 0) {{
+                        polygonPath.setAttribute('d', '');
+                        firstPoint = null;
+                        isPolygonComplete = false;
+                        return;
+                    }}
+                    
+                    // Create SVG path for the polygon - just draw lines between points, don't close automatically
+                    const pathData = points.map((point, index) => {{
+                        const rect = point.getBoundingClientRect();
+                        const previewRect = previewEl.getBoundingClientRect();
+                        const x = rect.left - previewRect.left + 6; // Center of point
+                        const y = rect.top - previewRect.top + 6;
+                        return `${{index === 0 ? 'M' : 'L'}} ${{x}} ${{y}}`;
+                    }}).join(' ');
+                    
+                    // Only close the path if polygon is complete
+                    if (isPolygonComplete) {{
+                        polygonPath.setAttribute('d', pathData + ' Z');
+                    }} else {{
+                        polygonPath.setAttribute('d', pathData);
+                    }}
+                }}
+
+                function loadPolygon(coords, previewEl) {{
+                    const videoWidth = 1280;
+                    const videoHeight = 720;
+                    
+                    // Wait for the image to load to get actual dimensions
+                    const img = document.getElementById("zonePreview");
+                    if (img.complete) {{
+                        drawPolygonCoords(coords, img, previewEl);
+                    }} else {{
+                        img.addEventListener('load', function() {{
+                            drawPolygonCoords(coords, img, previewEl);
+                        }});
+                    }}
+                }}
+
+                function drawPolygonCoords(coords, img, previewEl) {{
+                    const videoWidth = 1280;
+                    const videoHeight = 720;
+                    
+                    // Get the actual displayed dimensions of the image
+                    const displayedWidth = img.clientWidth;
+                    const displayedHeight = img.clientHeight;
+                    
+                    console.log("Loading polygon coords:", coords);
+                    console.log("Image dimensions:", displayedWidth, displayedHeight);
+                    
+                    coords.forEach(coord => {{
+                        const x = (coord[0] / videoWidth) * displayedWidth;
+                        const y = (coord[1] / videoHeight) * displayedHeight;
+                        console.log("Creating point at:", x, y, "from coord:", coord);
+                        createPoint(x, y);
+                    }});
+                    
+                    updatePolygonLine();
+                    
+                    // If loading an existing polygon, mark it as complete
+                    if (coords.length >= 3) {{
+                        completePolygon();
+                    }}
+                }}
+
+                function clearPolygon() {{
+                    const overlay = document.getElementById("polygonOverlay");
+                    const points = overlay.querySelectorAll('.polygon-point');
+                    points.forEach(point => point.remove());
+                    
+                    firstPoint = null;
+                    isPolygonComplete = false;
+                    
+                    if (polygonPath) {{
+                        polygonPath.setAttribute('d', '');
+                        polygonPath.setAttribute('fill', 'none');
+                        polygonPath.setAttribute('stroke', '#ff0000');
+                    }}
+                    
+                    // Re-enable clicking
+                    const previewEl = document.getElementById("zonePreview");
+                    previewEl.addEventListener('click', handlePreviewClick);
+                    
+                    // Reset instruction text
+                    const instruction = document.querySelector('#zoneModal .modal-content div:nth-child(3)');
+                    if (instruction) {{
+                        instruction.innerHTML = 'Click on the image to add points. Right-click to remove points. Click on the first point (blue) to complete the polygon.';
+                    }}
+                }}
+
+                // Add some CSS styles for the polygon editor
+                const polygonStyles = `
+                    .polygon-point:hover {{
+                        transform: scale(1.2);
+                        box-shadow: 0 0 5px rgba(0,0,0,0.5);
+                    }}
+                    .polygon-line path {{
+                        transition: all 0.2s ease;
+                    }}
+                `;
+
+                const styleSheet = document.createElement("style");
+                styleSheet.textContent = polygonStyles;
+                document.head.appendChild(styleSheet);
 
 
                 function openAlertModal() {{
