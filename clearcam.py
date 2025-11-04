@@ -1627,7 +1627,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 '{show_detections_checked}': 'checked' if show_detections else '',
                 '{image_links}': image_links,
                 '{class_labels}': json.dumps(class_labels),
-                '{start_time}': start_time if start_time is not None else 'null',
+                '{start_time}': str(start_time) if start_time is not None else 'null',
                 '{cam_name}': cam_name
             }
             for placeholder, value in replacements.items(): html = html.replace(placeholder, value)
