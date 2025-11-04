@@ -1611,7 +1611,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 """
 
             try:
-                start_time = float(start_param) if start_param is not None else None
+                start_time = max(float(start_param),0) if start_param is not None else None
             except ValueError:
                 start_time = None
 
