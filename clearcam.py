@@ -1060,7 +1060,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               for _ in range(100): print(coords)
               if isinstance(coords, list) and len(coords) >= 3:
                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
-                 for _ in range(100): print("FUCK",zone["coords"])
 
             w = query.get("w", [None])[0]
             h = query.get("h", [None])[0]
