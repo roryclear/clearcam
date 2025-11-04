@@ -423,7 +423,7 @@
                     </label>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="clearPolygon()">Clear</button>
+                    <button type="button" onclick="clearPolygon()">Clear Zone</button>
                     <button type="button" onclick="closeZoneModal()">Cancel</button>
                     <button type="button" onclick="saveZone()">Save</button>
                 </div>
@@ -764,41 +764,6 @@ function closeZoneModal() {
         return point;
     }
 
-    function removePoint(point) {
-        // If removing the first point, update the firstPoint reference
-        if (point === firstPoint) {
-            const points = Array.from(document.querySelectorAll('.polygon-point'));
-            if (points.length > 1) {
-                firstPoint = points[1]; // Second point becomes first
-                firstPoint.style.backgroundColor = '#0000ff';
-            } else {
-                firstPoint = null;
-            }
-        }
-        
-        point.remove();
-        updatePolygonLine();
-        
-        // If polygon was complete, re-enable editing
-        if (isPolygonComplete) {
-            isPolygonComplete = false;
-            const previewEl = document.getElementById("zonePreview");
-            previewEl.addEventListener('click', handlePreviewClick);
-            
-            // Reset visual style
-            if (polygonPath) {
-                polygonPath.setAttribute('fill', 'none');
-                polygonPath.setAttribute('stroke', '#ff0000');
-            }
-        }
-        
-        // Reset instruction text
-        const instruction = document.querySelector('#zoneModal .modal-content div:nth-child(3)');
-        if (instruction) {
-            instruction.innerHTML = 'Click on the image to make a detection zone.';
-        }
-    }
-
     function updatePolygonLine() {
         const previewEl = document.getElementById("zonePreview");
         const points = Array.from(document.querySelectorAll('.polygon-point'));
@@ -872,25 +837,15 @@ function closeZoneModal() {
         const overlay = document.getElementById("polygonOverlay");
         const points = overlay.querySelectorAll('.polygon-point');
         points.forEach(point => point.remove());
-        
         firstPoint = null;
         isPolygonComplete = false;
-        
         if (polygonPath) {
             polygonPath.setAttribute('d', '');
             polygonPath.setAttribute('fill', 'none');
             polygonPath.setAttribute('stroke', '#ff0000');
         }
-        
-        // Re-enable clicking
         const previewEl = document.getElementById("zonePreview");
         previewEl.addEventListener('click', handlePreviewClick);
-        
-        // Reset instruction text
-        const instruction = document.querySelector('#zoneModal .modal-content div:nth-child(3)');
-        if (instruction) {
-            instruction.innerHTML = 'Click on the image to add points.';
-        }
     }
 
     const polygonStyles = `
