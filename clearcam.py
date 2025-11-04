@@ -684,7 +684,7 @@ class VideoCapture:
            self.streamer._stop_event.clear()
            self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
            self.streamer.feeding_frames_thread.start()
-        elif self.streamer.feeding_frames:
+        elif hasattr(self, 'streamer') and self.streamer.feeding_frames:
            self.streamer.feeding_frames = False
            self.streamer._stop_event.set()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
