@@ -1057,7 +1057,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
-              for _ in range(100): print(coords)
               if isinstance(coords, list) and len(coords) >= 3:
                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
 
