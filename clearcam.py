@@ -567,6 +567,7 @@ class VideoCapture:
     send_det = False
     last_live_check = time.time()
     last_live_seg = time.time()
+    last_preview_time = None
     last_counter_update = time.time()
     count = 0
     while self.running:
@@ -587,6 +588,10 @@ class VideoCapture:
           filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
 
           if count > 10:
+            if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
+              last_preview_time = time.time()
+              filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+              write_png(filename, self.raw_frame)
             for _,alert in self.alert_counters.items():
                 if not alert.is_active():
                   alert.reset_counts()
