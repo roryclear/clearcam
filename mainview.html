@@ -208,60 +208,178 @@
                       fetchCameras(); // Immediately refresh
                   });
 
-                  function closeMultiView() {
-                      const container = document.getElementById('multiView');
-                      container.innerHTML = '';
-                      container.classList.remove('active');
-                      if (document.fullscreenElement) document.exitFullscreen();
-                  }
+                  async function waitForManifest(url, maxRetries = 30, delay = 2000) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const res = await fetch(url, { cache: "no-store" });
+            if (res.ok) {
+                const text = await res.text();
+                if (text.includes("#EXTINF")) return true;
+            }
+        } catch (err) {
+            // ignore / retry
+        }
+        await new Promise(r => setTimeout(r, delay));
+    }
+    return false;
+}
 
-                  function toggleMultiView() {
-                      const container = document.getElementById('multiView');
-                      if (container.classList.contains('active')) {
-                          closeMultiView();
-                          return;
-                      }
+function attachHlsToVideo(url, video, startTime = null) {
+    if (Hls.isSupported()) {
+        const hls = new Hls({
+            manifestLoadingTimeOut: 20000,
+            manifestLoadingMaxRetry: Infinity,
+            manifestLoadingRetryDelay: 2000,
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 0
+        });
 
-                      if (!window.currentCameras || window.currentCameras.length === 0) {
-                          alert("No cameras available.");
-                          return;
-                      }
+        hls.loadSource(url);
+        hls.attachMedia(video);
 
-                      container.classList.add('active');
-                      const cams = window.currentCameras;
-                      const today = new Date().toLocaleDateString('en-CA');
-                      const base = "http://localhost:8080";
+        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+            if (startTime !== null) video.currentTime = startTime;
+            video.play().catch(()=>{});
+        });
 
-                      const count = cams.length;
-                      const cols = Math.ceil(Math.sqrt(count));
-                      const rows = Math.ceil(count / cols);
-                      container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-                      container.style.gridTemplateRows = `repeat(${rows}, auto)`;
+        hls.on(Hls.Events.ERROR, function (event, data) {
+            if (data && data.fatal) {
+                switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        hls.startLoad(-1);
+                        break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        hls.recoverMediaError();
+                        break;
+                    default:
+                        hls.destroy();
+                        break;
+                }
+            }
+        });
 
-                      cams.forEach(cam => {
-                          const encoded = encodeURIComponent(cam);
-                          const videoUrl = `${base}/${encoded}_raw/streams/${today}/stream.m3u8`;
+        // keep a reference so it can be cleaned up if we close multi-view
+        video._hlsInstance = hls;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.addEventListener('loadedmetadata', function onMeta() {
+            video.removeEventListener('loadedmetadata', onMeta);
+            if (startTime !== null) video.currentTime = startTime;
+            video.play().catch(()=>{});
+        });
+    } else {
+        console.error("No HLS support in this browser.");
+    }
+}
 
-                          const wrapper = document.createElement('div');
-                          wrapper.className = 'video-wrapper';
-                          const vid = document.createElement('video');
-                          vid.autoplay = true;
-                          vid.muted = true;
-                          vid.playsInline = true;
-                          wrapper.appendChild(vid);
-                          container.appendChild(wrapper);
+async function toggleMultiView() {
+    const container = document.getElementById('multiView');
+    if (container.classList.contains('active')) {
+        closeMultiView();
+        return;
+    }
 
-                          if (vid.canPlayType('application/vnd.apple.mpegurl')) {
-                              vid.src = videoUrl;
-                          } else if (Hls.isSupported()) {
-                              const hls = new Hls();
-                              hls.loadSource(videoUrl);
-                              hls.attachMedia(vid);
-                          }
-                      });
+    if (!window.currentCameras || window.currentCameras.length === 0) {
+        alert("No cameras available.");
+        return;
+    }
 
-                      if (container.requestFullscreen) container.requestFullscreen();
-                  }
+    container.classList.add('active');
+
+    const cams = window.currentCameras.slice(); // copy
+    const today = new Date().toLocaleDateString('en-CA');
+    const base = "http://localhost:8080";
+
+    const count = cams.length;
+    const cols = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    container.style.gridTemplateRows = `repeat(${rows}, auto)`;
+    container.innerHTML = '';
+
+    // Create video placeholders & start loading each stream independently
+    cams.forEach(cam => {
+        const encoded = encodeURIComponent(cam);
+        const videoUrl = `${base}/${encoded}_raw/streams/${today}/stream.m3u8`;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'video-wrapper';
+        const vid = document.createElement('video');
+        vid.autoplay = true;
+        vid.muted = true;
+        vid.playsInline = true;
+        // attribute so we can cleanup later
+        vid.dataset.streamUrl = videoUrl;
+        wrapper.appendChild(vid);
+        container.appendChild(wrapper);
+
+        // Wait for manifest then attach HLS/native playback (non-blocking)
+        (async () => {
+            const ready = await waitForManifest(videoUrl, 60, 1000); // try a bit longer for multi-view
+            if (!ready) {
+                console.error("Stream never became available for", cam);
+                const notice = document.createElement('div');
+                notice.style.position = 'absolute';
+                notice.style.color = 'white';
+                notice.textContent = 'Stream unavailable';
+                wrapper.appendChild(notice);
+                return;
+            }
+
+            // Use the same attach logic that works for single-view
+            try {
+                attachHlsToVideo(videoUrl, vid, /*startTime=*/ null);
+            } catch (e) {
+                console.error("Failed to attach HLS for", cam, e);
+            }
+
+            // After some buffering, attempt jump-to-live for EVENT playlists
+            // (native players may still start at beginning; this seeks to the end once seekable is known)
+            let attempts = 0;
+            const seekInterval = setInterval(() => {
+                attempts++;
+                if (vid.seekable && vid.seekable.length > 0) {
+                    try {
+                        // move to near the live edge
+                        const end = vid.seekable.end(0);
+                        vid.currentTime = Math.max(0, end - 0.5);
+                        clearInterval(seekInterval);
+                    } catch (e) {
+                        // ignoring seeking errors — keep trying a few times
+                    }
+                }
+                if (attempts > 10) clearInterval(seekInterval);
+            }, 500);
+        })();
+    });
+
+    // request fullscreen for multi-view if available
+    if (container.requestFullscreen) container.requestFullscreen();
+}
+
+function closeMultiView() {
+    const container = document.getElementById('multiView');
+    // destroy any attached Hls instances and remove sources
+    container.querySelectorAll('video').forEach(vid => {
+        try {
+            if (vid._hlsInstance && typeof vid._hlsInstance.destroy === 'function') {
+                vid._hlsInstance.destroy();
+                delete vid._hlsInstance;
+            }
+            // stop loading / playback
+            vid.pause();
+            vid.removeAttribute('src');
+            vid.load();
+        } catch (e) {
+            console.warn('Error cleaning video', e);
+        }
+    });
+
+    container.innerHTML = '';
+    container.classList.remove('active');
+    if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
 
                   // Close multi-view on ESC or background click
                   document.addEventListener('keydown', e => {
