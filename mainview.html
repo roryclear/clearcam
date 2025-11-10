@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+                .camera-grid {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 20px;
+                }
+                .camera-card {
+                    width: 220px;
+                    border: 1px solid #ccc;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    text-align: center;
+                    font-family: sans-serif;
+                }
+                .camera-card img {
+                    width: 100%;
+                    display: block;
+                }
+                .camera-card div {
+                    padding: 8px;
+                    background: #f9f9f9;
+                }
+                .form-section {
+                    margin-top: 20px;
+                    font-family: sans-serif;
+                }
+                .form-section input {
+                    padding: 6px;
+                    margin: 4px;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    width: 200px;
+                }
+                .form-section button {
+                    padding: 6px 12px;
+                    background: #007bff;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                .form-section button:hover {
+                    background: #0056b3;
+                }
+                .shutdown-wrapper {
+                    margin-top: 20px;
+                }
+
+                /* Multi-view overlay grid */
+                #multiView {
+                    display: none;
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100vh;
+                    background: black;
+                    z-index: 9999;
+                    padding: 10px;
+                    box-sizing: border-box;
+                    justify-content: center;
+                    align-items: center;
+                    grid-gap: 10px;
+                }
+                #multiView.active {
+                    display: grid;
+                    justify-items: center;
+                    align-items: center;
+                }
+                #multiView .video-wrapper {
+                    position: relative;
+                    width: 100%;
+                    aspect-ratio: 16 / 9;
+                    background: #000;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+                #multiView video {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: contain;
+                    background: black;
+                }
+                .multi-view-wrapper {
+                    margin-top: 10px;
+                    text-align: left;
+                }
+                .multi-view-wrapper button {
+                    padding: 6px 12px;
+                    background: #007bff;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                .multi-view-wrapper button:hover {
+                    background: #0056b3;
+                }
+            </style>
+          </head>
+          <body>
+              <div id="cameraList" class="camera-grid"></div>
+              <div class="multi-view-wrapper">
+                  <button onclick="toggleMultiView()">Multi View</button>
+              </div>
+
+              <div class="form-section">
+                  <form id="addCameraForm">
+                      <input type="text" name="cam_name" placeholder="Camera Name" required>
+                      <input type="text" name="rtsp" placeholder="RTSP Link" required>
+                      <button type="submit">Add Camera</button>
+                  </form>
+                  <div class="max-storage-control" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
+                      <label for="maxStorageInput" style="margin-bottom: 4px;">Set Max Storage (GB):</label>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                          <input type="number" id="maxStorageInput" min="1" style="width: 120px;">
+                          <button type="button" id="setMaxStorageBtn">Set</button>
+                      </div>
+                  </div>
+                  <div class="shutdown-wrapper">
+                      <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
+                  </div>
+              </div>
+
+              <div id="multiView"></div>
+
+              <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+              <script>
+                  async function fetchCameras() {
+                      const res = await fetch('/list_cameras');
+                      const cams = await res.json();
+                      const container = document.getElementById("cameraList");
+                      container.innerHTML = cams.map(cam => `
+                          <div class="camera-card">
+                              <a href="/?cam=${cam}">
+                                  <img src="/${cam}/preview.png" alt="${cam} preview">
+                                  <div>${cam}</div>
+                              </a>
+                              <button onclick="deleteCamera('${cam}')">Delete</button>
+                          </div>
+                      `).join('');
+                      window.currentCameras = cams;
+                  }
+
+                  async function deleteCamera(cam) {
+                      if (!confirm(`Are you sure you want to delete ${cam}?`)) return;
+                      const res = await fetch(`/delete_camera?cam_name=${cam}`);
+                      if (res.ok) {
+                          fetchCameras();
+                      } else {
+                          alert("Failed to delete camera.");
+                      }
+                  }
+
+                  async function shutdownServer() {
+                      if (!confirm("Are you sure you want to shut down the server?")) return;
+                      const res = await fetch('/shutdown');
+                      if (res.ok) {
+                          alert("Server is shutting down...");
+                      } else {
+                          alert("Shutdown failed.");
+                      }
+                  }
+
+                  async function fetchMaxStorage() {
+                    try {
+                        const res = await fetch('/get_max_storage');
+                        const data = await res.json();
+                        const input = document.getElementById('maxStorageInput');
+                        if (input && data.max_gb !== undefined) {
+                            input.value = data.max_gb;
+                        }
+                    } catch (e) {
+                        console.error("Failed to fetch max storage:", e);
+                    }
+                  }
+
+                  async function setMaxStorage() {
+                      const input = document.getElementById('maxStorageInput');
+                      const newVal = parseFloat(input.value);
+                      if (!newVal || isNaN(newVal)) {
+                          alert("Please enter a valid number");
+                          return;
+                      }
+                      if (!confirm(`Set max storage to ${newVal} GB?`)) return;
+                      await fetch(`/set_max_storage?max=${newVal}`);
+                      fetchMaxStorage();
+                  }
+
+                  document.getElementById('setMaxStorageBtn').addEventListener('click', setMaxStorage);
+
+                  // Refresh storage field every 10 seconds
+                  fetchMaxStorage();
+                  setInterval(fetchMaxStorage, 10000);
+
+
+                  document.getElementById("addCameraForm").addEventListener("submit", async (e) => {
+                      e.preventDefault();
+                      const form = e.target;
+                      const params = new URLSearchParams(new FormData(form)).toString();
+                      await fetch(`/add_camera?${params}`);
+                      form.reset();
+                      fetchCameras(); // Immediately refresh
+                  });
+
+                  function closeMultiView() {
+                      const container = document.getElementById('multiView');
+                      container.innerHTML = '';
+                      container.classList.remove('active');
+                      if (document.fullscreenElement) document.exitFullscreen();
+                  }
+
+                  function toggleMultiView() {
+                      const container = document.getElementById('multiView');
+                      if (container.classList.contains('active')) {
+                          closeMultiView();
+                          return;
+                      }
+
+                      if (!window.currentCameras || window.currentCameras.length === 0) {
+                          alert("No cameras available.");
+                          return;
+                      }
+
+                      container.classList.add('active');
+                      const cams = window.currentCameras;
+                      const today = new Date().toLocaleDateString('en-CA');
+                      const base = "http://localhost:8080";
+
+                      const count = cams.length;
+                      const cols = Math.ceil(Math.sqrt(count));
+                      const rows = Math.ceil(count / cols);
+                      container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+                      container.style.gridTemplateRows = `repeat(${rows}, auto)`;
+
+                      cams.forEach(cam => {
+                          const encoded = encodeURIComponent(cam);
+                          const videoUrl = `${base}/${encoded}_raw/streams/${today}/stream.m3u8`;
+
+                          const wrapper = document.createElement('div');
+                          wrapper.className = 'video-wrapper';
+                          const vid = document.createElement('video');
+                          vid.autoplay = true;
+                          vid.muted = true;
+                          vid.playsInline = true;
+                          wrapper.appendChild(vid);
+                          container.appendChild(wrapper);
+
+                          if (vid.canPlayType('application/vnd.apple.mpegurl')) {
+                              vid.src = videoUrl;
+                          } else if (Hls.isSupported()) {
+                              const hls = new Hls();
+                              hls.loadSource(videoUrl);
+                              hls.attachMedia(vid);
+                          }
+                      });
+
+                      if (container.requestFullscreen) container.requestFullscreen();
+                  }
+
+                  // Close multi-view on ESC or background click
+                  document.addEventListener('keydown', e => {
+                      if (e.key === 'Escape') {
+                          const mv = document.getElementById('multiView');
+                          if (mv.classList.contains('active')) closeMultiView();
+                      }
+                  });
+
+                  document.getElementById('multiView').addEventListener('click', e => {
+                      if (e.target.id === 'multiView') closeMultiView();
+                  });
+
+                  // Refresh list every 5 seconds
+                  fetchCameras();
+                  setInterval(fetchCameras, 5000);
+              </script>
+          </body>
+          </html>
