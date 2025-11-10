@@ -465,7 +465,8 @@
       setupUserInteractionTracking(video);
       
       const encoded = encodeURIComponent(camName);
-      const streamUrl = `http://localhost:8080/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
+      const baseUrl = window.location.origin;
+      const streamUrl = `${baseUrl}/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
       
       activeVideoStreams.set(camName, {
         video: video,
@@ -706,7 +707,7 @@
       container.classList.add('active');
 
       const cams = window.currentCameras.slice();
-      const base = "http://localhost:8080";
+      const base = window.location.origin;
 
       const count = cams.length;
       const cols = Math.ceil(Math.sqrt(count));
