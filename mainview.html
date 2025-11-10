@@ -135,6 +135,9 @@
     .multi-view-wrapper {
       margin-top: 10px;
       text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     .multi-view-wrapper button {
       padding: 6px 12px;
@@ -147,12 +150,32 @@
     .multi-view-wrapper button:hover {
       background: #0056b3;
     }
+    .date-picker-container {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .date-picker-container label {
+      font-weight: bold;
+      font-size: 14px;
+      font-family: sans-serif;
+    }
+    .date-picker-container input {
+      padding: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
   <div id="cameraList" class="camera-grid"></div>
   <div class="multi-view-wrapper">
     <button onclick="toggleMultiView()">Multi View</button>
+    <div class="date-picker-container">
+      <label for="streamDatePicker">Play Date:</label>
+      <input type="date" id="streamDatePicker">
+    </div>
   </div>
 
   <div class="form-section">
@@ -177,16 +200,29 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    // Track active video streams
     const activeVideoStreams = new Map();
-
-    // Track visibility state
     let wasHidden = false;
+    let currentStreamDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
+    document.addEventListener('DOMContentLoaded', function() {
+      const datePicker = document.getElementById('streamDatePicker');
+      datePicker.value = currentStreamDate;
+      datePicker.addEventListener('change', function() {
+        const selectedDate = this.value;
+        if (selectedDate) {
+          currentStreamDate = selectedDate;
+          console.log('Date changed to:', currentStreamDate);
+          restartAllStreams();
+        }
+      });
+    });
 
-    // Listen for page visibility changes
+    function isToday(dateString) {
+      const today = new Date().toLocaleDateString('en-CA');
+      return dateString === today;
+    }
+
     document.addEventListener('visibilitychange', function() {
       if (!document.hidden && wasHidden) {
-        // Page became visible again after being hidden
         console.log('Tab became active, seeking all streams to live');
         seekAllStreamsToLive();
       }
@@ -194,8 +230,12 @@
     });
 
     function seekAllStreamsToLive() {
+      if (!isToday(currentStreamDate)) {
+        return;
+      }
+      
       activeVideoStreams.forEach((streamInfo, camName) => {
-        if (streamInfo.video && streamInfo.video.readyState >= 2) { // HAVE_CURRENT_DATA or better
+        if (streamInfo.video && streamInfo.video.readyState >= 2) {
           seekToLive(streamInfo.video);
         }
       });
@@ -206,11 +246,10 @@
         try {
           const end = video.seekable.end(video.seekable.length - 1);
           const currentTime = video.currentTime;
-          const liveThreshold = 10; // seconds from live edge
-          
-          // Only seek if we're more than threshold seconds behind live
+          const liveThreshold = 10;
+
           if (end - currentTime > liveThreshold) {
-            video.currentTime = Math.max(0, end - 2); // 2 seconds from live edge
+            video.currentTime = Math.max(0, end - 2);
             console.log('Seeking to live edge:', video.currentTime, 'from', currentTime);
           }
         } catch (e) {
@@ -219,27 +258,38 @@
       }
     }
 
-    // Periodic live seek for HLS streams (in case they fall behind)
     setInterval(() => {
-      if (!document.hidden) {
+      if (!document.hidden && isToday(currentStreamDate)) {
         activeVideoStreams.forEach((streamInfo, camName) => {
           if (streamInfo.video && streamInfo.video.readyState >= 2) {
             seekToLive(streamInfo.video);
           }
         });
       }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
+
+    function restartAllStreams() {
+      console.log('Restarting all streams for date:', currentStreamDate);
+
+      activeVideoStreams.forEach((streamInfo, camName) => {
+        cleanupCameraStream(camName);
+      });
+
+      if (window.currentCameras) {
+        window.currentCameras.forEach(camName => {
+          startCameraStream(camName);
+        });
+      }
+    }
 
     async function fetchCameras() {
       const res = await fetch('/list_cameras');
       const cams = await res.json();
       const container = document.getElementById("cameraList");
       
-      // Store current camera list
       const previousCameras = window.currentCameras || [];
       window.currentCameras = cams;
-      
-      // Get existing camera cards to preserve video elements
+
       const existingCards = new Map();
       container.querySelectorAll('.camera-card').forEach(card => {
         const camName = card.dataset.camera;
@@ -247,28 +297,24 @@
           existingCards.set(camName, card);
         }
       });
-      
-      // Update the container with minimal DOM changes
+
       const newCards = [];
       
       cams.forEach(cam => {
         let card = existingCards.get(cam);
         
         if (card) {
-          // Card already exists, just update if needed
           const nameSpan = card.querySelector('.camera-name');
           if (nameSpan && nameSpan.textContent !== cam) {
             nameSpan.textContent = cam;
           }
           newCards.push(card);
         } else {
-          // Create new card
           card = createCameraCard(cam);
           newCards.push(card);
         }
       });
       
-      // Only update DOM if there are changes
       const currentCards = Array.from(container.children);
       const needsUpdate = newCards.length !== currentCards.length || 
                          !newCards.every((card, index) => currentCards[index] === card);
@@ -327,10 +373,8 @@
       }
       
       const encoded = encodeURIComponent(camName);
-      const today = new Date().toLocaleDateString('en-CA');
-      const streamUrl = `http://localhost:8080/${encoded}_raw/streams/${today}/stream.m3u8`;
+      const streamUrl = `http://localhost:8080/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
       
-      // Mark as active
       activeVideoStreams.set(camName, {
         video: video,
         hls: null,
@@ -338,7 +382,6 @@
         isPlaying: false
       });
       
-      // Wait for manifest and start playback
       waitForManifest(streamUrl, 30, 1000).then(ready => {
         if (!ready) {
           if (placeholder) placeholder.textContent = 'Stream unavailable';
@@ -355,8 +398,8 @@
             enableWorker: true,
             lowLatencyMode: true,
             backBufferLength: 0,
-            liveSyncDurationCount: 1, // Stay closer to live
-            liveMaxLatencyDurationCount: 5 // Allow some latency but not too much
+            liveSyncDurationCount: isToday(currentStreamDate) ? 1 : 3,
+            liveMaxLatencyDurationCount: isToday(currentStreamDate) ? 5 : 10
           });
 
           hls.loadSource(streamUrl);
@@ -366,8 +409,9 @@
             video.play().catch(e => console.log('Auto-play prevented:', e));
             activeVideoStreams.get(camName).isPlaying = true;
             
-            // Initial seek to live
-            setTimeout(() => seekToLive(video), 1000);
+            if (isToday(currentStreamDate)) {
+              setTimeout(() => seekToLive(video), 1000);
+            }
           });
 
           hls.on(Hls.Events.ERROR, function (event, data) {
@@ -390,7 +434,6 @@
             }
           });
 
-          // Store reference for cleanup
           activeVideoStreams.get(camName).hls = hls;
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = streamUrl;
@@ -398,9 +441,10 @@
             video.removeEventListener('loadedmetadata', onMeta);
             video.play().catch(e => console.log('Auto-play prevented:', e));
             activeVideoStreams.get(camName).isPlaying = true;
-            
-            // Initial seek to live for native HLS
-            setTimeout(() => seekToLive(video), 1000);
+
+            if (isToday(currentStreamDate)) {
+              setTimeout(() => seekToLive(video), 1000);
+            }
           });
         } else {
           if (placeholder) {
@@ -527,8 +571,8 @@
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 0,
-          liveSyncDurationCount: 1,
-          liveMaxLatencyDurationCount: 5
+          liveSyncDurationCount: isToday(currentStreamDate) ? 1 : 3,
+          liveMaxLatencyDurationCount: isToday(currentStreamDate) ? 5 : 10
         });
 
         hls.loadSource(url);
@@ -538,8 +582,10 @@
           if (startTime !== null) video.currentTime = startTime;
           video.play().catch(()=>{});
           
-          // Seek to live for multi-view as well
-          setTimeout(() => seekToLive(video), 1000);
+          // Only seek to live for today's streams
+          if (isToday(currentStreamDate)) {
+            setTimeout(() => seekToLive(video), 1000);
+          }
         });
 
         hls.on(Hls.Events.ERROR, function (event, data) {
@@ -567,8 +613,10 @@
           if (startTime !== null) video.currentTime = startTime;
           video.play().catch(()=>{});
           
-          // Seek to live for native HLS in multi-view
-          setTimeout(() => seekToLive(video), 1000);
+          // Only seek to live for today's streams
+          if (isToday(currentStreamDate)) {
+            setTimeout(() => seekToLive(video), 1000);
+          }
         });
       } else {
         console.error("No HLS support in this browser.");
@@ -590,7 +638,6 @@
       container.classList.add('active');
 
       const cams = window.currentCameras.slice();
-      const today = new Date().toLocaleDateString('en-CA');
       const base = "http://localhost:8080";
 
       const count = cams.length;
@@ -600,10 +647,9 @@
       container.style.gridTemplateRows = `repeat(${rows}, auto)`;
       container.innerHTML = '';
 
-      // Create video placeholders & start loading each stream independently
       cams.forEach(cam => {
         const encoded = encodeURIComponent(cam);
-        const videoUrl = `${base}/${encoded}_raw/streams/${today}/stream.m3u8`;
+        const videoUrl = `${base}/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
 
         const wrapper = document.createElement('div');
         wrapper.className = 'video-wrapper';
@@ -633,20 +679,23 @@
             console.error("Failed to attach HLS for", cam, e);
           }
 
-          let attempts = 0;
-          const seekInterval = setInterval(() => {
-            attempts++;
-            if (vid.seekable && vid.seekable.length > 0) {
-              try {
-                const end = vid.seekable.end(0);
-                vid.currentTime = Math.max(0, end - 0.5);
-                clearInterval(seekInterval);
-              } catch (e) {
-                // ignoring seeking errors
+          // Only seek to live for today's streams
+          if (isToday(currentStreamDate)) {
+            let attempts = 0;
+            const seekInterval = setInterval(() => {
+              attempts++;
+              if (vid.seekable && vid.seekable.length > 0) {
+                try {
+                  const end = vid.seekable.end(0);
+                  vid.currentTime = Math.max(0, end - 0.5);
+                  clearInterval(seekInterval);
+                } catch (e) {
+                  // ignoring seeking errors
+                }
               }
-            }
-            if (attempts > 10) clearInterval(seekInterval);
-          }, 500);
+              if (attempts > 10) clearInterval(seekInterval);
+            }, 500);
+          }
         })();
       });
 
@@ -673,8 +722,6 @@
       container.classList.remove('active');
       if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
     }
-
-    // Close multi-view on ESC or background click
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         const mv = document.getElementById('multiView');
@@ -686,7 +733,6 @@
       if (e.target.id === 'multiView') closeMultiView();
     });
 
-    // Refresh list every 5 seconds
     fetchCameras();
     setInterval(fetchCameras, 5000);
   </script>
