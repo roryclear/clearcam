@@ -8,7 +8,7 @@
       gap: 20px;
     }
     .camera-card {
-      width: 380px; /* Increased from 320px */
+      width: 380px;
       border: 1px solid #ccc;
       border-radius: 8px;
       overflow: hidden;
@@ -18,7 +18,7 @@
     }
     .camera-card .video-container {
       width: 100%;
-      height: 240px; /* Increased from 180px */
+      height: 240px;
       background: #000;
       position: relative;
     }
@@ -196,7 +196,9 @@
   <script>
     const activeVideoStreams = new Map();
     let wasHidden = false;
-    let currentStreamDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
+    let currentStreamDate = new Date().toLocaleDateString('en-CA');
+    let userIsInteracting = false;
+
     document.addEventListener('DOMContentLoaded', function() {
       const datePicker = document.getElementById('streamDatePicker');
       datePicker.value = currentStreamDate;
@@ -215,52 +217,22 @@
       return dateString === today;
     }
 
-    document.addEventListener('visibilitychange', function() {
-      if (!document.hidden && wasHidden) {
-        console.log('Tab became active, seeking all streams to live');
-        seekAllStreamsToLive();
-      }
-      wasHidden = document.hidden;
-    });
-
-    function seekAllStreamsToLive() {
-      if (!isToday(currentStreamDate)) {
-        return;
-      }
+    function setupUserInteractionTracking(video) {
+      video.addEventListener('seeking', () => {
+        userIsInteracting = true;
+        console.log('User is scrubbing - disabling auto-seek');
+      });
       
-      activeVideoStreams.forEach((streamInfo, camName) => {
-        if (streamInfo.video && streamInfo.video.readyState >= 2) {
-          seekToLive(streamInfo.video);
-        }
+      video.addEventListener('seeked', () => {
+        setTimeout(() => {
+          userIsInteracting = false;
+        }, 3000);
+      });
+      
+      video.addEventListener('play', () => {
+        userIsInteracting = false;
       });
     }
-
-    function seekToLive(video) {
-      if (video.seekable && video.seekable.length > 0) {
-        try {
-          const end = video.seekable.end(video.seekable.length - 1);
-          const currentTime = video.currentTime;
-          const liveThreshold = 10;
-
-          if (end - currentTime > liveThreshold) {
-            video.currentTime = Math.max(0, end - 2);
-            console.log('Seeking to live edge:', video.currentTime, 'from', currentTime);
-          }
-        } catch (e) {
-          console.warn('Error seeking to live:', e);
-        }
-      }
-    }
-
-    setInterval(() => {
-      if (!document.hidden && isToday(currentStreamDate)) {
-        activeVideoStreams.forEach((streamInfo, camName) => {
-          if (streamInfo.video && streamInfo.video.readyState >= 2) {
-            seekToLive(streamInfo.video);
-          }
-        });
-      }
-    }, 30000);
 
     function restartAllStreams() {
       console.log('Restarting all streams for date:', currentStreamDate);
@@ -366,6 +338,9 @@
         return;
       }
       
+      // Setup user interaction tracking for this video
+      setupUserInteractionTracking(video);
+      
       const encoded = encodeURIComponent(camName);
       const streamUrl = `http://localhost:8080/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
       
@@ -389,12 +364,8 @@
             manifestLoadingTimeOut: 20000,
             manifestLoadingMaxRetry: Infinity,
             manifestLoadingRetryDelay: 2000,
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 0,
-            liveSyncDurationCount: isToday(currentStreamDate) ? 1 : 3,
-            liveMaxLatencyDurationCount: isToday(currentStreamDate) ? 5 : 10
           });
+
 
           hls.loadSource(streamUrl);
           hls.attachMedia(video);
@@ -402,10 +373,6 @@
           hls.on(Hls.Events.MANIFEST_PARSED, function () {
             video.play().catch(e => console.log('Auto-play prevented:', e));
             activeVideoStreams.get(camName).isPlaying = true;
-            
-            if (isToday(currentStreamDate)) {
-              setTimeout(() => seekToLive(video), 1000);
-            }
           });
 
           hls.on(Hls.Events.ERROR, function (event, data) {
@@ -435,10 +402,6 @@
             video.removeEventListener('loadedmetadata', onMeta);
             video.play().catch(e => console.log('Auto-play prevented:', e));
             activeVideoStreams.get(camName).isPlaying = true;
-
-            if (isToday(currentStreamDate)) {
-              setTimeout(() => seekToLive(video), 1000);
-            }
           });
         } else {
           if (placeholder) {
@@ -537,7 +500,7 @@
       const params = new URLSearchParams(new FormData(form)).toString();
       await fetch(`/add_camera?${params}`);
       form.reset();
-      fetchCameras(); // Immediately refresh
+      fetchCameras();
     });
 
     async function waitForManifest(url, maxRetries = 30, delay = 2000) {
@@ -565,8 +528,8 @@
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 0,
-          liveSyncDurationCount: isToday(currentStreamDate) ? 1 : 3,
-          liveMaxLatencyDurationCount: isToday(currentStreamDate) ? 5 : 10
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10
         });
 
         hls.loadSource(url);
@@ -575,11 +538,6 @@
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
           if (startTime !== null) video.currentTime = startTime;
           video.play().catch(()=>{});
-          
-          // Only seek to live for today's streams
-          if (isToday(currentStreamDate)) {
-            setTimeout(() => seekToLive(video), 1000);
-          }
         });
 
         hls.on(Hls.Events.ERROR, function (event, data) {
@@ -598,7 +556,6 @@
           }
         });
 
-        // keep a reference so it can be cleaned up if we close multi-view
         video._hlsInstance = hls;
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
@@ -606,11 +563,6 @@
           video.removeEventListener('loadedmetadata', onMeta);
           if (startTime !== null) video.currentTime = startTime;
           video.play().catch(()=>{});
-          
-          // Only seek to live for today's streams
-          if (isToday(currentStreamDate)) {
-            setTimeout(() => seekToLive(video), 1000);
-          }
         });
       } else {
         console.error("No HLS support in this browser.");
@@ -671,24 +623,6 @@
             attachHlsToVideo(videoUrl, vid, null);
           } catch (e) {
             console.error("Failed to attach HLS for", cam, e);
-          }
-
-          // Only seek to live for today's streams
-          if (isToday(currentStreamDate)) {
-            let attempts = 0;
-            const seekInterval = setInterval(() => {
-              attempts++;
-              if (vid.seekable && vid.seekable.length > 0) {
-                try {
-                  const end = vid.seekable.end(0);
-                  vid.currentTime = Math.max(0, end - 0.5);
-                  clearInterval(seekInterval);
-                } catch (e) {
-                  // ignoring seeking errors
-                }
-              }
-              if (attempts > 10) clearInterval(seekInterval);
-            }, 500);
           }
         })();
       });
