@@ -209,7 +209,6 @@
     }
     .event-image-actions button {
       padding: 4px 8px;
-      background: #007bff;
       color: white;
       border: none;
       border-radius: 4px;
@@ -217,14 +216,23 @@
       font-size: 11px;
       flex: 1;
     }
-    .event-image-actions button:hover {
-      background: #0056b3;
-    }
     .event-image-actions button.view-btn {
       background: #28a745;
     }
     .event-image-actions button.view-btn:hover {
       background: #218838;
+    }
+    .event-image-actions button.play-btn {
+      background: #007bff;
+    }
+    .event-image-actions button.play-btn:hover {
+      background: #0056b3;
+    }
+    .event-image-actions button.play-all-btn {
+      background: #6f42c1;
+    }
+    .event-image-actions button.play-all-btn:hover {
+      background: #5a359c;
     }
     #imagePreviewModal {
       display: none;
@@ -266,13 +274,6 @@
     </div>
   </div>
 
-  <!-- Event Images Section -->
-  <div class="events-section">
-    <h3>Detected Events</h3>
-    <div id="eventImagesContainer">
-      <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
-    </div>
-  </div>
 
   <div class="form-section">
     <form id="addCameraForm">
@@ -289,6 +290,13 @@
     </div>
     <div class="shutdown-wrapper">
       <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
+    </div>
+  </div>
+
+  <div class="events-section">
+    <h3>Detected Events</h3>
+    <div id="eventImagesContainer">
+      <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
     </div>
   </div>
 
@@ -792,7 +800,8 @@
                 </div>
                 <div class="event-image-actions">
                   <button class="view-btn" onclick="viewImage('${img.url}')">View</button>
-                  <button onclick="playVideoAtTime('${img.cam_name}', ${img.timestamp})">Play</button>
+                  <button class="play-btn" onclick="playVideoAtTime('${img.cam_name}', ${img.timestamp})">Play</button>
+                  <button class="play-all-btn" onclick="playAllCamerasAtTime(${img.timestamp})">Play (All)</button>
                 </div>
               </div>
             `;
@@ -842,6 +851,39 @@
         }
       } else {
         alert(`Camera ${camName} not found in current view`);
+      }
+    }
+
+    function playAllCamerasAtTime(timestamp) {
+      console.log(`Playing all cameras at timestamp: ${timestamp}`);
+      
+      // Play all available cameras at the same timestamp
+      if (window.currentCameras && window.currentCameras.length > 0) {
+        window.currentCameras.forEach(camName => {
+          const videoId = `video-${camName}`;
+          const video = document.getElementById(videoId);
+          
+          if (video) {
+            video.currentTime = timestamp;
+            video.play().catch(e => console.log(`Auto-play prevented for ${camName}:`, e));
+          }
+        });
+        
+        // Scroll to the first camera card
+        const firstCameraCard = document.querySelector('.camera-card');
+        if (firstCameraCard) {
+          firstCameraCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        // Highlight all camera cards briefly
+        document.querySelectorAll('.camera-card').forEach(card => {
+          card.style.boxShadow = '0 0 0 3px #6f42c1';
+          setTimeout(() => {
+            card.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          }, 2000);
+        });
+      } else {
+        alert("No cameras available to play");
       }
     }
 
