@@ -1295,23 +1295,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
-            event_image_dir = self.base_dir / cam_name / "event_images"
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
             show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["false"])[0]
             show_detections = show_detections_param.lower() in ("true", "1", "yes")
-            show_detections_checked = "checked" if show_detections else ""
-
-            event_image_path = event_image_dir / selected_dir
-            event_images = sorted(event_image_path.glob("*.jpg")) if event_image_path.exists() else []
-            image_links = ""
-            for img in event_images:
-                ts = int(img.stem)
-                image_links += f"""
-                <a href="/?cam={cam_name}&folder={selected_dir}&start={ts}">
-                    <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
-                </a>
-                """
 
             try:
                 start_time = max(float(start_param),0) if start_param is not None else None
@@ -1327,7 +1314,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             replacements = {
                 '{selected_dir}': selected_dir,
                 '{show_detections_checked}': 'checked' if show_detections else '',
-                '{image_links}': image_links,
                 '{class_labels}': json.dumps(class_labels),
                 '{start_time}': str(start_time) if start_time is not None else 'null',
                 '{cam_name}': cam_name
