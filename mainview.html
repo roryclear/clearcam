@@ -182,6 +182,56 @@
     // Track active video streams
     const activeVideoStreams = new Map();
 
+    // Track visibility state
+    let wasHidden = false;
+
+    // Listen for page visibility changes
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && wasHidden) {
+        // Page became visible again after being hidden
+        console.log('Tab became active, seeking all streams to live');
+        seekAllStreamsToLive();
+      }
+      wasHidden = document.hidden;
+    });
+
+    function seekAllStreamsToLive() {
+      activeVideoStreams.forEach((streamInfo, camName) => {
+        if (streamInfo.video && streamInfo.video.readyState >= 2) { // HAVE_CURRENT_DATA or better
+          seekToLive(streamInfo.video);
+        }
+      });
+    }
+
+    function seekToLive(video) {
+      if (video.seekable && video.seekable.length > 0) {
+        try {
+          const end = video.seekable.end(video.seekable.length - 1);
+          const currentTime = video.currentTime;
+          const liveThreshold = 10; // seconds from live edge
+          
+          // Only seek if we're more than threshold seconds behind live
+          if (end - currentTime > liveThreshold) {
+            video.currentTime = Math.max(0, end - 2); // 2 seconds from live edge
+            console.log('Seeking to live edge:', video.currentTime, 'from', currentTime);
+          }
+        } catch (e) {
+          console.warn('Error seeking to live:', e);
+        }
+      }
+    }
+
+    // Periodic live seek for HLS streams (in case they fall behind)
+    setInterval(() => {
+      if (!document.hidden) {
+        activeVideoStreams.forEach((streamInfo, camName) => {
+          if (streamInfo.video && streamInfo.video.readyState >= 2) {
+            seekToLive(streamInfo.video);
+          }
+        });
+      }
+    }, 30000); // Check every 30 seconds
+
     async function fetchCameras() {
       const res = await fetch('/list_cameras');
       const cams = await res.json();
@@ -310,7 +360,9 @@
             manifestLoadingRetryDelay: 2000,
             enableWorker: true,
             lowLatencyMode: true,
-            backBufferLength: 0
+            backBufferLength: 0,
+            liveSyncDurationCount: 1, // Stay closer to live
+            liveMaxLatencyDurationCount: 5 // Allow some latency but not too much
           });
 
           hls.loadSource(streamUrl);
@@ -319,6 +371,9 @@
           hls.on(Hls.Events.MANIFEST_PARSED, function () {
             video.play().catch(e => console.log('Auto-play prevented:', e));
             activeVideoStreams.get(camName).isPlaying = true;
+            
+            // Initial seek to live
+            setTimeout(() => seekToLive(video), 1000);
           });
 
           hls.on(Hls.Events.ERROR, function (event, data) {
@@ -349,6 +404,9 @@
             video.removeEventListener('loadedmetadata', onMeta);
             video.play().catch(e => console.log('Auto-play prevented:', e));
             activeVideoStreams.get(camName).isPlaying = true;
+            
+            // Initial seek to live for native HLS
+            setTimeout(() => seekToLive(video), 1000);
           });
         } else {
           if (placeholder) {
@@ -474,7 +532,9 @@
           manifestLoadingRetryDelay: 2000,
           enableWorker: true,
           lowLatencyMode: true,
-          backBufferLength: 0
+          backBufferLength: 0,
+          liveSyncDurationCount: 1,
+          liveMaxLatencyDurationCount: 5
         });
 
         hls.loadSource(url);
@@ -483,6 +543,9 @@
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
           if (startTime !== null) video.currentTime = startTime;
           video.play().catch(()=>{});
+          
+          // Seek to live for multi-view as well
+          setTimeout(() => seekToLive(video), 1000);
         });
 
         hls.on(Hls.Events.ERROR, function (event, data) {
@@ -509,6 +572,9 @@
           video.removeEventListener('loadedmetadata', onMeta);
           if (startTime !== null) video.currentTime = startTime;
           video.play().catch(()=>{});
+          
+          // Seek to live for native HLS in multi-view
+          setTimeout(() => seekToLive(video), 1000);
         });
       } else {
         console.error("No HLS support in this browser.");
