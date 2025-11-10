@@ -1050,7 +1050,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             is_on = query.get("is_on", [None])[0]
             show_dets = query.get("show_dets", [self.show_dets])[0]
             if show_dets is not None: self.show_dets = str(int(time.time())) # 2 mins
-            threshold = query.get("threshold", ["0.5"])[0] #default 0.5?
+            threshold = query.get("threshold", [None])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
 
