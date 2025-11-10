@@ -161,6 +161,100 @@
       border-radius: 4px;
       font-size: 14px;
     }
+
+    /* Event Images Styles */
+    .events-section {
+      margin-top: 20px;
+      font-family: sans-serif;
+    }
+    .events-section h3 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+    #eventImagesContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      justify-content: flex-start;
+    }
+    .event-image-item {
+      position: relative;
+      width: 220px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+    .event-image-item:hover {
+      transform: scale(1.05);
+    }
+    .event-image-item img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      cursor: pointer;
+    }
+    .event-image-info {
+      padding: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    .event-image-actions {
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      justify-content: space-between;
+    }
+    .event-image-actions button {
+      padding: 4px 8px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      flex: 1;
+    }
+    .event-image-actions button:hover {
+      background: #0056b3;
+    }
+    .event-image-actions button.view-btn {
+      background: #28a745;
+    }
+    .event-image-actions button.view-btn:hover {
+      background: #218838;
+    }
+    #imagePreviewModal {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.9);
+      justify-content: center;
+      align-items: center;
+    }
+    #previewImage {
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+    }
+    .close-preview {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      color: white;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close-preview:hover {
+      color: #ccc;
+    }
   </style>
 </head>
 <body>
@@ -169,6 +263,14 @@
     <button onclick="toggleMultiView()">Multi View</button>
     <div class="date-picker-container">
       <input type="date" id="streamDatePicker">
+    </div>
+  </div>
+
+  <!-- Event Images Section -->
+  <div class="events-section">
+    <h3>Detected Events</h3>
+    <div id="eventImagesContainer">
+      <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
     </div>
   </div>
 
@@ -192,6 +294,12 @@
 
   <div id="multiView"></div>
 
+  <!-- Image Preview Modal -->
+  <div id="imagePreviewModal" class="modal">
+    <span class="close-preview" onclick="closeImagePreview()">&times;</span>
+    <img id="previewImage" src="" alt="Preview">
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     const activeVideoStreams = new Map();
@@ -208,8 +316,15 @@
           currentStreamDate = selectedDate;
           console.log('Date changed to:', currentStreamDate);
           restartAllStreams();
+          loadEventImages(); // Reload events for the new date
         }
       });
+
+      // Load initial events
+      loadEventImages();
+      
+      // Set up interval to refresh events every 5 seconds
+      setInterval(loadEventImages, 5000);
     });
 
     function isToday(dateString) {
@@ -365,7 +480,6 @@
             manifestLoadingMaxRetry: Infinity,
             manifestLoadingRetryDelay: 2000,
           });
-
 
           hls.loadSource(streamUrl);
           hls.attachMedia(video);
@@ -659,6 +773,91 @@
 
     document.getElementById('multiView').addEventListener('click', e => {
       if (e.target.id === 'multiView') closeMultiView();
+    });
+
+    async function loadEventImages() {
+      try {
+        const res = await fetch(`/event_thumbs?folder=${currentStreamDate}`);
+        const data = await res.json();
+        const container = document.getElementById("eventImagesContainer");
+        
+        if (data.images && data.images.length > 0) {
+          let html = '';
+          data.images.forEach(img => {
+            html += `
+              <div class="event-image-item">
+                <img src="${img.url}" alt="Event" onclick="viewImage('${img.url}')">
+                <div class="event-image-info">
+                  <strong>${img.cam_name || 'Camera'}</strong>
+                </div>
+                <div class="event-image-actions">
+                  <button class="view-btn" onclick="viewImage('${img.url}')">View</button>
+                  <button onclick="playVideoAtTime('${img.cam_name}', ${img.timestamp})">Play</button>
+                </div>
+              </div>
+            `;
+          });
+          container.innerHTML = html;
+        } else {
+          container.innerHTML = '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
+        }
+      } catch (err) {
+        console.error("Failed to load event images:", err);
+        const container = document.getElementById("eventImagesContainer");
+        container.innerHTML = '<p style="text-align:center; color:#red; width:100%;">Error loading events.</p>';
+      }
+    }
+
+    function viewImage(imageSrc) {
+      const previewModal = document.getElementById("imagePreviewModal");
+      const previewImage = document.getElementById("previewImage");
+      previewImage.src = imageSrc;
+      previewModal.style.display = "flex";
+    }
+
+    function closeImagePreview() {
+      document.getElementById("imagePreviewModal").style.display = "none";
+    }
+
+    function playVideoAtTime(camName, timestamp) {
+      // Find the video element for this camera
+      const videoId = `video-${camName}`;
+      const video = document.getElementById(videoId);
+      
+      if (video) {
+        // Calculate the time position in the video (assuming timestamp is in seconds)
+        video.currentTime = timestamp;
+        video.play().catch(e => console.log('Auto-play prevented:', e));
+        
+        // Scroll to the camera card
+        const cameraCard = video.closest('.camera-card');
+        if (cameraCard) {
+          cameraCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Add a highlight effect
+          cameraCard.style.boxShadow = '0 0 0 3px #007bff';
+          setTimeout(() => {
+            cameraCard.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          }, 2000);
+        }
+      } else {
+        alert(`Camera ${camName} not found in current view`);
+      }
+    }
+
+    // Close modal when clicking outside the image
+    window.addEventListener("click", function(event) {
+      const modal = document.getElementById("imagePreviewModal");
+      if (event.target === modal) {
+        closeImagePreview();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        closeImagePreview();
+      }
     });
 
     fetchCameras();
