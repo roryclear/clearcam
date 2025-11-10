@@ -1,3 +1,5 @@
 *.m linguist-detectable=false
 *.h linguist-detectable=false
+*.html linguist-detectable=false
+*.kt linguist-detectable=false
 *.py linguist-language=Python
