@@ -1260,39 +1260,63 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.wfile.write(html.encode('utf-8'))
           return
                             
-        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
-          event_image_dir = self.base_dir / cam_name / "event_images"
-          selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
-          event_image_path = event_image_dir / selected_dir
-          event_images = sorted(
-              event_image_path.glob("*.jpg"),
-              key=lambda p: int(p.stem),
-              reverse=True
-          ) if event_image_path.exists() else []
-          image_data = []
-          for img in event_images:
-              ts = int(img.stem)
-              image_url = f"/{img.relative_to(self.base_dir.parent)}"
-              image_data.append({
-                  "url": image_url,
-                  "timestamp": ts,
-                  "filename": img.name,
-                  "cam_name": cam_name,
-                  "folder": selected_dir
-              })
-          
-          response_data = {
-              "images": image_data,
-              "count": len(image_data),
-              "folder": selected_dir,
-              "cam_name": cam_name
-          }
-          
-          self.send_response(200)
-          self.send_header('Content-type', 'application/json')
-          self.end_headers()
-          self.wfile.write(json.dumps(response_data).encode('utf-8'))
-          return
+        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'): # todo clean
+            selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+            image_data = []
+            
+            if cam_name is not None:
+                event_image_dir = self.base_dir / cam_name / "event_images"
+                event_image_path = event_image_dir / selected_dir
+                event_images = sorted(
+                    event_image_path.glob("*.jpg"),
+                    key=lambda p: int(p.stem),
+                    reverse=True
+                ) if event_image_path.exists() else []
+                
+                for img in event_images:
+                    ts = int(img.stem)
+                    image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                    image_data.append({
+                        "url": image_url,
+                        "timestamp": ts,
+                        "filename": img.name,
+                        "cam_name": cam_name,
+                        "folder": selected_dir
+                    })
+            else:
+                for camera_dir in self.base_dir.iterdir():
+                    if camera_dir.is_dir():
+                        event_image_dir = camera_dir / "event_images"
+                        event_image_path = event_image_dir / selected_dir
+                        if event_image_path.exists():
+                            event_images = sorted(
+                                event_image_path.glob("*.jpg"),
+                                key=lambda p: int(p.stem),
+                                reverse=True
+                            )
+                            for img in event_images:
+                                ts = int(img.stem)
+                                image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                                image_data.append({
+                                    "url": image_url,
+                                    "timestamp": ts,
+                                    "filename": img.name,
+                                    "cam_name": camera_dir.name,
+                                    "folder": selected_dir
+                                })
+            image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+            response_data = {
+                "images": image_data,
+                "count": len(image_data),
+                "folder": selected_dir,
+                "cam_name": cam_name if cam_name is not None else "all_cameras"
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+            return
 
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
