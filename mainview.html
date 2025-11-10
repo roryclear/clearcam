@@ -8,7 +8,7 @@
       gap: 20px;
     }
     .camera-card {
-      width: 320px;
+      width: 380px; /* Increased from 320px */
       border: 1px solid #ccc;
       border-radius: 8px;
       overflow: hidden;
@@ -18,13 +18,9 @@
     }
     .camera-card .video-container {
       width: 100%;
-      height: 180px;
+      height: 240px; /* Increased from 180px */
       background: #000;
       position: relative;
-      cursor: pointer;
-    }
-    .camera-card .video-container:hover {
-      opacity: 0.9;
     }
     .camera-card video {
       width: 100%;
@@ -44,10 +40,9 @@
       position: absolute;
       top: 0;
       left: 0;
-      cursor: pointer;
     }
     .camera-card .camera-info {
-      padding: 8px;
+      padding: 12px;
       background: #f9f9f9;
       display: flex;
       justify-content: space-between;
@@ -56,12 +51,15 @@
     .camera-card .camera-name {
       font-weight: bold;
       cursor: pointer;
+      color: #007bff;
+      text-decoration: none;
+      font-size: 16px;
     }
     .camera-card .camera-name:hover {
-      color: #007bff;
+      text-decoration: underline;
     }
     .camera-card button {
-      padding: 4px 8px;
+      padding: 6px 12px;
       background: #dc3545;
       color: white;
       border: none;
@@ -304,21 +302,17 @@
       const placeholderId = `placeholder-${camName}`;
       
       card.innerHTML = `
-        <div class="video-container" onclick="openCameraView('${camName}')">
-          <video id="${videoId}" muted playsinline></video>
-          <div class="video-placeholder" id="${placeholderId}" onclick="openCameraView('${camName}')">Loading stream...</div>
+        <div class="video-container">
+          <video id="${videoId}" controls muted playsinline></video>
+          <div class="video-placeholder" id="${placeholderId}">Loading stream...</div>
         </div>
         <div class="camera-info">
-          <span class="camera-name" onclick="openCameraView('${camName}')">${camName}</span>
-          <button onclick="event.stopPropagation(); deleteCamera('${camName}')">Delete</button>
+          <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
+          <button onclick="deleteCamera('${camName}')">Delete</button>
         </div>
       `;
       
       return card;
-    }
-
-    function openCameraView(camName) {
-      window.open(`/?cam=${encodeURIComponent(camName)}`, '_blank');
     }
 
     function startCameraStream(camName) {
