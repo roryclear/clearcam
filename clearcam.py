@@ -589,9 +589,9 @@ class VideoCapture:
 
           if count > 10:
             if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
-                last_preview_time = time.time()
-                filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
-                write_png(filename, self.raw_frame)
+              last_preview_time = time.time()
+              filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+              write_png(filename, self.raw_frame)
             for _,alert in self.alert_counters.items():
                 if not alert.is_active():
                   alert.reset_counts()
@@ -1264,47 +1264,63 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.end_headers()
           self.wfile.write(html.encode('utf-8'))
           return
-                
-        if not cam_name:
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
-            if available_cams:
-                cam_name = available_cams[0]
-            else:
-                self.send_error(404, "No cameras found")
-                return
-            
-        event_image_dir = self.base_dir / cam_name / "event_images"
-
-        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
+                            
+        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'): # todo clean
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
-            event_image_path = event_image_dir / selected_dir
-            event_images = sorted(
-                event_image_path.glob("*.jpg"),
-                key=lambda p: int(p.stem),
-                reverse=True
-            ) if event_image_path.exists() else []
+            image_data = []
             
-            image_links = ""
-            if event_images:
+            if cam_name is not None:
+                event_image_dir = self.base_dir / cam_name / "event_images"
+                event_image_path = event_image_dir / selected_dir
+                event_images = sorted(
+                    event_image_path.glob("*.jpg"),
+                    key=lambda p: int(p.stem),
+                    reverse=True
+                ) if event_image_path.exists() else []
+                
                 for img in event_images:
                     ts = int(img.stem)
                     image_url = f"/{img.relative_to(self.base_dir.parent)}"
-                    image_links += f"""
-                    <div class="image-item">
-                        <img src="{image_url}" alt="Event" />
-                        <div class="image-actions">
-                            <button onclick="viewImage('{image_url}')">View</button>
-                            <button onclick="playVideoAtTime({ts})">Play</button>
-                        </div>
-                    </div>
-                    """
+                    image_data.append({
+                        "url": image_url,
+                        "timestamp": ts,
+                        "filename": img.name,
+                        "cam_name": cam_name,
+                        "folder": selected_dir
+                    })
             else:
-                image_links = '<p style="text-align:center; color:#666;">No alerts detected yet.</p>'
+                for camera_dir in self.base_dir.iterdir():
+                    if camera_dir.is_dir():
+                        event_image_dir = camera_dir / "event_images"
+                        event_image_path = event_image_dir / selected_dir
+                        if event_image_path.exists():
+                            event_images = sorted(
+                                event_image_path.glob("*.jpg"),
+                                key=lambda p: int(p.stem),
+                                reverse=True
+                            )
+                            for img in event_images:
+                                ts = int(img.stem)
+                                image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                                image_data.append({
+                                    "url": image_url,
+                                    "timestamp": ts,
+                                    "filename": img.name,
+                                    "cam_name": camera_dir.name,
+                                    "folder": selected_dir
+                                })
+            image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+            response_data = {
+                "images": image_data,
+                "count": len(image_data),
+                "folder": selected_dir,
+                "cam_name": cam_name if cam_name is not None else "all_cameras"
+            }
             
             self.send_response(200)
-            self.send_header('Content-type', 'text/html')
+            self.send_header('Content-type', 'application/json')
             self.end_headers()
-            self.wfile.write(image_links.encode('utf-8'))
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
             return
 
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
@@ -1312,18 +1328,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
             show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["false"])[0]
             show_detections = show_detections_param.lower() in ("true", "1", "yes")
-            show_detections_checked = "checked" if show_detections else ""
-
-            event_image_path = event_image_dir / selected_dir
-            event_images = sorted(event_image_path.glob("*.jpg")) if event_image_path.exists() else []
-            image_links = ""
-            for img in event_images:
-                ts = int(img.stem)
-                image_links += f"""
-                <a href="/?cam={cam_name}&folder={selected_dir}&start={ts}">
-                    <img src="/{img.relative_to(self.base_dir.parent)}" width="160" style="margin: 5px; border: 1px solid #ccc;" />
-                </a>
-                """
 
             try:
                 start_time = max(float(start_param),0) if start_param is not None else None
@@ -1339,7 +1343,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             replacements = {
                 '{selected_dir}': selected_dir,
                 '{show_detections_checked}': 'checked' if show_detections else '',
-                '{image_links}': image_links,
                 '{class_labels}': json.dumps(class_labels),
                 '{start_time}': str(start_time) if start_time is not None else 'null',
                 '{cam_name}': cam_name

@@ -998,42 +998,41 @@ initDetectionSettings();
     }
 
 
-    function loadEventImages(folder) {
-        fetch(`/event_thumbs?cam=${cameraName}&folder=${folder}`)
-            .then(res => res.text())
-            .then(html => {
-                const container = document.getElementById("eventImagesContainer");
-
-                // Create a temporary div to parse incoming HTML
-                const temp = document.createElement("div");
-                temp.innerHTML = html.trim();
-
-                // Compare child count and content
-                const isSameLength = container.children.length === temp.children.length;
-                let isSame = isSameLength;
-
-                if (isSameLength) {
-                    for (let i = 0; i < container.children.length; i++) {
-                        if (
-                            container.children[i].outerHTML.trim() !==
-                            temp.children[i].outerHTML.trim()
-                        ) {
-                            isSame = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (!isSame) {
-                    container.innerHTML = html;
-                }
-            })
-            .catch(err => {
-                console.error("Failed to load images:", err);
-                const container = document.getElementById("eventImagesContainer");
-                container.innerHTML = "<p>No event images found.</p>";
-            });
-    }
+function loadEventImages(folder) {
+    fetch(`/event_thumbs?cam=${cameraName}&folder=${folder}`)
+        .then(res => res.json())
+        .then(data => {
+            const container = document.getElementById("eventImagesContainer");
+            
+            // Generate HTML from JSON data
+            let html = '';
+            if (data.images && data.images.length > 0) {
+                data.images.forEach(img => {
+                    html += `
+                    <div class="image-item">
+                        <img src="${img.url}" alt="Event" />
+                        <div class="image-actions">
+                            <button onclick="viewImage('${img.url}')">View</button>
+                            <button onclick="playVideoAtTime(${img.timestamp})">Play</button>
+                        </div>
+                    </div>
+                    `;
+                });
+            } else {
+                html = '<p style="text-align:center; color:#666;">No alerts detected yet.</p>';
+            }
+            
+            // Only update if content changed
+            if (container.innerHTML !== html) {
+                container.innerHTML = html;
+            }
+        })
+        .catch(err => {
+            console.error("Failed to load images:", err);
+            const container = document.getElementById("eventImagesContainer");
+            container.innerHTML = "<p>No event images found.</p>";
+        });
+}
 
     function fetchCounts() {
         fetch(`/get_counts?cam=${encodeURIComponent(cameraName)}`)

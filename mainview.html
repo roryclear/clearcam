@@ -1,307 +1,724 @@
 <!DOCTYPE html>
-          <html>
-          <head>
-            <style>
-                .camera-grid {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 20px;
-                }
-                .camera-card {
-                    width: 220px;
-                    border: 1px solid #ccc;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    text-align: center;
-                    font-family: sans-serif;
-                }
-                .camera-card img {
-                    width: 100%;
-                    display: block;
-                }
-                .camera-card div {
-                    padding: 8px;
-                    background: #f9f9f9;
-                }
-                .form-section {
-                    margin-top: 20px;
-                    font-family: sans-serif;
-                }
-                .form-section input {
-                    padding: 6px;
-                    margin: 4px;
-                    border: 1px solid #ccc;
-                    border-radius: 4px;
-                    width: 200px;
-                }
-                .form-section button {
-                    padding: 6px 12px;
-                    background: #007bff;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                }
-                .form-section button:hover {
-                    background: #0056b3;
-                }
-                .shutdown-wrapper {
-                    margin-top: 20px;
-                }
-
-                /* Multi-view overlay grid */
-                #multiView {
-                    display: none;
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100vh;
-                    background: black;
-                    z-index: 9999;
-                    padding: 10px;
-                    box-sizing: border-box;
-                    justify-content: center;
-                    align-items: center;
-                    grid-gap: 10px;
-                }
-                #multiView.active {
-                    display: grid;
-                    justify-items: center;
-                    align-items: center;
-                }
-                #multiView .video-wrapper {
-                    position: relative;
-                    width: 100%;
-                    aspect-ratio: 16 / 9;
-                    background: #000;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                }
-                #multiView video {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: contain;
-                    background: black;
-                }
-                .multi-view-wrapper {
-                    margin-top: 10px;
-                    text-align: left;
-                }
-                .multi-view-wrapper button {
-                    padding: 6px 12px;
-                    background: #007bff;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                }
-                .multi-view-wrapper button:hover {
-                    background: #0056b3;
-                }
-            </style>
-          </head>
-          <body>
-              <div id="cameraList" class="camera-grid"></div>
-              <div class="multi-view-wrapper">
-                  <button onclick="toggleMultiView()">Multi View</button>
-              </div>
-
-              <div class="form-section">
-                  <form id="addCameraForm">
-                      <input type="text" name="cam_name" placeholder="Camera Name" required>
-                      <input type="text" name="rtsp" placeholder="RTSP Link" required>
-                      <button type="submit">Add Camera</button>
-                  </form>
-                  <div class="max-storage-control" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
-                      <label for="maxStorageInput" style="margin-bottom: 4px;">Set Max Storage (GB):</label>
-                      <div style="display: flex; align-items: center; gap: 6px;">
-                          <input type="number" id="maxStorageInput" min="1" style="width: 120px;">
-                          <button type="button" id="setMaxStorageBtn">Set</button>
-                      </div>
-                  </div>
-                  <div class="shutdown-wrapper">
-                      <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
-                  </div>
-              </div>
-
-              <div id="multiView"></div>
-
-              <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-              <script>
-                  async function fetchCameras() {
-                      const res = await fetch('/list_cameras');
-                      const cams = await res.json();
-                      const container = document.getElementById("cameraList");
-                      container.innerHTML = cams.map(cam => `
-                          <div class="camera-card">
-                              <a href="/?cam=${cam}">
-                                  <img src="/${cam}/preview.png" alt="${cam} preview">
-                                  <div>${cam}</div>
-                              </a>
-                              <button onclick="deleteCamera('${cam}')">Delete</button>
-                          </div>
-                      `).join('');
-                      window.currentCameras = cams;
-                  }
-
-                  async function deleteCamera(cam) {
-                      if (!confirm(`Are you sure you want to delete ${cam}?`)) return;
-                      const res = await fetch(`/delete_camera?cam_name=${cam}`);
-                      if (res.ok) {
-                          fetchCameras();
-                      } else {
-                          alert("Failed to delete camera.");
-                      }
-                  }
-
-                  async function shutdownServer() {
-                      if (!confirm("Are you sure you want to shut down the server?")) return;
-                      const res = await fetch('/shutdown');
-                      if (res.ok) {
-                          alert("Server is shutting down...");
-                      } else {
-                          alert("Shutdown failed.");
-                      }
-                  }
-
-                  async function fetchMaxStorage() {
-                    try {
-                        const res = await fetch('/get_max_storage');
-                        const data = await res.json();
-                        const input = document.getElementById('maxStorageInput');
-                        if (input && data.max_gb !== undefined) {
-                            input.value = data.max_gb;
-                        }
-                    } catch (e) {
-                        console.error("Failed to fetch max storage:", e);
-                    }
-                  }
-
-                  async function setMaxStorage() {
-                      const input = document.getElementById('maxStorageInput');
-                      const newVal = parseFloat(input.value);
-                      if (!newVal || isNaN(newVal)) {
-                          alert("Please enter a valid number");
-                          return;
-                      }
-                      if (!confirm(`Set max storage to ${newVal} GB?`)) return;
-                      await fetch(`/set_max_storage?max=${newVal}`);
-                      fetchMaxStorage();
-                  }
-
-                  document.getElementById('setMaxStorageBtn').addEventListener('click', setMaxStorage);
-
-                  // Refresh storage field every 10 seconds
-                  fetchMaxStorage();
-                  setInterval(fetchMaxStorage, 10000);
-
-
-                  document.getElementById("addCameraForm").addEventListener("submit", async (e) => {
-                      e.preventDefault();
-                      const form = e.target;
-                      const params = new URLSearchParams(new FormData(form)).toString();
-                      await fetch(`/add_camera?${params}`);
-                      form.reset();
-                      fetchCameras(); // Immediately refresh
-                  });
-
-                  async function waitForManifest(url, maxRetries = 30, delay = 2000) {
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            const res = await fetch(url, { cache: "no-store" });
-            if (res.ok) {
-                const text = await res.text();
-                if (text.includes("#EXTINF")) return true;
-            }
-        } catch (err) {
-            // ignore / retry
-        }
-        await new Promise(r => setTimeout(r, delay));
+<html>
+<head>
+  <style>
+    .camera-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
     }
-    return false;
-}
+    .camera-card {
+      width: 480px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      text-align: center;
+      font-family: sans-serif;
+    }
+    .camera-card .video-container {
+      width: 100%;
+      height: 320px;
+      background: #000;
+      position: relative;
+    }
+    .camera-card video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: black;
+    }
+    .camera-card .video-placeholder {
+      width: 100%;
+      height: 100%;
+      background: #222;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    .camera-card .camera-info {
+      padding: 12px;
+      background: #f9f9f9;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .camera-card .camera-name {
+      font-weight: bold;
+      cursor: pointer;
+      color: #007bff;
+      text-decoration: none;
+      font-size: 18px;
+    }
+    .camera-card .camera-name:hover {
+      text-decoration: underline;
+    }
+    .camera-card button {
+      padding: 8px 16px;
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .camera-card button:hover {
+      background: #c82333;
+    }
+    .form-section {
+      margin-top: 20px;
+      font-family: sans-serif;
+    }
+    .form-section input {
+      padding: 6px;
+      margin: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 200px;
+    }
+    .form-section button {
+      padding: 6px 12px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .form-section button:hover {
+      background: #0056b3;
+    }
+    .shutdown-wrapper {
+      margin-top: 20px;
+    }
 
-function attachHlsToVideo(url, video, startTime = null) {
-    if (Hls.isSupported()) {
-        const hls = new Hls({
+    /* Multi-view overlay grid */
+    #multiView {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      background: black;
+      z-index: 9999;
+      padding: 10px;
+      box-sizing: border-box;
+      justify-content: center;
+      align-items: center;
+      grid-gap: 10px;
+    }
+    #multiView.active {
+      display: grid;
+      justify-items: center;
+      align-items: center;
+    }
+    #multiView .video-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #multiView video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: black;
+    }
+    .multi-view-wrapper {
+      margin-top: 10px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .multi-view-wrapper button {
+      padding: 6px 12px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .multi-view-wrapper button:hover {
+      background: #0056b3;
+    }
+    .date-picker-container {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .date-picker-container input {
+      padding: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    /* Event Images Styles */
+    .events-section {
+      margin-top: 20px;
+      font-family: sans-serif;
+    }
+    .events-section h3 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+    #eventImagesContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      justify-content: flex-start;
+    }
+    .event-image-item {
+      position: relative;
+      width: 220px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+    .event-image-item:hover {
+      transform: scale(1.05);
+    }
+    .event-image-item img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      cursor: pointer;
+    }
+    .event-image-info {
+      padding: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    .event-image-actions {
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      justify-content: space-between;
+    }
+    .event-image-actions button {
+      padding: 4px 8px;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      flex: 1;
+    }
+    .event-image-actions button.view-btn {
+      background: #28a745;
+    }
+    .event-image-actions button.view-btn:hover {
+      background: #218838;
+    }
+    .event-image-actions button.play-btn {
+      background: #007bff;
+    }
+    .event-image-actions button.play-btn:hover {
+      background: #0056b3;
+    }
+    .event-image-actions button.play-all-btn {
+      background: #6f42c1;
+    }
+    .event-image-actions button.play-all-btn:hover {
+      background: #5a359c;
+    }
+    #imagePreviewModal {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.9);
+      justify-content: center;
+      align-items: center;
+    }
+    #previewImage {
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+    }
+    .close-preview {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      color: white;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close-preview:hover {
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div id="cameraList" class="camera-grid"></div>
+  <div class="multi-view-wrapper">
+    <button onclick="toggleMultiView()">Multi View</button>
+    <div class="date-picker-container">
+      <input type="date" id="streamDatePicker">
+    </div>
+  </div>
+
+
+  <div class="form-section">
+    <form id="addCameraForm">
+      <input type="text" name="cam_name" placeholder="Camera Name" required>
+      <input type="text" name="rtsp" placeholder="RTSP Link" required>
+      <button type="submit">Add Camera</button>
+    </form>
+    <div class="max-storage-control" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
+      <label for="maxStorageInput" style="margin-bottom: 4px;">Set Max Storage (GB):</label>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <input type="number" id="maxStorageInput" min="1" style="width: 120px;">
+        <button type="button" id="setMaxStorageBtn">Set</button>
+      </div>
+    </div>
+    <div class="shutdown-wrapper">
+      <button class="shutdown-button" onclick="shutdownServer()">Shutdown Server</button>
+    </div>
+  </div>
+
+  <div class="events-section">
+    <h3>Detected Events</h3>
+    <div id="eventImagesContainer">
+      <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
+    </div>
+  </div>
+
+  <div id="multiView"></div>
+
+  <!-- Image Preview Modal -->
+  <div id="imagePreviewModal" class="modal">
+    <span class="close-preview" onclick="closeImagePreview()">&times;</span>
+    <img id="previewImage" src="" alt="Preview">
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script>
+    const activeVideoStreams = new Map();
+    let wasHidden = false;
+    let currentStreamDate = new Date().toLocaleDateString('en-CA');
+    let userIsInteracting = false;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const datePicker = document.getElementById('streamDatePicker');
+      datePicker.value = currentStreamDate;
+      datePicker.addEventListener('change', function() {
+        const selectedDate = this.value;
+        if (selectedDate) {
+          currentStreamDate = selectedDate;
+          console.log('Date changed to:', currentStreamDate);
+          restartAllStreams();
+          loadEventImages(); // Reload events for the new date
+        }
+      });
+
+      // Load initial events
+      loadEventImages();
+      
+      // Set up interval to refresh events every 5 seconds
+      setInterval(loadEventImages, 5000);
+    });
+
+    function isToday(dateString) {
+      const today = new Date().toLocaleDateString('en-CA');
+      return dateString === today;
+    }
+
+    function setupUserInteractionTracking(video) {
+      video.addEventListener('seeking', () => {
+        userIsInteracting = true;
+        console.log('User is scrubbing - disabling auto-seek');
+      });
+      
+      video.addEventListener('seeked', () => {
+        setTimeout(() => {
+          userIsInteracting = false;
+        }, 3000);
+      });
+      
+      video.addEventListener('play', () => {
+        userIsInteracting = false;
+      });
+    }
+
+    function restartAllStreams() {
+      console.log('Restarting all streams for date:', currentStreamDate);
+
+      activeVideoStreams.forEach((streamInfo, camName) => {
+        cleanupCameraStream(camName);
+      });
+
+      if (window.currentCameras) {
+        window.currentCameras.forEach(camName => {
+          startCameraStream(camName);
+        });
+      }
+    }
+
+    async function fetchCameras() {
+      const res = await fetch('/list_cameras');
+      const cams = await res.json();
+      const container = document.getElementById("cameraList");
+      
+      const previousCameras = window.currentCameras || [];
+      window.currentCameras = cams;
+
+      const existingCards = new Map();
+      container.querySelectorAll('.camera-card').forEach(card => {
+        const camName = card.dataset.camera;
+        if (camName) {
+          existingCards.set(camName, card);
+        }
+      });
+
+      const newCards = [];
+      
+      cams.forEach(cam => {
+        let card = existingCards.get(cam);
+        
+        if (card) {
+          const nameSpan = card.querySelector('.camera-name');
+          if (nameSpan && nameSpan.textContent !== cam) {
+            nameSpan.textContent = cam;
+          }
+          newCards.push(card);
+        } else {
+          card = createCameraCard(cam);
+          newCards.push(card);
+        }
+      });
+      
+      const currentCards = Array.from(container.children);
+      const needsUpdate = newCards.length !== currentCards.length || 
+                         !newCards.every((card, index) => currentCards[index] === card);
+      
+      if (needsUpdate) {
+        container.innerHTML = '';
+        newCards.forEach(card => container.appendChild(card));
+      }
+      
+      // Start streams for new cameras
+      cams.forEach(cam => {
+        if (!activeVideoStreams.has(cam)) {
+          startCameraStream(cam);
+        }
+      });
+      
+      // Clean up streams for removed cameras
+      previousCameras.forEach(cameraName => {
+        if (!cams.includes(cameraName)) {
+          cleanupCameraStream(cameraName);
+        }
+      });
+    }
+
+    function createCameraCard(camName) {
+      const card = document.createElement('div');
+      card.className = 'camera-card';
+      card.dataset.camera = camName;
+      
+      const videoId = `video-${camName}`;
+      const placeholderId = `placeholder-${camName}`;
+      
+      card.innerHTML = `
+        <div class="video-container">
+          <video id="${videoId}" controls muted playsinline></video>
+          <div class="video-placeholder" id="${placeholderId}">Loading stream...</div>
+        </div>
+        <div class="camera-info">
+          <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
+          <button onclick="deleteCamera('${camName}')">Delete</button>
+        </div>
+      `;
+      
+      return card;
+    }
+
+    function startCameraStream(camName) {
+      const videoId = `video-${camName}`;
+      const placeholderId = `placeholder-${camName}`;
+      const video = document.getElementById(videoId);
+      const placeholder = document.getElementById(placeholderId);
+      
+      if (!video) {
+        console.warn(`Video element not found for ${camName}`);
+        return;
+      }
+      
+      // Setup user interaction tracking for this video
+      setupUserInteractionTracking(video);
+      
+      const encoded = encodeURIComponent(camName);
+      const baseUrl = window.location.origin;
+      const streamUrl = `${baseUrl}/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
+      
+      activeVideoStreams.set(camName, {
+        video: video,
+        hls: null,
+        streamUrl: streamUrl,
+        isPlaying: false
+      });
+      
+      waitForManifest(streamUrl, 30, 1000).then(ready => {
+        if (!ready) {
+          if (placeholder) placeholder.textContent = 'Stream unavailable';
+          return;
+        }
+        
+        if (placeholder) placeholder.style.display = 'none';
+        
+        if (Hls.isSupported()) {
+          const hls = new Hls({
             manifestLoadingTimeOut: 20000,
             manifestLoadingMaxRetry: Infinity,
             manifestLoadingRetryDelay: 2000,
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 0
+          });
+
+          hls.loadSource(streamUrl);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, function () {
+            video.play().catch(e => console.log('Auto-play prevented:', e));
+            activeVideoStreams.get(camName).isPlaying = true;
+          });
+
+          hls.on(Hls.Events.ERROR, function (event, data) {
+            if (data && data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  hls.startLoad(-1);
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  cleanupCameraStream(camName);
+                  if (placeholder) {
+                    placeholder.textContent = 'Stream error';
+                    placeholder.style.display = 'flex';
+                  }
+                  break;
+              }
+            }
+          });
+
+          activeVideoStreams.get(camName).hls = hls;
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = streamUrl;
+          video.addEventListener('loadedmetadata', function onMeta() {
+            video.removeEventListener('loadedmetadata', onMeta);
+            video.play().catch(e => console.log('Auto-play prevented:', e));
+            activeVideoStreams.get(camName).isPlaying = true;
+          });
+        } else {
+          if (placeholder) {
+            placeholder.textContent = 'HLS not supported';
+            placeholder.style.display = 'flex';
+          }
+        }
+      }).catch(error => {
+        console.error(`Error starting stream for ${camName}:`, error);
+        if (placeholder) {
+          placeholder.textContent = 'Stream error';
+          placeholder.style.display = 'flex';
+        }
+      });
+    }
+
+    function cleanupCameraStream(camName) {
+      const streamInfo = activeVideoStreams.get(camName);
+      if (streamInfo) {
+        if (streamInfo.hls && typeof streamInfo.hls.destroy === 'function') {
+          streamInfo.hls.destroy();
+        }
+        if (streamInfo.video) {
+          streamInfo.video.pause();
+          streamInfo.video.removeAttribute('src');
+          streamInfo.video.load();
+        }
+        activeVideoStreams.delete(camName);
+      }
+    }
+
+    async function deleteCamera(cam) {
+      if (!confirm(`Are you sure you want to delete ${cam}?`)) return;
+      
+      // Clean up the stream first
+      cleanupCameraStream(cam);
+      
+      const res = await fetch(`/delete_camera?cam_name=${cam}`);
+      if (res.ok) {
+        fetchCameras();
+      } else {
+        alert("Failed to delete camera.");
+      }
+    }
+
+    async function shutdownServer() {
+      if (!confirm("Are you sure you want to shut down the server?")) return;
+      
+      // Clean up all streams
+      activeVideoStreams.forEach((stream, camName) => {
+        cleanupCameraStream(camName);
+      });
+      
+      const res = await fetch('/shutdown');
+      if (res.ok) {
+        alert("Server is shutting down...");
+      } else {
+        alert("Shutdown failed.");
+      }
+    }
+
+    async function fetchMaxStorage() {
+      try {
+        const res = await fetch('/get_max_storage');
+        const data = await res.json();
+        const input = document.getElementById('maxStorageInput');
+        if (input && data.max_gb !== undefined) {
+          input.value = data.max_gb;
+        }
+      } catch (e) {
+        console.error("Failed to fetch max storage:", e);
+      }
+    }
+
+    async function setMaxStorage() {
+      const input = document.getElementById('maxStorageInput');
+      const newVal = parseFloat(input.value);
+      if (!newVal || isNaN(newVal)) {
+        alert("Please enter a valid number");
+        return;
+      }
+      if (!confirm(`Set max storage to ${newVal} GB?`)) return;
+      await fetch(`/set_max_storage?max=${newVal}`);
+      fetchMaxStorage();
+    }
+
+    document.getElementById('setMaxStorageBtn').addEventListener('click', setMaxStorage);
+
+    // Refresh storage field every 10 seconds
+    fetchMaxStorage();
+    setInterval(fetchMaxStorage, 10000);
+
+    document.getElementById("addCameraForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const params = new URLSearchParams(new FormData(form)).toString();
+      await fetch(`/add_camera?${params}`);
+      form.reset();
+      fetchCameras();
+    });
+
+    async function waitForManifest(url, maxRetries = 30, delay = 2000) {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (res.ok) {
+            const text = await res.text();
+            if (text.includes("#EXTINF")) return true;
+          }
+        } catch (err) {
+          // ignore / retry
+        }
+        await new Promise(r => setTimeout(r, delay));
+      }
+      return false;
+    }
+
+    function attachHlsToVideo(url, video, startTime = null) {
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          manifestLoadingTimeOut: 20000,
+          manifestLoadingMaxRetry: Infinity,
+          manifestLoadingRetryDelay: 2000,
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 0,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10
         });
 
         hls.loadSource(url);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
-            if (startTime !== null) video.currentTime = startTime;
-            video.play().catch(()=>{});
+          if (startTime !== null) video.currentTime = startTime;
+          video.play().catch(()=>{});
         });
 
         hls.on(Hls.Events.ERROR, function (event, data) {
-            if (data && data.fatal) {
-                switch (data.type) {
-                    case Hls.ErrorTypes.NETWORK_ERROR:
-                        hls.startLoad(-1);
-                        break;
-                    case Hls.ErrorTypes.MEDIA_ERROR:
-                        hls.recoverMediaError();
-                        break;
-                    default:
-                        hls.destroy();
-                        break;
-                }
+          if (data && data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hls.startLoad(-1);
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+                break;
             }
+          }
         });
 
-        // keep a reference so it can be cleaned up if we close multi-view
         video._hlsInstance = hls;
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
         video.addEventListener('loadedmetadata', function onMeta() {
-            video.removeEventListener('loadedmetadata', onMeta);
-            if (startTime !== null) video.currentTime = startTime;
-            video.play().catch(()=>{});
+          video.removeEventListener('loadedmetadata', onMeta);
+          if (startTime !== null) video.currentTime = startTime;
+          video.play().catch(()=>{});
         });
-    } else {
+      } else {
         console.error("No HLS support in this browser.");
+      }
     }
-}
 
-async function toggleMultiView() {
-    const container = document.getElementById('multiView');
-    if (container.classList.contains('active')) {
+    async function toggleMultiView() {
+      const container = document.getElementById('multiView');
+      if (container.classList.contains('active')) {
         closeMultiView();
         return;
-    }
+      }
 
-    if (!window.currentCameras || window.currentCameras.length === 0) {
+      if (!window.currentCameras || window.currentCameras.length === 0) {
         alert("No cameras available.");
         return;
-    }
+      }
 
-    container.classList.add('active');
+      container.classList.add('active');
 
-    const cams = window.currentCameras.slice(); // copy
-    const today = new Date().toLocaleDateString('en-CA');
-    const base = "http://localhost:8080";
+      const cams = window.currentCameras.slice();
+      const base = window.location.origin;
 
-    const count = cams.length;
-    const cols = Math.ceil(Math.sqrt(count));
-    const rows = Math.ceil(count / cols);
-    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    container.style.gridTemplateRows = `repeat(${rows}, auto)`;
-    container.innerHTML = '';
+      const count = cams.length;
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+      container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      container.style.gridTemplateRows = `repeat(${rows}, auto)`;
+      container.innerHTML = '';
 
-    // Create video placeholders & start loading each stream independently
-    cams.forEach(cam => {
+      cams.forEach(cam => {
         const encoded = encodeURIComponent(cam);
-        const videoUrl = `${base}/${encoded}_raw/streams/${today}/stream.m3u8`;
+        const videoUrl = `${base}/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
 
         const wrapper = document.createElement('div');
         wrapper.className = 'video-wrapper';
@@ -309,93 +726,185 @@ async function toggleMultiView() {
         vid.autoplay = true;
         vid.muted = true;
         vid.playsInline = true;
-        // attribute so we can cleanup later
         vid.dataset.streamUrl = videoUrl;
         wrapper.appendChild(vid);
         container.appendChild(wrapper);
 
-        // Wait for manifest then attach HLS/native playback (non-blocking)
         (async () => {
-            const ready = await waitForManifest(videoUrl, 60, 1000); // try a bit longer for multi-view
-            if (!ready) {
-                console.error("Stream never became available for", cam);
-                const notice = document.createElement('div');
-                notice.style.position = 'absolute';
-                notice.style.color = 'white';
-                notice.textContent = 'Stream unavailable';
-                wrapper.appendChild(notice);
-                return;
-            }
+          const ready = await waitForManifest(videoUrl, 60, 1000);
+          if (!ready) {
+            console.error("Stream never became available for", cam);
+            const notice = document.createElement('div');
+            notice.style.position = 'absolute';
+            notice.style.color = 'white';
+            notice.textContent = 'Stream unavailable';
+            wrapper.appendChild(notice);
+            return;
+          }
 
-            // Use the same attach logic that works for single-view
-            try {
-                attachHlsToVideo(videoUrl, vid, /*startTime=*/ null);
-            } catch (e) {
-                console.error("Failed to attach HLS for", cam, e);
-            }
-
-            // After some buffering, attempt jump-to-live for EVENT playlists
-            // (native players may still start at beginning; this seeks to the end once seekable is known)
-            let attempts = 0;
-            const seekInterval = setInterval(() => {
-                attempts++;
-                if (vid.seekable && vid.seekable.length > 0) {
-                    try {
-                        // move to near the live edge
-                        const end = vid.seekable.end(0);
-                        vid.currentTime = Math.max(0, end - 0.5);
-                        clearInterval(seekInterval);
-                    } catch (e) {
-                        // ignoring seeking errors — keep trying a few times
-                    }
-                }
-                if (attempts > 10) clearInterval(seekInterval);
-            }, 500);
+          try {
+            attachHlsToVideo(videoUrl, vid, null);
+          } catch (e) {
+            console.error("Failed to attach HLS for", cam, e);
+          }
         })();
-    });
+      });
 
-    // request fullscreen for multi-view if available
-    if (container.requestFullscreen) container.requestFullscreen();
-}
+      if (container.requestFullscreen) container.requestFullscreen();
+    }
 
-function closeMultiView() {
-    const container = document.getElementById('multiView');
-    // destroy any attached Hls instances and remove sources
-    container.querySelectorAll('video').forEach(vid => {
+    function closeMultiView() {
+      const container = document.getElementById('multiView');
+      container.querySelectorAll('video').forEach(vid => {
         try {
-            if (vid._hlsInstance && typeof vid._hlsInstance.destroy === 'function') {
-                vid._hlsInstance.destroy();
-                delete vid._hlsInstance;
-            }
-            // stop loading / playback
-            vid.pause();
-            vid.removeAttribute('src');
-            vid.load();
+          if (vid._hlsInstance && typeof vid._hlsInstance.destroy === 'function') {
+            vid._hlsInstance.destroy();
+            delete vid._hlsInstance;
+          }
+          vid.pause();
+          vid.removeAttribute('src');
+          vid.load();
         } catch (e) {
-            console.warn('Error cleaning video', e);
+          console.warn('Error cleaning video', e);
         }
+      });
+
+      container.innerHTML = '';
+      container.classList.remove('active');
+      if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const mv = document.getElementById('multiView');
+        if (mv.classList.contains('active')) closeMultiView();
+      }
     });
 
-    container.innerHTML = '';
-    container.classList.remove('active');
-    if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
-}
+    document.getElementById('multiView').addEventListener('click', e => {
+      if (e.target.id === 'multiView') closeMultiView();
+    });
 
-                  // Close multi-view on ESC or background click
-                  document.addEventListener('keydown', e => {
-                      if (e.key === 'Escape') {
-                          const mv = document.getElementById('multiView');
-                          if (mv.classList.contains('active')) closeMultiView();
-                      }
-                  });
+    async function loadEventImages() {
+      try {
+        const res = await fetch(`/event_thumbs?folder=${currentStreamDate}`);
+        const data = await res.json();
+        const container = document.getElementById("eventImagesContainer");
+        
+        if (data.images && data.images.length > 0) {
+          let html = '';
+          data.images.forEach(img => {
+            html += `
+              <div class="event-image-item">
+                <img src="${img.url}" alt="Event" onclick="viewImage('${img.url}')">
+                <div class="event-image-info">
+                  <strong>${img.cam_name || 'Camera'}</strong>
+                </div>
+                <div class="event-image-actions">
+                  <button class="view-btn" onclick="viewImage('${img.url}')">View</button>
+                  <button class="play-btn" onclick="playVideoAtTime('${img.cam_name}', ${img.timestamp})">Play</button>
+                  <button class="play-all-btn" onclick="playAllCamerasAtTime(${img.timestamp})">Play (All)</button>
+                </div>
+              </div>
+            `;
+          });
+          container.innerHTML = html;
+        } else {
+          container.innerHTML = '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
+        }
+      } catch (err) {
+        console.error("Failed to load event images:", err);
+        const container = document.getElementById("eventImagesContainer");
+        container.innerHTML = '<p style="text-align:center; color:#red; width:100%;">Error loading events.</p>';
+      }
+    }
 
-                  document.getElementById('multiView').addEventListener('click', e => {
-                      if (e.target.id === 'multiView') closeMultiView();
-                  });
+    function viewImage(imageSrc) {
+      const previewModal = document.getElementById("imagePreviewModal");
+      const previewImage = document.getElementById("previewImage");
+      previewImage.src = imageSrc;
+      previewModal.style.display = "flex";
+    }
 
-                  // Refresh list every 5 seconds
-                  fetchCameras();
-                  setInterval(fetchCameras, 5000);
-              </script>
-          </body>
-          </html>
+    function closeImagePreview() {
+      document.getElementById("imagePreviewModal").style.display = "none";
+    }
+
+    function playVideoAtTime(camName, timestamp) {
+      // Find the video element for this camera
+      const videoId = `video-${camName}`;
+      const video = document.getElementById(videoId);
+      
+      if (video) {
+        // Calculate the time position in the video (assuming timestamp is in seconds)
+        video.currentTime = timestamp;
+        video.play().catch(e => console.log('Auto-play prevented:', e));
+        
+        // Scroll to the camera card
+        const cameraCard = video.closest('.camera-card');
+        if (cameraCard) {
+          cameraCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Add a highlight effect
+          cameraCard.style.boxShadow = '0 0 0 3px #007bff';
+          setTimeout(() => {
+            cameraCard.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          }, 2000);
+        }
+      } else {
+        alert(`Camera ${camName} not found in current view`);
+      }
+    }
+
+    function playAllCamerasAtTime(timestamp) {
+      console.log(`Playing all cameras at timestamp: ${timestamp}`);
+      
+      // Play all available cameras at the same timestamp
+      if (window.currentCameras && window.currentCameras.length > 0) {
+        window.currentCameras.forEach(camName => {
+          const videoId = `video-${camName}`;
+          const video = document.getElementById(videoId);
+          
+          if (video) {
+            video.currentTime = timestamp;
+            video.play().catch(e => console.log(`Auto-play prevented for ${camName}:`, e));
+          }
+        });
+        
+        // Scroll to the first camera card
+        const firstCameraCard = document.querySelector('.camera-card');
+        if (firstCameraCard) {
+          firstCameraCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        // Highlight all camera cards briefly
+        document.querySelectorAll('.camera-card').forEach(card => {
+          card.style.boxShadow = '0 0 0 3px #6f42c1';
+          setTimeout(() => {
+            card.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          }, 2000);
+        });
+      } else {
+        alert("No cameras available to play");
+      }
+    }
+
+    // Close modal when clicking outside the image
+    window.addEventListener("click", function(event) {
+      const modal = document.getElementById("imagePreviewModal");
+      if (event.target === modal) {
+        closeImagePreview();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        closeImagePreview();
+      }
+    });
+
+    fetchCameras();
+    setInterval(fetchCameras, 5000);
+  </script>
+</body>
+</html>
