@@ -555,7 +555,7 @@ class VideoCapture:
         "-vf", f"scale={self.width}:{self.height}",
         "-timeout", "5000000",
         "-rw_timeout", "15000000",
-        "-vsync", "2",s
+        "-vsync", "2",
         "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
         "-avioflags", "direct",
         "-flags", "low_delay",
