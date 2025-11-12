@@ -541,8 +541,7 @@ class VideoCapture:
     ]
     self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    time.sleep(10)
-
+    time.sleep(8)
     command = [
         ffmpeg_path,
         "-i", str(path / "stream.m3u8"),
@@ -550,12 +549,18 @@ class VideoCapture:
         "-reconnect", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "2",
-        "-an",  # No audio
+        "-an",
         "-f", "rawvideo",
         "-pix_fmt", "bgr24",
         "-vf", f"scale={self.width}:{self.height}",
         "-timeout", "5000000",
         "-rw_timeout", "15000000",
+        "-vsync", "2",s
+        "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
+        "-avioflags", "direct",
+        "-flags", "low_delay",
+        "-max_delay", "100000",
+        "-threads", "1",
         "-"
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -610,7 +615,7 @@ class VideoCapture:
                         if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                         last_det = time.time()
                         alert.last_det = time.time()
-            if (send_det and userID is not None) and time.time() - last_det >= 2: #send 15ish second clip after
+            if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
                 os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
                 mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
                 temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
