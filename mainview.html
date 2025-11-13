@@ -96,6 +96,54 @@
       margin-top: 20px;
     }
 
+    #zoneModal button {
+        padding: 8px 16px;
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-family: sans-serif;
+    }
+
+    #zoneModal button:hover {
+        background: #c82333;
+    }
+
+    #zoneModal label {
+        font-family: sans-serif;
+        font-size: 14px;
+    }
+
+    #zoneModal input[type="number"] {
+        padding: 6px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: sans-serif;
+    }
+
+    #zoneModal input[type="checkbox"] {
+        margin: 0;
+    }
+    #zoneModal h3 {
+        font-family: sans-serif;
+        margin: 0;
+    }
+
+    #zoneModal .modal-header h3 {
+        font-family: sans-serif;
+    }
+
+    #zoneModal div {
+        font-family: sans-serif;
+    }
+
+    #zoneModal {
+        font-family: sans-serif;
+    }
+
     /* Multi-view overlay grid */
     #multiView {
       display: none;
@@ -240,6 +288,10 @@
       max-height: 90%;
       object-fit: contain;
     }
+    .modal-content {
+        width: 95%;
+        padding: 15px;
+    }
     .close-preview {
       position: absolute;
       top: 20px;
@@ -263,6 +315,51 @@
       width: 100%;
       height: 100%;
       fill: currentColor;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 10000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        padding: 20px;
+        border-radius: 8px;
+        max-width: 600px;
+        width: 90%;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        margin: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .modal-header h3 {
+        margin: 0;
+    }
+
+    .close {
+        color: #aaa;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover {
+        color: black;
     }
   </style>
 </head>
@@ -299,7 +396,7 @@
       <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
     </div>
   </div>
-
+  
   <div id="multiView"></div>
 
   <!-- Image Preview Modal -->
@@ -307,6 +404,42 @@
     <span class="close-preview" onclick="closeImagePreview()">&times;</span>
     <img id="previewImage" src="" alt="Preview">
   </div>
+  
+  <div id="zoneModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>Edit Zone</h3>
+            <span class="close" onclick="closeZoneModal()">&times;</span>
+        </div>
+        <div style="position: relative; display: inline-block; max-width: 100%;">
+            <img id="zonePreview" src="/testcam/preview.png"
+                style="width: 100%; max-height: 400px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; user-select: none; -webkit-user-drag: none; cursor: crosshair;">
+            <div id="polygonOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+        </div>
+        <div style="margin: 10px 0; text-align: center; color: #666; font-size: 0.9rem;">
+            Click on the image to make a detection zone.
+        </div>
+        <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <label style="display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="zoneEnabledCheckbox" checked> Enable Zone
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px;">
+                    Detection Threshold:
+                    <input type="number" id="zoneThreshold" value="50" min="0" max="100" step="1" style="width: 60px;"> %
+                </label>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button type="button" onclick="clearPolygon()">Clear Zone</button>
+                <button type="button" onclick="closeZoneModal()">Cancel</button>
+                <button type="button" onclick="saveZone()">Save</button>
+            </div>
+        </div>
+    </div>
+    </div>
 
   <svg style="display: none;">
     <symbol id="icon-magnify" viewBox="0 0 24 24">
@@ -326,11 +459,21 @@
   </svg>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script>
+<script>
+    const zoneModal = document.getElementById("zoneModal");
+
     const activeVideoStreams = new Map();
     let wasHidden = false;
     let currentStreamDate = new Date().toLocaleDateString('en-CA');
     let userIsInteracting = false;
+
+    // Zone editor state - scoped to modal session
+    let zoneEditorState = {
+        polygonSvg: null,
+        polygonPath: null,
+        firstPoint: null,
+        isPolygonComplete: false
+    };
 
     document.addEventListener('DOMContentLoaded', function() {
       const datePicker = document.getElementById('streamDatePicker');
@@ -460,11 +603,356 @@
         </div>
         <div class="camera-info">
           <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
+          <button onclick="openSettingsEditor('${camName}')">Settings</button>
           <button onclick="deleteCamera('${camName}')">Delete</button>
         </div>
       `;
       
       return card;
+    }
+
+    let currentEditingCamera = null;
+    function openSettingsEditor(cameraName) {
+        currentEditingCamera = cameraName;
+        
+        // Reset zone editor state
+        zoneEditorState = {
+            polygonSvg: null,
+            polygonPath: null,
+            firstPoint: null,
+            isPolygonComplete: false
+        };
+        
+        // Update the zone preview image URL with the actual camera name
+        const zonePreview = document.getElementById("zonePreview");
+        zonePreview.src = `/${cameraName}/preview.png`;
+        
+        zoneModal.style.display = "flex";
+        initZoneEditor();
+          
+        // Then load the settings
+        fetch(`/get_settings?cam=${cameraName}`)
+            .then(res => res.json())
+            .then(data => {
+                console.log("Received settings data:", data);
+                const previewEl = document.getElementById("zonePreview");
+                
+                // Wait for the new image to load before drawing polygons
+                previewEl.onload = function() {
+                    if (data && data.coords) {
+                        console.log("Loading coords:", data.coords);
+                        loadPolygon(data.coords, previewEl);
+                    }
+                };
+                
+                // If image is already loaded (cached), draw immediately
+                if (previewEl.complete) {
+                    if (data && data.coords) {
+                        console.log("Loading coords:", data.coords);
+                        loadPolygon(data.coords, previewEl);
+                    }
+                }
+
+                const zoneEnabledCheckbox = document.getElementById("zoneEnabledCheckbox");
+                if (data.is_on !== undefined) {
+                    zoneEnabledCheckbox.checked = data.is_on;
+                } else if (data.length && data[0] && data[0].is_on !== undefined) {
+                    zoneEnabledCheckbox.checked = data[0].is_on;
+                } else {
+                    zoneEnabledCheckbox.checked = false;
+                }
+                
+                const outsideZoneCheckbox = document.getElementById("outsideZoneCheckbox");
+                if (data.outside !== undefined) {
+                    outsideZoneCheckbox.checked = data.outside;
+                } else if (data.length && data[0] && data[0].outside !== undefined) {
+                    outsideZoneCheckbox.checked = data[0].outside;
+                } else {
+                    outsideZoneCheckbox.checked = false;
+                }
+                
+                const thresholdInput = document.getElementById("zoneThreshold");
+                let rawThreshold = undefined;
+                if (data.threshold !== undefined) {
+                    rawThreshold = data.threshold;
+                } else if (data.length && data[0] && data[0].threshold !== undefined) {
+                    rawThreshold = data[0].threshold;
+                }
+                if (rawThreshold !== undefined) {
+                    if (rawThreshold <= 1) {
+                        thresholdInput.value = (rawThreshold * 100).toFixed(0);
+                    } else {
+                        thresholdInput.value = rawThreshold.toFixed(0);
+                    }
+                }
+            })
+            .catch(err => {
+                console.error("Failed to load zone:", err);
+            });
+    }
+
+    function closeZoneModal() {
+        zoneModal.style.display = "none";
+        currentEditingCamera = null;
+        // Clear zone editor state
+        zoneEditorState = {
+            polygonSvg: null,
+            polygonPath: null,
+            firstPoint: null,
+            isPolygonComplete: false
+        };
+    }
+
+    function isClickOnPoint(point, clickX, clickY) {
+        const pointRect = point.getBoundingClientRect();
+        const previewRect = document.getElementById("zonePreview").getBoundingClientRect();
+        const pointX = parseInt(point.style.left) + 6; // Center of point
+        const pointY = parseInt(point.style.top) + 6;
+        
+        // Check if click is within the point's area
+        const distance = Math.sqrt(Math.pow(clickX - pointX, 2) + Math.pow(clickY - pointY, 2));
+        return distance <= 10; // Increased tolerance for easier clicking
+    }
+
+    function initZoneEditor() {
+        const previewEl = document.getElementById("zonePreview");
+        clearPolygon();
+        initPolygonOverlay();
+        previewEl.addEventListener('click', handlePreviewClick);
+    }
+
+    function saveZone() {
+        if (!currentEditingCamera) {
+            console.error("No camera is currently being edited");
+            alert("Error: No camera selected for editing.");
+            return;
+        }
+
+        const previewEl = document.getElementById("zonePreview");
+        const points = Array.from(document.querySelectorAll('.polygon-point'));
+        
+        let coords = null;
+        if (points.length >= 3) {
+            const videoWidth = 1280;
+            const videoHeight = 720;
+            const previewRect = previewEl.getBoundingClientRect();
+
+            coords = points.map(point => {
+                const pointRect = point.getBoundingClientRect();
+                const centerX = pointRect.left + pointRect.width / 2;
+                const centerY = pointRect.top + pointRect.height / 2;
+                
+                const x = ((centerX - previewRect.left) / previewRect.width) * videoWidth;
+                const y = ((centerY - previewRect.top) / previewRect.height) * videoHeight;
+                
+                return [x, y];
+            });
+        }
+
+        const is_on = document.getElementById("zoneEnabledCheckbox").checked;
+        const outside = document.getElementById("outsideZoneCheckbox").checked;
+
+        const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
+        const threshold = thresholdPercent / 100;
+        
+        const params = new URLSearchParams({
+            cam: currentEditingCamera,
+            is_on: is_on,
+            threshold: threshold.toFixed(2),
+            outside: outside
+        });
+        
+        if (coords) {
+            params.set('coords', JSON.stringify(coords));
+        }
+
+        fetch(`/edit_settings?${params.toString()}`)
+            .then(res => {
+                if (!res.ok) throw new Error("Failed to save settings");
+                console.log("Settings saved successfully for camera:", currentEditingCamera);
+                closeZoneModal();
+            })
+            .catch(err => {
+                console.error("Save settings failed:", err);
+                alert("Failed to save settings.");
+            });
+    }
+
+    function loadPolygon(coords, previewEl) {
+      const videoWidth = 1280;
+      const videoHeight = 720;
+      const img = document.getElementById("zonePreview");
+      if (img.complete) {
+        drawPolygonCoords(coords, img, previewEl);
+      } else {
+        img.addEventListener('load', function() {
+          drawPolygonCoords(coords, img, previewEl);
+        });
+      }
+    }
+
+    function drawPolygonCoords(coords, img, previewEl) {
+      const videoWidth = 1280;
+      const videoHeight = 720;
+      
+      // Get the actual displayed dimensions of the image
+      const displayedWidth = img.clientWidth;
+      const displayedHeight = img.clientHeight;
+      
+      console.log("Loading polygon coords:", coords);
+      console.log("Image dimensions:", displayedWidth, displayedHeight);
+      
+      // Clear any existing points first
+      clearPolygon();
+      
+      coords.forEach(coord => {
+        const x = (coord[0] / videoWidth) * displayedWidth;
+        const y = (coord[1] / videoHeight) * displayedHeight;
+        console.log("Creating point at:", x, y, "from coord:", coord);
+        createPoint(x, y);
+      });
+      
+      updatePolygonLine();
+      
+      // If loading an existing polygon, mark it as complete
+      if (coords.length >= 3) {
+        completePolygon();
+      }
+    }
+
+    function initPolygonOverlay() {
+        const overlay = document.getElementById("polygonOverlay");
+        overlay.innerHTML = '';
+        zoneEditorState.polygonSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        zoneEditorState.polygonSvg.style.width = '100%';
+        zoneEditorState.polygonSvg.style.height = '100%';
+        zoneEditorState.polygonSvg.style.position = 'absolute';
+        zoneEditorState.polygonSvg.style.top = '0';
+        zoneEditorState.polygonSvg.style.left = '0';
+        zoneEditorState.polygonSvg.style.pointerEvents = 'none';
+        
+        zoneEditorState.polygonPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        zoneEditorState.polygonPath.setAttribute('fill', 'none');
+        zoneEditorState.polygonPath.setAttribute('stroke', '#ff0000');
+        zoneEditorState.polygonPath.setAttribute('stroke-width', '2');
+        zoneEditorState.polygonPath.setAttribute('stroke-linejoin', 'round');
+        
+        zoneEditorState.polygonSvg.appendChild(zoneEditorState.polygonPath);
+        overlay.appendChild(zoneEditorState.polygonSvg);
+    }
+
+    function clearPolygon() {
+        const overlay = document.getElementById("polygonOverlay");
+        const points = overlay.querySelectorAll('.polygon-point');
+        points.forEach(point => point.remove());
+        zoneEditorState.firstPoint = null;
+        zoneEditorState.isPolygonComplete = false;
+        if (zoneEditorState.polygonPath) {
+            zoneEditorState.polygonPath.setAttribute('d', '');
+            zoneEditorState.polygonPath.setAttribute('fill', 'none');
+            zoneEditorState.polygonPath.setAttribute('stroke', '#ff0000');
+        }
+        const previewEl = document.getElementById("zonePreview");
+        previewEl.addEventListener('click', handlePreviewClick);
+    }
+
+    function handlePreviewClick(e) {
+        const previewEl = document.getElementById("zonePreview");
+        const rect = previewEl.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (zoneEditorState.firstPoint && isClickOnPoint(zoneEditorState.firstPoint, x, y)) {
+            completePolygon();
+            return;
+        }
+        createPoint(x, y);
+        updatePolygonLine();
+    }
+
+    function completePolygon() {
+        console.log("Completing polygon");
+        if (zoneEditorState.polygonPath) {
+            zoneEditorState.polygonPath.setAttribute('fill', 'rgba(0, 255, 0, 0.3)');
+            zoneEditorState.polygonPath.setAttribute('stroke', '#00ff00');
+        }
+        const previewEl = document.getElementById("zonePreview");
+        previewEl.removeEventListener('click', handlePreviewClick);
+        zoneEditorState.isPolygonComplete = true;
+        updatePolygonLine();
+    }
+
+    function createPoint(x, y) {
+        const overlay = document.getElementById("polygonOverlay");
+        const point = document.createElement('div');
+        point.className = 'polygon-point';
+        point.style.position = 'absolute';
+        point.style.left = (x - 6) + 'px';
+        point.style.top = (y - 6) + 'px';
+        point.style.width = '12px';
+        point.style.height = '12px';
+        point.style.backgroundColor = '#ff0000';
+        point.style.borderRadius = '50%';
+        point.style.cursor = 'crosshair';
+        point.style.zIndex = '20';
+        point.style.border = '2px solid #ffffff';
+        point.style.boxShadow = '0 0 3px rgba(0,0,0,0.5)';
+        point.style.pointerEvents = 'auto';
+        
+        // Store first point reference
+        if (!zoneEditorState.firstPoint) {
+            zoneEditorState.firstPoint = point;
+            // Make first point visually distinct
+            point.style.backgroundColor = '#0000ff';
+            point.style.border = '2px solid #ffffff';
+            point.style.cursor = 'pointer'; // Make first point more clickable
+        }
+        
+        // Add click listener to first point for completion
+        if (zoneEditorState.firstPoint === point) {
+            point.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!zoneEditorState.isPolygonComplete) {
+                    completePolygon();
+                }
+            });
+        }
+        
+        overlay.appendChild(point);
+        return point;
+    }
+
+    function updatePolygonLine() {
+        const previewEl = document.getElementById("zonePreview");
+        const points = Array.from(document.querySelectorAll('.polygon-point'));
+        
+        if (points.length === 0) {
+            if (zoneEditorState.polygonPath) {
+                zoneEditorState.polygonPath.setAttribute('d', '');
+            }
+            zoneEditorState.firstPoint = null;
+            zoneEditorState.isPolygonComplete = false;
+            return;
+        }
+        
+        // Create SVG path for the polygon - just draw lines between points, don't close automatically
+        const pathData = points.map((point, index) => {
+            const rect = point.getBoundingClientRect();
+            const previewRect = previewEl.getBoundingClientRect();
+            const x = rect.left - previewRect.left + 6; // Center of point
+            const y = rect.top - previewRect.top + 6;
+            return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+        }).join(' ');
+        
+        // Only close the path if polygon is complete
+        if (zoneEditorState.isPolygonComplete) {
+            if (zoneEditorState.polygonPath) {
+                zoneEditorState.polygonPath.setAttribute('d', pathData + ' Z');
+            }
+        } else {
+            if (zoneEditorState.polygonPath) {
+                zoneEditorState.polygonPath.setAttribute('d', pathData);
+            }
+        }
     }
 
     function startCameraStream(camName) {
