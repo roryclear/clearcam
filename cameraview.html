@@ -251,6 +251,26 @@
             margin-top: 20px;
         }
 
+        /* Alerts modal specific styles */
+        #alertsModal .modal-content {
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #alertsModal .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        #alertsModal .modal-body {
+            padding: 10px 0;
+        }
+
         @media (max-width: 600px) {
             button {
                 padding: 8px 16px;
@@ -326,76 +346,107 @@
             <label style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
                 <input type="checkbox" id="showDetections" {show_detections_checked}> Show detections
             </label>
-        </div>
-        <h3>Active Alerts</h3>
-        <div id="alertsContainer">
-            <p>Loading alerts...</p>
-            <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
-                <button onclick="openSettingsEditor()">Settings</button>
-                <button onclick="openAlertModal()">Add Alert</button>
-            </div>
+            <button onclick="openSettingsEditor()">Settings</button>
+            <button onclick="openAlertsModal()">Alerts</button>
         </div>
 
-        <!-- The Modal -->
-        <div id="alertModal" class="modal">
-            <div class="modal-content" style="max-width: 400px;">
-                <div class="modal-header">
-                    <h3>Add New Alert</h3>
-                    <span class="close" onclick="closeAlertModal()">&times;</span>
+        <h3>Detected Events</h3>
+        <div id="eventImagesContainer">
+            {image_links}
+        </div>
+        <div id="imagePreviewModal" class="modal">
+            <span class="close" onclick="closeImagePreview()">&times;</span>
+            <img id="previewImage" src="" alt="Preview">
+        </div>
+    </div>
+
+    <!-- Alerts Modal -->
+    <div id="alertsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Alerts & Counts</h3>
+                <span class="close" onclick="closeAlertsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <h3>Active Alerts</h3>
+                <div id="alertsContainer">
+                    <p>Loading alerts...</p>
+                    <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
+                        <!-- Removed Settings button from here -->
+                        <button onclick="openAlertModal()">Add Alert</button>
+                    </div>
                 </div>
-                <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
-                    <div class="form-group" style="width: 90%; text-align: center;">
-                        <label for="maxCount">Trigger if there are more than</label>
-                        <input type="number" id="maxCount" name="max" min="1" value="1" required
-                            style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
-                        <span>objects detected</span>
-                    </div>
-                    <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
-                        <label>of class(es)</label>
-                        <div id="checkboxContainer" class="checkbox-container"></div>
-                    </div>
-                    <div class="form-group" style="width: 90%; text-align: center;">
-                        <label for="windowMinutes">within this time window</label>
-                        <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
-                            style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
-                        <span>minutes</span>
-                    </div>
 
-                    <div class="form-group" style="width: 90%; text-align: center;">
-                        <label>Schedule (optional)</label>
-                        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-                            <div>
-                                <label for="scheduleFrom">From</label><br>
-                                <input type="time" id="scheduleFrom" name="schedule_from" step="60" style="text-align: center;">
-                            </div>
-                            <div>
-                                <label for="scheduleTo">To</label><br>
-                                <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-group" style="width: 90%; text-align: center;">
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
-                            <label><input type="checkbox" name="days" value="0" checked> Mon</label>
-                            <label><input type="checkbox" name="days" value="1" checked> Tue</label>
-                            <label><input type="checkbox" name="days" value="2" checked> Wed</label>
-                            <label><input type="checkbox" name="days" value="3" checked> Thu</label>
-                            <label><input type="checkbox" name="days" value="4" checked> Fri</label>
-                            <label><input type="checkbox" name="days" value="5" checked> Sat</label>
-                            <label><input type="checkbox" name="days" value="6" checked> Sun</label>
-                        </div>
-                    </div>
-
-                    <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
-                        <button type="button" onclick="closeAlertModal()">Cancel</button>
-                        <button type="submit">Save Alert</button>
-                    </div>
-                </form>
+                <div class="counts-wrapper">
+                    <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
+                        <tbody></tbody>
+                    </table>
+                    <button onclick="resetCounts()">Reset</button>
+                </div>
             </div>
         </div>
+    </div>
 
+    <!-- Add Alert Modal -->
+    <div id="alertModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Add New Alert</h3>
+                <span class="close" onclick="closeAlertModal()">&times;</span>
+            </div>
+            <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
+                <div class="form-group" style="width: 90%; text-align: center;">
+                    <label for="maxCount">Trigger if there are more than</label>
+                    <input type="number" id="maxCount" name="max" min="1" value="1" required
+                        style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+                    <span>objects detected</span>
+                </div>
+                <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
+                    <label>of class(es)</label>
+                    <div id="checkboxContainer" class="checkbox-container"></div>
+                </div>
+                <div class="form-group" style="width: 90%; text-align: center;">
+                    <label for="windowMinutes">within this time window</label>
+                    <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
+                        style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+                    <span>minutes</span>
+                </div>
 
-        <div id="zoneModal" class="modal">
+                <div class="form-group" style="width: 90%; text-align: center;">
+                    <label>Schedule (optional)</label>
+                    <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                        <div>
+                            <label for="scheduleFrom">From</label><br>
+                            <input type="time" id="scheduleFrom" name="schedule_from" step="60" style="text-align: center;">
+                        </div>
+                        <div>
+                            <label for="scheduleTo">To</label><br>
+                            <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" style="width: 90%; text-align: center;">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
+                        <label><input type="checkbox" name="days" value="0" checked> Mon</label>
+                        <label><input type="checkbox" name="days" value="1" checked> Tue</label>
+                        <label><input type="checkbox" name="days" value="2" checked> Wed</label>
+                        <label><input type="checkbox" name="days" value="3" checked> Thu</label>
+                        <label><input type="checkbox" name="days" value="4" checked> Fri</label>
+                        <label><input type="checkbox" name="days" value="5" checked> Sat</label>
+                        <label><input type="checkbox" name="days" value="6" checked> Sun</label>
+                    </div>
+                </div>
+
+                <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
+                    <button type="button" onclick="closeAlertModal()">Cancel</button>
+                    <button type="submit">Save Alert</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Zone Settings Modal -->
+    <div id="zoneModal" class="modal">
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
                 <h3>Edit Zone</h3>
@@ -429,24 +480,6 @@
                 </div>
             </div>
         </div>
-        </div>
-
-
-        <div class="counts-wrapper">
-            <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
-                <tbody></tbody>
-            </table>
-            <button onclick="resetCounts()">Reset</button>
-        </div>
-
-        <h3>Detected Events</h3>
-        <div id="eventImagesContainer">
-            {image_links}
-        </div>
-        <div id="imagePreviewModal" class="modal">
-            <span class="close" onclick="closeImagePreview()">&times;</span>
-            <img id="previewImage" src="" alt="Preview">
-        </div>
     </div>
 
     <script>
@@ -457,7 +490,19 @@
     const startTime = {start_time};
     const cameraName = "{cam_name}";
 
-    
+    // Alerts modal functions
+    function openAlertsModal() {
+        document.getElementById("alertsModal").style.display = "flex";
+        // Refresh data when opening the modal
+        fetchAlerts();
+        fetchCounts();
+    }
+
+    function closeAlertsModal() {
+        document.getElementById("alertsModal").style.display = "none";
+    }
+
+    // Checkbox initialization
     window.onload = function () {
         const container = document.getElementById('checkboxContainer');
         container.innerHTML = '';
@@ -478,6 +523,7 @@
         }
     };
 
+    // Image preview functions
     function viewImage(imageSrc) {
         const previewModal = document.getElementById("imagePreviewModal");
         const previewImage = document.getElementById("previewImage");
@@ -501,20 +547,23 @@
         params.set('start', timestamp);
         window.location.search = params.toString();
     }
+    
+    // Event listeners for image preview
     window.addEventListener("click", function(event) {
         const modal = document.getElementById("imagePreviewModal");
         if (event.target === modal) {
             closeImagePreview();
         }
     });
+    
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
             closeImagePreview();
         }
     });
     
+    // Zone modal functions
     const zoneModal = document.getElementById("zoneModal");
-    const zoneRect = document.getElementById("zoneRect");
     let isDragging = false;
     let isResizing = false;
     let resizeHandle = null;
@@ -522,11 +571,10 @@
     let startWidth, startHeight;
     let startLeft, startTop;
 
-function closeZoneModal() {
-    zoneModal.style.display = "none";
-}
+    function closeZoneModal() {
+        zoneModal.style.display = "none";
+    }
 
-    // Global variables for polygon editing
     // Global variables for polygon editing
     let polygonSvg = null;
     let polygonPath = null;
@@ -588,10 +636,6 @@ function closeZoneModal() {
             .catch(err => {
                 console.error("Failed to load zone:", err);
             });
-    }
-
-    function closeZoneModal() {
-        zoneModal.style.display = "none";
     }
 
     function saveZone() {
@@ -859,7 +903,7 @@ function closeZoneModal() {
     styleSheet.textContent = polygonStyles;
     document.head.appendChild(styleSheet);
 
-
+    // Alert modal functions
     function openAlertModal() {
         alertModal.style.display = "flex";
     }
@@ -870,8 +914,10 @@ function closeZoneModal() {
 
     window.addEventListener("click", function(event) {
         if (event.target === alertModal) closeAlertModal();
+        if (event.target === document.getElementById("alertsModal")) closeAlertsModal();
     });
 
+    // Detection settings
     document.getElementById("showDetections").addEventListener("change", function() {
         const currentTime = video.currentTime;
         const params = new URLSearchParams(window.location.search);
@@ -881,49 +927,37 @@ function closeZoneModal() {
     });
 
     function initDetectionSettings() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const showDetections = urlParams.get('show_detections') === 'true';
-    
-    if (showDetections) {
-        // Send initial request
-        fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
-            .then(res => {
-                if (!res.ok) throw new Error("Failed to update detection settings");
-                console.log("Detection settings updated successfully");
-            })
-            .catch(err => {
-                console.error("Failed to update detection settings:", err);
-            });
+        const urlParams = new URLSearchParams(window.location.search);
+        const showDetections = urlParams.get('show_detections') === 'true';
         
-        // Set up interval to send request every 30 seconds
-        window.detectionInterval = setInterval(() => {
+        if (showDetections) {
+            // Send initial request
             fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
                 .then(res => {
-                    if (!res.ok) throw new Error("Failed to refresh detection settings");
-                    console.log("Detection settings refreshed");
+                    if (!res.ok) throw new Error("Failed to update detection settings");
+                    console.log("Detection settings updated successfully");
                 })
                 .catch(err => {
-                    console.error("Failed to refresh detection settings:", err);
+                    console.error("Failed to update detection settings:", err);
                 });
-        }, 30000); // 30 seconds
+            
+            // Set up interval to send request every 30 seconds
+            window.detectionInterval = setInterval(() => {
+                fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
+                    .then(res => {
+                        if (!res.ok) throw new Error("Failed to refresh detection settings");
+                        console.log("Detection settings refreshed");
+                    })
+                    .catch(err => {
+                        console.error("Failed to refresh detection settings:", err);
+                    });
+            }, 30000); // 30 seconds
+        }
     }
-}
 
-document.getElementById("showDetections").addEventListener("change", function() {
-    const currentTime = video.currentTime;
-    const params = new URLSearchParams(window.location.search);
-    params.set('show_detections', this.checked);
-    window.location.search = params.toString();
-});
+    initDetectionSettings();
 
-window.addEventListener('beforeunload', function() {
-    if (window.detectionInterval) {
-        clearInterval(window.detectionInterval);
-    }
-});
-
-initDetectionSettings();
-
+    // Stream loading
     function loadStream(folder) {
         const showDetections = document.getElementById("showDetections").checked;
         const streamSuffix = showDetections ? "" : "_raw";
@@ -997,43 +1031,44 @@ initDetectionSettings();
         })();
     }
 
-
-function loadEventImages(folder) {
-    fetch(`/event_thumbs?cam=${cameraName}&folder=${folder}`)
-        .then(res => res.json())
-        .then(data => {
-            const container = document.getElementById("eventImagesContainer");
-            
-            // Generate HTML from JSON data
-            let html = '';
-            if (data.images && data.images.length > 0) {
-                data.images.forEach(img => {
-                    html += `
-                    <div class="image-item">
-                        <img src="${img.url}" alt="Event" />
-                        <div class="image-actions">
-                            <button onclick="viewImage('${img.url}')">View</button>
-                            <button onclick="playVideoAtTime(${img.timestamp})">Play</button>
+    // Event images loading
+    function loadEventImages(folder) {
+        fetch(`/event_thumbs?cam=${cameraName}&folder=${folder}`)
+            .then(res => res.json())
+            .then(data => {
+                const container = document.getElementById("eventImagesContainer");
+                
+                // Generate HTML from JSON data
+                let html = '';
+                if (data.images && data.images.length > 0) {
+                    data.images.forEach(img => {
+                        html += `
+                        <div class="image-item">
+                            <img src="${img.url}" alt="Event" />
+                            <div class="image-actions">
+                                <button onclick="viewImage('${img.url}')">View</button>
+                                <button onclick="playVideoAtTime(${img.timestamp})">Play</button>
+                            </div>
                         </div>
-                    </div>
-                    `;
-                });
-            } else {
-                html = '<p style="text-align:center; color:#666;">No alerts detected yet.</p>';
-            }
-            
-            // Only update if content changed
-            if (container.innerHTML !== html) {
-                container.innerHTML = html;
-            }
-        })
-        .catch(err => {
-            console.error("Failed to load images:", err);
-            const container = document.getElementById("eventImagesContainer");
-            container.innerHTML = "<p>No event images found.</p>";
-        });
-}
+                        `;
+                    });
+                } else {
+                    html = '<p style="text-align:center; color:#666;">No alerts detected yet.</p>';
+                }
+                
+                // Only update if content changed
+                if (container.innerHTML !== html) {
+                    container.innerHTML = html;
+                }
+            })
+            .catch(err => {
+                console.error("Failed to load images:", err);
+                const container = document.getElementById("eventImagesContainer");
+                container.innerHTML = "<p>No event images found.</p>";
+            });
+    }
 
+    // Counts functions
     function fetchCounts() {
         fetch(`/get_counts?cam=${encodeURIComponent(cameraName)}`)
             .then(res => res.json())
@@ -1075,20 +1110,21 @@ function loadEventImages(folder) {
             });
     }
 
+    // Alerts functions
     function fetchAlerts() {
         fetch(`/get_alerts?cam=${encodeURIComponent(cameraName)}`)
             .then(res => res.json())
             .then(alerts => { 
                 const container = document.getElementById("alertsContainer");
-            if (!alerts.length) {
-                container.innerHTML = `
-                    <p>No alerts configured.</p>
-                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
-                        <button onclick="openSettingsEditor()">Settings</button>
-                        <button onclick="openAlertModal()">Add Alert</button>
-                    </div>`;
-                return;
-            }
+                if (!alerts.length) {
+                    container.innerHTML = `
+                        <p>No alerts configured.</p>
+                        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                            <button onclick="openSettingsEditor()">Settings</button>
+                            <button onclick="openAlertModal()">Add Alert</button>
+                        </div>`;
+                    return;
+                }
 
                 let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
                     <thead>
@@ -1169,7 +1205,6 @@ function loadEventImages(folder) {
                         </td>
                     </tr>`;
                 }
-
 
                 html += `</tbody></table>
                     <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
@@ -1259,7 +1294,7 @@ function loadEventImages(folder) {
             });
     }
 
-
+    // Date picker functionality
     folderPicker.addEventListener("change", () => {
         const folder = folderPicker.value;
         const params = new URLSearchParams(window.location.search);
@@ -1272,15 +1307,14 @@ function loadEventImages(folder) {
         return params.get('date') || folderPicker.value;
     }
 
-    
     function getQueryParam(name) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(name);
     }
 
+    // Initialize
     const initialDate = getQueryParam('date') || "{selected_dir}";
     folderPicker.value = initialDate;
-
 
     loadStream(getCurrentDate());
     loadEventImages(getCurrentDate());
@@ -1288,6 +1322,6 @@ function loadEventImages(folder) {
     fetchCounts();
     setInterval(fetchCounts, 5000);
     setInterval(() => loadEventImages(getCurrentDate()), 5000);
-</script>
+    </script>
 </body>
 </html>
