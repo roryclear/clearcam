@@ -60,7 +60,7 @@
     }
     .camera-card button {
       padding: 8px 16px;
-      background: #dc3545;
+      background: #007bff;
       color: white;
       border: none;
       border-radius: 4px;
@@ -68,8 +68,16 @@
       font-size: 14px;
     }
     .camera-card button:hover {
+      background: #0056b3;
+    }
+
+    .camera-card button.delete-button {
+      background: #dc3545;
+    }
+    .camera-card button.delete-button:hover {
       background: #c82333;
     }
+
     .form-section {
       margin-top: 20px;
       font-family: sans-serif;
@@ -98,7 +106,7 @@
 
     #zoneModal button {
         padding: 8px 16px;
-        background: #dc3545;
+        background: #007bff;
         color: white;
         border: none;
         border-radius: 4px;
@@ -108,6 +116,14 @@
     }
 
     #zoneModal button:hover {
+        background: #0056b3;
+    }
+
+    #zoneModal button.clear-zone-button {
+        background: #dc3545;
+    }
+
+    #zoneModal button.clear-zone-button:hover {
         background: #c82333;
     }
 
@@ -433,7 +449,7 @@
                 </label>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button type="button" onclick="clearPolygon()">Clear Zone</button>
+                <button type="button" class="clear-zone-button" onclick="clearPolygon()">Clear Zone</button>
                 <button type="button" onclick="closeZoneModal()">Cancel</button>
                 <button type="button" onclick="saveZone()">Save</button>
             </div>
@@ -604,7 +620,7 @@
         <div class="camera-info">
           <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
           <button onclick="openSettingsEditor('${camName}')">Settings</button>
-          <button onclick="deleteCamera('${camName}')">Delete</button>
+          <button class="delete-button" onclick="deleteCamera('${camName}')">Delete</button>
         </div>
       `;
       
