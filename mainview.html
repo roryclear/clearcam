@@ -1050,13 +1050,9 @@
       currentAlertsCamera = cameraName;
       document.getElementById('alertsCameraName').textContent = cameraName;
       document.getElementById("alertsModal").style.display = "flex";
-      
-      // Initialize checkboxes if not already done
       if (document.getElementById('checkboxContainer').children.length === 0) {
         initAlertCheckboxes();
       }
-      
-      // Refresh data when opening the modal
       fetchAlerts();
       fetchCounts();
     }
@@ -1336,14 +1332,11 @@
           currentStreamDate = selectedDate;
           console.log('Date changed to:', currentStreamDate);
           restartAllStreams();
-          loadEventImages(); // Reload events for the new date
+          loadEventImages();
         }
       });
 
-      // Load initial events
       loadEventImages();
-      
-      // Set up interval to refresh events every 5 seconds
       setInterval(loadEventImages, 5000);
     });
 
@@ -1424,15 +1417,13 @@
         container.innerHTML = '';
         newCards.forEach(card => container.appendChild(card));
       }
-      
-      // Start streams for new cameras
+
       cams.forEach(cam => {
         if (!activeVideoStreams.has(cam)) {
           startCameraStream(cam);
         }
       });
-      
-      // Clean up streams for removed cameras
+
       previousCameras.forEach(cameraName => {
         if (!cams.includes(cameraName)) {
           cleanupCameraStream(cameraName);
@@ -1487,38 +1478,27 @@
     let currentEditingCamera = null;
     function openSettingsEditor(cameraName) {
         currentEditingCamera = cameraName;
-        
-        // Reset zone editor state
         zoneEditorState = {
             polygonSvg: null,
             polygonPath: null,
             firstPoint: null,
             isPolygonComplete: false
         };
-        
-        // Update the zone preview image URL with the actual camera name
         const zonePreview = document.getElementById("zonePreview");
         zonePreview.src = `/${cameraName}/preview.png`;
-        
         zoneModal.style.display = "flex";
         initZoneEditor();
-          
-        // Then load the settings
         fetch(`/get_settings?cam=${cameraName}`)
             .then(res => res.json())
             .then(data => {
                 console.log("Received settings data:", data);
                 const previewEl = document.getElementById("zonePreview");
-                
-                // Wait for the new image to load before drawing polygons
                 previewEl.onload = function() {
                     if (data && data.coords) {
                         console.log("Loading coords:", data.coords);
                         loadPolygon(data.coords, previewEl);
                     }
                 };
-                
-                // If image is already loaded (cached), draw immediately
                 if (previewEl.complete) {
                     if (data && data.coords) {
                         console.log("Loading coords:", data.coords);
@@ -1567,7 +1547,6 @@
     function closeZoneModal() {
         zoneModal.style.display = "none";
         currentEditingCamera = null;
-        // Clear zone editor state
         zoneEditorState = {
             polygonSvg: null,
             polygonPath: null,
@@ -1579,12 +1558,10 @@
     function isClickOnPoint(point, clickX, clickY) {
         const pointRect = point.getBoundingClientRect();
         const previewRect = document.getElementById("zonePreview").getBoundingClientRect();
-        const pointX = parseInt(point.style.left) + 6; // Center of point
+        const pointX = parseInt(point.style.left) + 6;
         const pointY = parseInt(point.style.top) + 6;
-        
-        // Check if click is within the point's area
         const distance = Math.sqrt(Math.pow(clickX - pointX, 2) + Math.pow(clickY - pointY, 2));
-        return distance <= 10; // Increased tolerance for easier clicking
+        return distance <= 10;
     }
 
     function initZoneEditor() {
@@ -1667,27 +1644,16 @@
     function drawPolygonCoords(coords, img, previewEl) {
       const videoWidth = 1280;
       const videoHeight = 720;
-      
-      // Get the actual displayed dimensions of the image
       const displayedWidth = img.clientWidth;
       const displayedHeight = img.clientHeight;
-      
-      console.log("Loading polygon coords:", coords);
-      console.log("Image dimensions:", displayedWidth, displayedHeight);
-      
-      // Clear any existing points first
-      clearPolygon();
-      
+      clearPolygon();     
       coords.forEach(coord => {
         const x = (coord[0] / videoWidth) * displayedWidth;
         const y = (coord[1] / videoHeight) * displayedHeight;
         console.log("Creating point at:", x, y, "from coord:", coord);
         createPoint(x, y);
       });
-      
       updatePolygonLine();
-      
-      // If loading an existing polygon, mark it as complete
       if (coords.length >= 3) {
         completePolygon();
       }
@@ -1770,17 +1736,12 @@
         point.style.border = '2px solid #ffffff';
         point.style.boxShadow = '0 0 3px rgba(0,0,0,0.5)';
         point.style.pointerEvents = 'auto';
-        
-        // Store first point reference
         if (!zoneEditorState.firstPoint) {
             zoneEditorState.firstPoint = point;
-            // Make first point visually distinct
             point.style.backgroundColor = '#0000ff';
             point.style.border = '2px solid #ffffff';
-            point.style.cursor = 'pointer'; // Make first point more clickable
+            point.style.cursor = 'pointer';
         }
-        
-        // Add click listener to first point for completion
         if (zoneEditorState.firstPoint === point) {
             point.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1806,8 +1767,6 @@
             zoneEditorState.isPolygonComplete = false;
             return;
         }
-        
-        // Create SVG path for the polygon - just draw lines between points, don't close automatically
         const pathData = points.map((point, index) => {
             const rect = point.getBoundingClientRect();
             const previewRect = previewEl.getBoundingClientRect();
@@ -1815,8 +1774,6 @@
             const y = rect.top - previewRect.top + 6;
             return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
         }).join(' ');
-        
-        // Only close the path if polygon is complete
         if (zoneEditorState.isPolygonComplete) {
             if (zoneEditorState.polygonPath) {
                 zoneEditorState.polygonPath.setAttribute('d', pathData + ' Z');
@@ -1838,8 +1795,6 @@
         console.warn(`Video element not found for ${camName}`);
         return;
       }
-      
-      // Get current detection setting
       const checkbox = document.querySelector(`.show-detections-checkbox[data-camera="${camName}"]`);
       const showDetections = checkbox ? checkbox.checked : false;
       const streamSuffix = showDetections ? "" : "_raw";
@@ -1942,14 +1897,9 @@
       checkbox.addEventListener('change', function() {
         const showDetections = this.checked;
         updateCameraStream(cameraName, showDetections);
-        
-        // Send setting to server
         fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=${showDetections ? 1 : 0}`)
           .then(res => {
             if (!res.ok) throw new Error("Failed to update detection settings");
-            console.log(`Detection settings updated for ${cameraName}`);
-            
-            // Start/stop heartbeat based on setting
             if (showDetections) {
               startDetectionHeartbeat(cameraName);
             } else {
@@ -1958,7 +1908,6 @@
           })
           .catch(err => {
             console.error(`Failed to update detection settings for ${cameraName}:`, err);
-            // Revert checkbox on error
             this.checked = !showDetections;
           });
       });
@@ -2075,10 +2024,7 @@
       await fetch(`/set_max_storage?max=${newVal}`);
       fetchMaxStorage();
     }
-
     document.getElementById('setMaxStorageBtn').addEventListener('click', setMaxStorage);
-
-    // Refresh storage field every 10 seconds
     fetchMaxStorage();
     setInterval(fetchMaxStorage, 10000);
 
@@ -2307,21 +2253,15 @@
     }
 
     function playVideoAtTime(camName, timestamp) {
-      // Find the video element for this camera
       const videoId = `video-${camName}`;
       const video = document.getElementById(videoId);
       
       if (video) {
-        // Calculate the time position in the video (assuming timestamp is in seconds)
         video.currentTime = timestamp;
         video.play().catch(e => console.log('Auto-play prevented:', e));
-        
-        // Scroll to the camera card
         const cameraCard = video.closest('.camera-card');
         if (cameraCard) {
           cameraCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          // Add a highlight effect
           cameraCard.style.boxShadow = '0 0 0 3px #007bff';
           setTimeout(() => {
             cameraCard.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
@@ -2333,9 +2273,6 @@
     }
 
     function playAllCamerasAtTime(timestamp) {
-      console.log(`Playing all cameras at timestamp: ${timestamp}`);
-      
-      // Play all available cameras at the same timestamp
       if (window.currentCameras && window.currentCameras.length > 0) {
         window.currentCameras.forEach(camName => {
           const videoId = `video-${camName}`;
@@ -2346,14 +2283,10 @@
             video.play().catch(e => console.log(`Auto-play prevented for ${camName}:`, e));
           }
         });
-        
-        // Scroll to the first camera card
         const firstCameraCard = document.querySelector('.camera-card');
         if (firstCameraCard) {
           firstCameraCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-        
-        // Highlight all camera cards briefly
         document.querySelectorAll('.camera-card').forEach(card => {
           card.style.boxShadow = '0 0 0 3px #6f42c1';
           setTimeout(() => {
@@ -2364,16 +2297,12 @@
         alert("No cameras available to play");
       }
     }
-
-    // Close modal when clicking outside the image
     window.addEventListener("click", function(event) {
       const modal = document.getElementById("imagePreviewModal");
       if (event.target === modal) {
         closeImagePreview();
       }
     });
-
-    // Close modal with Escape key
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') {
         closeImagePreview();
