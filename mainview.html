@@ -2,6 +2,24 @@
 <html>
 <head>
   <style>
+    .events-filter {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .events-filter label {
+      font-weight: 500;
+      color: #333;
+    }
+    .events-filter select {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      background: white;
+      cursor: pointer;
+    }
     .camera-card .detection-toggle {
       display: flex;
       align-items: center;
@@ -781,6 +799,11 @@
 
   <div class="events-section">
     <h3>Detected Events</h3>
+    <div class="events-filter">
+      <select id="cameraFilter">
+        <option value="">All Cameras</option>
+      </select>
+    </div>
     <div id="eventImagesContainer">
       <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
     </div>
@@ -1331,6 +1354,7 @@
       const res = await fetch('/list_cameras');
       const cams = await res.json();
       const container = document.getElementById("cameraList");
+      populateCameraFilter(cams);
       
       const previousCameras = window.currentCameras || [];
       window.currentCameras = cams;
@@ -1381,6 +1405,14 @@
         }
       });
     }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const cameraFilter = document.getElementById('cameraFilter');
+      cameraFilter.addEventListener('change', function() {
+        currentEventCameraFilter = this.value;
+        loadEventImages();
+      });
+    });
 
     function createCameraCard(camName) {
       const card = document.createElement('div');
@@ -2146,9 +2178,33 @@
       if (e.target.id === 'multiView') closeMultiView();
     });
 
+    let currentEventCameraFilter = '';
+    function populateCameraFilter(cameras) {
+      const filter = document.getElementById('cameraFilter');
+      const currentValue = filter.value;
+      
+      filter.innerHTML = '<option value="">All Cameras</option>';
+      cameras.forEach(cam => {
+        const option = document.createElement('option');
+        option.value = cam;
+        option.textContent = cam;
+        filter.appendChild(option);
+      });
+      
+      if (cameras.includes(currentValue)) {
+        filter.value = currentValue;
+      }
+      currentEventCameraFilter = filter.value;
+    }
+
     async function loadEventImages() {
       try {
-        const res = await fetch(`/event_thumbs?folder=${currentStreamDate}`);
+        let url = `/event_thumbs?folder=${currentStreamDate}`;
+        if (currentEventCameraFilter) {
+          url += `&cam=${encodeURIComponent(currentEventCameraFilter)}`;
+        }
+        
+        const res = await fetch(url);
         const data = await res.json();
         const container = document.getElementById("eventImagesContainer");
         
@@ -2188,7 +2244,7 @@
       } catch (err) {
         console.error("Failed to load event images:", err);
         const container = document.getElementById("eventImagesContainer");
-        container.innerHTML = '<p style="text-align:center; color:#red; width:100%;">Error loading events.</p>';
+        container.innerHTML = '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
       }
     }
 
