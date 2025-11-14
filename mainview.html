@@ -417,13 +417,14 @@
     }
     .camera-card .camera-name {
       font-weight: bold;
-      cursor: pointer;
-      color: #007bff;
+      color: #333;
       text-decoration: none;
       font-size: 18px;
+      cursor: default;
     }
     .camera-card .camera-name:hover {
-      text-decoration: underline;
+      text-decoration: none;
+      color: #333;
     }
     .camera-card button {
       padding: 8px 16px;
@@ -1416,7 +1417,7 @@
           <div class="video-placeholder" id="${placeholderId}">Loading stream...</div>
         </div>
         <div class="camera-info">
-          <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
+          <span class="camera-name">${camName}</span>
           <div style="display: flex; gap: 6px; align-items: center;">
             <label class="detection-toggle">
               <input type="checkbox" class="show-detections-checkbox" data-camera="${camName}">
