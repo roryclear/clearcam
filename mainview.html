@@ -2,6 +2,362 @@
 <html>
 <head>
   <style>
+
+    #alertsModal .modal-content {
+      max-width: 800px;
+      max-height: 90vh;
+      overflow-y: auto;
+      font-family: sans-serif;
+    }
+
+    #alertsModal .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+
+    #alertsModal .modal-header h3 {
+      margin: 0;
+      font-size: 1.3rem;
+      color: #333;
+    }
+
+    #alertsModal .close {
+      color: #aaa;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #alertsModal .close:hover {
+      color: black;
+    }
+
+    #alertsModal .modal-body {
+      padding: 10px 0;
+    }
+
+    #alertsModal h3 {
+      margin: 20px 0 10px;
+      font-size: 1.1rem;
+      color: #333;
+    }
+
+    #alertsContainer table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin-bottom: 15px;
+    }
+
+    #alertsContainer th {
+      background: #f8f9fa;
+      padding: 8px;
+      text-align: left;
+      border-bottom: 2px solid #dee2e6;
+      font-weight: 600;
+    }
+
+    #alertsContainer td {
+      padding: 8px;
+      border-bottom: 1px solid #dee2e6;
+      vertical-align: middle;
+    }
+
+    #alertsContainer button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-family: sans-serif;
+    }
+
+    #alertsContainer button:hover {
+      background: #0056b3;
+    }
+
+    #alertsContainer .delete-button {
+      background: #dc3545;
+    }
+
+    #alertsContainer .delete-button:hover {
+      background: #c82333;
+    }
+
+    #alertsContainer input[type="checkbox"] {
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+
+    .counts-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      margin: 20px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 6px;
+    }
+
+    #objectCounts {
+      font-size: 0.95rem;
+      border-collapse: collapse;
+    }
+
+    #objectCounts td {
+      padding: 6px 12px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .counts-wrapper button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: sans-serif;
+    }
+
+    .counts-wrapper button:hover {
+      background: #0056b3;
+    }
+
+    #alertModal .modal-content {
+      max-width: 450px;
+      font-family: sans-serif;
+    }
+
+    #alertModal .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+
+    #alertModal .modal-header h3 {
+      margin: 0;
+      font-size: 1.3rem;
+      color: #333;
+    }
+
+    #alertModal .close {
+      color: #aaa;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #alertModal .close:hover {
+      color: black;
+    }
+
+    #alertModal .form-group {
+      margin-bottom: 15px;
+      width: 100%;
+    }
+
+    #alertModal label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #333;
+      font-size: 0.95rem;
+    }
+
+    #alertModal input[type="number"],
+    #alertModal input[type="time"] {
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      text-align: center;
+      font-family: sans-serif;
+    }
+
+    #alertModal input[type="number"] {
+      width: 70px;
+    }
+
+    #alertModal input[type="time"] {
+      width: 100px;
+    }
+
+    #alertModal .checkbox-container {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 8px 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 8px auto;
+      padding: 8px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      background: #f9f9f9;
+    }
+
+    #alertModal .checkbox-container label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-weight: normal;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    #alertModal .checkbox-container input[type="checkbox"] {
+      margin: 0;
+      transform: scale(1.1);
+      cursor: pointer;
+    }
+
+    #alertModal .days-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    #alertModal .days-container label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 0;
+      font-weight: normal;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    #alertModal .days-container input[type="checkbox"] {
+      margin: 0;
+      transform: scale(1.1);
+      cursor: pointer;
+    }
+
+    #alertModal .form-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+      width: 100%;
+    }
+
+    #alertModal button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: sans-serif;
+      transition: background-color 0.2s;
+    }
+
+    #alertModal button[type="button"] {
+      background: #6c757d;
+      color: white;
+    }
+
+    #alertModal button[type="button"]:hover {
+      background: #5a6268;
+    }
+
+    #alertModal button[type="submit"] {
+      background: #007bff;
+      color: white;
+    }
+
+    #alertModal button[type="submit"]:hover {
+      background: #0056b3;
+    }
+
+    #alertsContainer table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin-bottom: 15px;
+    }
+
+    #alertsContainer th {
+      background: #f8f9fa;
+      padding: 8px;
+      text-align: left;
+      border-bottom: 2px solid #dee2e6;
+      font-weight: 600;
+    }
+
+    #alertsContainer td {
+      padding: 8px;
+      border-bottom: 1px solid #dee2e6;
+      vertical-align: middle;
+    }
+
+    #alertsContainer .delete-button {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    #alertsContainer .delete-button:hover {
+      background: #c82333;
+    }
+
+    #alertsContainer input[type="checkbox"] {
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+    .counts-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      margin: 20px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 6px;
+    }
+
+    #objectCounts {
+      font-size: 0.95rem;
+      border-collapse: collapse;
+    }
+
+    #objectCounts td {
+      padding: 6px 12px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .counts-wrapper button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .counts-wrapper button:hover {
+      background: #0056b3;
+    }
+
     .camera-grid {
       display: flex;
       flex-wrap: wrap;
@@ -457,6 +813,87 @@
     </div>
     </div>
 
+    <div id="alertsModal" class="modal">
+      <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+        <div class="modal-header">
+          <h3>Alerts & Counts - <span id="alertsCameraName"></span></h3>
+          <span class="close" onclick="closeAlertsModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+          <h3>Active Alerts</h3>
+          <div id="alertsContainer">
+            <p>Loading alerts...</p>
+            <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
+              <button onclick="openAlertModal()">Add Alert</button>
+            </div>
+          </div>
+
+          <div class="counts-wrapper" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 20px; margin: 20px 0;">
+            <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
+              <tbody></tbody>
+            </table>
+            <button onclick="resetCounts()">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="alertModal" class="modal">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <h3>Add New Alert</h3>
+          <span class="close" onclick="closeAlertModal()">&times;</span>
+        </div>
+        <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
+          <div class="form-group" style="width: 90%; text-align: center;">
+            <label for="maxCount">Trigger if there are more than</label>
+            <input type="number" id="maxCount" name="max" min="1" value="1" required
+                style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+            <span>objects detected</span>
+          </div>
+          <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
+            <label>of class(es)</label>
+            <div id="checkboxContainer" class="checkbox-container" style="display: grid; grid-template-columns: auto auto; gap: 8px 16px; max-height: 200px; overflow-y: auto; margin: 0 auto; padding: 8px; justify-content: center;"></div>
+          </div>
+          <div class="form-group" style="width: 90%; text-align: center;">
+            <label for="windowMinutes">within this time window</label>
+            <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
+                style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+            <span>minutes</span>
+          </div>
+
+          <div class="form-group" style="width: 90%; text-align: center;">
+            <label>Schedule (optional)</label>
+            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+              <div>
+                <label for="scheduleFrom">From</label><br>
+                <input type="time" id="scheduleFrom" name="schedule_from" step="60" style="text-align: center;">
+              </div>
+              <div>
+                <label for="scheduleTo">To</label><br>
+                <input type="time" id="scheduleTo" name="schedule_to" step="60" style="text-align: center;">
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="width: 90%; text-align: center;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
+              <label><input type="checkbox" name="days" value="0" checked> Mon</label>
+              <label><input type="checkbox" name="days" value="1" checked> Tue</label>
+              <label><input type="checkbox" name="days" value="2" checked> Wed</label>
+              <label><input type="checkbox" name="days" value="3" checked> Thu</label>
+              <label><input type="checkbox" name="days" value="4" checked> Fri</label>
+              <label><input type="checkbox" name="days" value="5" checked> Sat</label>
+              <label><input type="checkbox" name="days" value="6" checked> Sun</label>
+            </div>
+          </div>
+
+          <div class="form-actions" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; width: 100%;">
+            <button type="button" onclick="closeAlertModal()">Cancel</button>
+            <button type="submit">Save Alert</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   <svg style="display: none;">
     <symbol id="icon-magnify" viewBox="0 0 24 24">
       <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
@@ -476,6 +913,355 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
+
+    const classLabels = {
+      0: 'person',
+      1: 'bicycle',
+      2: 'car',
+      3: 'motorbike',
+      4: 'aeroplane',
+      5: 'bus',
+      6: 'train',
+      7: 'truck',
+      8: 'boat',
+      9: 'traffic light',
+      10: 'fire hydrant',
+      11: 'stop sign',
+      12: 'parking meter',
+      13: 'bench',
+      14: 'bird',
+      15: 'cat',
+      16: 'dog',
+      17: 'horse',
+      18: 'sheep',
+      19: 'cow',
+      20: 'elephant',
+      21: 'bear',
+      22: 'zebra',
+      23: 'giraffe',
+      24: 'backpack',
+      25: 'umbrella',
+      26: 'handbag',
+      27: 'tie',
+      28: 'suitcase',
+      29: 'frisbee',
+      30: 'skis',
+      31: 'snowboard',
+      32: 'sports ball',
+      33: 'kite',
+      34: 'baseball bat',
+      35: 'baseball glove',
+      36: 'skateboard',
+      37: 'surfboard',
+      38: 'tennis racket',
+      39: 'bottle',
+      40: 'wine glass',
+      41: 'cup',
+      42: 'fork',
+      43: 'knife',
+      44: 'spoon',
+      45: 'bowl',
+      46: 'banana',
+      47: 'apple',
+      48: 'sandwich',
+      49: 'orange',
+      50: 'broccoli',
+      51: 'carrot',
+      52: 'hot dog',
+      53: 'pizza',
+      54: 'donut',
+      55: 'cake',
+      56: 'chair',
+      57: 'sofa',
+      58: 'pottedplant',
+      59: 'bed',
+      60: 'diningtable',
+      61: 'toilet',
+      62: 'tvmonitor',
+      63: 'laptop',
+      64: 'mouse',
+      65: 'remote',
+      66: 'keyboard',
+      67: 'cell phone',
+      68: 'microwave',
+      69: 'oven',
+      70: 'toaster',
+      71: 'sink',
+      72: 'refrigerator',
+      73: 'book',
+      74: 'clock',
+      75: 'vase',
+      76: 'scissors',
+      77: 'teddy bear',
+      78: 'hair drier',
+      79: 'toothbrush'
+    };
+
+    function openAlertsModal(cameraName) {
+      currentAlertsCamera = cameraName;
+      document.getElementById('alertsCameraName').textContent = cameraName;
+      document.getElementById("alertsModal").style.display = "flex";
+      
+      // Initialize checkboxes if not already done
+      if (document.getElementById('checkboxContainer').children.length === 0) {
+        initAlertCheckboxes();
+      }
+      
+      // Refresh data when opening the modal
+      fetchAlerts();
+      fetchCounts();
+    }
+
+    function initAlertCheckboxes() {
+        const container = document.getElementById('checkboxContainer');
+        container.innerHTML = '';
+        
+        for (let i = 0; i < 80; i++) {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = i;
+            checkbox.name = 'class_ids';
+            checkbox.id = 'class_' + i;
+            
+            const label = document.createElement('label');
+            label.htmlFor = 'class_' + i;
+            label.textContent = (classLabels[i] !== undefined) ? `${classLabels[i]}` : `${i}`;
+            
+            container.appendChild(checkbox);
+            container.appendChild(label);
+        }
+    }
+
+    function fetchAlerts() {
+      if (!currentAlertsCamera) return;
+      
+      fetch(`/get_alerts?cam=${encodeURIComponent(currentAlertsCamera)}`)
+        .then(res => res.json())
+        .then(alerts => { 
+          const container = document.getElementById("alertsContainer");
+          if (!alerts || !alerts.length) {
+            container.innerHTML = `
+              <p>No alerts configured.</p>
+              <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                <button onclick="openAlertModal()">Add Alert</button>
+              </div>`;
+            return;
+          }
+
+          let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
+            <thead>
+              <tr>
+                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
+                <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
+                <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window</th>
+                <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
+                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
+                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
+              </tr>
+            </thead><tbody>`;
+
+          for (const alert of alerts) {
+            const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
+            const h = Math.floor(alert.window / 3600);
+            const m = Math.floor((alert.window % 3600) / 60);
+            const s = alert.window % 60;
+            const windowStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+            
+            // Format schedule
+            let scheduleStr = "Always";
+            if (alert.sched && alert.sched.length > 0) {
+              const fromSec = alert.sched[0][0];
+              const toSec = alert.sched[0][1];
+              const fromH = Math.floor(fromSec / 3600);
+              const fromM = Math.floor((fromSec % 3600) / 60);
+              const toH = Math.floor(toSec / 3600);
+              const toM = Math.floor((toSec % 3600) / 60);
+              const timeRange = `${String(fromH).padStart(2,'0')}:${String(fromM).padStart(2,'0')} to ${String(toH).padStart(2,'0')}:${String(toM).padStart(2,'0')}`;
+
+              const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+              const activeDays = alert.sched.slice(1).map((on, idx) => on ? daysOfWeek[idx] : null).filter(Boolean);
+              
+              if (activeDays.length === 7) {
+                scheduleStr = `${timeRange} (Daily)`;
+              } else {
+                scheduleStr = `${timeRange} (${activeDays.join(', ')})`;
+              }
+            }
+
+            const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
+            const checkedAttr = isOn ? "checked" : "";
+            
+            html += `<tr>
+              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">${alert.max}</td>
+              <td style="padding:6px; border-bottom:1px solid #eee;">${classNames}</td>
+              <td style="padding:6px; border-bottom:1px solid #eee;">${windowStr}</td>
+              <td style="padding:6px; border-bottom:1px solid #eee;">${scheduleStr}</td>
+              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                <input type="checkbox" data-alert-id="${alert.id}" ${checkedAttr} 
+                    onchange="toggleAlert('${alert.id}', this.checked)" 
+                    style="transform:scale(1.2); cursor:pointer;">
+              </td>
+              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                <button onclick="deleteAlert('${alert.id}')" style="padding:4px 8px;">Delete</button>
+              </td>
+            </tr>`;
+          }
+
+          html += `</tbody></table>
+            <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
+              <button onclick="openAlertModal()">Add Alert</button>
+            </div>`;
+          container.innerHTML = html;
+        })
+        .catch(err => {
+          console.error("Failed to fetch alerts:", err);
+          document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
+        });
+    }
+
+    function fetchCounts() {
+      if (!currentAlertsCamera) return;
+      
+      fetch(`/get_counts?cam=${encodeURIComponent(currentAlertsCamera)}`)
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.querySelector("#objectCounts tbody");
+          tbody.innerHTML = "";
+
+          const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+          if (!entries.length) {
+            tbody.innerHTML = "<tr><td colspan='2'>No detections.</td></tr>";
+            return;
+          }
+
+          for (const [label, count] of entries) {
+            tbody.innerHTML += `
+              <tr>
+                <td style="padding:6px 12px; border-bottom:1px solid #eee;">${label}</td>
+                <td style="padding:6px 12px; border-bottom:1px solid #eee;">${count}</td>
+              </tr>`;
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch counts:", err);
+          document.querySelector("#objectCounts tbody").innerHTML = "<tr><td colspan='2'>Error fetching counts.</td></tr>";
+        });
+    }
+
+    function addAlert(event) {
+      event.preventDefault();
+      if (!currentAlertsCamera) return;
+      
+      const form = event.target;
+      const formData = new FormData(form);
+
+      const windowMinutes = parseFloat(formData.get('window'));
+      const windowSeconds = Math.round(windowMinutes * 60);
+
+      const checked = form.querySelectorAll('input[name="class_ids"]:checked');
+      const classIds = Array.from(checked).map(cb => cb.value).join(',');
+
+      const scheduleFrom = formData.get("schedule_from") || "00:00";
+      const scheduleTo = formData.get("schedule_to") || "23:59";
+
+      const toSeconds = (hhmm) => {
+        const parts = hhmm.split(":").map(Number);
+        const [h = 0, m = 0] = parts;
+        return h * 3600 + m * 60;
+      };
+
+      const fromSec = toSeconds(scheduleFrom);
+      const toSec = toSeconds(scheduleTo);
+      const dayChecks = form.querySelectorAll('input[name="days"]');
+      const dayBools = Array.from(dayChecks).map(cb => cb.checked);
+      const schedArray = [[fromSec, toSec], ...dayBools];
+
+      const params = new URLSearchParams({
+        cam: currentAlertsCamera,
+        window: windowSeconds,
+        max: formData.get('max'),
+        class_ids: classIds,
+        sched: JSON.stringify(schedArray),
+      });
+
+      fetch(`/edit_alert?${params.toString()}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Failed to add alert");
+          return res.json();
+        })
+        .then(() => {
+          closeAlertModal();
+          form.reset();
+          fetchAlerts();
+        })
+        .catch(err => {
+          console.error("Add alert failed:", err);
+          alert("Failed to add alert.");
+        });
+    }
+
+    let currentAlertsCamera = null;
+    function toggleAlert(alertId, isOn) {
+      if (!currentAlertsCamera) return;
+      
+      fetch(`/edit_alert?cam=${encodeURIComponent(currentAlertsCamera)}&id=${alertId}&is_on=${isOn}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Failed to toggle alert");
+          console.log(`Alert ${alertId} ${isOn ? 'enabled' : 'disabled'}`);
+        })
+        .catch(err => {
+          console.error("Toggle alert failed:", err);
+          alert("Failed to toggle alert status.");
+          fetchAlerts();
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      initAlertCheckboxes();
+    });
+
+    function resetCounts() {
+      if (!currentAlertsCamera) return;
+      
+      if (!confirm("Are you sure you want to reset the counts for this camera?")) return;
+      fetch(`/reset_counts?cam=${encodeURIComponent(currentAlertsCamera)}`)
+        .then(res => res.json())
+        .then(() => {
+          console.log("Counts reset");
+          fetchCounts();
+        })
+        .catch(err => {
+          console.error("Failed to reset counts:", err);
+          alert("Failed to reset counts.");
+        });
+    }
+
+    function closeAlertsModal() {
+      document.getElementById("alertsModal").style.display = "none";
+      currentAlertsCamera = null;
+    }
+
+    function deleteAlert(alertId) {
+      if (!currentAlertsCamera) return;
+      
+      fetch(`/edit_alert?cam=${encodeURIComponent(currentAlertsCamera)}&id=${alertId}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Failed to delete alert");
+          fetchAlerts();
+        })
+        .catch(err => {
+          console.error("Delete failed:", err);
+          alert("Failed to delete alert.");
+        });
+    }
+
+    function openAlertModal() {
+      document.getElementById("alertModal").style.display = "flex";
+    }
+
+    function closeAlertModal() {
+      document.getElementById("alertModal").style.display = "none";
+    }
+
     const zoneModal = document.getElementById("zoneModal");
 
     const activeVideoStreams = new Map();
@@ -483,7 +1269,8 @@
     let currentStreamDate = new Date().toLocaleDateString('en-CA');
     let userIsInteracting = false;
 
-    // Zone editor state - scoped to modal session
+
+    
     let zoneEditorState = {
         polygonSvg: null,
         polygonPath: null,
@@ -619,8 +1406,11 @@
         </div>
         <div class="camera-info">
           <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
-          <button onclick="openSettingsEditor('${camName}')">Settings</button>
-          <button class="delete-button" onclick="deleteCamera('${camName}')">Delete</button>
+          <div style="display: flex; gap: 6px;">
+            <button onclick="openSettingsEditor('${camName}')">Settings</button>
+            <button onclick="openAlertsModal('${camName}')">Alerts</button>
+            <button class="delete-button" onclick="deleteCamera('${camName}')">Delete</button>
+          </div>
         </div>
       `;
       
