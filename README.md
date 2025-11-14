@@ -51,14 +51,7 @@ Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m
 ## video demo:
 https://x.com/RoryClear/status/1959249250811785405
 
-## install and run NVR + inference with homebrew (old release)
-1. brew tap roryclear/tap
-2. brew install clearcam
-3. clearcam
-4. (optional) enter your Clearcam premium userID (viewable in iOS app) to receive streams and notifications
-5. open localhost:8080 in your browser
-
-## run NVR + inference in python from source (recommended)
+## run NVR + inference in python from source
 1. pip install -r requirements.txt
 2. python3 clearcam.py
 3. (optional) enter your Clearcam premium userID (viewable in iOS app) to receive streams and notifications
