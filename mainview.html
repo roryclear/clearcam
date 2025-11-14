@@ -2,7 +2,18 @@
 <html>
 <head>
   <style>
+    .camera-card .detection-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 10px;
+      font-size: 14px;
+    }
 
+    .camera-card .detection-toggle input[type="checkbox"] {
+      margin: 0;
+      transform: scale(1.1);
+    }
     #alertsModal .modal-content {
       max-width: 800px;
       max-height: 90vh;
@@ -1406,14 +1417,18 @@
         </div>
         <div class="camera-info">
           <a href="/?cam=${encodeURIComponent(camName)}" class="camera-name" target="_blank">${camName}</a>
-          <div style="display: flex; gap: 6px;">
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <label class="detection-toggle">
+              <input type="checkbox" class="show-detections-checkbox" data-camera="${camName}">
+              Show detections
+            </label>
             <button onclick="openSettingsEditor('${camName}')">Settings</button>
             <button onclick="openAlertsModal('${camName}')">Alerts</button>
             <button class="delete-button" onclick="deleteCamera('${camName}')">Delete</button>
           </div>
         </div>
       `;
-      
+      setTimeout(() => initDetectionSettings(camName), 100);
       return card;
     }
 
@@ -1772,12 +1787,14 @@
         return;
       }
       
-      // Setup user interaction tracking for this video
-      setupUserInteractionTracking(video);
+      // Get current detection setting
+      const checkbox = document.querySelector(`.show-detections-checkbox[data-camera="${camName}"]`);
+      const showDetections = checkbox ? checkbox.checked : false;
+      const streamSuffix = showDetections ? "" : "_raw";
       
       const encoded = encodeURIComponent(camName);
       const baseUrl = window.location.origin;
-      const streamUrl = `${baseUrl}/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
+      const streamUrl = `${baseUrl}/${encoded}${streamSuffix}/streams/${currentStreamDate}/stream.m3u8`;
       
       activeVideoStreams.set(camName, {
         video: video,
@@ -1852,6 +1869,95 @@
       });
     }
 
+    const detectionIntervals = new Map();
+    function initDetectionSettings(cameraName) {
+      const checkbox = document.querySelector(`.show-detections-checkbox[data-camera="${cameraName}"]`);
+      if (!checkbox) return;
+      fetch(`/get_settings?cam=${encodeURIComponent(cameraName)}`)
+        .then(res => res.json())
+        .then(data => {
+          const showDetections = data.show_dets === 1 || data.show_dets === true;
+          checkbox.checked = showDetections;
+          updateCameraStream(cameraName, showDetections);
+          if (showDetections) {
+            startDetectionHeartbeat(cameraName);
+          }
+        })
+        .catch(err => {
+          console.error(`Failed to load detection settings for ${cameraName}:`, err);
+        });
+
+      checkbox.addEventListener('change', function() {
+        const showDetections = this.checked;
+        updateCameraStream(cameraName, showDetections);
+        
+        // Send setting to server
+        fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=${showDetections ? 1 : 0}`)
+          .then(res => {
+            if (!res.ok) throw new Error("Failed to update detection settings");
+            console.log(`Detection settings updated for ${cameraName}`);
+            
+            // Start/stop heartbeat based on setting
+            if (showDetections) {
+              startDetectionHeartbeat(cameraName);
+            } else {
+              stopDetectionHeartbeat(cameraName);
+            }
+          })
+          .catch(err => {
+            console.error(`Failed to update detection settings for ${cameraName}:`, err);
+            // Revert checkbox on error
+            this.checked = !showDetections;
+          });
+      });
+    }
+
+    function updateCameraStream(cameraName, showDetections) {
+      const streamInfo = activeVideoStreams.get(cameraName);
+      if (!streamInfo) return;
+
+      const streamSuffix = showDetections ? "" : "_raw";
+      const newStreamUrl = `${window.location.origin}/${encodeURIComponent(cameraName)}${streamSuffix}/streams/${currentStreamDate}/stream.m3u8`;
+      if (streamInfo.streamUrl !== newStreamUrl) {
+        console.log(`Updating stream for ${cameraName} to ${showDetections ? 'with' : 'without'} detections`);
+        cleanupCameraStream(cameraName);
+        setTimeout(() => startCameraStream(cameraName), 100);
+      }
+    }
+
+    function startDetectionHeartbeat(cameraName) {
+      stopDetectionHeartbeat(cameraName);
+      fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
+        .then(res => {
+          if (!res.ok) throw new Error("Failed to update detection settings");
+          console.log(`Detection heartbeat started for ${cameraName}`);
+        })
+        .catch(err => {
+          console.error(`Failed to start detection heartbeat for ${cameraName}:`, err);
+        });
+      const interval = setInterval(() => {
+        fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
+          .then(res => {
+            if (!res.ok) throw new Error("Failed to refresh detection settings");
+            console.log(`Detection settings refreshed for ${cameraName}`);
+          })
+          .catch(err => {
+            console.error(`Failed to refresh detection settings for ${cameraName}:`, err);
+          });
+      }, 30000);
+      
+      detectionIntervals.set(cameraName, interval);
+    }
+
+    function stopDetectionHeartbeat(cameraName) {
+      const interval = detectionIntervals.get(cameraName);
+      if (interval) {
+        clearInterval(interval);
+        detectionIntervals.delete(cameraName);
+        console.log(`Detection heartbeat stopped for ${cameraName}`);
+      }
+    }
+
     function cleanupCameraStream(camName) {
       const streamInfo = activeVideoStreams.get(camName);
       if (streamInfo) {
@@ -1865,14 +1971,12 @@
         }
         activeVideoStreams.delete(camName);
       }
+      stopDetectionHeartbeat(camName);
     }
 
     async function deleteCamera(cam) {
       if (!confirm(`Are you sure you want to delete ${cam}?`)) return;
-      
-      // Clean up the stream first
       cleanupCameraStream(cam);
-      
       const res = await fetch(`/delete_camera?cam_name=${cam}`);
       if (res.ok) {
         fetchCameras();
@@ -1883,8 +1987,6 @@
 
     async function shutdownServer() {
       if (!confirm("Are you sure you want to shut down the server?")) return;
-      
-      // Clean up all streams
       activeVideoStreams.forEach((stream, camName) => {
         cleanupCameraStream(camName);
       });
