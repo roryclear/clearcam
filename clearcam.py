@@ -357,6 +357,7 @@ class RollingClassCounter:
     self.sched = sched
     self.cam_name = cam_name
     self.is_on = True
+    self.is_notif = True
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -604,7 +605,7 @@ class VideoCapture:
                 if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
                 if alert.get_counts()[1]:
                     if time.time() - alert.last_det >= alert.window:
-                        send_det = True
+                        if alert.is_notif: send_det = True
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
@@ -612,7 +613,7 @@ class VideoCapture:
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                         cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                         text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
-                        if userID is not None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                        if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                         last_det = time.time()
                         alert.last_det = time.time()
             if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
@@ -1053,10 +1054,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if zone is None: zone = {}
             outside = query.get("outside", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            is_notif = query.get("is_notif", [None])[0]
             show_dets = query.get("show_dets", [self.show_dets])[0]
             if show_dets is not None: self.show_dets = str(int(time.time())) # 2 mins
             threshold = query.get("threshold", [None])[0] #default 0.5?
             if is_on is not None: is_on = str(is_on).lower() == "true"
+            if is_notif is not None: is_notif = str(is_notif).lower() == "true"
             if outside is not None: outside = str(outside).lower() == "true"
 
             coords_json = query.get("coords", [None])[0]
@@ -1068,6 +1071,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             w = query.get("w", [None])[0]
             h = query.get("h", [None])[0]
             if is_on is not None: zone["is_on"] = is_on
+            if is_notif is not None: zone["is_notif"] = is_notif
             if outside is not None: zone["outside"] = outside
             if threshold is not None: zone["threshold"] = float(threshold)
             if self.show_dets is not None: zone["show_dets"] = self.show_dets
@@ -1090,6 +1094,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            is_notif = query.get("is_notif", [None])[0]
             if alert_id is None: # no id, add alert
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
@@ -1112,7 +1117,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     is_on = str(is_on).lower() == "true"
                     raw_alerts[alert_id].is_on = is_on
                     alert = raw_alerts[alert_id]
-                else:
+                if is_notif is not None:
+                    is_notif = str(is_notif).lower() == "true"
+                    raw_alerts[alert_id].is_notif = is_notif
+                    alert = raw_alerts[alert_id]
+                if is_on is None and is_notif is None:
                     del raw_alerts[alert_id]
             with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
             added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
@@ -1161,6 +1170,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 "id": str(key),
                                 "sched": sched,
                                 "is_on": alert.is_on,
+                                "is_notif": alert.is_notif,
                             })
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")

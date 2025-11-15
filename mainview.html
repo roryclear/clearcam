@@ -88,6 +88,7 @@
       text-align: left;
       border-bottom: 2px solid #dee2e6;
       font-weight: 600;
+      white-space: nowrap;
     }
 
     .camera-card .icon {
@@ -99,6 +100,7 @@
       padding: 8px;
       border-bottom: 1px solid #dee2e6;
       vertical-align: middle;
+      white-space: nowrap;
     }
 
     #alertsContainer button {
@@ -1078,6 +1080,7 @@
                 <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window</th>
                 <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
                 <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
+                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Send Alerts</th>
                 <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
               </tr>
             </thead><tbody>`;
@@ -1111,7 +1114,9 @@
             }
 
             const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
+            const isNotif = alert.hasOwnProperty("is_notif") ? alert.is_notif : true;
             const checkedAttr = isOn ? "checked" : "";
+            const notifCheckedAttr = isNotif ? "checked" : "";
             
             html += `<tr>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">${alert.max}</td>
@@ -1120,7 +1125,12 @@
               <td style="padding:6px; border-bottom:1px solid #eee;">${scheduleStr}</td>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
                 <input type="checkbox" data-alert-id="${alert.id}" ${checkedAttr} 
-                    onchange="toggleAlert('${alert.id}', this.checked)" 
+                    onchange="toggleAlert('${alert.id}', this.checked, 'is_on')" 
+                    style="transform:scale(1.2); cursor:pointer;">
+              </td>
+              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                <input type="checkbox" data-alert-id="${alert.id}" ${notifCheckedAttr} 
+                    onchange="toggleAlert('${alert.id}', this.checked, 'is_notif')" 
                     style="transform:scale(1.2); cursor:pointer;">
               </td>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
@@ -1204,6 +1214,7 @@
         max: formData.get('max'),
         class_ids: classIds,
         sched: JSON.stringify(schedArray),
+        is_notif: 'true' // Default to true for new alerts
       });
 
       fetch(`/edit_alert?${params.toString()}`)
@@ -1223,13 +1234,13 @@
     }
 
     let currentAlertsCamera = null;
-    function toggleAlert(alertId, isOn) {
+    function toggleAlert(alertId, isChecked, field) {
       if (!currentAlertsCamera) return;
       
-      fetch(`/edit_alert?cam=${encodeURIComponent(currentAlertsCamera)}&id=${alertId}&is_on=${isOn}`)
+      fetch(`/edit_alert?cam=${encodeURIComponent(currentAlertsCamera)}&id=${alertId}&${field}=${isChecked}`)
         .then(res => {
           if (!res.ok) throw new Error("Failed to toggle alert");
-          console.log(`Alert ${alertId} ${isOn ? 'enabled' : 'disabled'}`);
+          console.log(`Alert ${alertId} ${field} ${isChecked ? 'enabled' : 'disabled'}`);
         })
         .catch(err => {
           console.error("Toggle alert failed:", err);
@@ -1237,6 +1248,7 @@
           fetchAlerts();
         });
     }
+
     document.addEventListener('DOMContentLoaded', function() {
       initAlertCheckboxes();
     });
