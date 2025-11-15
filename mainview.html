@@ -2,6 +2,65 @@
 <html>
 <head>
   <style>
+    .tooltip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: help;
+      gap: 4px;
+    }
+
+    .tooltip-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      background: #6c757d;
+      color: white;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: bold;
+      line-height: 1;
+    }
+
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      width: 220px;
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 8px;
+      position: absolute;
+      z-index: 1000;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 0.8rem;
+      font-weight: normal;
+      line-height: 1.3;
+      white-space: normal;
+      word-wrap: break-word;
+    }
+
+    .tooltip .tooltiptext::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: #333 transparent transparent transparent;
+    }
+
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
+    }
     .events-filter {
       display: flex;
       align-items: center;
@@ -1072,18 +1131,24 @@
             return;
           }
 
-          let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
-            <thead>
-              <tr>
-                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
-                <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
-                <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window</th>
-                <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
-                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
-                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Send Alerts</th>
-                <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
-              </tr>
-            </thead><tbody>`;
+        let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
+          <thead>
+            <tr>
+              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
+              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
+              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">
+                <span class="tooltip">
+                  Send Alerts
+                  <span class="tooltip-icon">?</span>
+                  <span class="tooltiptext">Enable to send notifications and clips to your clearcam app for this alert (requires premium).</span>
+                </span>
+              </th>
+              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
+            </tr>
+          </thead><tbody>`;
 
           for (const alert of alerts) {
             const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
