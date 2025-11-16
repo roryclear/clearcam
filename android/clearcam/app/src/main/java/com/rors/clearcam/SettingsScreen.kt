@@ -187,7 +187,7 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        text = "Automatically delete old video clips more than 14 days old.",
+                        text = "Automatically delete clips after 14 days.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         modifier = Modifier.padding(top = 4.dp)
