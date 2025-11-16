@@ -56,6 +56,7 @@ import androidx.core.content.ContextCompat
 import android.Manifest
 import android.graphics.BitmapFactory
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -160,7 +161,6 @@ object ThumbnailCache {
     }
 }
 
-
 suspend fun deleteVideoFromBackend(userId: String, filename: String) {
     withContext(Dispatchers.IO) {
         try {
@@ -261,6 +261,7 @@ fun HomeScreen(userId: String) {
     }
 
     fun loadVideosFromStorage() {
+        deleteOldClipsIfEnabled(context, videosDir, coroutineScope)
         eventVideos = loadAllVideos(videosDir)
     }
 
@@ -268,6 +269,7 @@ fun HomeScreen(userId: String) {
         coroutineScope.launch {
             try {
                 if (!videosDir.exists()) videosDir.mkdirs()
+                deleteOldClipsIfEnabled(context, videosDir, coroutineScope)
                 val camerasDeferred = async { fetchCameraJson(userId) }
                 val newestTime = getNewestCreationTimeFromFiles(videosDir)
                 val newVideos = fetchEventVideos(userId, newestTime / 1000)
@@ -553,6 +555,7 @@ fun SimpleVideoPlayer(videoPath: String, onDismiss: () -> Unit) {
     var isScrubbing by remember { mutableStateOf(false) }
     val videoViewRef = remember { mutableStateOf<VideoView?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val videosDir = remember { File(context.filesDir, APP_VIDEO_DIR) }
 
     var isPrepared by remember { mutableStateOf(false) }
     var isInitialPlay by remember { mutableStateOf(true) }
@@ -1552,6 +1555,62 @@ fun EventVideoListItem(
                     )
                 }
             }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+private fun isVideoOld(filename: String): Boolean {
+    return try {
+        Log.d("DeleteOldClips", "Checking file: $filename")
+
+        // Extract date-time part from filename (format: "2025-11-16_16-09-58")
+        val baseName = filename
+            .removeSuffix(".mp4")
+            .removeSuffix(".aes")
+
+        // The date-time part is everything before the last underscore (remove the UUID)
+        val dateTimePart = baseName.substringBeforeLast("_")
+        Log.d("DeleteOldClips", "Date-time part: $dateTimePart")
+
+        // Parse the date-time string (format: "yyyy-MM-dd_HH-mm-ss")
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
+        val fileDateTime = java.time.LocalDateTime.parse(dateTimePart, formatter)
+
+        // Convert to milliseconds since epoch
+        val timestamp = fileDateTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val currentTime = System.currentTimeMillis()
+        val timeLimit = currentTime - (48 * 60 * 60 * 1000) // 48 hours ago
+
+        Log.d("DeleteOldClips", "File timestamp: $timestamp (${java.util.Date(timestamp)})")
+        Log.d("DeleteOldClips", "Current time: $currentTime (${java.util.Date(currentTime)})")
+        Log.d("DeleteOldClips", "Time limit: $timeLimit (${java.util.Date(timeLimit)})")
+        Log.d("DeleteOldClips", "Is old: ${timestamp < timeLimit}")
+
+        timestamp < timeLimit
+    } catch (e: Exception) {
+        Log.e("DeleteOldClips", "Error parsing timestamp for $filename: ${e.message}")
+        false
+    }
+}
+
+private fun deleteOldClipsIfEnabled(context: Context, videosDir: File, coroutineScope: CoroutineScope) {
+    val prefs = context.getSharedPreferences("clearcam_prefs", Context.MODE_PRIVATE)
+    val deleteOldClips = prefs.getBoolean("delete_old_clips", true) // Default to true if setting doesn't exist
+    if (!deleteOldClips) return
+    coroutineScope.launch(Dispatchers.IO) {
+        try {
+            val files = videosDir.listFiles()
+            files?.forEach { file ->
+                if (file.isFile && (file.name.endsWith(".mp4") || file.name.endsWith(".aes"))) {
+                    if (isVideoOld(file.name)) {
+                        file.delete()
+                        ThumbnailCache.deleteCachedThumbnail(context, file.name)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DeleteOldClips", "Error deleting old clips", e)
         }
     }
 }
