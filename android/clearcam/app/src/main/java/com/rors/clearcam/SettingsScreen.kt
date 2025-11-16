@@ -27,6 +27,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.OutputStreamWriter
@@ -60,6 +61,13 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
         }.collect { enabled ->
             deleteOldClipsEnabled.value = enabled
         }
+    }
+
+    LaunchedEffect(Unit) {
+        val enabled = context.dataStore.data
+            .map { prefs -> prefs[booleanPreferencesKey("delete_old_clips")] ?: true }
+            .first() // get the first (current) value and stop
+        deleteOldClipsEnabled.value = enabled
     }
 
     // Logout confirmation dialog
@@ -125,7 +133,7 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Receive event notifications",
+                    text = "Receive Event Notifications",
                     style = MaterialTheme.typography.bodyLarge
                 )
 
@@ -175,11 +183,11 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
             ) {
                 Column {
                     Text(
-                        text = "Delete clips older than 48 hours",
+                        text = "Delete Old Clips",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        text = "Automatically delete old video clips to save storage",
+                        text = "Automatically delete old video clips more than 14 days old.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         modifier = Modifier.padding(top = 4.dp)

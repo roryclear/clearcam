@@ -74,6 +74,9 @@ import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 
 private const val APP_VIDEO_DIR = "videos"
@@ -1580,7 +1583,7 @@ private fun isVideoOld(filename: String): Boolean {
         // Convert to milliseconds since epoch
         val timestamp = fileDateTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         val currentTime = System.currentTimeMillis()
-        val timeLimit = currentTime - (48 * 60 * 60 * 1000) // 48 hours ago
+        val timeLimit = currentTime - (12 * 14 * 60 * 60 * 1000) // 14 days
 
         Log.d("DeleteOldClips", "File timestamp: $timestamp (${java.util.Date(timestamp)})")
         Log.d("DeleteOldClips", "Current time: $currentTime (${java.util.Date(currentTime)})")
@@ -1594,11 +1597,21 @@ private fun isVideoOld(filename: String): Boolean {
     }
 }
 
-private fun deleteOldClipsIfEnabled(context: Context, videosDir: File, coroutineScope: CoroutineScope) {
-    val prefs = context.getSharedPreferences("clearcam_prefs", Context.MODE_PRIVATE)
-    val deleteOldClips = prefs.getBoolean("delete_old_clips", true) // Default to true if setting doesn't exist
-    if (!deleteOldClips) return
+@RequiresApi(Build.VERSION_CODES.O)
+private fun deleteOldClipsIfEnabled(
+    context: Context,
+    videosDir: File,
+    coroutineScope: CoroutineScope
+) {
     coroutineScope.launch(Dispatchers.IO) {
+
+        // Read from DataStore (NOT SharedPreferences)
+        val deleteOldClips = context.dataStore.data
+            .map { prefs -> prefs[booleanPreferencesKey("delete_old_clips")] ?: true }
+            .first()
+
+        if (!deleteOldClips) return@launch
+
         try {
             val files = videosDir.listFiles()
             files?.forEach { file ->
