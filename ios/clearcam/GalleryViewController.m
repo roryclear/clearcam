@@ -631,7 +631,7 @@
     NSError *error = nil;
     NSArray *contents = [fileManager contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
     if (error) return;
-    NSDate *cutoffDate = [NSDate dateWithTimeIntervalSinceNow:-45 * 60 * 60]; // 100 hours ago
+    NSDate *cutoffDate = [NSDate dateWithTimeIntervalSinceNow:-24 * 14 * 60 * 60]; // 2 weeks
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
     BOOL didDeleteFiles = NO;
