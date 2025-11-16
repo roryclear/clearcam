@@ -197,3 +197,6 @@
 "continue_without_account" = "बिना खाता के जारी रखें";
 
 "alerts" = "अलर्ट";
+
+"auto_delete_old_clips" = "पुराने क्लिप स्वचालित रूप से हटाएं";
+"auto_delete_old_clips_description" = "14 दिनों के बाद क्लिप स्वचालित रूप से हटाएं।";

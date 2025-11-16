@@ -115,3 +115,6 @@
 "continue_without_account" = "Continue without an account";
 
 "alerts" = "Alerts";
+
+"auto_delete_old_clips" = "Auto Delete Old Clips";
+"auto_delete_old_clips_description" = "Delete clips after 14 days.";

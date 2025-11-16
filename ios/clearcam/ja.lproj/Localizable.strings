@@ -197,3 +197,6 @@
 "continue_without_account" = "アカウントなしで続ける";
 
 "alerts" = "アラート";
+
+"auto_delete_old_clips" = "古いクリップを自動削除";
+"auto_delete_old_clips_description" = "14日後にクリップを自動削除します。";

@@ -582,8 +582,8 @@
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = YES;
         } else if (indexPath.row == 1) {
-            cell.textLabel.text = NSLocalizedString(@"auto_delete_old_clips", @"Label for auto delete old clips setting");
-            cell.detailTextLabel.text = NSLocalizedString(@"auto_delete_old_clips_description", @"Description for auto delete old clips setting");
+            cell.textLabel.text = NSLocalizedString(@"auto_delete_old_clips", nil);
+            cell.detailTextLabel.text = NSLocalizedString(@"auto_delete_old_clips_description", nil);
             cell.accessoryType = UITableViewCellAccessoryNone;
             UISwitch *deleteOldClipsSwitch = [[UISwitch alloc] init];
             deleteOldClipsSwitch.on = self.deleteOldClipsEnabled;

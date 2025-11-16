@@ -197,3 +197,6 @@
 "continue_without_account" = "계정 없이 계속하기";
 
 "alerts" = "알림";
+
+"auto_delete_old_clips" = "오래된 클립 자동 삭제";
+"auto_delete_old_clips_description" = "14일 후에 클립을 자동으로 삭제합니다.";

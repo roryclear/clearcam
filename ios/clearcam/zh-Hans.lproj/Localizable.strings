@@ -196,3 +196,6 @@
 "continue_without_account" = "继续使用（无账户）";
 
 "alerts" = "警报";
+
+"auto_delete_old_clips" = "自动删除旧剪辑";
+"auto_delete_old_clips_description" = "14天后自动删除剪辑。";
