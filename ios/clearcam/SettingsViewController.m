@@ -30,6 +30,7 @@
 @property (nonatomic, assign) BOOL useOwnInferenceServerEnabled;
 @property (nonatomic, strong) NSString *inferenceServerAddress;
 @property (nonatomic, assign) BOOL isUserIDVisible;
+@property (nonatomic, assign) BOOL deleteOldClipsEnabled;
 
 @end
 
@@ -112,6 +113,13 @@
         self.liveStreamInternetEnabled = NO;
         [defaults setBool:NO forKey:@"live_stream_internet_enabled"];
     }
+    if ([defaults objectForKey:@"delete_old_clips"] != nil) {
+        self.deleteOldClipsEnabled = [defaults boolForKey:@"delete_old_clips"];
+    } else {
+        self.deleteOldClipsEnabled = YES;
+        [defaults setBool:YES forKey:@"delete_old_clips"];
+    }
+    
     
     self.deviceName = [defaults stringForKey:@"device_name"] ?: NSLocalizedString(@"default_device_name", @"Default device name");
     [defaults setObject:self.deviceName forKey:@"device_name"];
@@ -213,6 +221,13 @@
     self.streamViaWiFiEnabled = sender.on;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:self.streamViaWiFiEnabled forKey:@"stream_via_wifi_enabled"];
+    [defaults synchronize];
+}
+
+- (void)deleteOldClipsSwitchToggled:(UISwitch *)sender {
+    self.deleteOldClipsEnabled = sender.on;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:self.deleteOldClipsEnabled forKey:@"delete_old_clips"];
     [defaults synchronize];
 }
 
@@ -566,6 +581,15 @@
             receiveNotifSwitch.enabled = isPremium;
             cell.textLabel.textColor = isPremium ? [UIColor labelColor] : [UIColor grayColor];
             cell.userInteractionEnabled = YES;
+        } else if (indexPath.row == 1) {
+            cell.textLabel.text = NSLocalizedString(@"auto_delete_old_clips", nil);
+            cell.detailTextLabel.text = NSLocalizedString(@"auto_delete_old_clips_description", nil);
+            cell.accessoryType = UITableViewCellAccessoryNone;
+            UISwitch *deleteOldClipsSwitch = [[UISwitch alloc] init];
+            deleteOldClipsSwitch.on = self.deleteOldClipsEnabled;
+            [deleteOldClipsSwitch addTarget:self action:@selector(deleteOldClipsSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = deleteOldClipsSwitch;
+            cell.userInteractionEnabled = YES;
         }
     } else if (indexPath.section == 3) { // Advanced Settings
         if (indexPath.row == 0) {
@@ -668,7 +692,7 @@
     } else if (section == 1) { // Live Stream Settings
         return 2; // Live Stream over the internet and Device name
     } else if (section == 2) { // Viewer Settings
-        return 1; // Just Receive Notifications
+        return 2; // Just Receive Notifications
     } else if (section == 3) { // Advanced Settings
         return 2; // Use Own Notification Server, Use Own Inference Server
     } else if (section == 4) { // Upgrade to Premium / Subscription
@@ -906,6 +930,7 @@
                 [[StoreManager sharedInstance] showUpgradePopupInViewController:self completion:^(BOOL success) {}];
             } // Switch handles toggle when premium
         }
+        // Row 1 (auto delete old clips) is handled by the switch, so no action needed on tap
     } else if (indexPath.section == 3) { // Advanced Settings
         // Rows 0 and 1 (server switches) are handled by their toggles, so do nothing on tap
     } else if (indexPath.section == 4) { // Upgrade to Premium / Subscription

@@ -27,6 +27,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.OutputStreamWriter
@@ -42,15 +43,31 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val userId = PrefsHelper.getUserId(context) ?: ""
     val notificationsEnabled = remember { mutableStateOf(false) }
+    val deleteOldClipsEnabled = remember { mutableStateOf(true) } // Default to true
     val showLogoutDialog = remember { mutableStateOf(false) }
 
-    // Load saved preference when screen appears
+    // Load saved preferences when screen appears
     LaunchedEffect(Unit) {
+        // Load notifications preference
         context.dataStore.data.map { preferences ->
             preferences[booleanPreferencesKey("notifications_enabled")] ?: false
         }.collect { enabled ->
             notificationsEnabled.value = enabled
         }
+
+        // Load delete old clips preference (defaults to true)
+        context.dataStore.data.map { preferences ->
+            preferences[booleanPreferencesKey("delete_old_clips")] ?: true
+        }.collect { enabled ->
+            deleteOldClipsEnabled.value = enabled
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val enabled = context.dataStore.data
+            .map { prefs -> prefs[booleanPreferencesKey("delete_old_clips")] ?: true }
+            .first() // get the first (current) value and stop
+        deleteOldClipsEnabled.value = enabled
     }
 
     // Logout confirmation dialog
@@ -107,6 +124,7 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Notifications toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,11 +133,11 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Receive event notifications",
+                    text = "Receive Event Notifications",
                     style = MaterialTheme.typography.bodyLarge
                 )
 
-                val activity = LocalContext.current as? Activity // todo
+                val activity = LocalContext.current as? Activity
 
                 Switch(
                     checked = notificationsEnabled.value,
@@ -150,6 +168,45 @@ fun SettingsScreen(onBackPressed: () -> Unit) {
                                 }
                             }
                             disableNotifications(context)
+                        }
+                    }
+                )
+            }
+
+            // Delete old clips toggle - added below notifications
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Delete Old Clips",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "Automatically delete clips after 14 days.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Switch(
+                    checked = deleteOldClipsEnabled.value,
+                    onCheckedChange = { enabled ->
+                        deleteOldClipsEnabled.value = enabled
+                        coroutineScope.launch {
+                            context.dataStore.edit { prefs ->
+                                prefs[booleanPreferencesKey("delete_old_clips")] = enabled
+                            }
+                        }
+                        if (enabled) {
+                            Toast.makeText(context, "Old clips will be automatically deleted", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Old clips will be kept", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -259,4 +316,3 @@ private fun requestNotificationPermissionAndRegister(
             }
         }
 }
-

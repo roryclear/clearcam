@@ -581,6 +581,14 @@
     NSError *error;
     NSArray *contents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
     if (!self.loadedFilenames) self.loadedFilenames = [NSMutableSet set];
+    BOOL shouldDeleteOldClips = YES;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:@"delete_old_clips"] != nil) {
+        shouldDeleteOldClips = [defaults boolForKey:@"delete_old_clips"];
+    }
+    if (shouldDeleteOldClips) {
+        [self deleteOldClips];
+    }
     for (NSString *file in contents) {
         NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
         NSString *outputFilePath = filePath;
@@ -615,6 +623,49 @@
             
         }
         [self addVideoFileAtPath:outputFilePath];
+    }
+}
+
+- (void)deleteOldClips {
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSError *error = nil;
+    NSArray *contents = [fileManager contentsOfDirectoryAtPath:self.downloadDirectory error:&error];
+    if (error) return;
+    NSDate *cutoffDate = [NSDate dateWithTimeIntervalSinceNow:-24 * 14 * 60 * 60]; // 2 weeks
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+    [dateFormatter setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
+    BOOL didDeleteFiles = NO;
+    for (NSString *file in contents) {
+        NSString *filePath = [self.downloadDirectory stringByAppendingPathComponent:file];
+        NSError *regexError = nil;
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(\\d{4}-\\d{2}-\\d{2})_(\\d{2}-\\d{2}-\\d{2})"
+                                                                               options:0
+                                                                                 error:&regexError];
+        NSTextCheckingResult *match = [regex firstMatchInString:file options:0 range:NSMakeRange(0, file.length)];
+        if (!match) continue;
+        NSString *dateStr = [file substringWithRange:[match rangeAtIndex:1]];
+        NSString *timeStr = [file substringWithRange:[match rangeAtIndex:2]];
+        NSString *fullTimestamp = [NSString stringWithFormat:@"%@_%@", dateStr, timeStr];
+        NSDate *fileDate = [dateFormatter dateFromString:fullTimestamp];
+        if (fileDate && [fileDate compare:cutoffDate] == NSOrderedAscending) {
+            NSError *deleteError = nil;
+            BOOL success = [fileManager removeItemAtPath:filePath error:&deleteError];
+            if (success) {
+                NSLog(@"Deleted old clip: %@", file);
+                didDeleteFiles = YES;
+            } else {
+                NSLog(@"Failed to delete old clip %@: %@", file, deleteError);
+            }
+        }
+    }
+    if (didDeleteFiles) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.videoFiles removeAllObjects];
+            [self.groupedVideos removeAllObjects];
+            [self.sectionTitles removeAllObjects];
+            [self.loadedFilenames removeAllObjects];
+            [self loadExistingVideos];
+        });
     }
 }
 

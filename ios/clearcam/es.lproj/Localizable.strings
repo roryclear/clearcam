@@ -197,3 +197,6 @@
 "continue_without_account" = "Continuar sin cuenta";
 
 "alerts" = "Alertas";
+
+"auto_delete_old_clips" = "Eliminar Clips Antiguos Automáticamente";
+"auto_delete_old_clips_description" = "Eliminar clips automáticamente después de 14 días.";
