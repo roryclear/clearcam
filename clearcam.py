@@ -1099,16 +1099,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     )
                 raw_alerts[alert_id] = alert
             else:
-                if is_on is not None: # todo add other properties to edit
-                    is_on = str(is_on).lower() == "true"
-                    raw_alerts[alert_id].is_on = is_on
-                    alert = raw_alerts[alert_id]
-                if is_notif is not None:
-                    is_notif = str(is_notif).lower() == "true"
-                    raw_alerts[alert_id].is_notif = is_notif
-                    alert = raw_alerts[alert_id]
-                if is_on is None and is_notif is None:
-                    del raw_alerts[alert_id]
+              if is_on is not None or is_notif is not None:
+                if is_on is not None: raw_alerts[alert_id].is_on = str(is_on).lower() == "true"
+                if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
+                alert = raw_alerts[alert_id]
+              else:
+                del raw_alerts[alert_id]
             with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
             added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
             append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, alert])
