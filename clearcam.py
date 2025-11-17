@@ -1052,32 +1052,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             with open(settings_file, "rb") as f:
                zone = pickle.load(f)
             if zone is None: zone = {}
-            outside = query.get("outside", [None])[0]
-            is_on = query.get("is_on", [None])[0]
-            is_notif = query.get("is_notif", [None])[0]
-            show_dets = query.get("show_dets", [self.show_dets])[0]
-            if show_dets is not None: self.show_dets = str(int(time.time())) # 2 mins
-            threshold = query.get("threshold", [None])[0] #default 0.5?
-            if is_on is not None: is_on = str(is_on).lower() == "true"
-            if is_notif is not None: is_notif = str(is_notif).lower() == "true"
-            if outside is not None: outside = str(outside).lower() == "true"
-
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
               if isinstance(coords, list) and len(coords) >= 3:
                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
-
-            w = query.get("w", [None])[0]
-            h = query.get("h", [None])[0]
-            if is_on is not None: zone["is_on"] = is_on
-            if is_notif is not None: zone["is_notif"] = is_notif
-            if outside is not None: zone["outside"] = outside
-            if threshold is not None: zone["threshold"] = float(threshold)
-            if self.show_dets is not None: zone["show_dets"] = self.show_dets
+            zone["is_on"] = (str(is_on).lower() == "true") if (is_on := query.get("is_on", [None])[0]) is not None else zone.get("is_on")
+            zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
+            zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
+            query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])})
+            query.get("show_dets", [self.show_dets])[0] is not None and setattr(self, "show_dets", str(int(time.time()))) and zone.update({"show_dets": self.show_dets})
             with open(settings_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
-
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
