@@ -367,19 +367,21 @@ class RollingClassCounter:
 
   def cleanup(self, class_id, now):
     q = self.data[class_id]
-    while self.window and q and now - q[0] > self.window:
-        q.popleft()
+    window = self.window if self.window else (60 if self.is_notif else 1)
+    while window and q and now - q[0] > window:
+      q.popleft()
 
   def reset_counts(self):
     for class_id, _ in self.data.items():
        self.data[class_id] = deque() # todo, use in reset endpoint?
 
   def get_counts(self):
+    window = self.window if self.window else (60 if self.is_notif else 1)
     max_reached = False
     now = time.time()
     counts = {}
     for class_id, q in self.data.items():
-      while self.window and q and now - q[0] > self.window:
+      while window and q and now - q[0] > window:
         q.popleft()
       if q:
         counts[class_id] = len(q)
@@ -393,7 +395,8 @@ class RollingClassCounter:
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
     if not self.sched[time.localtime().tm_wday + 1]: return False
-    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
+    window = self.window if self.window else (60 if self.is_notif else 1)
+    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - window) + offset)
 
 def write_png(filename, array):
     array = array[..., ::-1]  # BGR to RGB
@@ -483,7 +486,7 @@ class VideoCapture:
     except Exception:
         with open(alerts_file, 'wb') as f:
             self.alert_counters = dict()
-            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
+            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
             pickle.dump(self.alert_counters, f)
     try:
         with open(settings_file, "rb") as f:
@@ -602,9 +605,10 @@ class VideoCapture:
                 if not alert.is_active():
                   alert.reset_counts()
                   continue
+                window = alert.window if alert.window else (60 if alert.is_notif else 1)
                 if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
                 if alert.get_counts()[1]:
-                    if time.time() - alert.last_det >= alert.window:
+                    if time.time() - alert.last_det >= window:
                         if alert.is_notif: send_det = True
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
@@ -717,8 +721,7 @@ class VideoCapture:
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
               for _, alert in self.alert_counters.items():
-                if not alert.get_counts()[1]:
-                    alert.add(int(x.class_id)) #only add if empty, don't spam notifs
+                if not alert.get_counts()[1]: alert.add(int(x.class_id)) #only add if empty, don't spam notifs
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
@@ -1086,7 +1089,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 max_count = query.get("max", [None])[0]
                 class_ids = query.get("class_ids", [None])[0]
                 sched = json.loads(query.get("sched", ["[[0,86400],[0,86400],[0,86400],[0,86400],[0,86400],[0,86400],[0,86400]]"])[0]) # todo, weekly
-                window = int(window)
+                if window: window = int(window)
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
                 alert_id = str(uuid.uuid4())

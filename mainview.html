@@ -992,25 +992,28 @@
           <span class="close" onclick="closeAlertModal()">&times;</span>
         </div>
         <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
-          <div class="form-group" style="width: 90%; text-align: center;">
-            <label for="maxCount">Trigger if there are</label>
-            <input type="number" id="maxCount" name="max" min="1" value="1" required
-                style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
-            <span>objects detected</span>
-          </div>
           <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
-            <label>of class(es)</label>
             <div id="checkboxContainer" class="checkbox-container" style="display: grid; grid-template-columns: auto auto; gap: 8px 16px; max-height: 200px; overflow-y: auto; margin: 0 auto; padding: 8px; justify-content: center;"></div>
           </div>
-          <div class="form-group" style="width: 90%; text-align: center;">
-            <label for="windowMinutes">within this time window</label>
-            <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
-                style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
-            <span>minutes</span>
+          <div class="form-group" style="width: 90%; text-align: center; margin-top: 15px;">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Window (Optional)</label>
+            <div style="margin-bottom: 10px;">
+              <label for="maxCount">Trigger if there are</label>
+              <input type="number" id="maxCount" name="max" min="1" placeholder="1"
+                  style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+              <span>objects detected</span>
+            </div>
+            
+            <div>
+              <label for="windowMinutes">within this time window</label>
+              <input type="number" id="windowMinutes" name="window" min="1" placeholder="1" 
+                  style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+              <span>minutes</span>
+            </div>
           </div>
 
           <div class="form-group" style="width: 90%; text-align: center;">
-            <label>Schedule (optional)</label>
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Schedule (Optional)</label>
             <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
               <div>
                 <label for="scheduleFrom">From</label><br>
@@ -1022,6 +1025,7 @@
               </div>
             </div>
           </div>
+
           <div class="form-group" style="width: 90%; text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
               <label><input type="checkbox" name="days" value="0" checked> Mon</label>
@@ -1292,25 +1296,21 @@
     function addAlert(event) {
       event.preventDefault();
       if (!currentAlertsCamera) return;
-      
       const form = event.target;
       const formData = new FormData(form);
-
       const windowMinutes = parseFloat(formData.get('window'));
-      const windowSeconds = Math.round(windowMinutes * 60);
-
+      const windowSeconds = windowMinutes ? Math.round(windowMinutes * 60) : null;
+      // Default max to 1 if empty
+      const maxCount = formData.get('max') || '1';
       const checked = form.querySelectorAll('input[name="class_ids"]:checked');
       const classIds = Array.from(checked).map(cb => cb.value).join(',');
-
       const scheduleFrom = formData.get("schedule_from") || "00:00";
       const scheduleTo = formData.get("schedule_to") || "23:59";
-
       const toSeconds = (hhmm) => {
         const parts = hhmm.split(":").map(Number);
         const [h = 0, m = 0] = parts;
         return h * 3600 + m * 60;
       };
-
       const fromSec = toSeconds(scheduleFrom);
       const toSec = toSeconds(scheduleTo);
       const dayChecks = form.querySelectorAll('input[name="days"]');
@@ -1319,13 +1319,14 @@
 
       const params = new URLSearchParams({
         cam: currentAlertsCamera,
-        window: windowSeconds,
-        max: formData.get('max'),
+        max: maxCount,
         class_ids: classIds,
         sched: JSON.stringify(schedArray),
-        is_notif: 'true' // Default to true for new alerts
+        is_notif: 'true'
       });
-
+      if (windowSeconds !== null) {
+        params.set('window', windowSeconds);
+      }
       fetch(`/edit_alert?${params.toString()}`)
         .then(res => {
           if (!res.ok) throw new Error("Failed to add alert");
