@@ -613,6 +613,7 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
+                        # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                         filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}_notif.jpg" if alert.is_notif else filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                         cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
