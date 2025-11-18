@@ -616,6 +616,7 @@ class VideoCapture:
                         filepath.mkdir(parents=True, exist_ok=True)
                         # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                         filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}_notif.jpg" if alert.is_notif else filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
+                        if alert.is_notif: (filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg").unlink(missing_ok=True) # only one image per event
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                         cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                         text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
