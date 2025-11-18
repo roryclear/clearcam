@@ -358,6 +358,7 @@ class RollingClassCounter:
     self.cam_name = cam_name
     self.is_on = True
     self.is_notif = True
+    self.zone = True
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -714,15 +715,22 @@ class VideoCapture:
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "settings") and self.settings is not None and self.settings.get("is_on"):
+            outside = False
+            if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
               outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
-              if outside ^ self.settings["outside"]: continue
+              outside = outside ^ self.settings["outside"]
+            if outside: # check if any alerts don't use zone
+              for _, alert in self.alert_counters.items():
+                if not alert.zone:
+                  outside = False
+                  break
+              if outside: continue
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
             if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
               self.object_set.add(int(x.track_id))
               self.counter.add(int(x.class_id))
               for _, alert in self.alert_counters.items():
-                if not alert.get_counts()[1]: alert.add(int(x.class_id)) #only add if empty, don't spam notifs
+                if not alert.get_counts()[1] and (not outside or not alert.zone): alert.add(int(x.class_id)) #only add if empty, don't spam notifs. todo, outside depends on mask on of off
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
@@ -1061,7 +1069,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               coords = json.loads(coords_json)
               if isinstance(coords, list) and len(coords) >= 3:
                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
-            zone["is_on"] = (str(is_on).lower() == "true") if (is_on := query.get("is_on", [None])[0]) is not None else zone.get("is_on")
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])})
@@ -1084,6 +1091,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            zone = query.get("zone", [None])[0]
             is_notif = query.get("is_notif", [None])[0]
             if alert_id is None: # no id, add alert
                 window = query.get("window", [None])[0]
@@ -1103,9 +1111,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     )
                 raw_alerts[alert_id] = alert
             else:
-              if is_on is not None or is_notif is not None:
+              if is_on is not None or is_notif is not None or zone is not None:
                 if is_on is not None: raw_alerts[alert_id].is_on = str(is_on).lower() == "true"
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
+                if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
                 alert = raw_alerts[alert_id]
               else:
                 del raw_alerts[alert_id]
@@ -1157,6 +1166,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 "sched": sched,
                                 "is_on": alert.is_on,
                                 "is_notif": alert.is_notif,
+                                "zone": alert.zone,
                             })
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")

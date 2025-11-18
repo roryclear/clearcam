@@ -143,14 +143,14 @@
       transform: scale(1.1);
     }
 
-    #alertsModal .modal-content {
-      max-width: 800px;
-      max-height: 90vh;
-      overflow-y: auto;
-      font-family: sans-serif;
-      background-color: var(--bg-primary);
-      color: var(--text-primary);
-    }
+      #alertsModal .modal-content {
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+        font-family: sans-serif;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+      }
 
     #alertsModal .modal-header {
       display: flex;
@@ -946,9 +946,6 @@
         <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <label style="display: flex; align-items: center; gap: 6px;">
-                    <input type="checkbox" id="zoneEnabledCheckbox" checked> Enable Zone
-                </label>
-                <label style="display: flex; align-items: center; gap: 6px;">
                     <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
                 </label>
                 <label style="display: flex; align-items: center; gap: 6px;">
@@ -1198,6 +1195,13 @@
                   <span class="tooltiptext">Enable to send notifications and clips to your clearcam app for this alert (requires premium).</span>
                 </span>
               </th>
+              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">
+                <span class="tooltip">
+                  Zone
+                  <span class="tooltip-icon">?</span>
+                  <span class="tooltiptext">Enable to only trigger this alert when objects are detected within the defined zone.</span>
+                </span>
+              </th>
               <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
             </tr>
           </thead><tbody>`;
@@ -1232,12 +1236,14 @@
 
             const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
             const isNotif = alert.hasOwnProperty("is_notif") ? alert.is_notif : true;
+            const isZone = alert.hasOwnProperty("zone") ? alert.zone : true;
             const checkedAttr = isOn ? "checked" : "";
             const notifCheckedAttr = isNotif ? "checked" : "";
+            const zoneCheckedAttr = isZone ? "checked" : "";
             
             html += `<tr>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">${alert.max}</td>
-              <td style="padding:6px; border-bottom:1px solid #eee;">${classNames}</td>
+              <td style="padding:6px; border-bottom:1px solid #eee; max-width:150px; white-space:normal; word-wrap:break-word; line-height:1.3;">${classNames}</td>
               <td style="padding:6px; border-bottom:1px solid #eee;">${windowStr}</td>
               <td style="padding:6px; border-bottom:1px solid #eee;">${scheduleStr}</td>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
@@ -1251,10 +1257,15 @@
                     style="transform:scale(1.2); cursor:pointer;">
               </td>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                <input type="checkbox" data-alert-id="${alert.id}" ${zoneCheckedAttr} 
+                    onchange="toggleAlert('${alert.id}', this.checked, 'zone')" 
+                    style="transform:scale(1.2); cursor:pointer;">
+              </td>
+              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
                 <button onclick="deleteAlert('${alert.id}')" style="padding:4px 8px;">Delete</button>
               </td>
             </tr>`;
-          }
+            }
 
           html += `</tbody></table>
             <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
@@ -1326,7 +1337,8 @@
         max: maxCount,
         class_ids: classIds,
         sched: JSON.stringify(schedArray),
-        is_notif: 'true'
+        is_notif: 'true',
+        zone: 'true'
       });
       if (windowSeconds !== null) {
         params.set('window', windowSeconds);
@@ -1621,15 +1633,6 @@
                         loadPolygon(data.coords, previewEl);
                     }
                 }
-
-                const zoneEnabledCheckbox = document.getElementById("zoneEnabledCheckbox");
-                if (data.is_on !== undefined) {
-                    zoneEnabledCheckbox.checked = data.is_on;
-                } else if (data.length && data[0] && data[0].is_on !== undefined) {
-                    zoneEnabledCheckbox.checked = data[0].is_on;
-                } else {
-                    zoneEnabledCheckbox.checked = false;
-                }
                 
                 const outsideZoneCheckbox = document.getElementById("outsideZoneCheckbox");
                 if (data.outside !== undefined) {
@@ -1715,7 +1718,6 @@
             });
         }
 
-        const is_on = document.getElementById("zoneEnabledCheckbox").checked;
         const outside = document.getElementById("outsideZoneCheckbox").checked;
 
         const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
@@ -1723,7 +1725,6 @@
         
         const params = new URLSearchParams({
             cam: currentEditingCamera,
-            is_on: is_on,
             threshold: threshold.toFixed(2),
             outside: outside
         });
