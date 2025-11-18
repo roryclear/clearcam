@@ -613,7 +613,7 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
+                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}_notif.jpg" if alert.is_notif else filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
                         cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                         text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
@@ -1274,12 +1274,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 event_image_path = event_image_dir / selected_dir
                 event_images = sorted(
                     event_image_path.glob("*.jpg"),
-                    key=lambda p: int(p.stem),
+                    key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
                     reverse=True
                 ) if event_image_path.exists() else []
                 
                 for img in event_images:
-                    ts = int(img.stem)
+                    ts = int(img.stem.split('_')[0]) # n.jpg or n_{s}.jpg?
                     image_url = f"/{img.relative_to(self.base_dir.parent)}"
                     image_data.append({
                         "url": image_url,
@@ -1296,11 +1296,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         if event_image_path.exists():
                             event_images = sorted(
                                 event_image_path.glob("*.jpg"),
-                                key=lambda p: int(p.stem),
+                                key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
                                 reverse=True
                             )
                             for img in event_images:
-                                ts = int(img.stem)
+                                ts = int(img.stem.split('_')[0]) 
                                 image_url = f"/{img.relative_to(self.base_dir.parent)}"
                                 image_data.append({
                                     "url": image_url,
