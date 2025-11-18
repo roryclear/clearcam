@@ -1267,6 +1267,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'): # todo clean
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+            name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
             image_data = []
             
             if cam_name is not None:
@@ -1279,6 +1280,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 ) if event_image_path.exists() else []
                 
                 for img in event_images:
+                    if name_contains and name_contains not in img.name: continue
                     ts = int(img.stem.split('_')[0]) # n.jpg or n_{s}.jpg?
                     image_url = f"/{img.relative_to(self.base_dir.parent)}"
                     image_data.append({
@@ -1300,6 +1302,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 reverse=True
                             )
                             for img in event_images:
+                                if name_contains and name_contains not in img.name: continue
                                 ts = int(img.stem.split('_')[0]) 
                                 image_url = f"/{img.relative_to(self.base_dir.parent)}"
                                 image_data.append({

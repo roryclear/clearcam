@@ -911,6 +911,10 @@
       <select id="cameraFilter">
         <option value="">All Cameras</option>
       </select>
+      <label style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+        <input type="checkbox" id="alertsOnlyCheckbox">
+        Alerts Only
+      </label>
     </div>
     <div id="eventImagesContainer">
       <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
@@ -1535,6 +1539,10 @@
       const cameraFilter = document.getElementById('cameraFilter');
       cameraFilter.addEventListener('change', function() {
         currentEventCameraFilter = this.value;
+        loadEventImages();
+      });
+      alertsOnlyCheckbox.addEventListener('change', function() {
+        alertsOnlyFilter = this.checked;
         loadEventImages();
       });
     });
@@ -2304,6 +2312,7 @@
     });
 
     let currentEventCameraFilter = '';
+    let alertsOnlyFilter = false;
     function populateCameraFilter(cameras) {
       const filter = document.getElementById('cameraFilter');
       const currentValue = filter.value;
@@ -2328,7 +2337,9 @@
         if (currentEventCameraFilter) {
           url += `&cam=${encodeURIComponent(currentEventCameraFilter)}`;
         }
-        
+        if (alertsOnlyFilter) {
+          url += `&name_contains=_notif`;
+        }
         const res = await fetch(url);
         const data = await res.json();
         const container = document.getElementById("eventImagesContainer");
