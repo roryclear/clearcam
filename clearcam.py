@@ -460,6 +460,7 @@ class VideoCapture:
     self.counter = RollingClassCounter(cam_name=cam_name)
     self.cam_name = cam_name
     self.object_set = set()
+    self.object_set_zone = set()
 
     self.src = src
     self.width = 1920 # todo 1080?
@@ -549,6 +550,7 @@ class VideoCapture:
     time.sleep(8)
     command = [
         ffmpeg_path,
+        "-live_start_index", "-1",
         "-i", str(path / "stream.m3u8"),
         "-loglevel", "quiet",
         "-reconnect", "1",
@@ -614,11 +616,14 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}_notif.jpg" if alert.is_notif else filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
-                        if alert.is_notif: (filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg").unlink(missing_ok=True) # only one image per event
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                        # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                        ts = int(time.time() - self.streamer.start_time - 10)
+                        filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                         cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                        if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                          plain.unlink() # only one image per event
+                          filename = filepath / f"{ts}_notif.jpg"
                         text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                         if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                         last_det = time.time()
@@ -720,18 +725,24 @@ class VideoCapture:
             if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
               outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
               outside = outside ^ self.settings["outside"]
+            non_zone_alert = False
             if outside: # check if any alerts don't use zone
               for _, alert in self.alert_counters.items():
                 if not alert.zone:
-                  outside = False
+                  non_zone_alert = True
                   break
-              if outside: continue
+              if not non_zone_alert and outside: continue
             preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
-            if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
-              self.object_set.add(int(x.track_id))
-              self.counter.add(int(x.class_id))
+            if (classes is None or str(int(x.class_id)) in classes):
+              new = int(x.track_id) not in self.object_set
+              new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
+              if new:
+                self.object_set.add(int(x.track_id))
+                self.counter.add(int(x.class_id))
+              if new_in_zone: self.object_set_zone.add(int(x.track_id))
               for _, alert in self.alert_counters.items():
-                if not alert.get_counts()[1] and (not outside or not alert.zone): alert.add(int(x.class_id)) #only add if empty, don't spam notifs. todo, outside depends on mask on of off
+                if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
+                
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
