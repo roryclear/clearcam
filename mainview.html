@@ -143,14 +143,14 @@
       transform: scale(1.1);
     }
 
-    #alertsModal .modal-content {
-      max-width: 800px;
-      max-height: 90vh;
-      overflow-y: auto;
-      font-family: sans-serif;
-      background-color: var(--bg-primary);
-      color: var(--text-primary);
-    }
+      #alertsModal .modal-content {
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+        font-family: sans-serif;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+      }
 
     #alertsModal .modal-header {
       display: flex;
@@ -911,6 +911,10 @@
       <select id="cameraFilter">
         <option value="">All Cameras</option>
       </select>
+      <label style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+        <input type="checkbox" id="alertsOnlyCheckbox">
+        Alerts Only
+      </label>
     </div>
     <div id="eventImagesContainer">
       <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
@@ -941,9 +945,6 @@
         </div>
         <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <div style="display: flex; flex-direction: column; gap: 10px;">
-                <label style="display: flex; align-items: center; gap: 6px;">
-                    <input type="checkbox" id="zoneEnabledCheckbox" checked> Enable Zone
-                </label>
                 <label style="display: flex; align-items: center; gap: 6px;">
                     <input type="checkbox" id="outsideZoneCheckbox"> Detect outside of zone
                 </label>
@@ -992,25 +993,28 @@
           <span class="close" onclick="closeAlertModal()">&times;</span>
         </div>
         <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
-          <div class="form-group" style="width: 90%; text-align: center;">
-            <label for="maxCount">Trigger if there are</label>
-            <input type="number" id="maxCount" name="max" min="1" value="1" required
-                style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
-            <span>objects detected</span>
-          </div>
           <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
-            <label>of class(es)</label>
             <div id="checkboxContainer" class="checkbox-container" style="display: grid; grid-template-columns: auto auto; gap: 8px 16px; max-height: 200px; overflow-y: auto; margin: 0 auto; padding: 8px; justify-content: center;"></div>
           </div>
-          <div class="form-group" style="width: 90%; text-align: center;">
-            <label for="windowMinutes">within this time window</label>
-            <input type="number" id="windowMinutes" name="window" min="1" value="1" required 
-                style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
-            <span>minutes</span>
+          <div class="form-group" style="width: 90%; text-align: center; margin-top: 15px;">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Window (Optional)</label>
+            <div style="margin-bottom: 10px;">
+              <label for="maxCount">Trigger if there are</label>
+              <input type="number" id="maxCount" name="max" min="1" placeholder="1"
+                  style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+              <span>objects detected</span>
+            </div>
+            
+            <div>
+              <label for="windowMinutes">within this time window</label>
+              <input type="number" id="windowMinutes" name="window" min="1" placeholder="1" 
+                  style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+              <span>minutes</span>
+            </div>
           </div>
 
           <div class="form-group" style="width: 90%; text-align: center;">
-            <label>Schedule (optional)</label>
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Schedule (Optional)</label>
             <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
               <div>
                 <label for="scheduleFrom">From</label><br>
@@ -1022,6 +1026,7 @@
               </div>
             </div>
           </div>
+
           <div class="form-group" style="width: 90%; text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
               <label><input type="checkbox" name="days" value="0" checked> Mon</label>
@@ -1190,6 +1195,13 @@
                   <span class="tooltiptext">Enable to send notifications and clips to your clearcam app for this alert (requires premium).</span>
                 </span>
               </th>
+              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">
+                <span class="tooltip">
+                  Zone
+                  <span class="tooltip-icon">?</span>
+                  <span class="tooltiptext">Enable to only trigger this alert when objects are detected within the defined zone.</span>
+                </span>
+              </th>
               <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
             </tr>
           </thead><tbody>`;
@@ -1224,12 +1236,14 @@
 
             const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
             const isNotif = alert.hasOwnProperty("is_notif") ? alert.is_notif : true;
+            const isZone = alert.hasOwnProperty("zone") ? alert.zone : true;
             const checkedAttr = isOn ? "checked" : "";
             const notifCheckedAttr = isNotif ? "checked" : "";
+            const zoneCheckedAttr = isZone ? "checked" : "";
             
             html += `<tr>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">${alert.max}</td>
-              <td style="padding:6px; border-bottom:1px solid #eee;">${classNames}</td>
+              <td style="padding:6px; border-bottom:1px solid #eee; max-width:150px; white-space:normal; word-wrap:break-word; line-height:1.3;">${classNames}</td>
               <td style="padding:6px; border-bottom:1px solid #eee;">${windowStr}</td>
               <td style="padding:6px; border-bottom:1px solid #eee;">${scheduleStr}</td>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
@@ -1243,10 +1257,15 @@
                     style="transform:scale(1.2); cursor:pointer;">
               </td>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                <input type="checkbox" data-alert-id="${alert.id}" ${zoneCheckedAttr} 
+                    onchange="toggleAlert('${alert.id}', this.checked, 'zone')" 
+                    style="transform:scale(1.2); cursor:pointer;">
+              </td>
+              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
                 <button onclick="deleteAlert('${alert.id}')" style="padding:4px 8px;">Delete</button>
               </td>
             </tr>`;
-          }
+            }
 
           html += `</tbody></table>
             <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
@@ -1292,25 +1311,21 @@
     function addAlert(event) {
       event.preventDefault();
       if (!currentAlertsCamera) return;
-      
       const form = event.target;
       const formData = new FormData(form);
-
       const windowMinutes = parseFloat(formData.get('window'));
-      const windowSeconds = Math.round(windowMinutes * 60);
-
+      const windowSeconds = windowMinutes ? Math.round(windowMinutes * 60) : null;
+      // Default max to 1 if empty
+      const maxCount = formData.get('max') || '1';
       const checked = form.querySelectorAll('input[name="class_ids"]:checked');
       const classIds = Array.from(checked).map(cb => cb.value).join(',');
-
       const scheduleFrom = formData.get("schedule_from") || "00:00";
       const scheduleTo = formData.get("schedule_to") || "23:59";
-
       const toSeconds = (hhmm) => {
         const parts = hhmm.split(":").map(Number);
         const [h = 0, m = 0] = parts;
         return h * 3600 + m * 60;
       };
-
       const fromSec = toSeconds(scheduleFrom);
       const toSec = toSeconds(scheduleTo);
       const dayChecks = form.querySelectorAll('input[name="days"]');
@@ -1319,13 +1334,15 @@
 
       const params = new URLSearchParams({
         cam: currentAlertsCamera,
-        window: windowSeconds,
-        max: formData.get('max'),
+        max: maxCount,
         class_ids: classIds,
         sched: JSON.stringify(schedArray),
-        is_notif: 'true' // Default to true for new alerts
+        is_notif: 'true',
+        zone: 'true'
       });
-
+      if (windowSeconds !== null) {
+        params.set('window', windowSeconds);
+      }
       fetch(`/edit_alert?${params.toString()}`)
         .then(res => {
           if (!res.ok) throw new Error("Failed to add alert");
@@ -1536,6 +1553,10 @@
         currentEventCameraFilter = this.value;
         loadEventImages();
       });
+      alertsOnlyCheckbox.addEventListener('change', function() {
+        alertsOnlyFilter = this.checked;
+        loadEventImages();
+      });
     });
 
     function createCameraCard(camName) {
@@ -1611,15 +1632,6 @@
                         console.log("Loading coords:", data.coords);
                         loadPolygon(data.coords, previewEl);
                     }
-                }
-
-                const zoneEnabledCheckbox = document.getElementById("zoneEnabledCheckbox");
-                if (data.is_on !== undefined) {
-                    zoneEnabledCheckbox.checked = data.is_on;
-                } else if (data.length && data[0] && data[0].is_on !== undefined) {
-                    zoneEnabledCheckbox.checked = data[0].is_on;
-                } else {
-                    zoneEnabledCheckbox.checked = false;
                 }
                 
                 const outsideZoneCheckbox = document.getElementById("outsideZoneCheckbox");
@@ -1706,7 +1718,6 @@
             });
         }
 
-        const is_on = document.getElementById("zoneEnabledCheckbox").checked;
         const outside = document.getElementById("outsideZoneCheckbox").checked;
 
         const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
@@ -1714,7 +1725,6 @@
         
         const params = new URLSearchParams({
             cam: currentEditingCamera,
-            is_on: is_on,
             threshold: threshold.toFixed(2),
             outside: outside
         });
@@ -2303,6 +2313,7 @@
     });
 
     let currentEventCameraFilter = '';
+    let alertsOnlyFilter = false;
     function populateCameraFilter(cameras) {
       const filter = document.getElementById('cameraFilter');
       const currentValue = filter.value;
@@ -2327,7 +2338,9 @@
         if (currentEventCameraFilter) {
           url += `&cam=${encodeURIComponent(currentEventCameraFilter)}`;
         }
-        
+        if (alertsOnlyFilter) {
+          url += `&name_contains=_notif`;
+        }
         const res = await fetch(url);
         const data = await res.json();
         const container = document.getElementById("eventImagesContainer");

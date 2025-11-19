@@ -358,6 +358,7 @@ class RollingClassCounter:
     self.cam_name = cam_name
     self.is_on = True
     self.is_notif = True
+    self.zone = True
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -367,19 +368,21 @@ class RollingClassCounter:
 
   def cleanup(self, class_id, now):
     q = self.data[class_id]
-    while self.window and q and now - q[0] > self.window:
-        q.popleft()
+    window = self.window if self.window else (60 if self.is_notif else 1)
+    while window and q and now - q[0] > window:
+      q.popleft()
 
   def reset_counts(self):
     for class_id, _ in self.data.items():
        self.data[class_id] = deque() # todo, use in reset endpoint?
 
   def get_counts(self):
+    window = self.window if self.window else (60 if self.is_notif else 1)
     max_reached = False
     now = time.time()
     counts = {}
     for class_id, q in self.data.items():
-      while self.window and q and now - q[0] > self.window:
+      while window and q and now - q[0] > window:
         q.popleft()
       if q:
         counts[class_id] = len(q)
@@ -393,7 +396,8 @@ class RollingClassCounter:
     now = time.localtime()
     time_of_day = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
     if not self.sched[time.localtime().tm_wday + 1]: return False
-    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - self.window) + offset)
+    window = self.window if self.window else (60 if self.is_notif else 1)
+    return time_of_day < self.sched[0][1] and time_of_day > ((self.sched[0][0] - window) + offset)
 
 def write_png(filename, array):
     array = array[..., ::-1]  # BGR to RGB
@@ -456,6 +460,7 @@ class VideoCapture:
     self.counter = RollingClassCounter(cam_name=cam_name)
     self.cam_name = cam_name
     self.object_set = set()
+    self.object_set_zone = set()
 
     self.src = src
     self.width = 1920 # todo 1080?
@@ -483,7 +488,7 @@ class VideoCapture:
     except Exception:
         with open(alerts_file, 'wb') as f:
             self.alert_counters = dict()
-            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=60, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
+            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
             pickle.dump(self.alert_counters, f)
     try:
         with open(settings_file, "rb") as f:
@@ -545,6 +550,7 @@ class VideoCapture:
     time.sleep(8)
     command = [
         ffmpeg_path,
+        "-live_start_index", "-1",
         "-i", str(path / "stream.m3u8"),
         "-loglevel", "quiet",
         "-reconnect", "1",
@@ -602,16 +608,22 @@ class VideoCapture:
                 if not alert.is_active():
                   alert.reset_counts()
                   continue
+                window = alert.window if alert.window else (60 if alert.is_notif else 1)
                 if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
                 if alert.get_counts()[1]:
-                    if time.time() - alert.last_det >= alert.window:
+                    if time.time() - alert.last_det >= window:
                         if alert.is_notif: send_det = True
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        filename = filepath / f"{int(time.time() - self.streamer.start_time - 10)}.jpg"
                         self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                        # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                        ts = int(time.time() - self.streamer.start_time - 10)
+                        filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                         cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                        if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                          plain.unlink() # only one image per event
+                          filename = filepath / f"{ts}_notif.jpg"
                         text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
                         if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                         last_det = time.time()
@@ -709,16 +721,28 @@ class VideoCapture:
           preds = []
           for x in online_targets:
             if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
-            if hasattr(self, "settings") and self.settings is not None and self.settings.get("is_on"):
+            outside = False
+            if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
               outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
-              if outside ^ self.settings["outside"]: continue
-            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
-            if int(x.track_id) not in self.object_set and (classes is None or str(int(x.class_id)) in classes):
-              self.object_set.add(int(x.track_id))
-              self.counter.add(int(x.class_id))
+              outside = outside ^ self.settings["outside"]
+            non_zone_alert = False
+            if outside: # check if any alerts don't use zone
               for _, alert in self.alert_counters.items():
-                if not alert.get_counts()[1]:
-                    alert.add(int(x.class_id)) #only add if empty, don't spam notifs
+                if not alert.zone:
+                  non_zone_alert = True
+                  break
+              if not non_zone_alert and outside: continue
+            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+            if (classes is None or str(int(x.class_id)) in classes):
+              new = int(x.track_id) not in self.object_set
+              new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
+              if new:
+                self.object_set.add(int(x.track_id))
+                self.counter.add(int(x.class_id))
+              if new_in_zone: self.object_set_zone.add(int(x.track_id))
+              for _, alert in self.alert_counters.items():
+                if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
+                
         preds = np.array(preds)
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
@@ -1057,7 +1081,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               coords = json.loads(coords_json)
               if isinstance(coords, list) and len(coords) >= 3:
                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
-            zone["is_on"] = (str(is_on).lower() == "true") if (is_on := query.get("is_on", [None])[0]) is not None else zone.get("is_on")
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])})
@@ -1080,13 +1103,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
+            zone = query.get("zone", [None])[0]
             is_notif = query.get("is_notif", [None])[0]
             if alert_id is None: # no id, add alert
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
                 class_ids = query.get("class_ids", [None])[0]
                 sched = json.loads(query.get("sched", ["[[0,86400],[0,86400],[0,86400],[0,86400],[0,86400],[0,86400],[0,86400]]"])[0]) # todo, weekly
-                window = int(window)
+                if window: window = int(window)
                 max_count = int(max_count)
                 classes = [int(c.strip()) for c in class_ids.split(",")]
                 alert_id = str(uuid.uuid4())
@@ -1099,9 +1123,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     )
                 raw_alerts[alert_id] = alert
             else:
-              if is_on is not None or is_notif is not None:
+              if is_on is not None or is_notif is not None or zone is not None:
                 if is_on is not None: raw_alerts[alert_id].is_on = str(is_on).lower() == "true"
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
+                if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
                 alert = raw_alerts[alert_id]
               else:
                 del raw_alerts[alert_id]
@@ -1153,6 +1178,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                                 "sched": sched,
                                 "is_on": alert.is_on,
                                 "is_notif": alert.is_notif,
+                                "zone": alert.zone,
                             })
                 except Exception as e:
                     self.send_error(500, f"Failed to load alerts: {e}")
@@ -1264,6 +1290,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                             
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'): # todo clean
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+            name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
             image_data = []
             
             if cam_name is not None:
@@ -1271,12 +1298,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 event_image_path = event_image_dir / selected_dir
                 event_images = sorted(
                     event_image_path.glob("*.jpg"),
-                    key=lambda p: int(p.stem),
+                    key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
                     reverse=True
                 ) if event_image_path.exists() else []
                 
                 for img in event_images:
-                    ts = int(img.stem)
+                    if name_contains and name_contains not in img.name: continue
+                    ts = int(img.stem.split('_')[0]) # n.jpg or n_{s}.jpg?
                     image_url = f"/{img.relative_to(self.base_dir.parent)}"
                     image_data.append({
                         "url": image_url,
@@ -1293,11 +1321,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         if event_image_path.exists():
                             event_images = sorted(
                                 event_image_path.glob("*.jpg"),
-                                key=lambda p: int(p.stem),
+                                key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
                                 reverse=True
                             )
                             for img in event_images:
-                                ts = int(img.stem)
+                                if name_contains and name_contains not in img.name: continue
+                                ts = int(img.stem.split('_')[0]) 
                                 image_url = f"/{img.relative_to(self.base_dir.parent)}"
                                 image_data.append({
                                     "url": image_url,
