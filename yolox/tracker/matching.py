@@ -25,7 +25,6 @@ def lapjv(cost: np.ndarray, cost_limit=np.inf):
       n = max(n_rows, n_cols)
       cost_extended = np.zeros((n, n))
       cost_extended[:n_rows, :n_cols] = cost
-    print(cost_extended)
     row_ind, col_ind = linear_sum_assignment(cost_extended)
     x = -np.ones(n_rows, dtype=int)
     y = -np.ones(n_cols, dtype=int)
