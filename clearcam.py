@@ -322,7 +322,7 @@ def get_weights_location(yolo_variant: str) -> Path:
   return f32_weights
 
 @TinyJit
-def do_inf(im):
+def do_inf(im, yolo_infer):
   im = im.unsqueeze(0)
   im = im[..., ::-1].permute(0, 3, 1, 2)
   im = im / 255.0
@@ -714,7 +714,7 @@ class VideoCapture:
       if frame is not None:
         frame = Tensor(frame)
         pre = preprocess(frame)
-        preds = do_inf(pre).numpy()
+        preds = do_inf(pre, do_inf).numpy()
         if track:
           thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
           online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
