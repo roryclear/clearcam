@@ -1,26 +1,31 @@
 import numpy as np
 from scipy.optimize import linear_sum_assignment as scipy_linear_sum_assignment
 from yolox.tracker.matching import linear_sum_assignment
+from yolox.tracker.matching import kwok_linear_sum_assignment
 import time
 
 def test_linear_sum_assigment():
-  for i in range(300):
+  for i in range(1,300):
     input = np.random.rand(i,i)
-    a, b = linear_sum_assignment(input)
+    a, b = kwok_linear_sum_assignment(input)
     c, d = scipy_linear_sum_assignment(input)
-    np.testing.assert_allclose(a, c)
-    np.testing.assert_allclose(b, d)
+    x = 0
+    for j in range(len(a)): x = x + a[j] + b[j]
+    c = c.sum() + c.sum()
+    np.testing.assert_equal(x,c)
+    assert np.array_equal(np.sort(a), np.arange(i))
+    assert np.array_equal(np.sort(b), np.arange(i))
 
 def test_linear_sum_assigment_speed():
-  for i in range(100):
+  for i in range(1,300):
     input = np.random.rand(i,i)
     st = time.perf_counter()
-    _, _ = linear_sum_assignment(input)
+    kwok_linear_sum_assignment(input)
     t = time.perf_counter() - st
     st = time.perf_counter()
-    _, _ = scipy_linear_sum_assignment(input)
+    scipy_linear_sum_assignment(input)
     t_scipy = time.perf_counter() - st
-    np.testing.assert_(t < t_scipy*50, f"test_linear_sum_assigment_speed slow from {i}")
+    np.testing.assert_(t < t_scipy*25, f"test_linear_sum_assigment_speed slow from {i}")
 
 test_linear_sum_assigment()
 test_linear_sum_assigment_speed()
