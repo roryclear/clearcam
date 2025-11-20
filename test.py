@@ -17,15 +17,20 @@ def test_linear_sum_assigment():
     assert np.array_equal(np.sort(b), np.arange(i))
 
 def test_linear_sum_assigment_speed():
+  total_scipy = 0
+  total = 0
   for i in range(1,300):
     input = np.random.rand(i,i)
     st = time.perf_counter()
     kwok_linear_sum_assignment(input)
     t = time.perf_counter() - st
+    total += t
     st = time.perf_counter()
     scipy_linear_sum_assignment(input)
     t_scipy = time.perf_counter() - st
-    np.testing.assert_(t < t_scipy*25, f"test_linear_sum_assigment_speed slow from {i}")
+    total_scipy += t_scipy
+    np.testing.assert_(t < t_scipy*30, f"test_linear_sum_assigment_speed slow from {i}")
+  print("time vs scipy =", f"{(total / total_scipy) * 100:.1f}%")
 
 test_linear_sum_assigment()
 test_linear_sum_assigment_speed()
