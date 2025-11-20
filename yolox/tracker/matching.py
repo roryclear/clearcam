@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import linear_sum_assignment
+#from scipy.optimize import linear_sum_assignment
 
 def linear_assignment(cost_matrix, thresh):
     if cost_matrix.size == 0:
@@ -34,6 +34,91 @@ def lapjv(cost: np.ndarray, cost_limit=np.inf):
           x[r] = c
           y[c] = r
     return x, y
+
+def linear_sum_assignment(cost):
+    cost = np.asarray(cost, float)
+    nr, nc = cost.shape
+    u = np.zeros(nr)
+    v = np.zeros(nc)
+    shortest = np.full(nc, np.inf)
+    path = np.full(nc, -1, int)
+    col4row = np.full(nr, -1, int)
+    row4col = np.full(nc, -1, int)
+
+    for curRow in range(nr):
+        minVal = 0.0
+        remaining = np.arange(nc - 1, -1, -1).copy()
+        num_remaining = nc
+
+        SR = np.zeros(nr, bool)
+        SC = np.zeros(nc, bool)
+        shortest[:] = np.inf
+
+        sink = -1
+        localRow = curRow
+
+        while sink < 0:
+            SR[localRow] = True
+            jlist = remaining[:num_remaining]
+            rcost = minVal + cost[localRow, jlist] - u[localRow] - v[jlist]
+            mask_better = rcost < shortest[jlist]
+            if mask_better.any():
+                idxs = jlist[mask_better]
+                shortest[idxs] = rcost[mask_better]
+                path[idxs] = localRow
+            best_idx = -1
+            lowest = np.inf
+            for idx_in_remaining, j in enumerate(jlist):
+                val = shortest[j]
+                if val < lowest or (val == lowest and row4col[j] == -1):
+                    lowest = val
+                    best_idx = idx_in_remaining
+            if lowest == np.inf:
+                return np.arange(nr), -np.ones(nr, int)
+
+            minVal = lowest
+            j = jlist[best_idx]
+
+            SC[j] = True
+
+            if row4col[j] == -1:
+                sink = j
+            else:
+                localRow = row4col[j]
+
+            remaining[best_idx], remaining[num_remaining - 1] = (
+                remaining[num_remaining - 1],
+                remaining[best_idx],
+            )
+            num_remaining -= 1
+
+        u[curRow] += minVal
+        SR_indices = np.nonzero(SR)[0]
+        for i in SR_indices:
+            if i == curRow:
+                continue
+            assigned_col = col4row[i]
+            if assigned_col >= 0:
+                u[i] += minVal - shortest[assigned_col]
+            else:
+                u[i] += minVal
+        SC_indices = np.nonzero(SC)[0]
+        for jidx in SC_indices:
+            v[jidx] -= minVal - shortest[jidx]
+
+        j = sink
+        while True:
+            i = path[j]
+            row4col[j] = i
+            prev = col4row[i]
+            col4row[i] = j
+            j = prev
+            if i == curRow:
+                break
+
+    a = np.arange(nr, dtype=int)
+    b = col4row.copy()
+    return a, b
 
 def ious(atlbrs, btlbrs):
     """
