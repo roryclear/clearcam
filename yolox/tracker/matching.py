@@ -37,8 +37,7 @@ def lapjv(cost: np.ndarray, cost_limit=np.inf):
     return x, y
 
 # todo try # https://github.com/ShawxingKwok/Kwok-algorithm/blob/main/Python.py
-'''
-def linear_sum_assignment(cost):
+def linear_sum_assignment2(cost): # 50x slower vs scipy
     cost = np.asarray(cost, float)
     nr, nc = cost.shape
     u = np.zeros(nr)
@@ -122,7 +121,6 @@ def linear_sum_assignment(cost):
     a = np.arange(nr, dtype=int)
     b = col4row.copy()
     return a, b
-'''
 
 def ious(atlbrs, btlbrs):
     """
