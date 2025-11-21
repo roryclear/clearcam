@@ -199,7 +199,19 @@ class BYTETracker2(object):
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
         STrack.multi_predict(strack_pool)
-        dists = matching.iou_distance(strack_pool, detections)
+
+        atlbrs = [track.tlbr for track in strack_pool]
+        btlbrs = [track.tlbr for track in detections]
+
+        ious = np.zeros((len(atlbrs), len(btlbrs)), dtype=np.float64)
+        if ious.size == 0:
+          dists = 1 - ious
+        else:
+          dists = 1 - matching.bbox_ious(
+              np.ascontiguousarray(atlbrs, dtype=np.float64),
+              np.ascontiguousarray(btlbrs, dtype=np.float64)
+          )
+
         if not self.args.mot20:
             dists = matching.fuse_score(dists, detections)
         matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
@@ -224,7 +236,7 @@ class BYTETracker2(object):
             detections_second = []
         r_tracked_stracks = [strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked]
         dists = matching.iou_distance(r_tracked_stracks, detections_second)
-        matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh=threshold) # prev 0.5
+        matches, u_track, _ = matching.linear_assignment(dists, thresh=threshold) # prev 0.5
         for itracked, idet in matches:
             track = r_tracked_stracks[itracked]
             det = detections_second[idet]
