@@ -52,18 +52,6 @@ class STrack(BaseTrack):
         self.frame_id = frame_id
         self.start_frame = frame_id
 
-    def re_activate(self, new_track, frame_id, new_id=False):
-        self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, self.tlwh_to_xyah(new_track.tlwh)
-        )
-        self.tracklet_len = 0
-        self.state = TrackState.Tracked
-        self.is_activated = True
-        self.frame_id = frame_id
-        if new_id:
-            self.track_id = self.next_id()
-        self.score = new_track.score
-
     def update(self, new_track, frame_id):
         """
         Update a matched track
@@ -155,9 +143,6 @@ class BYTETracker2(object):
     def update(self, output_results, img_info, img_size, threshold=0.5):
         self.frame_id += 1
         activated_starcks = []
-        refind_stracks = []
-        lost_stracks = []
-        removed_stracks = []
 
         classes = output_results[:, 5]
         scores = output_results[:, 4]
@@ -168,16 +153,9 @@ class BYTETracker2(object):
         bboxes /= scale
 
         remain_inds = scores > threshold # prev track thresh
-        inds_low = scores > 0.1
-        inds_high = scores < threshold # prev track thresh
-
-        inds_second = np.logical_and(inds_low, inds_high)
-        dets_second = bboxes[inds_second]
         dets_keep = bboxes[remain_inds]
         scores_keep = scores[remain_inds]
-        scores_second = scores[inds_second]
         classes_keep = classes[remain_inds]
-        classes_second = classes[inds_second]
 
         if len(dets_keep) > 0:
             '''Detections'''
@@ -203,65 +181,13 @@ class BYTETracker2(object):
         btlbrs = [track.tlbr for track in detections]
         dists = 1 - matching.ious(atlbrs, btlbrs)
         
-        det_scores = [track.score for track in detections]
+        _, _, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
 
-        if dists.size != 0:
-          iou_sim = 1 - dists
-          det_scores = np.expand_dims(det_scores, axis=0).repeat(dists.shape[0], axis=0)
-          fuse_sim = iou_sim * det_scores
-          dists = 1 - fuse_sim
-
-        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
-
-        for itracked, idet in matches:
-            track = strack_pool[itracked]
-            det = detections[idet]
-            if track.state == TrackState.Tracked:
-                track.update(detections[idet], self.frame_id)
-                activated_starcks.append(track)
-            else:
-                track.re_activate(det, self.frame_id, new_id=False)
-                refind_stracks.append(track)
-
-        ''' Step 3: Second association, with low score detection boxes'''
-        # association the untrack to the low score detections
-        if len(dets_second) > 0:
-            '''Detections'''
-            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s, c) for
-                          (tlbr, s, c) in zip(dets_second, scores_second, classes_second)]
-        else:
-            detections_second = []
-        r_tracked_stracks = [strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked]
-        dists = matching.iou_distance(r_tracked_stracks, detections_second)
-        matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh=threshold) # prev 0.5
-        for itracked, idet in matches:
-            track = r_tracked_stracks[itracked]
-            det = detections_second[idet]
-            if track.state == TrackState.Tracked:
-                track.update(det, self.frame_id)
-                activated_starcks.append(track)
-            else:
-                track.re_activate(det, self.frame_id, new_id=False)
-                refind_stracks.append(track)
-
-        for it in u_track:
-            track = r_tracked_stracks[it]
-            if not track.state == TrackState.Lost:
-                track.mark_lost()
-                lost_stracks.append(track)
 
         '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
         detections = [detections[i] for i in u_detection]
         dists = matching.iou_distance(unconfirmed, detections)
-        dists = matching.fuse_score(dists, detections)
-        matches, u_unconfirmed, u_detection = matching.linear_assignment(dists, thresh=0.7)
-        for itracked, idet in matches:
-            unconfirmed[itracked].update(detections[idet], self.frame_id)
-            activated_starcks.append(unconfirmed[itracked])
-        for it in u_unconfirmed:
-            track = unconfirmed[it]
-            track.mark_removed()
-            removed_stracks.append(track)
+        _, _, u_detection = matching.linear_assignment(dists, thresh=0.7)
 
         """ Step 4: Init new stracks"""
         for inew in u_detection:
@@ -270,25 +196,8 @@ class BYTETracker2(object):
                 continue
             track.activate(self.kalman_filter, self.frame_id)
             activated_starcks.append(track)
-        """ Step 5: Update state"""
-        for track in self.lost_stracks:
-            if self.frame_id - track.end_frame > self.max_time_lost:
-                track.mark_removed()
-                removed_stracks.append(track)
-
-        # print('Ramained match {} s'.format(t4-t3))
-
-        self.tracked_stracks = [t for t in self.tracked_stracks if t.state == TrackState.Tracked]
         self.tracked_stracks = joint_stracks(self.tracked_stracks, activated_starcks)
-        self.tracked_stracks = joint_stracks(self.tracked_stracks, refind_stracks)
-        self.lost_stracks = sub_stracks(self.lost_stracks, self.tracked_stracks)
-        self.lost_stracks.extend(lost_stracks)
-        self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
-        self.removed_stracks.extend(removed_stracks)
-        self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
-        # get scores of lost tracks
         output_stracks = [track for track in self.tracked_stracks if track.is_activated]
-
         return output_stracks
 
 
