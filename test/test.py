@@ -46,6 +46,7 @@ def test_yolo_infer():
 
 import pickle
 from yolox.tracker.byte_tracker import BYTETracker
+from yolox.tracker.byte_tracker2 import BYTETracker2
 
 def test_bytetracker():
   class Args:
@@ -54,57 +55,29 @@ def test_bytetracker():
           self.mot20 = False
           self.match_thresh = 0.9
   tracker = BYTETracker(Args())
+  tracker2 = BYTETracker2(Args())
 
   inputs = pickle.load(open("test/tracker_inputs.pkl", "rb"))
-  outputs = pickle.load(open("test/tracker_outputs.pkl", "rb"))
   total_time = 0
   total_time2 = 0
   for i in range(len(inputs)):
     st = time.perf_counter()
     output = tracker.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
+    output2 = tracker2.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
     total_time += (time.perf_counter() - st)
     st = time.perf_counter()
     total_time2 += (time.perf_counter() - st)
-    assert len(outputs[i]) == len(output)
+    assert len(output2) == len(output)
     for j in range(len(output)):
-      np.testing.assert_allclose(output[j]._tlwh, outputs[i][j]._tlwh)
-      np.testing.assert_allclose(output[j].score, outputs[i][j].score) 
-      np.testing.assert_allclose(output[j].is_activated, outputs[i][j].is_activated)
-      np.testing.assert_allclose(output[j].mean, outputs[i][j].mean)
-      np.testing.assert_allclose(output[j].covariance, outputs[i][j].covariance)
-      np.testing.assert_allclose(output[j].class_id, outputs[i][j].class_id)
+      np.testing.assert_allclose(output[j]._tlwh, output2[j]._tlwh)
+      np.testing.assert_allclose(output[j].score, output2[j].score) 
+      np.testing.assert_allclose(output[j].is_activated, output2[j].is_activated)
+      np.testing.assert_allclose(output[j].mean, output2[j].mean)
+      np.testing.assert_allclose(output[j].covariance, output2[j].covariance)
+      np.testing.assert_allclose(output[j].class_id, output2[j].class_id)
     
     assert total_time2 < (total_time * 1.1), "too slow"
 
-
-def setup_test_bytetracker():
-  depth, width, ratio = get_variant_multiples("s")
-  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-  state_dict = safe_load(get_weights_location("s"))
-  load_state_dict(yolo_infer, state_dict)
-
-  class Args:
-      def __init__(self):
-          self.track_buffer = 60
-          self.mot20 = False
-          self.match_thresh = 0.9
-
-  inputs = []
-  outputs = []
-
-  tracker = BYTETracker(Args())
-  cap = cv2.VideoCapture("test/MOT16-03.mp4")
-  for _ in range(1500):
-    _, frame = cap.read()
-    frame = Tensor(frame)
-    preds = do_inf(frame, yolo_infer).numpy()
-    inputs.append(preds)
-    preds = tracker.update(preds, [1280,1280], [1280,1280], threshold=0.5)
-    outputs.append(preds)
-  pickle.dump(inputs, open("test/tracker_inputs.pkl", "wb"))
-  pickle.dump(outputs, open("test/tracker_outputs.pkl", "wb"))
-
-setup_test_bytetracker()
 test_bytetracker()
 #test_yolo_infer()
 #test_linear_sum_assigment()

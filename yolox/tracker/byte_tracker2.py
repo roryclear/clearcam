@@ -173,19 +173,19 @@ class BYTETracker2(object):
 
         inds_second = np.logical_and(inds_low, inds_high)
         dets_second = bboxes[inds_second]
-        dets_keep = bboxes[remain_inds]
+        dets = bboxes[remain_inds]
         scores_keep = scores[remain_inds]
         scores_second = scores[inds_second]
         classes_keep = classes[remain_inds]
         classes_second = classes[inds_second]
 
-        if len(dets_keep) > 0:
+        if len(dets) > 0:
             '''Detections'''
             detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, c) for
-                          (tlbr, s, c) in zip(dets_keep, scores_keep, classes_keep)]
+                          (tlbr, s, c) in zip(dets, scores_keep, classes_keep)]
         else:
             detections = []
-        
+
         ''' Add newly detected tracklets to tracked_stracks'''
         unconfirmed = []
         tracked_stracks = []  # type: list[STrack]
@@ -200,7 +200,8 @@ class BYTETracker2(object):
         # Predict the current location with KF
         STrack.multi_predict(strack_pool)
         dists = matching.iou_distance(strack_pool, detections)
-        dists = matching.fuse_score(dists, detections)
+        if not self.args.mot20:
+            dists = matching.fuse_score(dists, detections)
         matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
 
         for itracked, idet in matches:
@@ -243,7 +244,8 @@ class BYTETracker2(object):
         '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
         detections = [detections[i] for i in u_detection]
         dists = matching.iou_distance(unconfirmed, detections)
-        dists = matching.fuse_score(dists, detections)
+        if not self.args.mot20:
+            dists = matching.fuse_score(dists, detections)
         matches, u_unconfirmed, u_detection = matching.linear_assignment(dists, thresh=0.7)
         for itracked, idet in matches:
             unconfirmed[itracked].update(detections[idet], self.frame_id)
