@@ -199,7 +199,11 @@ class BYTETracker2(object):
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
         STrack.multi_predict(strack_pool)
-        dists = matching.iou_distance(strack_pool, detections)
+        atlbrs = [track.tlbr for track in strack_pool]
+        btlbrs = [track.tlbr for track in detections]
+        
+        dists = 1 - matching.ious(atlbrs, btlbrs)
+        
         dists = matching.fuse_score(dists, detections)
         matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
 
