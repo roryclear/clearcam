@@ -207,10 +207,25 @@ class BYTETracker2(object):
         if ious.size == 0:
           dists = 1 - ious
         else:
-          dists = 1 - matching.bbox_ious(
-              np.ascontiguousarray(atlbrs, dtype=np.float64),
-              np.ascontiguousarray(btlbrs, dtype=np.float64)
-          )
+          atlbrs = np.asarray(atlbrs)
+          btlbrs = np.asarray(btlbrs)
+          N = atlbrs.shape[0]
+          K = btlbrs.shape[0]
+          
+          boxes_area = ((atlbrs[:, 2] - atlbrs[:, 0] + 1) * (atlbrs[:, 3] - atlbrs[:, 1] + 1)).reshape(N, 1)
+          query_areas = ((btlbrs[:, 2] - btlbrs[:, 0] + 1) * (btlbrs[:, 3] - btlbrs[:, 1] + 1)).reshape(1, K)
+
+          ixmin = np.maximum(atlbrs[:, 0].reshape(N, 1), btlbrs[:, 0].reshape(1, K))
+          iymin = np.maximum(atlbrs[:, 1].reshape(N, 1), btlbrs[:, 1].reshape(1, K))
+          ixmax = np.minimum(atlbrs[:, 2].reshape(N, 1), btlbrs[:, 2].reshape(1, K))
+          iymax = np.minimum(atlbrs[:, 3].reshape(N, 1), btlbrs[:, 3].reshape(1, K))
+          iw = np.maximum(ixmax - ixmin + 1, 0)
+          ih = np.maximum(iymax - iymin + 1, 0)
+          intersection = iw * ih
+          union = boxes_area + query_areas - intersection
+          overlaps = np.where((iw > 0) & (ih > 0), intersection / union, np.zeros_like(intersection)) 
+          dists = 1 - overlaps
+
 
         if not self.args.mot20:
             dists = matching.fuse_score(dists, detections)
