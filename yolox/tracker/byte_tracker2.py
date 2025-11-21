@@ -289,7 +289,6 @@ class BYTETracker2(object):
         """ Step 5: Update state"""
         for track in self.lost_stracks:
             if self.frame_id - track.end_frame > self.max_time_lost:
-                track.mark_removed()
                 removed_stracks.append(track)
 
         # print('Ramained match {} s'.format(t4-t3))
