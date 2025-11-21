@@ -201,10 +201,16 @@ class BYTETracker2(object):
         STrack.multi_predict(strack_pool)
         atlbrs = [track.tlbr for track in strack_pool]
         btlbrs = [track.tlbr for track in detections]
-        
         dists = 1 - matching.ious(atlbrs, btlbrs)
         
-        dists = matching.fuse_score(dists, detections)
+        det_scores = [track.score for track in detections]
+
+        if dists.size != 0:
+          iou_sim = 1 - dists
+          det_scores = np.expand_dims(det_scores, axis=0).repeat(dists.shape[0], axis=0)
+          fuse_sim = iou_sim * det_scores
+          dists = 1 - fuse_sim
+
         matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
 
         for itracked, idet in matches:
