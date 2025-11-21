@@ -226,9 +226,7 @@ class BYTETracker2(object):
           overlaps = np.where((iw > 0) & (ih > 0), intersection / union, np.zeros_like(intersection)) 
           dists = 1 - overlaps
 
-
-        if not self.args.mot20:
-            dists = matching.fuse_score(dists, detections)
+          dists = matching.fuse_score(dists, detections)
         matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
 
         for itracked, idet in matches:
@@ -271,8 +269,7 @@ class BYTETracker2(object):
         '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
         detections = [detections[i] for i in u_detection]
         dists = matching.iou_distance(unconfirmed, detections)
-        if not self.args.mot20:
-            dists = matching.fuse_score(dists, detections)
+        dists = matching.fuse_score(dists, detections)
         matches, u_unconfirmed, u_detection = matching.linear_assignment(dists, thresh=0.7)
         for itracked, idet in matches:
             unconfirmed[itracked].update(detections[idet], self.frame_id)
@@ -312,28 +309,12 @@ class BYTETracker2(object):
 
 
 def joint_stracks(tlista, tlistb):
-    exists = {}
-    res = []
-    for t in tlista:
-        exists[t.track_id] = 1
-        res.append(t)
-    for t in tlistb:
-        tid = t.track_id
-        if not exists.get(tid, 0):
-            exists[tid] = 1
-            res.append(t)
-    return res
+  return list(dict.fromkeys(tlista + tlistb))
 
 
 def sub_stracks(tlista, tlistb):
-    stracks = {}
-    for t in tlista:
-        stracks[t.track_id] = t
-    for t in tlistb:
-        tid = t.track_id
-        if stracks.get(tid, 0):
-            del stracks[tid]
-    return list(stracks.values())
+  tlistb_ids = {t.track_id for t in tlistb}
+  return [t for t in tlista if t.track_id not in tlistb_ids]
 
 
 def remove_duplicate_stracks(stracksa, stracksb):

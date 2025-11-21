@@ -76,7 +76,7 @@ def test_bytetracker():
       np.testing.assert_allclose(output[j].covariance, output2[j].covariance)
       np.testing.assert_allclose(output[j].class_id, output2[j].class_id)
     
-    assert total_time2 < (total_time * 1.1), "too slow"
+    assert total_time2 < (total_time * 1.0), "too slow"
 
 test_bytetracker()
 #test_yolo_infer()
