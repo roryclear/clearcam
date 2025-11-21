@@ -1083,8 +1083,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
-            query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])})
-            query.get("show_dets", [self.show_dets])[0] is not None and setattr(self, "show_dets", str(int(time.time()))) and zone.update({"show_dets": self.show_dets})
+            query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
+            if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
             with open(settings_file, 'wb') as f: pickle.dump(zone, f)
             with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
             self.send_response(200)
