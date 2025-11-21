@@ -44,7 +44,54 @@ def test_yolo_infer():
     if x[-2] > 0: counts[int(x[-1])] += 1
   assert {int(k): v for k, v in counts.items()} == {2: 1, 0: 35, 1: 2, 3: 1}
 
+import pickle
+from yolox.tracker.byte_tracker import BYTETracker
 
+def test_bytetracker():
+  class Args:
+      def __init__(self):
+          self.track_buffer = 60
+          self.mot20 = False
+          self.match_thresh = 0.9
+  tracker = BYTETracker(Args())
+
+  inputs = pickle.load(open("test/tracker_inputs.pkl", "rb"))
+  outputs = pickle.load(open("test/tracker_outputs.pkl", "rb"))
+  for i in range(len(inputs)):
+    output = tracker.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
+    assert len(outputs[i]) == len(output)
+    for j in range(len(output)):
+      np.testing.assert_allclose(output[j]._tlwh, outputs[i][j]._tlwh) 
+
+def setup_test_bytetracker():
+  depth, width, ratio = get_variant_multiples("s")
+  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+  state_dict = safe_load(get_weights_location("s"))
+  load_state_dict(yolo_infer, state_dict)
+
+  class Args:
+      def __init__(self):
+          self.track_buffer = 60
+          self.mot20 = False
+          self.match_thresh = 0.9
+
+  inputs = []
+  outputs = []
+
+  tracker = BYTETracker(Args())
+  for _ in range(1500):
+    cap = cv2.VideoCapture("test/MOT16-03.mp4")
+    frame = cap.read()[1]
+    frame = Tensor(frame)
+    preds = do_inf(frame, yolo_infer).numpy()
+    inputs.append(preds)
+    preds = tracker.update(preds, [1280,1280], [1280,1280], threshold=0.5)
+    outputs.append(preds)
+  pickle.dump(inputs, open("test/tracker_inputs.pkl", "wb"))
+  pickle.dump(outputs, open("test/tracker_outputs.pkl", "wb"))
+
+#setup_test_bytetracker()
+test_bytetracker()
 test_yolo_infer()
 test_linear_sum_assigment()
 test_linear_sum_assigment_speed()
