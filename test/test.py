@@ -63,9 +63,9 @@ def test_bytetracker():
   for i in range(len(inputs)):
     st = time.perf_counter()
     output = tracker.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
-    output2 = tracker2.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
     total_time += (time.perf_counter() - st)
     st = time.perf_counter()
+    output2 = tracker2.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
     total_time2 += (time.perf_counter() - st)
     assert len(output2) == len(output)
     for j in range(len(output)):
@@ -75,8 +75,7 @@ def test_bytetracker():
       np.testing.assert_allclose(output[j].mean, output2[j].mean)
       np.testing.assert_allclose(output[j].covariance, output2[j].covariance)
       np.testing.assert_allclose(output[j].class_id, output2[j].class_id)
-    
-    assert total_time2 < (total_time * 1.0), "too slow"
+    assert total_time2 <= (total_time * 1.0), "slower"
 
 test_bytetracker()
 #test_yolo_infer()
