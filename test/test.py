@@ -46,6 +46,7 @@ def test_yolo_infer():
 
 import pickle
 from yolox.tracker.byte_tracker import BYTETracker
+from yolox.tracker.byte_tracker2 import BYTETracker2
 
 def test_bytetracker():
   class Args:
@@ -54,14 +55,27 @@ def test_bytetracker():
           self.mot20 = False
           self.match_thresh = 0.9
   tracker = BYTETracker(Args())
+  tracker2 = BYTETracker2(Args())
 
   inputs = pickle.load(open("test/tracker_inputs.pkl", "rb"))
   outputs = pickle.load(open("test/tracker_outputs.pkl", "rb"))
+  total_time = 0
+  total_time2 = 0
   for i in range(len(inputs)):
+    st = time.perf_counter()
     output = tracker.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
+    total_time += (time.perf_counter() - st)
+    st = time.perf_counter()
+    output2 = tracker2.update(inputs[i], [1280,1280], [1280,1280], threshold=0.5)
+    total_time2 += (time.perf_counter() - st)
     assert len(outputs[i]) == len(output)
+    assert len(outputs[i]) == len(output2)
     for j in range(len(output)):
       np.testing.assert_allclose(output[j]._tlwh, outputs[i][j]._tlwh) 
+      np.testing.assert_allclose(output2[j]._tlwh, outputs[i][j]._tlwh) 
+    
+    assert total_time2 < (total_time * 1.1), "too slow"
+
 
 def setup_test_bytetracker():
   depth, width, ratio = get_variant_multiples("s")
