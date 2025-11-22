@@ -462,6 +462,8 @@ class VideoCapture:
     self.object_set = set()
     self.object_set_zone = set()
 
+    self.object_sizes = {}
+
     self.src = src
     self.width = 1920 # todo 1080?
     self.height = 1080
@@ -475,6 +477,8 @@ class VideoCapture:
     self.dir = None
 
     self.settings = None
+
+    self.start_time = time.time()
     
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
@@ -739,6 +743,9 @@ class VideoCapture:
               if new:
                 self.object_set.add(int(x.track_id))
                 self.counter.add(int(x.class_id))
+              if int(x.track_id) not in self.object_sizes or x.tlwh[2] * x.tlwh[3] > self.object_sizes[int(x.track_id)]:
+                self.object_sizes[x.track_id] = x.tlwh[2] * x.tlwh[3]
+                print("New largest ",int(time.time() - self.start_time), x.track_id, self.object_sizes[x.track_id])
               if new_in_zone: self.object_set_zone.add(int(x.track_id))
               for _, alert in self.alert_counters.items():
                 if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
