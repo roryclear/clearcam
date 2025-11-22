@@ -602,6 +602,7 @@ class VideoCapture:
           filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
           for p in filtered_preds:
             if p[6] not in pred_sizes and (p[2]-p[0])*(p[3]-p[1]) or (p[2]-p[0])*(p[3]-p[1]) > pred_sizes[p[6]]: # p[6] track_id, p[0:4] tlbr
+              if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
               pred_sizes[p[6]] = (p[2]-p[0])*(p[3]-p[1])
               timestamp = datetime.now().strftime("%Y-%m-%d")
               filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
