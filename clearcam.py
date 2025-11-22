@@ -462,8 +462,6 @@ class VideoCapture:
     self.object_set = set()
     self.object_set_zone = set()
 
-    self.object_sizes = {}
-
     self.src = src
     self.width = 1920 # todo 1080?
     self.height = 1080
@@ -477,8 +475,6 @@ class VideoCapture:
     self.dir = None
 
     self.settings = None
-
-    self.start_time = time.time()
     
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
@@ -736,16 +732,13 @@ class VideoCapture:
                   non_zone_alert = True
                   break
               if not non_zone_alert and outside: continue
-            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
             if (classes is None or str(int(x.class_id)) in classes):
               new = int(x.track_id) not in self.object_set
               new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
               if new:
                 self.object_set.add(int(x.track_id))
                 self.counter.add(int(x.class_id))
-              if int(x.track_id) not in self.object_sizes or x.tlwh[2] * x.tlwh[3] > self.object_sizes[int(x.track_id)]:
-                self.object_sizes[x.track_id] = x.tlwh[2] * x.tlwh[3]
-                print("New largest ",int(time.time() - self.start_time), x.track_id, self.object_sizes[x.track_id])
               if new_in_zone: self.object_set_zone.add(int(x.track_id))
               for _, alert in self.alert_counters.items():
                 if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
@@ -765,7 +758,7 @@ class VideoCapture:
     return brightness > 127
 
   def draw_predictions(self, frame, preds):
-      for x1, y1, x2, y2, conf, cls in preds:
+      for x1, y1, x2, y2, conf, cls, _ in preds:
           x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
           label = f"{class_labels[int(cls)]}:{conf:.2f}"
           color = color_dict[class_labels[int(cls)]]
