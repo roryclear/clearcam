@@ -582,6 +582,7 @@ class VideoCapture:
     last_live_seg = time.time()
     last_preview_time = None
     last_counter_update = time.time()
+    pred_sizes = {}
     count = 0
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
@@ -599,6 +600,33 @@ class VideoCapture:
             fail_count = 0
           frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
           filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
+          for p in filtered_preds:
+            if p[6] not in pred_sizes and (p[2]-p[0])*(p[3]-p[1]) or (p[2]-p[0])*(p[3]-p[1]) > pred_sizes[p[6]]: # p[6] track_id, p[0:4] tlbr
+              pred_sizes[p[6]] = (p[2]-p[0])*(p[3]-p[1])
+              timestamp = datetime.now().strftime("%Y-%m-%d")
+              filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
+              filepath.mkdir(parents=True, exist_ok=True)
+              ts = int(time.time() - self.streamer.start_time - 10)
+              filename = filepath / f"{int(p[6])}.jpg" # todo, timestamp somewhere
+
+              x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
+              cx = (x1 + x2) // 2
+              cy = (y1 + y2) // 2
+              hw = (x2 - x1) // 2
+              hh = (y2 - y1) // 2
+              hw *= 2
+              hh *= 2
+              x1_new = cx - hw
+              x2_new = cx + hw
+              y1_new = cy - hh
+              y2_new = cy + hh
+              H, W = self.last_frame.shape[:2]
+              x1_new = max(0, min(x1_new, W))
+              x2_new = max(0, min(x2_new, W))
+              y1_new = max(0, min(y1_new, H))
+              y2_new = max(0, min(y2_new, H))
+              crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
+              cv2.imwrite(str(filename), crop)
 
           if count > 10:
             if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
