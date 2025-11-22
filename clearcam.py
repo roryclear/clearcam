@@ -581,6 +581,7 @@ class VideoCapture:
     last_live_seg = time.time()
     last_preview_time = None
     last_counter_update = time.time()
+    pred_sizes = {}
     count = 0
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
@@ -598,6 +599,10 @@ class VideoCapture:
             fail_count = 0
           frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
           filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
+          for p in filtered_preds:
+             if p[6] not in pred_sizes or (p[2]-p[0])*(p[3]-p[1]) > pred_sizes[p[6]]: # p[6] track_id, p[0:4] tlbr
+              pred_sizes[p[6]] = (p[2]-p[0])*(p[3]-p[1])
+              print("new largest for ",p[6])
 
           if count > 10:
             if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
