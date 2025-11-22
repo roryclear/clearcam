@@ -61,17 +61,8 @@ class CLIPSearch:
 
 if __name__ == "__main__":
   searcher = CLIPSearch()
-  
-  while True:
-    query = input("\nEnter search query (or 'quit' to exit): ").strip()
-    if query.lower() == 'quit':
-      break
-    
-    if not query:
-      continue
-        
-    results = searcher.search(query, top_k=10)
-    print(f"\nTop results for '{query}' (best per object):")
-    for i, (path, score) in enumerate(results, 1):
-      filename = os.path.basename(path)
-      print(f"{i}. Score: {score:.3f} - {filename}")
+  query = input("\nEnter search query (or 'quit' to exit): ").strip()    
+  results = searcher.search(query, top_k=10)
+  print(f"\nTop results for '{query}' (best per object):")
+  for i, (path, score) in enumerate(results, 1):
+    print(f'{i}. Score: {score:.3f} - "{path}"')
