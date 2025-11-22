@@ -46,17 +46,13 @@ class CachedCLIPSearch:
                 img_path = os.path.join(folder_path, img_file)
                 current_images.add(img_path)
         
-        # Find new images (not in cache)
-        cached_images = set(self.image_embeddings.keys())
+        cached_images = {p for p in self.image_embeddings if p.startswith(folder_path)}
+        current_images = {os.path.join(folder_path, f) for f in os.listdir(folder_path)
+                          if f.lower().endswith((".png",".jpg",".jpeg"))}
+
         new_images = current_images - cached_images
         deleted_images = cached_images - current_images
-        
-        # Remove deleted images
-        for img_path in deleted_images:
-            if img_path in self.image_embeddings:
-                del self.image_embeddings[img_path]
-                del self.image_paths[img_path]
-        
+
         if not new_images:
             print(f"{datetime.now()}: No new images found in {folder_path}.")
             # Still save to update deletions
