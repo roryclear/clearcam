@@ -582,7 +582,7 @@ class VideoCapture:
     last_live_seg = time.time()
     last_preview_time = None
     last_counter_update = time.time()
-    pred_sizes = {}
+    pred_occs = {}
     count = 0
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
@@ -602,7 +602,11 @@ class VideoCapture:
           filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
           for p in filtered_preds:
             if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
-            pred_sizes[p[6]] = (p[2]-p[0])*(p[3]-p[1])
+            if p[6] not in pred_occs: pred_occs[p[6]] = [time.time()]
+            if (len(pred_occs[p[6]]) < 20 and (time.time() - pred_occs[p[6]][-1]) > 1) or (time.time() - pred_occs[p[6]][-1]) > 600:
+              pred_occs[p[6]].append(time.time())
+            else:
+              continue
             timestamp = datetime.now().strftime("%Y-%m-%d")
             filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
             filepath.mkdir(parents=True, exist_ok=True)
