@@ -94,11 +94,14 @@ class CachedCLIPSearch:
         return similarities[:top_k]
 
 # Delete old cache and run
-if os.path.exists("embeddings.pkl"): 
-    os.remove("embeddings.pkl")
+#if os.path.exists("embeddings.pkl"): os.remove("embeddings.pkl")
 
 # Usage with caching
-searcher = CachedCLIPSearch()
+#searcher = CachedCLIPSearch()
+searcher = CachedCLIPSearch(model_name="laion/CLIP-ViT-L-14-laion2B-s32B-b82K")
+#searcher = CachedCLIPSearch("laion/CLIP-ViT-B-16-laion400m_e32")
+#searcher = CachedCLIPSearch("laion/CLIP-ViT-L-14-laion400m_e32")
+#searcher = CachedCLIPSearch("laion/CLIP-ViT-H-14-laion2B-s32B-b79K")
 searcher.precompute_embeddings("data/cameras/city/objects/2025-11-22", batch_size=16)  # Adjust batch size as needed
 
 # Subsequent searches are fast!
@@ -106,8 +109,8 @@ results = searcher.search("red car")
 for path, score in results:
     print(f"Score: {score:.3f} - {os.path.basename(path)}")
 
-q = "toyota land cruiser"
+q = "kia picanto"
 print(f"results for {q}")
-results2 = searcher.search(q)
+results2 = searcher.search(q,top_k=100)
 for path, score in results2:
     print(f"Score: {score:.3f} - {os.path.basename(path)}")
