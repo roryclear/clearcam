@@ -100,6 +100,7 @@ class CachedCLIPSearch:
 
 if __name__ == "__main__":
     searcher = CachedCLIPSearch()
+    #searcher = CachedCLIPSearch(model_name="laion/CLIP-ViT-B-32-laion2B-s34B-b79K") # smaller model
 
     # Load cache ONCE at startup
     if os.path.exists("embeddings.pkl"):
