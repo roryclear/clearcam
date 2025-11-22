@@ -472,6 +472,7 @@ class VideoCapture:
     self.raw_frame = None
     self.annotated_frame = None
     self.last_preds = []
+    self.last_frame = None
     self.dir = None
 
     self.settings = None
@@ -616,7 +617,7 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                        self.annotated_frame = self.draw_predictions(self.last_frame.copy(), filtered_preds)
                         # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                         ts = int(time.time() - self.streamer.start_time - 10)
                         filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
@@ -732,7 +733,7 @@ class VideoCapture:
                   non_zone_alert = True
                   break
               if not non_zone_alert and outside: continue
-            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id]))
+            preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
             if (classes is None or str(int(x.class_id)) in classes):
               new = int(x.track_id) not in self.object_set
               new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
@@ -747,6 +748,7 @@ class VideoCapture:
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
           self.last_preds = preds
+          self.last_frame = frame.numpy().copy()
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
@@ -758,7 +760,7 @@ class VideoCapture:
     return brightness > 127
 
   def draw_predictions(self, frame, preds):
-      for x1, y1, x2, y2, conf, cls in preds:
+      for x1, y1, x2, y2, conf, cls, _ in preds:
           x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
           label = f"{class_labels[int(cls)]}:{conf:.2f}"
           color = color_dict[class_labels[int(cls)]]
