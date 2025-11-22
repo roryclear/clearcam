@@ -472,6 +472,7 @@ class VideoCapture:
     self.raw_frame = None
     self.annotated_frame = None
     self.last_preds = []
+    self.last_frame = None
     self.dir = None
 
     self.settings = None
@@ -614,12 +615,12 @@ class VideoCapture:
               h2 = h * 2
               x2 = x1 + w2
               y2 = y1 + h2
-              H, W = frame.shape[:2]
+              H, W = self.last_frame.shape[:2]
               x1 = max(0, min(x1, W))
               y1 = max(0, min(y1, H))
               x2 = max(0, min(x2, W))
               y2 = max(0, min(y2, H))
-              crop = frame[y1:y2, x1:x2]
+              crop = self.last_frame[y1:y2, x1:x2]
               cv2.imwrite(str(filename), crop)
 
           if count > 10:
@@ -639,7 +640,7 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
+                        self.annotated_frame = self.draw_predictions(self.last_frame.copy(), filtered_preds)
                         # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                         ts = int(time.time() - self.streamer.start_time - 10)
                         filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
@@ -770,6 +771,7 @@ class VideoCapture:
         preds = scale_boxes(pre.shape[:2], preds, frame.shape)
         with self.lock:
           self.last_preds = preds
+          self.last_frame = frame.numpy().copy()
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
