@@ -29,6 +29,7 @@ from urllib.parse import quote
 import platform
 import ctypes
 import zlib
+from clip_search import CLIPSearch
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1042,6 +1043,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
+        self.searcher = None
         super().__init__(*args, **kwargs)
 
     def send_200(self, body=None):
@@ -1324,10 +1326,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
+            image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
             if cam_name:
                 camera_dirs = [self.base_dir / cam_name]
             else:
                 camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
+            if image_text:
+              if not self.searcher: self.searcher = CLIPSearch()
+              results = self.searcher.search(image_text, top_k=10)
+              for r in results: print(r)
+               
             image_data = []
             for camera_dir in camera_dirs:
                 event_image_path = camera_dir / "event_images" / selected_dir
