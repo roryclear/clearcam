@@ -1333,9 +1333,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
           if image_text:
             if not self.searcher: self.searcher = CLIPSearch()
-            results = self.searcher.search(image_text, top_k=10)
+            results = self.searcher.search(image_text, top_k=100, cam_name=cam_name, timestamp=selected_dir)
             image_data = []
             for path_str, score in results:
+              if score < 0.23: break
               img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
               ts = int(img_path.stem.split('_')[0])
               parts = img_path.parts
