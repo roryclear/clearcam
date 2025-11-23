@@ -915,6 +915,11 @@
         <input type="checkbox" id="alertsOnlyCheckbox">
         Alerts Only
       </label>
+      <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+        <input type="text" id="imageSearchInput" placeholder="Search text..." style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+        <button onclick="searchEventImages()" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer;">Search</button>
+        <button onclick="clearSearch()" style="padding: 6px 12px; background: var(--text-secondary); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear</button>
+      </div>
     </div>
     <div id="eventImagesContainer">
       <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
@@ -2332,6 +2337,19 @@
       currentEventCameraFilter = filter.value;
     }
 
+    let currentImageSearchText = '';
+    function searchEventImages() {
+      const searchInput = document.getElementById('imageSearchInput');
+      currentImageSearchText = searchInput.value.trim();
+      loadEventImages();
+    }
+
+    function clearSearch() {
+      document.getElementById('imageSearchInput').value = '';
+      currentImageSearchText = '';
+      loadEventImages();
+    }
+
     async function loadEventImages() {
       try {
         let url = `/event_thumbs?folder=${currentStreamDate}`;
@@ -2341,6 +2359,10 @@
         if (alertsOnlyFilter) {
           url += `&name_contains=_notif`;
         }
+        if (currentImageSearchText) {
+          url += `&image_text=${encodeURIComponent(currentImageSearchText)}`;
+        }
+        
         const res = await fetch(url);
         const data = await res.json();
         const container = document.getElementById("eventImagesContainer");
