@@ -1707,28 +1707,48 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_thread = None
         self.max_gb = 40
         self.searcher = None
+        self.clip_stop_event = threading.Event()
+        self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
+
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
             self.cleanup_stop_event.clear()
             self.cleanup_thread = threading.Thread(
-                target=self._cleanup_and_clip_task,
+                target=self._cleanup_task,
                 daemon=True,
                 name="StorageCleanup"
             )
             self.cleanup_thread.start()
 
-    def _cleanup_and_clip_task(self):
+        if self.clip_thread is None or not self.clip_thread.is_alive():
+            self.clip_stop_event.clear()
+            self.clip_thread = threading.Thread(
+                target=self._clip_task,
+                daemon=True,
+                name="CLIPMaintenance"
+            )
+            self.clip_thread.start()
+
+    def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
-            if not self.searcher: self.searcher = CachedCLIPSearch()
             try:
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            object_folders = self.searcher.find_object_folders("data/cameras")
-            for folder in object_folders: self.searcher.precompute_embeddings(folder)
-            self.cleanup_stop_event.wait(timeout=600)  # Check every 10 min
+            self.cleanup_stop_event.wait(timeout=600)
+
+    def _clip_task(self):
+        if not self.searcher: self.searcher = CachedCLIPSearch()
+        while not self.clip_stop_event.is_set():
+            try:
+                object_folders = self.searcher.find_object_folders("data/cameras")
+                for folder in object_folders:
+                    self.searcher.precompute_embeddings(folder)
+            except Exception as e:
+                print(f"CLIP error: {e}")
+            self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
@@ -1762,7 +1782,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       oldest_recording = recordings[0][0]
       shutil.rmtree(oldest_recording)
       event_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("event_images") / Path(oldest_recording.name) # todo, remove _raw
+      object_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("objects") / Path(oldest_recording.name) # todo, remove _raw
       if event_images_dir.exists(): shutil.rmtree(event_images_dir)
+      if object_images_dir.exists(): shutil.rmtree(object_images_dir)
       print(f"Deleted oldest recording: {oldest_recording}")
 
     def server_close(self):
@@ -1770,6 +1792,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.set()
         if hasattr(self, 'cleanup_thread') and self.cleanup_thread:
             self.cleanup_thread.join(timeout=5)
+        if hasattr(self, 'clip_stop_event'):
+            self.clip_stop_event.set()
+        if hasattr(self, 'clip_thread') and self.clip_thread:
+            self.clip_thread.join(timeout=5)
+
         super().server_close()
 
 if __name__ == "__main__":
