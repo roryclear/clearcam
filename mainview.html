@@ -1457,7 +1457,13 @@
       });
 
       loadEventImages();
-      setInterval(loadEventImages, 5000);
+      setInterval(() => {
+      // Only refresh if there's no active search
+      if (!currentImageSearchText) {
+        loadEventImages();
+      }
+    }, 5000);
+
     });
 
     function isToday(dateString) {
