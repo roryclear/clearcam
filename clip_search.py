@@ -58,12 +58,19 @@ class CLIPSearch:
         if not self.image_embeddings:
             print("No embeddings available.")
             return []
-        model = CLIPModel.from_pretrained("laion/CLIP-ViT-L-14-laion2B-s32B-b82K")
+        device = torch.device("cpu")
+        
+        model = CLIPModel.from_pretrained(
+            "laion/CLIP-ViT-L-14-laion2B-s32B-b82K",
+            low_cpu_mem_usage=False
+        )
+
         processor = CLIPProcessor.from_pretrained("laion/CLIP-ViT-L-14-laion2B-s32B-b82K")
         with torch.no_grad():
             text_inputs = processor(text=[query], return_tensors="pt", padding=True)
+            text_inputs = {k: v.to(device) for k, v in text_inputs.items()}
             text_embedding = model.get_text_features(**text_inputs)
-            text_embedding = text_embedding / text_embedding.norm(dim=-1, keepdim=True)
+        text_embedding = text_embedding / text_embedding.norm(dim=-1, keepdim=True)
         all_similarities = []
         for path, img_embedding in self.image_embeddings.items():
             if cam_name and f"/cameras/{cam_name}/" not in path.replace("\\", "/"):

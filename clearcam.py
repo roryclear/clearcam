@@ -30,6 +30,7 @@ import platform
 import ctypes
 import zlib
 from clip_search import CLIPSearch
+from clip import CachedCLIPSearch
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1336,7 +1337,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             results = self.searcher.search(image_text, top_k=100, cam_name=cam_name, timestamp=selected_dir)
             image_data = []
             for path_str, score in results:
-              if score < 0.23: break
+              if score < 0.21: break
               img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
               ts = int(img_path.stem.split('_')[0])
               parts = img_path.parts
@@ -1705,25 +1706,30 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 40
-        self._setup_cleanup_thread()
+        self.searcher = None
+        self._setup_cleanup_and_clip_thread()
 
-    def _setup_cleanup_thread(self):
+    def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
             self.cleanup_stop_event.clear()
             self.cleanup_thread = threading.Thread(
-                target=self._cleanup_task,
+                target=self._cleanup_and_clip_task,
                 daemon=True,
                 name="StorageCleanup"
             )
             self.cleanup_thread.start()
 
-    def _cleanup_task(self):
+    def _cleanup_and_clip_task(self):
         while not self.cleanup_stop_event.is_set():
+            if not self.searcher: self.searcher = CachedCLIPSearch()
             try:
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=600)  # Check every 10 min
+            for _ in range(100): print("CLIP!!!")
+            object_folders = self.searcher.find_object_folders("data/cameras")
+            for folder in object_folders: self.searcher.precompute_embeddings(folder)
+            self.cleanup_stop_event.wait(timeout=120)  # Check every 10 min
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
@@ -1830,6 +1836,7 @@ if __name__ == "__main__":
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
   
+  searcher = None
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)

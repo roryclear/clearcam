@@ -9,7 +9,10 @@ from datetime import datetime
 
 class CachedCLIPSearch:
     def __init__(self, model_name="laion/CLIP-ViT-L-14-laion2B-s32B-b82K"):
-        self.model = CLIPModel.from_pretrained(model_name)
+        #model_name = "laion/CLIP-ViT-B-32-laion2B-s34B-b79K" #smaller
+        
+        self.model = CLIPModel.from_pretrained(model_name, low_cpu_mem_usage=False)
+
         self.processor = CLIPProcessor.from_pretrained(model_name)
         self.image_embeddings = {}
         self.image_paths = {}
@@ -70,6 +73,7 @@ class CachedCLIPSearch:
 
         if not new_images:
             print(f"{datetime.now()}: No new images found in {folder_path}. Saving cache...")
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             with open(cache_file, "wb") as f:
                 pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
             return
@@ -111,6 +115,7 @@ class CachedCLIPSearch:
                 img.close()
 
         # Save folder-specific cache
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
