@@ -1321,66 +1321,46 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.wfile.write(html.encode('utf-8'))
           return
                             
-        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'): # todo clean
+        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
+            if cam_name:
+                camera_dirs = [self.base_dir / cam_name]
+            else:
+                camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
             image_data = []
-            
-            if cam_name is not None:
-                event_image_dir = self.base_dir / cam_name / "event_images"
-                event_image_path = event_image_dir / selected_dir
+            for camera_dir in camera_dirs:
+                event_image_path = camera_dir / "event_images" / selected_dir
+                if not event_image_path.exists(): continue
                 event_images = sorted(
-                    event_image_path.glob("*.jpg"),
-                    key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
-                    reverse=True
-                ) if event_image_path.exists() else []
-                
+                  event_image_path.glob("*.jpg"),
+                  key=lambda p: int(p.stem.split('_')[0]),
+                  reverse=True
+                )
                 for img in event_images:
                     if name_contains and name_contains not in img.name: continue
-                    ts = int(img.stem.split('_')[0]) # n.jpg or n_{s}.jpg?
+                    ts = int(img.stem.split('_')[0])
                     image_url = f"/{img.relative_to(self.base_dir.parent)}"
                     image_data.append({
                         "url": image_url,
                         "timestamp": ts,
                         "filename": img.name,
-                        "cam_name": cam_name,
+                        "cam_name": camera_dir.name,
                         "folder": selected_dir
                     })
-            else:
-                for camera_dir in self.base_dir.iterdir():
-                    if camera_dir.is_dir():
-                        event_image_dir = camera_dir / "event_images"
-                        event_image_path = event_image_dir / selected_dir
-                        if event_image_path.exists():
-                            event_images = sorted(
-                                event_image_path.glob("*.jpg"),
-                                key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
-                                reverse=True
-                            )
-                            for img in event_images:
-                                if name_contains and name_contains not in img.name: continue
-                                ts = int(img.stem.split('_')[0]) 
-                                image_url = f"/{img.relative_to(self.base_dir.parent)}"
-                                image_data.append({
-                                    "url": image_url,
-                                    "timestamp": ts,
-                                    "filename": img.name,
-                                    "cam_name": camera_dir.name,
-                                    "folder": selected_dir
-                                })
             image_data.sort(key=lambda x: x["timestamp"], reverse=True)
             response_data = {
                 "images": image_data,
                 "count": len(image_data),
                 "folder": selected_dir,
-                "cam_name": cam_name if cam_name is not None else "all_cameras"
+                "cam_name": cam_name if cam_name else "all_cameras"
             }
-            
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(response_data).encode('utf-8'))
             return
+
 
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
