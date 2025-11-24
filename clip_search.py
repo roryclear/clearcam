@@ -17,6 +17,26 @@ class CLIPSearch:
 
         self._load_all_embeddings()
 
+    def _load_single_embeddings_file(self, cache_file):
+        """Load embeddings from a single cache file."""
+        try:
+            with open(cache_file, "rb") as f:
+                cache = pickle.load(f)
+
+            folder_embeddings = cache.get("embeddings", {})
+            folder_paths = cache.get("paths", {})
+
+            self.image_embeddings.update(folder_embeddings)
+            self.image_paths.update(folder_paths)
+
+            loaded_count = len(folder_embeddings)
+            print(f"Loaded {loaded_count} embeddings from {cache_file}")
+            return loaded_count
+            
+        except Exception as e:
+            print(f"Error loading {cache_file}: {e}")
+            return 0
+
     def _load_all_embeddings(self):
         total_loaded = 0
 
@@ -41,21 +61,7 @@ class CLIPSearch:
                 cache_file = os.path.join(date_path, "embeddings.pkl")
 
                 if os.path.exists(cache_file):
-                    try:
-                        with open(cache_file, "rb") as f:
-                            cache = pickle.load(f)
-
-                        folder_embeddings = cache.get("embeddings", {})
-                        folder_paths = cache.get("paths", {})
-
-                        self.image_embeddings.update(folder_embeddings)
-                        self.image_paths.update(folder_paths)
-
-                        total_loaded += len(folder_embeddings)
-                        print(f"Loaded {len(folder_embeddings)} embeddings from {cache_file}")
-
-                    except Exception as e:
-                        print(f"Error loading {cache_file}: {e}")
+                    total_loaded += self._load_single_embeddings_file(cache_file)
 
         print(f"\nTotal images loaded: {total_loaded}")
 
