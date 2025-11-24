@@ -575,6 +575,32 @@ class VideoCapture:
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
+  def save_object(self, p):
+    timestamp = datetime.now().strftime("%Y-%m-%d")
+    filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
+    filepath.mkdir(parents=True, exist_ok=True)
+    ts = int(time.time() - self.streamer.start_time - 10)
+    object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
+    x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
+    cx = (x1 + x2) // 2
+    cy = (y1 + y2) // 2
+    hw = (x2 - x1) // 2
+    hh = (y2 - y1) // 2
+    hw *= 2
+    hh *= 2
+    x1_new = cx - hw
+    x2_new = cx + hw
+    y1_new = cy - hh
+    y2_new = cy + hh
+    H, W = self.last_frame.shape[:2]
+    x1_new = max(0, min(x1_new, W))
+    x2_new = max(0, min(x2_new, W))
+    y1_new = max(0, min(y1_new, H))
+    y2_new = max(0, min(y2_new, H))
+    crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
+    cv2.imwrite(str(object_filename), crop)
+     
+
   def capture_loop(self):
     frame_size = self.width * self.height * 3
     fail_count = 0
@@ -609,29 +635,7 @@ class VideoCapture:
               pred_occs[p[6]].append(time.time())
             else:
               continue
-            timestamp = datetime.now().strftime("%Y-%m-%d")
-            filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
-            filepath.mkdir(parents=True, exist_ok=True)
-            ts = int(time.time() - self.streamer.start_time - 10)
-            filename = filepath / f"{ts}_{int(p[6])}.jpg"
-            x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
-            cx = (x1 + x2) // 2
-            cy = (y1 + y2) // 2
-            hw = (x2 - x1) // 2
-            hh = (y2 - y1) // 2
-            hw *= 2
-            hh *= 2
-            x1_new = cx - hw
-            x2_new = cx + hw
-            y1_new = cy - hh
-            y2_new = cy + hh
-            H, W = self.last_frame.shape[:2]
-            x1_new = max(0, min(x1_new, W))
-            x2_new = max(0, min(x2_new, W))
-            y1_new = max(0, min(y1_new, H))
-            y2_new = max(0, min(y2_new, H))
-            crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
-            cv2.imwrite(str(filename), crop)
+            self.save_object(p)
 
           if count > 10:
             if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
