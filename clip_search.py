@@ -85,21 +85,23 @@ class CLIPSearch:
             if timestamp and f"/objects/{timestamp}/" not in normalized_path:
                 continue
             similarity = (img_embedding @ text_embedding.T).item()
-
             filename = os.path.basename(path)
-            if "_" in filename and filename.lower().endswith((".jpg", ".jpeg", ".png")):
-                object_id = filename.split("_")[1].split(".")[0]
+            if filename.lower().endswith((".jpg", ".jpeg", ".png")):
+                object_id = filename.split("_")[1].split(".")[0] if "_" in filename else None
                 all_similarities.append((path, similarity, object_id))
+        
+        if any(item[2] for item in all_similarities):
+            best_per_id = {}
+            for path, score, object_id in all_similarities:
+                if object_id is not None:
+                    if object_id not in best_per_id or score > best_per_id[object_id][1]:
+                        best_per_id[object_id] = (path, score)
 
-        best_per_id = {}
-        for path, score, object_id in all_similarities:
-            if object_id not in best_per_id or score > best_per_id[object_id][1]:
-                best_per_id[object_id] = (path, score)
-
-        # Sort by similarity
-        results = list(best_per_id.values())
+            items_without_id = [(path, score) for path, score, object_id in all_similarities if object_id is None]
+            results = list(best_per_id.values()) + items_without_id
+        else:
+            results = [(path, score) for path, score, _ in all_similarities]
         results.sort(key=lambda x: x[1], reverse=True)
-
         return results[:top_k]
 
 
