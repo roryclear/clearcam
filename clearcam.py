@@ -1337,7 +1337,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           else:
             camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
           if image_text:
-            if not self.searcher: self.searcher = CLIPSearch()
+            if not self.searcher:
+              self.searcher = CLIPSearch()
+              self.searcher._load_all_embeddings()
             results = self.searcher.search(image_text, top_k=100, cam_name=cam_name, timestamp=selected_dir)
             image_data = []
             for path_str, score in results:

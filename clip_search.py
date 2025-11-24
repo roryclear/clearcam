@@ -15,8 +15,6 @@ class CLIPSearch:
         )
         self.model = self.model.to(self.device).eval()
 
-        self._load_all_embeddings()
-
     def _load_single_embeddings_file(self, cache_file):
         """Load embeddings from a single cache file."""
         try:
