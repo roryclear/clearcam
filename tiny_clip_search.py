@@ -124,7 +124,23 @@ def encode_text(model, text, normalize: bool = False):
     if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
     x = x + model.tiny_positional_embedding
     x = torch.Tensor(x.numpy())
-    x = model.transformer(x, attn_mask=model.attn_mask)
+    
+    for resblock in model.transformer.resblocks:
+        residual = x
+        x = resblock.ln_1(x)
+        attn_output, _ = resblock.attn(
+            x, x, x, 
+            attn_mask=model.attn_mask,
+            need_weights=False
+        )
+        x = residual + resblock.ls_1(attn_output)
+        
+        residual = x
+        x = resblock.ln_2(x)
+        x = resblock.mlp(x)
+        x = residual + resblock.ls_2(x)
+
+
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
     x = text_global_pool(x, text, model.text_pool_type, eos_token_id=getattr(model, "text_eos_id", None))
     if model.text_projection is not None:
