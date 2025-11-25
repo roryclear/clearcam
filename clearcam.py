@@ -29,8 +29,6 @@ from urllib.parse import quote
 import platform
 import ctypes
 import zlib
-from clip_search import CLIPSearch
-from clip import CachedCLIPSearch
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1336,7 +1334,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             camera_dirs = [self.base_dir / cam_name]
           else:
             camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
-          if image_text:
+          if image_text and use_clip:
             if not self.searcher:
               self.searcher = CLIPSearch()
               self.searcher._load_all_embeddings()
@@ -1653,6 +1651,7 @@ def start_cam(rtsp, cam_name, yolo_variant='n'):
     new_args = upsert_arg(base_args, "cam_name", cam_name)
     new_args = upsert_arg(new_args, "rtsp", rtsp)
     new_args = upsert_arg(new_args, "yolo_size", yolo_variant)
+    new_args = upsert_arg(new_args, "use_clip", use_clip)
     proc = subprocess.Popen(executable + new_args, close_fds=True)
     active_subprocesses.append(proc)
 
@@ -1728,7 +1727,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             )
             self.cleanup_thread.start()
 
-        if self.clip_thread is None or not self.clip_thread.is_alive():
+        if use_clip and (self.clip_thread is None or not self.clip_thread.is_alive()):
             self.clip_stop_event.clear()
             self.clip_thread = threading.Thread(
                 target=self._clip_task,
@@ -1822,15 +1821,24 @@ if __name__ == "__main__":
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
+  use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
+  if use_clip: use_clip = use_clip != "False" # str to bool
   yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
-  if not yolo_variant: yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
+  if not yolo_variant:
+    yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
+    use_clip = input("Would you like to use experimental clip search on events? (see README) (y/n), or press enter to skip:") or False
+    use_clip = use_clip in ["y", "Y"]
+
+  if use_clip:
+    from clip_search import CLIPSearch
+    from clip import CachedCLIPSearch
 
   if rtsp_url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      sys.argv.extend([f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"])
+      sys.argv.extend([f"--use_clip={use_clip}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"])
     else: userID = None
 
   if userID is not None and key is None:
