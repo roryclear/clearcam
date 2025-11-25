@@ -114,16 +114,16 @@ class tiny_Embedding(nn.Module):
         self.tiny_embedding.weight = tiny_Tensor(weight.detach().numpy())
         
     def forward(self, x):
-        ret = self.tiny_embedding(tiny_Tensor(x.detach().numpy())).numpy()
+        return self.tiny_embedding(tiny_Tensor(x.detach().numpy()))
         return torch.Tensor(ret)
 
 def encode_text(model, text, normalize: bool = False):
-    cast_dtype = model.transformer.get_cast_dtype()
     if not isinstance(model.token_embedding, tiny_Embedding):
         model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
     x = model.token_embedding(text)
-    x = x.to(cast_dtype)  # [batch_size, n_ctx, d_model]
-    x = x + model.positional_embedding.to(cast_dtype)
+    if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
+    x = x + model.tiny_positional_embedding
+    x = torch.Tensor(x.numpy())
     x = model.transformer(x, attn_mask=model.attn_mask)
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
     x = text_global_pool(x, text, model.text_pool_type, eos_token_id=getattr(model, "text_eos_id", None))
