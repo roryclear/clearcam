@@ -115,7 +115,21 @@ class tiny_Embedding(nn.Module):
         
     def forward(self, x):
         return self.tiny_embedding(tiny_Tensor(x.detach().numpy()))
-        return torch.Tensor(ret)
+
+class tiny_LayerNorm(nn.Module):
+    def __init__(self, weight, bias, eps, normalized_shape):
+        super().__init__()
+        self.normalized_shape = normalized_shape
+        self.weight = tiny_Tensor(weight.detach().numpy())
+        self.bias = tiny_Tensor(bias.detach().numpy())
+        self.eps = eps
+        self.axis = tuple(-1-i for i in range(len(self.normalized_shape)))
+
+    def forward(self, x):
+        x = tiny_Tensor(x.detach().numpy())
+        x = x.layernorm(eps=self.eps, axis=self.axis)
+        x = x * self.weight + self.bias
+        return torch.Tensor(x.numpy())
 
 def encode_text(model, text, normalize: bool = False):
     if not isinstance(model.token_embedding, tiny_Embedding):
@@ -127,6 +141,11 @@ def encode_text(model, text, normalize: bool = False):
     
     for resblock in model.transformer.resblocks:
         residual = x
+        if not isinstance(resblock.ln_1, tiny_LayerNorm):
+            resblock.ln_1 = tiny_LayerNorm(resblock.ln_1.weight, resblock.ln_1.bias, resblock.ln_1.eps, resblock.ln_1.normalized_shape)
+        if not isinstance(resblock.ln_1, tiny_LayerNorm):
+            resblock.ln_2 = tiny_LayerNorm(resblock.ln_2.weight, resblock.ln_2.bias, resblock.ln_2.eps, resblock.ln_2.normalized_shape)
+        
         x = resblock.ln_1(x)
         attn_output, _ = resblock.attn(
             x, x, x, 
@@ -140,6 +159,9 @@ def encode_text(model, text, normalize: bool = False):
         x = resblock.mlp(x)
         x = residual + resblock.ls_2(x)
 
+
+    if not isinstance(model.ln_final, tiny_LayerNorm):
+        model.ln_final = tiny_LayerNorm(model.ln_final.weight, model.ln_final.bias, model.ln_final.eps, model.ln_final.normalized_shape)
 
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
     x = text_global_pool(x, text, model.text_pool_type, eos_token_id=getattr(model, "text_eos_id", None))
