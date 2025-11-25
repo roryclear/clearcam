@@ -5,6 +5,7 @@ import open_clip
 from typing import Optional
 from torch.nn import functional as F
 import torch.nn as nn
+from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
@@ -105,19 +106,21 @@ class CLIPSearch:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
-class my_embedding(nn.Module):
+class tiny_Embedding(nn.Module):
     def __init__(self, num_embeddings, embeddings_dim, weight):
         super().__init__()
         self.embedding = torch.nn.modules.sparse.Embedding(num_embeddings=num_embeddings, embedding_dim=embeddings_dim)
-        self.embedding.weight.data = weight
+        self.tiny_embedding = tiny_nn.Embedding(num_embeddings, embeddings_dim)
+        self.tiny_embedding.weight = tiny_Tensor(weight.detach().numpy())
         
     def forward(self, x):
-        return self.embedding(x)
+        ret = self.tiny_embedding(tiny_Tensor(x.detach().numpy())).numpy()
+        return torch.Tensor(ret)
 
 def encode_text(model, text, normalize: bool = False):
     cast_dtype = model.transformer.get_cast_dtype()
-    if not isinstance(model.token_embedding, my_embedding):
-        model.token_embedding = my_embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
+    if not isinstance(model.token_embedding, tiny_Embedding):
+        model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
     x = model.token_embedding(text)
     x = x.to(cast_dtype)  # [batch_size, n_ctx, d_model]
     x = x + model.positional_embedding.to(cast_dtype)
