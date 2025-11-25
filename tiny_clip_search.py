@@ -152,8 +152,7 @@ def encode_text(model, text, normalize: bool = False):
             attn_mask=model.attn_mask,
             need_weights=False
         )
-        x = residual + resblock.ls_1(attn_output)
-        
+        x = residual + attn_output
         residual = x
         x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_2(x)
