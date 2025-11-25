@@ -129,6 +129,15 @@ class tiny_LayerNorm(nn.Module):
         x = x.layernorm(eps=self.eps, axis=self.axis)
         return x * self.weight + self.bias
 
+class tiny_Linear(nn.Module):
+    def __init__(self, weight, bias):
+        super().__init__()
+        self.linear = tiny_nn.Linear(weight.shape[0], weight.shape[1])
+        self.linear.weight = tiny_Tensor(weight.detach().numpy())
+        self.linear.bias = tiny_Tensor(bias.detach().numpy())
+
+    def forward(self, x): return self.linear(x)
+
 def encode_text(model, text, normalize: bool = False):
     if not isinstance(model.token_embedding, tiny_Embedding):
         model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
@@ -156,9 +165,9 @@ def encode_text(model, text, normalize: bool = False):
         residual = x
         x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_2(x)
-        x = torch.Tensor(x.numpy())
-        
+        if not isinstance(resblock.mlp.c_fc, tiny_Linear): resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
         x = resblock.mlp.c_fc(x)
+        x = torch.Tensor(x.numpy())
         x = resblock.mlp.gelu(x)
         x = resblock.mlp.c_proj(x)
 
