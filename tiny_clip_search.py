@@ -114,7 +114,7 @@ class tiny_Embedding(nn.Module):
         self.tiny_embedding.weight = tiny_Tensor(weight.detach().numpy())
         
     def forward(self, x):
-        return self.tiny_embedding(tiny_Tensor(x.detach().numpy()))
+        return self.tiny_embedding(x)
 
 class tiny_LayerNorm(nn.Module):
     def __init__(self, weight, bias, eps, normalized_shape):
@@ -126,15 +126,14 @@ class tiny_LayerNorm(nn.Module):
         self.axis = tuple(-1-i for i in range(len(self.normalized_shape)))
 
     def forward(self, x):
-        x = tiny_Tensor(x.detach().numpy())
         x = x.layernorm(eps=self.eps, axis=self.axis)
-        x = x * self.weight + self.bias
-        return torch.Tensor(x.numpy())
+        return x * self.weight + self.bias
 
 def encode_text(model, text, normalize: bool = False):
     if not isinstance(model.token_embedding, tiny_Embedding):
         model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
-    x = model.token_embedding(text)
+    x = tiny_Tensor(text.detach().numpy())
+    x = model.token_embedding(x)
     if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
     x = x + model.tiny_positional_embedding
     x = torch.Tensor(x.numpy())
@@ -143,10 +142,11 @@ def encode_text(model, text, normalize: bool = False):
         residual = x
         if not isinstance(resblock.ln_1, tiny_LayerNorm):
             resblock.ln_1 = tiny_LayerNorm(resblock.ln_1.weight, resblock.ln_1.bias, resblock.ln_1.eps, resblock.ln_1.normalized_shape)
-        if not isinstance(resblock.ln_1, tiny_LayerNorm):
+        if not isinstance(resblock.ln_2, tiny_LayerNorm):
             resblock.ln_2 = tiny_LayerNorm(resblock.ln_2.weight, resblock.ln_2.bias, resblock.ln_2.eps, resblock.ln_2.normalized_shape)
-        
+        x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_1(x)
+        x = torch.Tensor(x.numpy())
         attn_output, _ = resblock.attn(
             x, x, x, 
             attn_mask=model.attn_mask,
@@ -155,7 +155,9 @@ def encode_text(model, text, normalize: bool = False):
         x = residual + resblock.ls_1(attn_output)
         
         residual = x
+        x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_2(x)
+        x = torch.Tensor(x.numpy())
         x = resblock.mlp(x)
         x = residual + resblock.ls_2(x)
 
@@ -163,7 +165,9 @@ def encode_text(model, text, normalize: bool = False):
     if not isinstance(model.ln_final, tiny_LayerNorm):
         model.ln_final = tiny_LayerNorm(model.ln_final.weight, model.ln_final.bias, model.ln_final.eps, model.ln_final.normalized_shape)
 
+    x = tiny_Tensor(x.detach().numpy())
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
+    x = torch.Tensor(x.numpy())
     x = text_global_pool(x, text, model.text_pool_type, eos_token_id=getattr(model, "text_eos_id", None))
     if model.text_projection is not None:
         if isinstance(model.text_projection, nn.Linear):
