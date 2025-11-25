@@ -161,6 +161,7 @@ def encode_text(model, text, normalize: bool = False):
             attn_mask=model.attn_mask,
             need_weights=False
         )
+        
         x = residual + attn_output
         residual = x
         x = tiny_Tensor(x.detach().numpy())
@@ -168,9 +169,9 @@ def encode_text(model, text, normalize: bool = False):
         if not isinstance(resblock.mlp.c_fc, tiny_Linear): resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
         x = resblock.mlp.c_fc(x)
         x = x.gelu()
-        x = torch.Tensor(x.numpy())
+        if not isinstance(resblock.mlp.c_proj, tiny_Linear): resblock.mlp.c_proj = tiny_Linear(resblock.mlp.c_proj.weight , resblock.mlp.c_proj.bias)
         x = resblock.mlp.c_proj(x)
-
+        x = torch.Tensor(x.numpy())
         x += residual
 
     if not isinstance(model.ln_final, tiny_LayerNorm):
