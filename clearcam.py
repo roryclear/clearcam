@@ -573,6 +573,32 @@ class VideoCapture:
     ]
     self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
+  def save_object(self, p):
+    timestamp = datetime.now().strftime("%Y-%m-%d")
+    filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
+    filepath.mkdir(parents=True, exist_ok=True)
+    ts = int(time.time() - self.streamer.start_time - 10)
+    object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
+    x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
+    cx = (x1 + x2) // 2
+    cy = (y1 + y2) // 2
+    hw = (x2 - x1) // 2
+    hh = (y2 - y1) // 2
+    hw *= 2
+    hh *= 2
+    x1_new = cx - hw
+    x2_new = cx + hw
+    y1_new = cy - hh
+    y2_new = cy + hh
+    H, W = self.last_frame.shape[:2]
+    x1_new = max(0, min(x1_new, W))
+    x2_new = max(0, min(x2_new, W))
+    y1_new = max(0, min(y1_new, H))
+    y2_new = max(0, min(y2_new, H))
+    crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
+    cv2.imwrite(str(object_filename), crop)
+     
+
   def capture_loop(self):
     frame_size = self.width * self.height * 3
     fail_count = 0
@@ -582,6 +608,7 @@ class VideoCapture:
     last_live_seg = time.time()
     last_preview_time = None
     last_counter_update = time.time()
+    pred_occs = {}
     count = 0
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
@@ -599,6 +626,14 @@ class VideoCapture:
             fail_count = 0
           frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
           filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
+          for p in filtered_preds:
+            if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
+            if p[6] not in pred_occs: pred_occs[p[6]] = [time.time()]
+            if (len(pred_occs[p[6]]) < 20 and (time.time() - pred_occs[p[6]][-1]) > 1) or (time.time() - pred_occs[p[6]][-1]) > 600:
+              pred_occs[p[6]].append(time.time())
+            else:
+              continue
+            self.save_object(p)
 
           if count > 10:
             if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
@@ -1011,6 +1046,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
+        self.searcher = None
         super().__init__(*args, **kwargs)
 
     def send_200(self, body=None):
@@ -1290,66 +1326,83 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.wfile.write(html.encode('utf-8'))
           return
                             
-        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'): # todo clean
-            selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
-            name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
+        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
+          selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+          name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
+          image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
+          if cam_name:
+            camera_dirs = [self.base_dir / cam_name]
+          else:
+            camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
+          if image_text and use_clip:
+            if not self.searcher:
+              self.searcher = CLIPSearch()
+              self.searcher._load_all_embeddings()
+            results = self.searcher.search(image_text, top_k=100, cam_name=cam_name, timestamp=selected_dir)
             image_data = []
-            
-            if cam_name is not None:
-                event_image_dir = self.base_dir / cam_name / "event_images"
-                event_image_path = event_image_dir / selected_dir
-                event_images = sorted(
-                    event_image_path.glob("*.jpg"),
-                    key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
-                    reverse=True
-                ) if event_image_path.exists() else []
-                
-                for img in event_images:
-                    if name_contains and name_contains not in img.name: continue
-                    ts = int(img.stem.split('_')[0]) # n.jpg or n_{s}.jpg?
-                    image_url = f"/{img.relative_to(self.base_dir.parent)}"
-                    image_data.append({
-                        "url": image_url,
-                        "timestamp": ts,
-                        "filename": img.name,
-                        "cam_name": cam_name,
-                        "folder": selected_dir
-                    })
-            else:
-                for camera_dir in self.base_dir.iterdir():
-                    if camera_dir.is_dir():
-                        event_image_dir = camera_dir / "event_images"
-                        event_image_path = event_image_dir / selected_dir
-                        if event_image_path.exists():
-                            event_images = sorted(
-                                event_image_path.glob("*.jpg"),
-                                key=lambda p: int(p.stem.split('_')[0]), # n.jpg or n_{s}.jpg?
-                                reverse=True
-                            )
-                            for img in event_images:
-                                if name_contains and name_contains not in img.name: continue
-                                ts = int(img.stem.split('_')[0]) 
-                                image_url = f"/{img.relative_to(self.base_dir.parent)}"
-                                image_data.append({
-                                    "url": image_url,
-                                    "timestamp": ts,
-                                    "filename": img.name,
-                                    "cam_name": camera_dir.name,
-                                    "folder": selected_dir
-                                })
-            image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+            for path_str, score in results:
+              if score < 0.21: break
+              img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
+              ts = int(img_path.stem.split('_')[0])
+              parts = img_path.parts
+              cam_index = parts.index("cameras") + 1
+              cam = parts[cam_index]
+              rel = img_path.relative_to(self.base_dir)
+              image_url = f"/{rel}"
+              image_data.append({
+                "url": image_url,
+                "timestamp": ts,
+                "filename": img_path.name,
+                "cam_name": cam,
+                "folder": selected_dir
+              })
             response_data = {
-                "images": image_data,
-                "count": len(image_data),
-                "folder": selected_dir,
-                "cam_name": cam_name if cam_name is not None else "all_cameras"
+              "images": image_data,
+              "count": len(image_data),
+              "folder": selected_dir,
+              "cam_name": cam_name if cam_name else "all_cameras"
             }
-            
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(response_data).encode('utf-8'))
             return
+
+          image_data = []
+          for camera_dir in camera_dirs:
+            event_image_path = camera_dir / "event_images" / selected_dir
+            if not event_image_path.exists(): continue
+            event_images = sorted(
+              event_image_path.glob("*.jpg"),
+              key=lambda p: int(p.stem.split('_')[0]),
+              reverse=True
+            )
+            for img in event_images:
+              if name_contains and name_contains not in img.name: continue
+              ts = int(img.stem.split('_')[0])
+              image_url = f"/{img.relative_to(self.base_dir.parent)}"
+              image_data.append({
+                "url": image_url,
+                "timestamp": ts,
+                "filename": img.name,
+                "cam_name": camera_dir.name,
+                "folder": selected_dir
+              })
+
+          image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+
+          response_data = {
+            "images": image_data,
+            "count": len(image_data),
+            "folder": selected_dir,
+            "cam_name": cam_name if cam_name else "all_cameras"
+          }
+
+          self.send_response(200)
+          self.send_header('Content-type', 'application/json')
+          self.end_headers()
+          self.wfile.write(json.dumps(response_data).encode('utf-8'))
+          return
 
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
@@ -1598,6 +1651,7 @@ def start_cam(rtsp, cam_name, yolo_variant='n'):
     new_args = upsert_arg(base_args, "cam_name", cam_name)
     new_args = upsert_arg(new_args, "rtsp", rtsp)
     new_args = upsert_arg(new_args, "yolo_size", yolo_variant)
+    new_args = upsert_arg(new_args, "use_clip", use_clip)
     proc = subprocess.Popen(executable + new_args, close_fds=True)
     active_subprocesses.append(proc)
 
@@ -1657,9 +1711,13 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 40
-        self._setup_cleanup_thread()
+        self.searcher = None
+        self.clip_stop_event = threading.Event()
+        self.clip_thread = None
+        self._setup_cleanup_and_clip_thread()
 
-    def _setup_cleanup_thread(self):
+
+    def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
             self.cleanup_stop_event.clear()
             self.cleanup_thread = threading.Thread(
@@ -1669,13 +1727,33 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             )
             self.cleanup_thread.start()
 
+        if use_clip and (self.clip_thread is None or not self.clip_thread.is_alive()):
+            self.clip_stop_event.clear()
+            self.clip_thread = threading.Thread(
+                target=self._clip_task,
+                daemon=True,
+                name="CLIPMaintenance"
+            )
+            self.clip_thread.start()
+
     def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
             try:
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=600)  # Check every 10 min
+            self.cleanup_stop_event.wait(timeout=600)
+
+    def _clip_task(self):
+        if not self.searcher: self.searcher = CachedCLIPSearch()
+        while not self.clip_stop_event.is_set():
+            try:
+                object_folders = self.searcher.find_object_folders("data/cameras")
+                for folder in object_folders:
+                    self.searcher.precompute_embeddings(folder)
+            except Exception as e:
+                print(f"CLIP error: {e}")
+            self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
@@ -1709,7 +1787,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       oldest_recording = recordings[0][0]
       shutil.rmtree(oldest_recording)
       event_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("event_images") / Path(oldest_recording.name) # todo, remove _raw
+      object_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("objects") / Path(oldest_recording.name) # todo, remove _raw
       if event_images_dir.exists(): shutil.rmtree(event_images_dir)
+      if object_images_dir.exists(): shutil.rmtree(object_images_dir)
       print(f"Deleted oldest recording: {oldest_recording}")
 
     def server_close(self):
@@ -1717,6 +1797,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.set()
         if hasattr(self, 'cleanup_thread') and self.cleanup_thread:
             self.cleanup_thread.join(timeout=5)
+        if hasattr(self, 'clip_stop_event'):
+            self.clip_stop_event.set()
+        if hasattr(self, 'clip_thread') and self.clip_thread:
+            self.clip_thread.join(timeout=5)
+
         super().server_close()
 
 if __name__ == "__main__":
@@ -1736,15 +1821,24 @@ if __name__ == "__main__":
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
+  use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
+  if use_clip: use_clip = use_clip != "False" # str to bool
   yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
-  if not yolo_variant: yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
+  if not yolo_variant:
+    yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
+    use_clip = input("Would you like to use experimental clip search on events? (see README) (y/n), or press enter to skip:") or False
+    use_clip = use_clip in ["y", "Y"]
+
+  if use_clip:
+    from clip_search import CLIPSearch
+    from clip import CachedCLIPSearch
 
   if rtsp_url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      sys.argv.extend([f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"])
+      sys.argv.extend([f"--use_clip={use_clip}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={yolo_variant}"])
     else: userID = None
 
   if userID is not None and key is None:
@@ -1782,6 +1876,7 @@ if __name__ == "__main__":
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
   
+  searcher = None
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
