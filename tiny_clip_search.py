@@ -157,7 +157,11 @@ def encode_text(model, text, normalize: bool = False):
         x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_2(x)
         x = torch.Tensor(x.numpy())
-        x = resblock.mlp(x)
+        
+        x = resblock.mlp.c_fc(x)
+        x = resblock.mlp.gelu(x)
+        x = resblock.mlp.c_proj(x)
+
         x += residual
 
     if not isinstance(model.ln_final, tiny_LayerNorm):
