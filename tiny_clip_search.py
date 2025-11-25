@@ -105,9 +105,21 @@ class CLIPSearch:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
+class my_embedding(nn.Module):
+    def __init__(self, num_embeddings, embeddings_dim, weight):
+        super().__init__()
+        self.embedding = torch.nn.modules.sparse.Embedding(num_embeddings=num_embeddings, embedding_dim=embeddings_dim)
+        self.embedding.weight.data = weight
+        
+    def forward(self, x):
+        return self.embedding(x)
+
 def encode_text(model, text, normalize: bool = False):
     cast_dtype = model.transformer.get_cast_dtype()
-    x = model.token_embedding(text).to(cast_dtype)  # [batch_size, n_ctx, d_model]
+    if not isinstance(model.token_embedding, my_embedding):
+        model.token_embedding = my_embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
+    x = model.token_embedding(text)
+    x = x.to(cast_dtype)  # [batch_size, n_ctx, d_model]
     x = x + model.positional_embedding.to(cast_dtype)
     x = model.transformer(x, attn_mask=model.attn_mask)
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
