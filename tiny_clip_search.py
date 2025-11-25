@@ -167,8 +167,8 @@ def encode_text(model, text, normalize: bool = False):
         x = resblock.ln_2(x)
         if not isinstance(resblock.mlp.c_fc, tiny_Linear): resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
         x = resblock.mlp.c_fc(x)
+        x = x.gelu()
         x = torch.Tensor(x.numpy())
-        x = resblock.mlp.gelu(x)
         x = resblock.mlp.c_proj(x)
 
         x += residual
