@@ -215,14 +215,7 @@ def encode_text(model, text, normalize: bool = False):
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
     x = torch.Tensor(x.numpy())
     x = text_global_pool(x, text, model.text_pool_type, eos_token_id=getattr(model, "text_eos_id", None))
-    if model.text_projection is not None:
-        if isinstance(model.text_projection, nn.Linear):
-            x = model.text_projection(x)
-        else:
-            x = x @ model.text_projection
-
-    return F.normalize(x, dim=-1) if normalize else x
-
+    return x @ model.text_projection
 
 import torch
 import torch.nn.functional as F
