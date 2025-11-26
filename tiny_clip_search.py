@@ -163,7 +163,13 @@ def encode_text(model, text, normalize: bool = False):
         B, L, D = x.shape
         H = resblock.attn.num_heads
         d_head = D // H
-        qkv = F.linear(x, resblock.attn.in_proj_weight, resblock.attn.in_proj_bias)
+
+        in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store
+        in_proj_bias_tiny = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy())
+        x = tiny_Tensor(x.detach().numpy())
+        qkv = x.matmul(in_proj_weight_tiny.T) + in_proj_bias_tiny
+        x = torch.Tensor(x.numpy())
+        qkv = torch.Tensor(qkv.numpy())
         q, k, v = qkv.split(D, dim=-1)
         def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
         q = shape(q)
