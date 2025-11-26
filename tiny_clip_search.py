@@ -201,38 +201,11 @@ def encode_text(model, text, normalize: bool = False):
 
     if not isinstance(model.ln_final, tiny_LayerNorm):
         model.ln_final = tiny_LayerNorm(model.ln_final.weight, model.ln_final.bias, model.ln_final.eps, model.ln_final.normalized_shape)
-
-    x = tiny_Tensor(x.detach().numpy())
+    
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
     x = torch.Tensor(x.numpy())
-    x = text_global_pool(x, text, model.text_pool_type, eos_token_id=getattr(model, "text_eos_id", None))
+    x = x[torch.arange(x.shape[0], device=x.device), text.argmax(dim=-1)]
     return x @ model.text_projection
-
-def text_global_pool(
-        x: torch.Tensor,
-        text: Optional[torch.Tensor] = None,
-        pool_type: str = 'argmax',
-        eos_token_id: Optional[int] = None,
-) -> torch.Tensor:
-    if pool_type == 'first':
-        pooled = x[:, 0]
-    elif pool_type == 'last':
-        pooled = x[:, -1]
-    elif pool_type == 'argmax':
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        assert text is not None
-        pooled = x[torch.arange(x.shape[0], device=x.device), text.argmax(dim=-1)]
-    elif pool_type == 'eos':
-        # take features from tokenizer specific eos
-        assert text is not None
-        assert eos_token_id is not None
-        idx = (text == eos_token_id).int().argmax(dim=-1)
-        pooled = x[torch.arange(x.shape[0], device=x.device), idx]
-    else:
-        pooled = x
-
-    return pooled
-
 
 '''
 if __name__ == "__main__":
