@@ -248,14 +248,7 @@ def inline_mha(
     v = shape(v)
     scale = 1.0 / (d_head ** 0.5)
     attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale  # (B,H,L,L)
-    if attn_mask.dtype != torch.bool:
-        if torch.is_floating_point(attn_mask):
-            bool_mask = attn_mask < 0 
-        else:
-            bool_mask = attn_mask != 0
-    else:
-        bool_mask = attn_mask
-
+    bool_mask = attn_mask < 0
     attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
     attn_probs = F.softmax(attn_scores, dim=-1)
     context = torch.matmul(attn_probs, v)
