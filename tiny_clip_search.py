@@ -146,7 +146,6 @@ def encode_text(model, text, normalize: bool = False):
     x = model.token_embedding(x)
     if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
     x = x + model.tiny_positional_embedding
-    x = torch.Tensor(x.numpy())
     
     for resblock in model.transformer.resblocks:
         residual = x
@@ -187,20 +186,17 @@ def encode_text(model, text, normalize: bool = False):
         attn_probs = tiny_Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
-        context = torch.Tensor(context.detach().numpy())
-        x = F.linear(context, resblock.attn.out_proj.weight, resblock.attn.out_proj.bias)
+        x = context.matmul(out_proj_weight_tiny.T) + out_proj_bias_tiny
 
 
         x += residual
         residual = x
-        x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_2(x)
         if not isinstance(resblock.mlp.c_fc, tiny_Linear): resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
         x = resblock.mlp.c_fc(x)
         x = x.gelu()
         if not isinstance(resblock.mlp.c_proj, tiny_Linear): resblock.mlp.c_proj = tiny_Linear(resblock.mlp.c_proj.weight , resblock.mlp.c_proj.bias)
         x = resblock.mlp.c_proj(x)
-        x = torch.Tensor(x.numpy())
         x += residual
 
     if not isinstance(model.ln_final, tiny_LayerNorm):
