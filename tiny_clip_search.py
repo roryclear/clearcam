@@ -156,11 +156,50 @@ def encode_text(model, text, normalize: bool = False):
         x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_1(x)
         x = torch.Tensor(x.numpy())
-        attn_output, _ = resblock.attn(
-            x, x, x, 
-            attn_mask=model.attn_mask,
-            need_weights=False
+
+        if not isinstance(resblock.attn.out_proj, nn.modules.linear.Linear):
+            resblock.attn.out_proj = nn.modules.linear.Linear(resblock.attn.out_proj.weight.shape, None)
+        
+        # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
+
+        key_padding_mask=None
+        key_padding_mask = F._canonical_mask(
+            mask=key_padding_mask,
+            mask_name="key_padding_mask",
+            other_type=F._none_or_dtype(model.attn_mask),
+            other_name="attn_mask",
+            target_type=x.dtype,
         )
+
+        attn_mask = F._canonical_mask(
+            mask=model.attn_mask,
+            mask_name="attn_mask",
+            other_type=None,
+            other_name="",
+            target_type=x.dtype,
+            check_other=False,
+        )
+
+        merged_mask, mask_type = resblock.attn.merge_masks(
+            attn_mask, key_padding_mask, x
+        )
+
+        attn_output = torch._native_multi_head_attention(
+            x,
+            x,
+            x,
+            resblock.attn.embed_dim,
+            resblock.attn.num_heads,
+            resblock.attn.in_proj_weight,
+            resblock.attn.in_proj_bias,
+            resblock.attn.out_proj.weight,
+            resblock.attn.out_proj.bias,
+            merged_mask,
+            True,
+            True,
+            mask_type,
+        )[0]
+
         
         x = residual + attn_output
         residual = x
