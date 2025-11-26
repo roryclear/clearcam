@@ -1044,7 +1044,9 @@ def point_not_in_polygon(coords, poly):
 
 import multiprocessing
 
-def clip_worker(searcher, image_text, top_k, cam_name, selected_dir): return searcher.search(image_text, top_k, cam_name, selected_dir)
+def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
+  res = searcher.search(image_text, top_k, cam_name, selected_dir)
+  return_q.put(res)
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -1343,9 +1345,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               self.searcher = CLIPSearch()
               self.searcher._load_all_embeddings()
 
-            with multiprocessing.Pool(1) as pool:
-              async_result = pool.apply_async(clip_worker, (self.searcher, image_text, 100, cam_name, selected_dir,))
-              results = async_result.get(timeout=30.0) # todo, what should the timeout be?
+            return_q = multiprocessing.Queue()
+            p = multiprocessing.Process(target=run_search, args=(return_q, self.searcher, image_text, 100, cam_name, selected_dir,))
+            p.start()
+            results = return_q.get(timeout=3600)
+            p.join()
             image_data = []
             for path_str, score in results:
               if score < 0.21: break
