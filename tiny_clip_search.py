@@ -19,6 +19,37 @@ class CLIPSearch:
         )
         self.model = self.model.to(self.device).eval()
 
+        # convert here
+        # .copy() or trouble
+        self.model.tiny_text_projection = tiny_Tensor(self.model.text_projection.detach().numpy().copy())
+        self.model.tiny_token_embedding = tiny_nn.Embedding(self.model.token_embedding.num_embeddings, self.model.token_embedding.embedding_dim)
+        self.model.tiny_token_embedding.weight = tiny_Tensor(self.model.token_embedding.weight.data.detach().numpy().copy())
+        
+        self.model.tiny_ln_1 = []
+        self.model.tiny_ln_2 = []
+        self.model.out_proj_bias_tiny = []
+        for resblock in self.model.transformer.resblocks:
+            layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
+            layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
+            layernorm.bias = tiny_Tensor(resblock.ln_1.bias.detach().numpy().copy())
+            self.model.tiny_ln_1.append(layernorm)
+
+            layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_2.normalized_shape, eps=resblock.ln_2.eps, elementwise_affine=True)
+            layernorm.weight = tiny_Tensor(resblock.ln_2.weight.detach().numpy().copy())
+            layernorm.bias = tiny_Tensor(resblock.ln_2.bias.detach().numpy().copy())
+            self.model.tiny_ln_2.append(layernorm)
+
+            opb = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy().copy())
+            self.model.out_proj_bias_tiny.append(opb)
+
+            # todo
+            resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
+            resblock.mlp.c_proj = tiny_Linear(resblock.mlp.c_proj.weight , resblock.mlp.c_proj.bias)
+
+        self.model.tiny_ln_final = tiny_nn.LayerNorm(normalized_shape=self.model.ln_final.normalized_shape, eps=self.model.ln_final.eps, elementwise_affine=True)
+        self.model.tiny_ln_final .weight = tiny_Tensor(self.model.ln_final.weight.detach().numpy().copy())
+        self.model.tiny_ln_final .bias = tiny_Tensor(self.model.ln_final.bias.detach().numpy().copy())
+
     def _load_single_embeddings_file(self, cache_file):
         try:
             with open(cache_file, "rb") as f:
@@ -116,19 +147,6 @@ class tiny_Embedding(nn.Module):
     def forward(self, x):
         return self.tiny_embedding(x)
 
-class tiny_LayerNorm(nn.Module):
-    def __init__(self, weight, bias, eps, normalized_shape):
-        super().__init__()
-        self.normalized_shape = normalized_shape
-        self.weight = tiny_Tensor(weight.detach().numpy())
-        self.bias = tiny_Tensor(bias.detach().numpy())
-        self.eps = eps
-        self.axis = tuple(-1-i for i in range(len(self.normalized_shape)))
-
-    def forward(self, x):
-        x = x.layernorm(eps=self.eps, axis=self.axis)
-        return x * self.weight + self.bias
-
 class tiny_Linear(nn.Module):
     def __init__(self, weight, bias):
         super().__init__()
@@ -140,22 +158,14 @@ class tiny_Linear(nn.Module):
 
 @TinyJit
 def encode_text(model, text):
-    text_projection = tiny_Tensor(model.text_projection.detach().numpy())
-    if not isinstance(model.token_embedding, tiny_Embedding):
-        model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
     x = text
-    x = model.token_embedding(x)
+    x = model.tiny_token_embedding(x)
     if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
     x = x + model.tiny_positional_embedding
     
-    for resblock in model.transformer.resblocks:
+    for i, resblock in enumerate(model.transformer.resblocks):
         residual = x
-        if not isinstance(resblock.ln_1, tiny_LayerNorm):
-            resblock.ln_1 = tiny_LayerNorm(resblock.ln_1.weight, resblock.ln_1.bias, resblock.ln_1.eps, resblock.ln_1.normalized_shape)
-        if not isinstance(resblock.ln_2, tiny_LayerNorm):
-            resblock.ln_2 = tiny_LayerNorm(resblock.ln_2.weight, resblock.ln_2.bias, resblock.ln_2.eps, resblock.ln_2.normalized_shape)
-        x = resblock.ln_1(x)
-
+        x = model.tiny_ln_1[i](x)
         if not isinstance(resblock.attn.out_proj, nn.modules.linear.Linear):
             resblock.attn.out_proj = nn.modules.linear.Linear(resblock.attn.out_proj.weight.shape, None)
         
@@ -166,7 +176,6 @@ def encode_text(model, text):
         in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store these
         in_proj_bias_tiny = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy())
         out_proj_weight_tiny = tiny_Tensor(resblock.attn.out_proj.weight.detach().numpy())
-        out_proj_bias_tiny = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy())
         attn_mask = tiny_Tensor(model.attn_mask.detach().numpy())
         
 
@@ -184,26 +193,20 @@ def encode_text(model, text):
         attn_probs = tiny_Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
-        x = context.matmul(out_proj_weight_tiny.T) + out_proj_bias_tiny
-
+        x = context.matmul(out_proj_weight_tiny.T) + model.out_proj_bias_tiny[i]
 
         x += residual
         residual = x
-        x = resblock.ln_2(x)
-        if not isinstance(resblock.mlp.c_fc, tiny_Linear): resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
+        x = model.tiny_ln_2[i](x)
         x = resblock.mlp.c_fc(x)
         x = x.gelu()
-        if not isinstance(resblock.mlp.c_proj, tiny_Linear): resblock.mlp.c_proj = tiny_Linear(resblock.mlp.c_proj.weight , resblock.mlp.c_proj.bias)
         x = resblock.mlp.c_proj(x)
         x += residual
 
-    if not isinstance(model.ln_final, tiny_LayerNorm):
-        model.ln_final = tiny_LayerNorm(model.ln_final.weight, model.ln_final.bias, model.ln_final.eps, model.ln_final.normalized_shape)
-    
-    x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
+    x = model.tiny_ln_final(x)  # [batch_size, n_ctx, transformer.width]
     argmax = text.argmax()
     x = x[0][argmax]
-    return x @ text_projection
+    return x @ model.tiny_text_projection
 
 '''
 if __name__ == "__main__":
@@ -215,3 +218,4 @@ if __name__ == "__main__":
     for i, (path, score) in enumerate(results, 1):
         print(f"{i}. Score: {score:.3f} - \"{path}\"")
 '''
+
