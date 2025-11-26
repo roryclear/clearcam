@@ -20,7 +20,6 @@ class CLIPSearch:
         self.model = self.model.to(self.device).eval()
 
     def _load_single_embeddings_file(self, cache_file):
-        """Load embeddings from a single cache file."""
         try:
             with open(cache_file, "rb") as f:
                 cache = pickle.load(f)
@@ -70,7 +69,9 @@ class CLIPSearch:
     def _encode_text(self, query):
         tokens = open_clip.tokenize([query]).to(self.device)
         with torch.no_grad():
+            tokens = tiny_Tensor(tokens.detach().numpy())
             text_emb = encode_text(self.model, tokens)
+            text_emb = torch.Tensor(text_emb.numpy())
         text_emb = text_emb / text_emb.norm(dim=-1, keepdim=True)
         return text_emb
 
@@ -138,11 +139,12 @@ class tiny_Linear(nn.Module):
 
     def forward(self, x): return self.linear(x)
 
-#@TinyJit
-def encode_text(model, text, normalize: bool = False):
+@TinyJit
+def encode_text(model, text):
+    text_projection = tiny_Tensor(model.text_projection.detach().numpy())
     if not isinstance(model.token_embedding, tiny_Embedding):
         model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
-    x = tiny_Tensor(text.detach().numpy())
+    x = text
     x = model.token_embedding(x)
     if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
     x = x + model.tiny_positional_embedding
@@ -153,9 +155,7 @@ def encode_text(model, text, normalize: bool = False):
             resblock.ln_1 = tiny_LayerNorm(resblock.ln_1.weight, resblock.ln_1.bias, resblock.ln_1.eps, resblock.ln_1.normalized_shape)
         if not isinstance(resblock.ln_2, tiny_LayerNorm):
             resblock.ln_2 = tiny_LayerNorm(resblock.ln_2.weight, resblock.ln_2.bias, resblock.ln_2.eps, resblock.ln_2.normalized_shape)
-        x = tiny_Tensor(x.detach().numpy())
         x = resblock.ln_1(x)
-        x = torch.Tensor(x.numpy())
 
         if not isinstance(resblock.attn.out_proj, nn.modules.linear.Linear):
             resblock.attn.out_proj = nn.modules.linear.Linear(resblock.attn.out_proj.weight.shape, None)
@@ -171,7 +171,6 @@ def encode_text(model, text, normalize: bool = False):
         attn_mask = tiny_Tensor(model.attn_mask.detach().numpy())
         
 
-        x = tiny_Tensor(x.detach().numpy())
         qkv = x.matmul(in_proj_weight_tiny.T) + in_proj_bias_tiny
         x = torch.Tensor(x.numpy())
         q, k, v = qkv.split(D, dim=-1)
@@ -203,9 +202,9 @@ def encode_text(model, text, normalize: bool = False):
         model.ln_final = tiny_LayerNorm(model.ln_final.weight, model.ln_final.bias, model.ln_final.eps, model.ln_final.normalized_shape)
     
     x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
-    x = torch.Tensor(x.numpy())
-    x = x[torch.arange(x.shape[0], device=x.device), text.argmax(dim=-1)]
-    return x @ model.text_projection
+    argmax = text.argmax()
+    x = x[0][argmax]
+    return x @ text_projection
 
 '''
 if __name__ == "__main__":
