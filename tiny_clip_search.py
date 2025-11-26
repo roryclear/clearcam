@@ -184,9 +184,7 @@ def encode_text(model, text, normalize: bool = False):
             attn_mask, key_padding_mask, x
         )
 
-        attn_output = torch._native_multi_head_attention(
-            x,
-            x,
+        attn_output = inline_mha(
             x,
             resblock.attn.embed_dim,
             resblock.attn.num_heads,
@@ -194,10 +192,7 @@ def encode_text(model, text, normalize: bool = False):
             resblock.attn.in_proj_bias,
             resblock.attn.out_proj.weight,
             resblock.attn.out_proj.bias,
-            merged_mask,
-            True,
-            True,
-            mask_type,
+            merged_mask
         )[0]
 
         
@@ -227,6 +222,46 @@ def encode_text(model, text, normalize: bool = False):
             x = x @ model.text_projection
 
     return F.normalize(x, dim=-1) if normalize else x
+
+
+import torch
+import torch.nn.functional as F
+
+def inline_mha(
+    x,
+    embed_dim,
+    num_heads,
+    in_proj_weight,
+    in_proj_bias,
+    out_proj_weight,
+    out_proj_bias,
+    attn_mask=None
+):
+    B, L, D = x.shape
+    H = num_heads
+    d_head = D // H
+    qkv = F.linear(x, in_proj_weight, in_proj_bias)
+    q, k, v = qkv.split(D, dim=-1)
+    def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
+    q = shape(q)
+    k = shape(k)
+    v = shape(v)
+    scale = 1.0 / (d_head ** 0.5)
+    attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale  # (B,H,L,L)
+    if attn_mask.dtype != torch.bool:
+        if torch.is_floating_point(attn_mask):
+            bool_mask = attn_mask < 0 
+        else:
+            bool_mask = attn_mask != 0
+    else:
+        bool_mask = attn_mask
+
+    attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
+    attn_probs = F.softmax(attn_scores, dim=-1)
+    context = torch.matmul(attn_probs, v)
+    context = context.transpose(1, 2).contiguous().view(B, L, D)
+    out = F.linear(context, out_proj_weight, out_proj_bias)
+    return out, attn_probs.mean(dim=1)
 
 
 def text_global_pool(
