@@ -164,22 +164,26 @@ def encode_text(model, text, normalize: bool = False):
         H = resblock.attn.num_heads
         d_head = D // H
 
-        in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store
+        in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store these
         in_proj_bias_tiny = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy())
+        attn_mask = tiny_Tensor(model.attn_mask.detach().numpy())
+        
+
         x = tiny_Tensor(x.detach().numpy())
         qkv = x.matmul(in_proj_weight_tiny.T) + in_proj_bias_tiny
         x = torch.Tensor(x.numpy())
-        qkv = torch.Tensor(qkv.numpy())
         q, k, v = qkv.split(D, dim=-1)
-        def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
-        q = shape(q)
-        k = shape(k)
-        v = shape(v)
+        q = q.view(B, L, H, d_head).transpose(1, 2)
+        k = k.view(B, L, H, d_head).transpose(1, 2)
+        v = v.view(B, L, H, d_head).transpose(1, 2)
+
         scale = 1.0 / (d_head ** 0.5)
-        attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale  # (B,H,L,L)
-        bool_mask = model.attn_mask < 0
+        attn_scores = q.matmul(k.transpose(-2, -1)) * scale  # (B,H,L,L)
+        bool_mask = attn_mask < 0
         attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
+        attn_scores = torch.Tensor(attn_scores.numpy())
         attn_probs = F.softmax(attn_scores, dim=-1)
+        v = torch.Tensor(v.numpy())
         context = torch.matmul(attn_probs, v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
         x = F.linear(context, resblock.attn.out_proj.weight, resblock.attn.out_proj.bias)
