@@ -161,29 +161,6 @@ def encode_text(model, text, normalize: bool = False):
             resblock.attn.out_proj = nn.modules.linear.Linear(resblock.attn.out_proj.weight.shape, None)
         
         # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
-
-        key_padding_mask=None
-        key_padding_mask = F._canonical_mask(
-            mask=key_padding_mask,
-            mask_name="key_padding_mask",
-            other_type=F._none_or_dtype(model.attn_mask),
-            other_name="attn_mask",
-            target_type=x.dtype,
-        )
-
-        attn_mask = F._canonical_mask(
-            mask=model.attn_mask,
-            mask_name="attn_mask",
-            other_type=None,
-            other_name="",
-            target_type=x.dtype,
-            check_other=False,
-        )
-
-        merged_mask, mask_type = resblock.attn.merge_masks(
-            attn_mask, key_padding_mask, x
-        )
-
         attn_output = inline_mha(
             x,
             resblock.attn.embed_dim,
@@ -192,7 +169,7 @@ def encode_text(model, text, normalize: bool = False):
             resblock.attn.in_proj_bias,
             resblock.attn.out_proj.weight,
             resblock.attn.out_proj.bias,
-            merged_mask
+            model.attn_mask
         )[0]
 
         
