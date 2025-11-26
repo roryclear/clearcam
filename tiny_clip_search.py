@@ -168,7 +168,6 @@ def encode_text(model, text):
         
 
         qkv = x.matmul(in_proj_weight_tiny.T) + in_proj_bias_tiny
-        x = torch.Tensor(x.numpy())
         q, k, v = qkv.split(D, dim=-1)
         q = q.view(B, L, H, d_head).transpose(1, 2)
         k = k.view(B, L, H, d_head).transpose(1, 2)
