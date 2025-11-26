@@ -110,8 +110,6 @@ class CLIPSearch:
         tokens = open_clip.tokenize([query]).to(self.device)
         tokens = tiny_Tensor(tokens.detach().numpy())
         text_emb = encode_text(self.model, tokens)
-        text_emb = torch.Tensor(text_emb.numpy())
-        text_emb = text_emb / text_emb.norm(dim=-1, keepdim=True)
         return text_emb
 
     def search(self, query, top_k=10, cam_name=None, timestamp=None):
@@ -119,6 +117,7 @@ class CLIPSearch:
             print("No embeddings available.")
             return []
         text_embedding = self._encode_text(query)
+        text_embedding = torch.Tensor(text_embedding.numpy())
         all_similarities = []
         for path, img_embedding in self.image_embeddings.items():
             normalized_path = path.replace("\\", "/")
@@ -193,7 +192,8 @@ def encode_text(model, text):
     x = model.tiny_ln_final(x)  # [batch_size, n_ctx, transformer.width]
     argmax = text.argmax()
     x = x[0][argmax]
-    return x @ model.tiny_text_projection
+    x = x @ model.tiny_text_projection
+    return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 '''
 if __name__ == "__main__":
