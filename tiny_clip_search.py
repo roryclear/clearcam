@@ -166,8 +166,6 @@ def encode_text(model, text):
     for i, resblock in enumerate(model.transformer.resblocks):
         residual = x
         x = model.tiny_ln_1[i](x)
-        if not isinstance(resblock.attn.out_proj, nn.modules.linear.Linear):
-            resblock.attn.out_proj = nn.modules.linear.Linear(resblock.attn.out_proj.weight.shape, None)
         
         B, L, D = x.shape
         H = resblock.attn.num_heads
