@@ -68,10 +68,9 @@ class CLIPSearch:
 
     def _encode_text(self, query):
         tokens = open_clip.tokenize([query]).to(self.device)
-        with torch.no_grad():
-            tokens = tiny_Tensor(tokens.detach().numpy())
-            text_emb = encode_text(self.model, tokens)
-            text_emb = torch.Tensor(text_emb.numpy())
+        tokens = tiny_Tensor(tokens.detach().numpy())
+        text_emb = encode_text(self.model, tokens)
+        text_emb = torch.Tensor(text_emb.numpy())
         text_emb = text_emb / text_emb.norm(dim=-1, keepdim=True)
         return text_emb
 
