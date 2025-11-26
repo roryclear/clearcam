@@ -28,6 +28,8 @@ class CLIPSearch:
         self.model.tiny_ln_1 = []
         self.model.tiny_ln_2 = []
         self.model.out_proj_bias_tiny = []
+        self.model.mlp_c_fc = []
+        self.model.mlp_c_proj = []
         for resblock in self.model.transformer.resblocks:
             layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
             layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
@@ -43,8 +45,15 @@ class CLIPSearch:
             self.model.out_proj_bias_tiny.append(opb)
 
             # todo
-            resblock.mlp.c_fc = tiny_Linear(resblock.mlp.c_fc.weight, resblock.mlp.c_fc.bias)
-            resblock.mlp.c_proj = tiny_Linear(resblock.mlp.c_proj.weight , resblock.mlp.c_proj.bias)
+            mlpcfc = tiny_nn.Linear(resblock.mlp.c_fc.weight.shape[0], resblock.mlp.c_fc.weight.shape[1])
+            mlpcfc.weight = tiny_Tensor(resblock.mlp.c_fc.weight.detach().numpy().copy())
+            mlpcfc.bias = tiny_Tensor(resblock.mlp.c_fc.bias.detach().numpy().copy())
+            self.model.mlp_c_fc.append(mlpcfc)
+
+            mlpcp = tiny_nn.Linear(resblock.mlp.c_proj.weight.shape[0], resblock.mlp.c_proj.weight.shape[1])
+            mlpcp.weight = tiny_Tensor(resblock.mlp.c_proj.weight.detach().numpy().copy())
+            mlpcp.bias = tiny_Tensor(resblock.mlp.c_proj.bias.detach().numpy().copy())
+            self.model.mlp_c_proj.append(mlpcp)
 
         self.model.tiny_ln_final = tiny_nn.LayerNorm(normalized_shape=self.model.ln_final.normalized_shape, eps=self.model.ln_final.eps, elementwise_affine=True)
         self.model.tiny_ln_final .weight = tiny_Tensor(self.model.ln_final.weight.detach().numpy().copy())
@@ -137,25 +146,6 @@ class CLIPSearch:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
-class tiny_Embedding(nn.Module):
-    def __init__(self, num_embeddings, embeddings_dim, weight):
-        super().__init__()
-        self.embedding = torch.nn.modules.sparse.Embedding(num_embeddings=num_embeddings, embedding_dim=embeddings_dim)
-        self.tiny_embedding = tiny_nn.Embedding(num_embeddings, embeddings_dim)
-        self.tiny_embedding.weight = tiny_Tensor(weight.detach().numpy())
-        
-    def forward(self, x):
-        return self.tiny_embedding(x)
-
-class tiny_Linear(nn.Module):
-    def __init__(self, weight, bias):
-        super().__init__()
-        self.linear = tiny_nn.Linear(weight.shape[0], weight.shape[1])
-        self.linear.weight = tiny_Tensor(weight.detach().numpy())
-        self.linear.bias = tiny_Tensor(bias.detach().numpy())
-
-    def forward(self, x): return self.linear(x)
-
 @TinyJit
 def encode_text(model, text):
     x = text
@@ -196,9 +186,9 @@ def encode_text(model, text):
         x += residual
         residual = x
         x = model.tiny_ln_2[i](x)
-        x = resblock.mlp.c_fc(x)
+        x = model.mlp_c_fc[i](x)
         x = x.gelu()
-        x = resblock.mlp.c_proj(x)
+        x = model.mlp_c_proj[i](x)
         x += residual
 
     x = model.tiny_ln_final(x)  # [batch_size, n_ctx, transformer.width]
