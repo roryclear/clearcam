@@ -5,7 +5,7 @@ import open_clip
 from typing import Optional
 from torch.nn import functional as F
 import torch.nn as nn
-from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor
+from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
@@ -138,6 +138,7 @@ class tiny_Linear(nn.Module):
 
     def forward(self, x): return self.linear(x)
 
+#@TinyJit
 def encode_text(model, text, normalize: bool = False):
     if not isinstance(model.token_embedding, tiny_Embedding):
         model.token_embedding = tiny_Embedding(model.token_embedding.num_embeddings, model.token_embedding.embedding_dim, model.token_embedding.weight.data.clone())
@@ -166,6 +167,8 @@ def encode_text(model, text, normalize: bool = False):
 
         in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store these
         in_proj_bias_tiny = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy())
+        out_proj_weight_tiny = tiny_Tensor(resblock.attn.out_proj.weight.detach().numpy())
+        out_proj_bias_tiny = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy())
         attn_mask = tiny_Tensor(model.attn_mask.detach().numpy())
         
 
@@ -181,11 +184,10 @@ def encode_text(model, text, normalize: bool = False):
         attn_scores = q.matmul(k.transpose(-2, -1)) * scale  # (B,H,L,L)
         bool_mask = attn_mask < 0
         attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
-        attn_scores = torch.Tensor(attn_scores.numpy())
-        attn_probs = F.softmax(attn_scores, dim=-1)
-        v = torch.Tensor(v.numpy())
-        context = torch.matmul(attn_probs, v)
+        attn_probs = tiny_Tensor.softmax(attn_scores)
+        context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
+        context = torch.Tensor(context.detach().numpy())
         x = F.linear(context, resblock.attn.out_proj.weight, resblock.attn.out_proj.bias)
 
 
