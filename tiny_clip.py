@@ -5,6 +5,7 @@ import os
 import pickle
 import time
 from datetime import datetime
+from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
 
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
@@ -15,10 +16,16 @@ class CachedCLIPSearch:
         )
 
         self.model = self.model.to("cpu").eval()
+        
         self.tokenizer = open_clip.get_tokenizer(model_name)
 
         self.image_embeddings = {}
         self.image_paths = {}
+
+        # convert
+        self.model.visual.tiny_vc = tiny_nn.Conv2d(in_channels=self.model.visual.conv1.in_channels, out_channels=self.model.visual.conv1.out_channels, kernel_size=self.model.visual.conv1.kernel_size, stride=self.model.visual.conv1.stride,\
+        padding=self.model.visual.conv1.padding, dilation=self.model.visual.conv1.dilation, groups=self.model.visual.conv1.groups, bias=False)
+        self.model.visual.tiny_vc.weight = tiny_Tensor(self.model.visual.conv1.weight.detach().numpy().copy())
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -99,7 +106,11 @@ class CachedCLIPSearch:
 
                 visual = self.model.visual
                 x = batch_tensors
-                x = visual.conv1(x)
+                
+                x = tiny_Tensor(x.detach().numpy())
+                x = visual.tiny_vc(x)
+                x = torch.Tensor(x.numpy())
+
                 x = x.reshape(x.shape[0], x.shape[1], -1)
                 x = x.permute(0, 2, 1)
                 cls_emb = visual.class_embedding.to(x.dtype)
@@ -130,6 +141,8 @@ class CachedCLIPSearch:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
+
+
 
 '''
 if __name__ == "__main__":
