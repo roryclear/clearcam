@@ -33,6 +33,15 @@ class CachedCLIPSearch:
         self.model.visual.tiny_ln_pre = tiny_nn.LayerNorm(self.model.visual.ln_pre.weight.shape[0])
         self.model.visual.tiny_ln_pre.weight = tiny_Tensor(self.model.visual.ln_pre.weight.detach().numpy().copy())
         self.model.visual.tiny_ln_pre.bias = tiny_Tensor(self.model.visual.ln_pre.bias.detach().numpy().copy())
+        
+        self.model.tiny_ln_1 = []
+
+        for resblock in self.model.visual.transformer.resblocks:
+            layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
+            layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
+            layernorm.bias = tiny_Tensor(resblock.ln_1.bias.detach().numpy().copy())
+            self.model.tiny_ln_1.append(layernorm)
+
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -123,12 +132,14 @@ class CachedCLIPSearch:
                 x = tiny_Tensor.cat(cls_emb, x, dim=1)
                 x = x + visual.tiny_positional_embedding
                 x = visual.tiny_ln_pre(x)
-                x = torch.Tensor(x.numpy())
+                print(type(x))
 
                 for i, block in enumerate(visual.transformer.resblocks):
-                    x_ln1 = block.ln_1(x)
+                    x_ln1 = self.model.tiny_ln_1[i](x)
+                    x_ln1 = torch.Tensor(x_ln1.numpy())
                     attn_out, _ = block.attn(x_ln1, x_ln1, x_ln1)
                     attn_scaled = block.ls_1(attn_out)
+                    x = torch.Tensor(x.numpy())
                     x = x + attn_scaled
                     x_ln2 = block.ln_2(x)
                     ff = block.mlp.c_fc(x_ln2)
@@ -136,7 +147,9 @@ class CachedCLIPSearch:
                     ff = block.mlp.c_proj(ff)
                     ff_scaled = block.ls_2(ff)
                     x = x + ff_scaled
+                    x = tiny_Tensor(x.detach().numpy())
 
+                x = torch.Tensor(x.numpy())
                 x = visual.ln_post(x)
                 image_embeds = x[:, 0, :]
                 embeddings = image_embeds @ visual.proj
