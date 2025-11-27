@@ -72,6 +72,7 @@ class CachedCLIPSearch:
             with open(cache_file, "wb") as f:
                 pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
             return
+        
 
         print(f"{datetime.now()}: Found {len(new_images)} new images in {folder_path}, processing...")
 
@@ -92,12 +93,27 @@ class CachedCLIPSearch:
                     continue
 
             if batch_images:
-                with torch.no_grad():
-                    batch_tensors = torch.stack(
-                        [self.preprocess(img) for img in batch_images]
-                    )
-                    embeddings = self.model.encode_image(batch_tensors)
-                    embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
+                batch_tensors = torch.stack(
+                    [self.preprocess(img) for img in batch_images]
+                )
+
+                visual = self.model.visual
+                x = batch_tensors
+                x = visual.conv1(x)
+                x = x.reshape(x.shape[0], x.shape[1], -1)
+                x = x.permute(0, 2, 1)
+                cls_emb = visual.class_embedding.to(x.dtype)
+                cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
+                x = torch.cat([cls_emb, x], dim=1)
+                x = x + visual.positional_embedding.to(x.dtype)
+                x = visual.ln_pre(x)
+                for block in visual.transformer.resblocks:
+                    x = block(x)
+                x = visual.ln_post(x)
+                image_embeds = x[:, 0, :]
+                embeddings = image_embeds @ visual.proj
+                
+                embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
 
                 for path, embedding in zip(batch_paths, embeddings):
                     folder_embeddings[path] = embedding
