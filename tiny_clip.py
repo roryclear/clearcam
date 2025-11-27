@@ -141,27 +141,6 @@ class CachedCLIPSearch:
                     
                     # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
 
-                    key_padding_mask = F._canonical_mask(
-                        mask=None,
-                        mask_name="key_padding_mask",
-                        other_type=None,
-                        other_name="attn_mask",
-                        target_type=x_ln1.dtype,
-                    )
-
-                    attn_mask = F._canonical_mask(
-                        mask=None,
-                        mask_name="attn_mask",
-                        other_type=None,
-                        other_name="",
-                        target_type=x_ln1.dtype,
-                        check_other=False,
-                    )
-
-                    merged_mask, mask_type = block.attn.merge_masks(
-                    attn_mask, key_padding_mask, x_ln1
-                    )
-
                     attn_out, _ = torch._native_multi_head_attention(
                         x_ln1,
                         x_ln1,
@@ -172,10 +151,10 @@ class CachedCLIPSearch:
                         block.attn.in_proj_bias,
                         block.attn.out_proj.weight,
                         block.attn.out_proj.bias,
-                        merged_mask,
+                        None,
                         True,
                         True,
-                        mask_type,
+                        None,
                     )
                     
 
