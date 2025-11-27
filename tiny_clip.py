@@ -141,7 +141,6 @@ class CachedCLIPSearch:
                 x = tiny_Tensor.cat(cls_emb, x, dim=1)
                 x = x + visual.tiny_positional_embedding
                 x = visual.tiny_ln_pre(x)
-                print(type(x))
 
                 for i, block in enumerate(visual.transformer.resblocks):
                     x_ln1 = self.model.tiny_ln_1[i](x)
@@ -152,29 +151,21 @@ class CachedCLIPSearch:
                     H = block.attn.num_heads
                     d_head = D // H
                     qkv = x_ln1 @ self.model.tiny_in_proj_weight[i].T + self.model.tiny_in_proj_bias[i]
-                    qkv = torch.Tensor(qkv.numpy())
+                    
                     q, k, v = qkv.split(D, dim=-1)
                     def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
                     q = shape(q)
                     k = shape(k)
                     v = shape(v)
+
                     scale = 1.0 / (d_head ** 0.5)
-                    attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale
-                    attn_mask = None
-                    if attn_mask is not None:
-                        if attn_mask.dtype != torch.bool:
-                            if torch.is_floating_point(attn_mask):
-                                bool_mask = attn_mask < 0 
-                            else:
-                                bool_mask = attn_mask != 0
-                        else:
-                            bool_mask = attn_mask
-                        attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
+                    attn_scores = q.matmul(k.transpose(-2, -1)) * scale
+                    attn_scores = torch.Tensor(attn_scores.numpy())
                     attn_probs = F.softmax(attn_scores, dim=-1)
+                    v = torch.Tensor(v.numpy())
                     context = torch.matmul(attn_probs, v)
                     context = context.transpose(1, 2).contiguous().view(B, L, D)
-                    attn_out = F.linear(context, block.attn.out_proj.weight, block.attn.out_proj.bias)
-                    
+                    attn_out = F.linear(context, block.attn.out_proj.weight, block.attn.out_proj.bias)                    
 
                     attn_scaled = block.ls_1(attn_out)
                     x = torch.Tensor(x.numpy())
