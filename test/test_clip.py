@@ -1,4 +1,4 @@
-from clip import CachedCLIPSearch
+from tiny_clip import CachedCLIPSearch as tiny_CachedCLIPSearch
 from clip_search import CLIPSearch
 from tiny_clip_search import CLIPSearch as tiny_ClipSearch
 import numpy as np
@@ -7,7 +7,7 @@ import torch
 import json
 
 def setup_clip_test():
-  scanner = CachedCLIPSearch()
+  scanner = tiny_CachedCLIPSearch()
   scanner.precompute_embeddings("test/clip_images")
 
 def test_clip_search():
