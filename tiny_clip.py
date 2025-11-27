@@ -141,21 +141,31 @@ class CachedCLIPSearch:
                     
                     # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
 
-                    attn_out, _ = torch._native_multi_head_attention(
-                        x_ln1,
-                        x_ln1,
-                        x_ln1,
-                        block.attn.embed_dim,
-                        block.attn.num_heads,
-                        block.attn.in_proj_weight,
-                        block.attn.in_proj_bias,
-                        block.attn.out_proj.weight,
-                        block.attn.out_proj.bias,
-                        None,
-                        True,
-                        True,
-                        None,
-                    )
+                    B, L, D = x_ln1.shape
+                    H = block.attn.num_heads
+                    d_head = D // H
+                    qkv = F.linear(x_ln1, block.attn.in_proj_weight, block.attn.in_proj_bias)
+                    q, k, v = qkv.split(D, dim=-1)
+                    def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
+                    q = shape(q)
+                    k = shape(k)
+                    v = shape(v)
+                    scale = 1.0 / (d_head ** 0.5)
+                    attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale
+                    attn_mask = None
+                    if attn_mask is not None:
+                        if attn_mask.dtype != torch.bool:
+                            if torch.is_floating_point(attn_mask):
+                                bool_mask = attn_mask < 0 
+                            else:
+                                bool_mask = attn_mask != 0
+                        else:
+                            bool_mask = attn_mask
+                        attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
+                    attn_probs = F.softmax(attn_scores, dim=-1)
+                    context = torch.matmul(attn_probs, v)
+                    context = context.transpose(1, 2).contiguous().view(B, L, D)
+                    attn_out = F.linear(context, block.attn.out_proj.weight, block.attn.out_proj.bias)
                     
 
                     attn_scaled = block.ls_1(attn_out)
