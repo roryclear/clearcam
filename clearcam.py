@@ -1842,7 +1842,7 @@ if __name__ == "__main__":
 
   if use_clip:
     from tiny_clip_search import CLIPSearch
-    from clip import CachedCLIPSearch
+    from tiny_clip import CachedCLIPSearch
 
   if rtsp_url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")

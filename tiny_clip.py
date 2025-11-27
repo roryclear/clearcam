@@ -113,11 +113,10 @@ class CachedCLIPSearch:
                 x = visual.tiny_vc(x)
                 x = x.reshape(x.shape[0], x.shape[1], -1)
                 x = x.permute(0, 2, 1)
-                x = torch.Tensor(x.numpy())
                 cls_emb = visual.tiny_class_embedding
                 cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
-                cls_emb = torch.Tensor(cls_emb.numpy())
-                x = torch.cat([cls_emb, x], dim=1)
+                x = tiny_Tensor.cat(cls_emb, x, dim=1)
+                x = torch.Tensor(x.numpy())
                 x = x + visual.positional_embedding.to(x.dtype)
                 x = visual.ln_pre(x)
                 for block in visual.transformer.resblocks:
