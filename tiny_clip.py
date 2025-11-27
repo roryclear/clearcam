@@ -36,12 +36,20 @@ class CachedCLIPSearch:
         self.model.visual.tiny_ln_pre.bias = tiny_Tensor(self.model.visual.ln_pre.bias.detach().numpy().copy())
         
         self.model.tiny_ln_1 = []
+        self.model.tiny_in_proj_weight = []
+        self.model.tiny_in_proj_bias = []
 
         for resblock in self.model.visual.transformer.resblocks:
             layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
             layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
             layernorm.bias = tiny_Tensor(resblock.ln_1.bias.detach().numpy().copy())
             self.model.tiny_ln_1.append(layernorm)
+
+            w = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy().copy())
+            self.model.tiny_in_proj_weight.append(w)
+
+            b = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy().copy())
+            self.model.tiny_in_proj_bias.append(b)
 
 
     def find_object_folders(self, base_path="data/cameras"):
@@ -137,14 +145,14 @@ class CachedCLIPSearch:
 
                 for i, block in enumerate(visual.transformer.resblocks):
                     x_ln1 = self.model.tiny_ln_1[i](x)
-                    x_ln1 = torch.Tensor(x_ln1.numpy())
                     
                     # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
 
                     B, L, D = x_ln1.shape
                     H = block.attn.num_heads
                     d_head = D // H
-                    qkv = F.linear(x_ln1, block.attn.in_proj_weight, block.attn.in_proj_bias)
+                    qkv = x_ln1 @ self.model.tiny_in_proj_weight[i].T + self.model.tiny_in_proj_bias[i]
+                    qkv = torch.Tensor(qkv.numpy())
                     q, k, v = qkv.split(D, dim=-1)
                     def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
                     q = shape(q)
