@@ -39,6 +39,9 @@ class CachedCLIPSearch:
         self.model.tiny_in_proj_weight = []
         self.model.tiny_in_proj_bias = []
 
+        self.model.tiny_out_proj_weight = []
+        self.model.tiny_out_proj_bias = []
+
         for resblock in self.model.visual.transformer.resblocks:
             layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
             layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
@@ -50,6 +53,12 @@ class CachedCLIPSearch:
 
             b = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy().copy())
             self.model.tiny_in_proj_bias.append(b)
+
+            w = tiny_Tensor(resblock.attn.out_proj.weight.detach().numpy().copy())
+            self.model.tiny_out_proj_weight.append(w)
+
+            b = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy().copy())
+            self.model.tiny_out_proj_bias.append(b)
 
 
     def find_object_folders(self, base_path="data/cameras"):
@@ -160,16 +169,13 @@ class CachedCLIPSearch:
 
                     scale = 1.0 / (d_head ** 0.5)
                     attn_scores = q.matmul(k.transpose(-2, -1)) * scale
-                    attn_scores = torch.Tensor(attn_scores.numpy())
-                    attn_probs = F.softmax(attn_scores, dim=-1)
-                    v = torch.Tensor(v.numpy())
-                    context = torch.matmul(attn_probs, v)
+                    attn_probs = tiny_Tensor.softmax(attn_scores)
+                    context = attn_probs.matmul(v)
                     context = context.transpose(1, 2).contiguous().view(B, L, D)
-                    attn_out = F.linear(context, block.attn.out_proj.weight, block.attn.out_proj.bias)                    
-
+                    attn_out = context @ self.model.tiny_out_proj_weight[i].T + self.model.tiny_out_proj_bias[i]
                     attn_scaled = block.ls_1(attn_out)
-                    x = torch.Tensor(x.numpy())
                     x = x + attn_scaled
+                    x = torch.Tensor(x.numpy())
                     x_ln2 = block.ln_2(x)
                     ff = block.mlp.c_fc(x_ln2)
                     ff = block.mlp.gelu(ff)
