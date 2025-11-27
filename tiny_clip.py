@@ -124,8 +124,19 @@ class CachedCLIPSearch:
                 x = x + visual.tiny_positional_embedding
                 x = visual.tiny_ln_pre(x)
                 x = torch.Tensor(x.numpy())
-                for block in visual.transformer.resblocks:
-                    x = block(x)
+
+                for i, block in enumerate(visual.transformer.resblocks):
+                    x_ln1 = block.ln_1(x)
+                    attn_out, _ = block.attn(x_ln1, x_ln1, x_ln1)
+                    attn_scaled = block.ls_1(attn_out)
+                    x = x + attn_scaled
+                    x_ln2 = block.ln_2(x)
+                    ff = block.mlp.c_fc(x_ln2)
+                    ff = block.mlp.gelu(ff)
+                    ff = block.mlp.c_proj(ff)
+                    ff_scaled = block.ls_2(ff)
+                    x = x + ff_scaled
+
                 x = visual.ln_post(x)
                 image_embeds = x[:, 0, :]
                 embeddings = image_embeds @ visual.proj
