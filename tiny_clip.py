@@ -30,6 +30,10 @@ class CachedCLIPSearch:
         self.model.visual.tiny_class_embedding = tiny_Tensor(self.model.visual.class_embedding.detach().numpy().copy())
         self.model.visual.tiny_positional_embedding = tiny_Tensor(self.model.visual.positional_embedding.detach().numpy().copy())
 
+        self.model.visual.tiny_ln_pre = tiny_nn.LayerNorm(self.model.visual.ln_pre.weight.shape[0])
+        self.model.visual.tiny_ln_pre.weight = tiny_Tensor(self.model.visual.ln_pre.weight.detach().numpy().copy())
+        self.model.visual.tiny_ln_pre.bias = tiny_Tensor(self.model.visual.ln_pre.bias.detach().numpy().copy())
+
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
 
@@ -118,8 +122,8 @@ class CachedCLIPSearch:
                 cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
                 x = tiny_Tensor.cat(cls_emb, x, dim=1)
                 x = x + visual.tiny_positional_embedding
+                x = visual.tiny_ln_pre(x)
                 x = torch.Tensor(x.numpy())
-                x = visual.ln_pre(x)
                 for block in visual.transformer.resblocks:
                     x = block(x)
                 x = visual.ln_post(x)
