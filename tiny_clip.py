@@ -27,6 +27,8 @@ class CachedCLIPSearch:
         padding=self.model.visual.conv1.padding, dilation=self.model.visual.conv1.dilation, groups=self.model.visual.conv1.groups, bias=False)
         self.model.visual.tiny_vc.weight = tiny_Tensor(self.model.visual.conv1.weight.detach().numpy().copy())
 
+        self.model.visual.tiny_class_embedding = tiny_Tensor(self.model.visual.class_embedding.detach().numpy().copy())
+
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
 
@@ -109,12 +111,12 @@ class CachedCLIPSearch:
                 
                 x = tiny_Tensor(x.detach().numpy())
                 x = visual.tiny_vc(x)
-                x = torch.Tensor(x.numpy())
-
                 x = x.reshape(x.shape[0], x.shape[1], -1)
                 x = x.permute(0, 2, 1)
-                cls_emb = visual.class_embedding.to(x.dtype)
+                x = torch.Tensor(x.numpy())
+                cls_emb = visual.tiny_class_embedding
                 cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
+                cls_emb = torch.Tensor(cls_emb.numpy())
                 x = torch.cat([cls_emb, x], dim=1)
                 x = x + visual.positional_embedding.to(x.dtype)
                 x = visual.ln_pre(x)
