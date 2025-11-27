@@ -34,6 +34,10 @@ class CachedCLIPSearch:
         self.model.visual.tiny_ln_pre = tiny_nn.LayerNorm(self.model.visual.ln_pre.weight.shape[0])
         self.model.visual.tiny_ln_pre.weight = tiny_Tensor(self.model.visual.ln_pre.weight.detach().numpy().copy())
         self.model.visual.tiny_ln_pre.bias = tiny_Tensor(self.model.visual.ln_pre.bias.detach().numpy().copy())
+
+        self.model.visual.tiny_ln_post = tiny_nn.LayerNorm(self.model.visual.ln_post.weight.shape[0])
+        self.model.visual.tiny_ln_post.weight = tiny_Tensor(self.model.visual.ln_post.weight.detach().numpy().copy())
+        self.model.visual.tiny_ln_post.bias = tiny_Tensor(self.model.visual.ln_post.bias.detach().numpy().copy())
         
         self.model.tiny_ln_1 = []
         self.model.tiny_ln_2 = []
@@ -45,6 +49,8 @@ class CachedCLIPSearch:
 
         self.model.tiny_c_fc = []
         self.model.tiny_c_proj = []
+
+        self.model.visual.tiny_proj = tiny_Tensor(self.model.visual.proj.detach().numpy().copy())
 
         for resblock in self.model.visual.transformer.resblocks:
             layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
@@ -195,13 +201,12 @@ class CachedCLIPSearch:
                     ff = self.model.tiny_c_proj[i](ff)
                     x = x + ff
 
-                x = torch.Tensor(x.numpy())
-                x = visual.ln_post(x)
+                x = visual.tiny_ln_post(x)
                 image_embeds = x[:, 0, :]
-                embeddings = image_embeds @ visual.proj
+                embeddings = image_embeds @ visual.tiny_proj
+                embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
                 
-                embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
-
+                embeddings = torch.Tensor(embeddings.numpy())
                 for path, embedding in zip(batch_paths, embeddings):
                     folder_embeddings[path] = embedding
                     folder_paths[path] = path
