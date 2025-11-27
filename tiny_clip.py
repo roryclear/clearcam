@@ -6,12 +6,12 @@ import pickle
 import time
 from datetime import datetime
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
-import torch.nn.functional as F
+from torchvision.transforms import functional as F
 # DO NOT USE WITH BEAM
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
         print(f"Loading OpenCLIP model: {model_name} ({pretrained_name})")
-        self.model, _, self.preprocess = open_clip.create_model_and_transforms(
+        self.model, _, _ = open_clip.create_model_and_transforms(
             model_name,
             pretrained=pretrained_name
         )
@@ -160,7 +160,7 @@ class CachedCLIPSearch:
 
             if batch_images:
                 batch_tensors = torch.stack(
-                    [self.preprocess(img) for img in batch_images]
+                    [inline_preprocess(img) for img in batch_images]
                 )
 
                 visual = self.model.visual
@@ -205,7 +205,7 @@ class CachedCLIPSearch:
                 image_embeds = x[:, 0, :]
                 embeddings = image_embeds @ visual.tiny_proj
                 embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
-                
+
                 embeddings = torch.Tensor(embeddings.numpy())
                 for path, embedding in zip(batch_paths, embeddings):
                     folder_embeddings[path] = embedding
@@ -224,6 +224,15 @@ class CachedCLIPSearch:
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
 
 
+def inline_preprocess(image):
+    image = F.resize(image, size=224, interpolation=F.InterpolationMode.BICUBIC, antialias=True)
+    image = F.center_crop(image, output_size=(224, 224))
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    image = F.to_tensor(image)
+    image = F.normalize(image, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+   
+    return image
 
 '''
 if __name__ == "__main__":
