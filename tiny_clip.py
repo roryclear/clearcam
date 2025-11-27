@@ -36,17 +36,26 @@ class CachedCLIPSearch:
         self.model.visual.tiny_ln_pre.bias = tiny_Tensor(self.model.visual.ln_pre.bias.detach().numpy().copy())
         
         self.model.tiny_ln_1 = []
+        self.model.tiny_ln_2 = []
         self.model.tiny_in_proj_weight = []
         self.model.tiny_in_proj_bias = []
 
         self.model.tiny_out_proj_weight = []
         self.model.tiny_out_proj_bias = []
 
+        self.model.tiny_c_fc = []
+        self.model.tiny_c_proj = []
+
         for resblock in self.model.visual.transformer.resblocks:
             layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
             layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
             layernorm.bias = tiny_Tensor(resblock.ln_1.bias.detach().numpy().copy())
             self.model.tiny_ln_1.append(layernorm)
+
+            layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_2.normalized_shape, eps=resblock.ln_2.eps, elementwise_affine=True)
+            layernorm.weight = tiny_Tensor(resblock.ln_2.weight.detach().numpy().copy())
+            layernorm.bias = tiny_Tensor(resblock.ln_2.bias.detach().numpy().copy())
+            self.model.tiny_ln_2.append(layernorm)
 
             w = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy().copy())
             self.model.tiny_in_proj_weight.append(w)
@@ -59,6 +68,16 @@ class CachedCLIPSearch:
 
             b = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy().copy())
             self.model.tiny_out_proj_bias.append(b)
+
+            linear = tiny_nn.Linear(resblock.mlp.c_fc.weight.shape[0], resblock.mlp.c_fc.weight.shape[1])
+            linear.weight = tiny_Tensor(resblock.mlp.c_fc.weight.detach().numpy().copy())
+            linear.bias = tiny_Tensor(resblock.mlp.c_fc.bias.detach().numpy().copy())
+            self.model.tiny_c_fc.append(linear)
+
+            linear = tiny_nn.Linear(resblock.mlp.c_proj.weight.shape[0], resblock.mlp.c_proj.weight.shape[1])
+            linear.weight = tiny_Tensor(resblock.mlp.c_proj.weight.detach().numpy().copy())
+            linear.bias = tiny_Tensor(resblock.mlp.c_proj.bias.detach().numpy().copy())
+            self.model.tiny_c_proj.append(linear)
 
 
     def find_object_folders(self, base_path="data/cameras"):
@@ -175,12 +194,13 @@ class CachedCLIPSearch:
                     attn_out = context @ self.model.tiny_out_proj_weight[i].T + self.model.tiny_out_proj_bias[i]
                     attn_scaled = block.ls_1(attn_out)
                     x = x + attn_scaled
-                    x = torch.Tensor(x.numpy())
-                    x_ln2 = block.ln_2(x)
-                    ff = block.mlp.c_fc(x_ln2)
-                    ff = block.mlp.gelu(ff)
-                    ff = block.mlp.c_proj(ff)
+                    x_ln2 = self.model.tiny_ln_2[i](x)
+                    ff = self.model.tiny_c_fc[i](x_ln2)
+                    ff = ff.gelu()
+                    ff = self.model.tiny_c_proj[i](ff)
+                    ff = torch.Tensor(ff.numpy())
                     ff_scaled = block.ls_2(ff)
+                    x = torch.Tensor(x.numpy())
                     x = x + ff_scaled
                     x = tiny_Tensor(x.detach().numpy())
 
