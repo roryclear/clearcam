@@ -6,7 +6,7 @@ import pickle
 import time
 from datetime import datetime
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
-
+# DO NOT USE WITH BEAM
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
         print(f"Loading OpenCLIP model: {model_name} ({pretrained_name})")
@@ -28,6 +28,7 @@ class CachedCLIPSearch:
         self.model.visual.tiny_vc.weight = tiny_Tensor(self.model.visual.conv1.weight.detach().numpy().copy())
 
         self.model.visual.tiny_class_embedding = tiny_Tensor(self.model.visual.class_embedding.detach().numpy().copy())
+        self.model.visual.tiny_positional_embedding = tiny_Tensor(self.model.visual.positional_embedding.detach().numpy().copy())
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -116,8 +117,8 @@ class CachedCLIPSearch:
                 cls_emb = visual.tiny_class_embedding
                 cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
                 x = tiny_Tensor.cat(cls_emb, x, dim=1)
+                x = x + visual.tiny_positional_embedding
                 x = torch.Tensor(x.numpy())
-                x = x + visual.positional_embedding.to(x.dtype)
                 x = visual.ln_pre(x)
                 for block in visual.transformer.resblocks:
                     x = block(x)
