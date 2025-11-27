@@ -127,7 +127,6 @@ class CachedCLIPSearch:
         new_images = current_images - cached_images
         deleted_images = cached_images - current_images
 
-        # Remove deleted files
         for img in deleted_images:
             folder_embeddings.pop(img, None)
             folder_paths.pop(img, None)
@@ -159,12 +158,13 @@ class CachedCLIPSearch:
                     continue
 
             batch_tensors = torch.stack([inline_preprocess(img) for img in batch_images])
-            visual = self.model.visual
-            x = batch_tensors
-            
-            x = tiny_Tensor(x.detach().numpy())
-            embeddings = tiny_precompute_embeddings(self.model, x)
+            x = tiny_Tensor(batch_tensors.detach().numpy())
+            if len(batch_images) == batch_size:
+                embeddings = tiny_precompute_embeddings(self.model, x)
+            else:
+                embeddings = tiny_precompute_embedding(self.model, x) #less than batch size, no jit
             embeddings = torch.Tensor(embeddings.numpy())
+
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
@@ -174,14 +174,16 @@ class CachedCLIPSearch:
             for img in batch_images:
                 img.close()
 
-        # Save updated cache
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
 
-def tiny_precompute_embeddings(model, x):
+@TinyJit
+def tiny_precompute_embeddings(model, x): return tiny_precompute_embedding(model, x)
+
+def tiny_precompute_embedding(model, x):
     visual = model.visual
     x = visual.tiny_vc(x)
     x = x.reshape(x.shape[0], x.shape[1], -1)
