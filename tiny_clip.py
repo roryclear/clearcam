@@ -158,58 +158,54 @@ class CachedCLIPSearch:
                     print(f"Error loading {img_path}: {e}")
                     continue
 
-            if batch_images:
-                batch_tensors = torch.stack(
-                    [inline_preprocess(img) for img in batch_images]
-                )
+            batch_tensors = torch.stack([inline_preprocess(img) for img in batch_images])
+            visual = self.model.visual
+            x = batch_tensors
+            
+            x = tiny_Tensor(x.detach().numpy())
+            x = visual.tiny_vc(x)
+            x = x.reshape(x.shape[0], x.shape[1], -1)
+            x = x.permute(0, 2, 1)
+            cls_emb = visual.tiny_class_embedding
+            cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
+            x = tiny_Tensor.cat(cls_emb, x, dim=1)
+            x = x + visual.tiny_positional_embedding
+            x = visual.tiny_ln_pre(x)
+            # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
+            for i, block in enumerate(visual.transformer.resblocks):
+                x_ln1 = self.model.tiny_ln_1[i](x)
+                B, L, D = x_ln1.shape
+                H = block.attn.num_heads
+                d_head = D // H
+                qkv = x_ln1 @ self.model.tiny_in_proj_weight[i].T + self.model.tiny_in_proj_bias[i]           
+                q, k, v = qkv.split(D, dim=-1)
+                def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
+                q = shape(q)
+                k = shape(k)
+                v = shape(v)
+                scale = 1.0 / (d_head ** 0.5)
+                attn_scores = q.matmul(k.transpose(-2, -1)) * scale
+                attn_probs = tiny_Tensor.softmax(attn_scores)
+                context = attn_probs.matmul(v)
+                context = context.transpose(1, 2).contiguous().view(B, L, D)
+                attn_out = context @ self.model.tiny_out_proj_weight[i].T + self.model.tiny_out_proj_bias[i]
+                attn_scaled = block.ls_1(attn_out)
+                x = x + attn_scaled
+                x_ln2 = self.model.tiny_ln_2[i](x)
+                ff = self.model.tiny_c_fc[i](x_ln2)
+                ff = ff.gelu()
+                ff = self.model.tiny_c_proj[i](ff)
+                x = x + ff
 
-                visual = self.model.visual
-                x = batch_tensors
-                
-                x = tiny_Tensor(x.detach().numpy())
-                x = visual.tiny_vc(x)
-                x = x.reshape(x.shape[0], x.shape[1], -1)
-                x = x.permute(0, 2, 1)
-                cls_emb = visual.tiny_class_embedding
-                cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
-                x = tiny_Tensor.cat(cls_emb, x, dim=1)
-                x = x + visual.tiny_positional_embedding
-                x = visual.tiny_ln_pre(x)
-                # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
-                for i, block in enumerate(visual.transformer.resblocks):
-                    x_ln1 = self.model.tiny_ln_1[i](x)
-                    B, L, D = x_ln1.shape
-                    H = block.attn.num_heads
-                    d_head = D // H
-                    qkv = x_ln1 @ self.model.tiny_in_proj_weight[i].T + self.model.tiny_in_proj_bias[i]           
-                    q, k, v = qkv.split(D, dim=-1)
-                    def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
-                    q = shape(q)
-                    k = shape(k)
-                    v = shape(v)
-                    scale = 1.0 / (d_head ** 0.5)
-                    attn_scores = q.matmul(k.transpose(-2, -1)) * scale
-                    attn_probs = tiny_Tensor.softmax(attn_scores)
-                    context = attn_probs.matmul(v)
-                    context = context.transpose(1, 2).contiguous().view(B, L, D)
-                    attn_out = context @ self.model.tiny_out_proj_weight[i].T + self.model.tiny_out_proj_bias[i]
-                    attn_scaled = block.ls_1(attn_out)
-                    x = x + attn_scaled
-                    x_ln2 = self.model.tiny_ln_2[i](x)
-                    ff = self.model.tiny_c_fc[i](x_ln2)
-                    ff = ff.gelu()
-                    ff = self.model.tiny_c_proj[i](ff)
-                    x = x + ff
+            x = visual.tiny_ln_post(x)
+            image_embeds = x[:, 0, :]
+            embeddings = image_embeds @ visual.tiny_proj
+            embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
 
-                x = visual.tiny_ln_post(x)
-                image_embeds = x[:, 0, :]
-                embeddings = image_embeds @ visual.tiny_proj
-                embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
-
-                embeddings = torch.Tensor(embeddings.numpy())
-                for path, embedding in zip(batch_paths, embeddings):
-                    folder_embeddings[path] = embedding
-                    folder_paths[path] = path
+            embeddings = torch.Tensor(embeddings.numpy())
+            for path, embedding in zip(batch_paths, embeddings):
+                folder_embeddings[path] = embedding
+                folder_paths[path] = path
 
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
 
