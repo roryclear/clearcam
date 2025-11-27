@@ -1042,6 +1042,12 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
+import multiprocessing
+
+def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
+  res = searcher.search(image_text, top_k, cam_name, selected_dir)
+  return_q.put(res)
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
@@ -1338,7 +1344,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not self.searcher:
               self.searcher = CLIPSearch()
               self.searcher._load_all_embeddings()
-            results = self.searcher.search(image_text, top_k=100, cam_name=cam_name, timestamp=selected_dir)
+
+            return_q = multiprocessing.Queue()
+            p = multiprocessing.Process(target=run_search, args=(return_q, self.searcher, image_text, 100, cam_name, selected_dir,))
+            p.start()
+            results = return_q.get(timeout=3600)
+            p.join()
             image_data = []
             for path_str, score in results:
               if score < 0.21: break
@@ -1830,7 +1841,7 @@ if __name__ == "__main__":
     use_clip = use_clip in ["y", "Y"]
 
   if use_clip:
-    from clip_search import CLIPSearch
+    from tiny_clip_search import CLIPSearch
     from clip import CachedCLIPSearch
 
   if rtsp_url is None and userID is None:
