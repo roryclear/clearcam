@@ -6,6 +6,7 @@ import pickle
 import time
 from datetime import datetime
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
+import torch.nn.functional as F
 # DO NOT USE WITH BEAM
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
@@ -137,7 +138,47 @@ class CachedCLIPSearch:
                 for i, block in enumerate(visual.transformer.resblocks):
                     x_ln1 = self.model.tiny_ln_1[i](x)
                     x_ln1 = torch.Tensor(x_ln1.numpy())
-                    attn_out, _ = block.attn(x_ln1, x_ln1, x_ln1)
+                    
+                    # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
+
+                    key_padding_mask = F._canonical_mask(
+                        mask=None,
+                        mask_name="key_padding_mask",
+                        other_type=None,
+                        other_name="attn_mask",
+                        target_type=x_ln1.dtype,
+                    )
+
+                    attn_mask = F._canonical_mask(
+                        mask=None,
+                        mask_name="attn_mask",
+                        other_type=None,
+                        other_name="",
+                        target_type=x_ln1.dtype,
+                        check_other=False,
+                    )
+
+                    merged_mask, mask_type = block.attn.merge_masks(
+                    attn_mask, key_padding_mask, x_ln1
+                    )
+
+                    attn_out, _ = torch._native_multi_head_attention(
+                        x_ln1,
+                        x_ln1,
+                        x_ln1,
+                        block.attn.embed_dim,
+                        block.attn.num_heads,
+                        block.attn.in_proj_weight,
+                        block.attn.in_proj_bias,
+                        block.attn.out_proj.weight,
+                        block.attn.out_proj.bias,
+                        merged_mask,
+                        True,
+                        True,
+                        mask_type,
+                    )
+                    
+
                     attn_scaled = block.ls_1(attn_out)
                     x = torch.Tensor(x.numpy())
                     x = x + attn_scaled
