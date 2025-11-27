@@ -169,23 +169,18 @@ class CachedCLIPSearch:
                 x = tiny_Tensor.cat(cls_emb, x, dim=1)
                 x = x + visual.tiny_positional_embedding
                 x = visual.tiny_ln_pre(x)
-
+                # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
                 for i, block in enumerate(visual.transformer.resblocks):
                     x_ln1 = self.model.tiny_ln_1[i](x)
-                    
-                    # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
-
                     B, L, D = x_ln1.shape
                     H = block.attn.num_heads
                     d_head = D // H
-                    qkv = x_ln1 @ self.model.tiny_in_proj_weight[i].T + self.model.tiny_in_proj_bias[i]
-                    
+                    qkv = x_ln1 @ self.model.tiny_in_proj_weight[i].T + self.model.tiny_in_proj_bias[i]           
                     q, k, v = qkv.split(D, dim=-1)
                     def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
                     q = shape(q)
                     k = shape(k)
                     v = shape(v)
-
                     scale = 1.0 / (d_head ** 0.5)
                     attn_scores = q.matmul(k.transpose(-2, -1)) * scale
                     attn_probs = tiny_Tensor.softmax(attn_scores)
@@ -198,11 +193,7 @@ class CachedCLIPSearch:
                     ff = self.model.tiny_c_fc[i](x_ln2)
                     ff = ff.gelu()
                     ff = self.model.tiny_c_proj[i](ff)
-                    ff = torch.Tensor(ff.numpy())
-                    ff_scaled = block.ls_2(ff)
-                    x = torch.Tensor(x.numpy())
-                    x = x + ff_scaled
-                    x = tiny_Tensor(x.detach().numpy())
+                    x = x + ff
 
                 x = torch.Tensor(x.numpy())
                 x = visual.ln_post(x)
