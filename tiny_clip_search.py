@@ -4,6 +4,7 @@ from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
 from tinygrad.helpers import fetch
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
+import gc
 
 class TinyModel:
     pass
@@ -73,6 +74,7 @@ class CLIPSearch:
 
             self.model.resblocks.append(resblock)
 
+        weights = None
 
     def _load_single_embeddings_file(self, cache_file):
         try:

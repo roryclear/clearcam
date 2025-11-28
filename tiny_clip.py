@@ -7,6 +7,7 @@ from tinygrad.helpers import fetch
 from torchvision.transforms import functional as F
 from tinygrad.dtype import dtypes
 import numpy as np
+import gc
 
 class TinyModel: pass
 
@@ -68,6 +69,9 @@ class CachedCLIPSearch:
             tiny_resblock.mlp_c_proj.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
 
             self.tiny_model.resblocks.append(tiny_resblock)
+        
+        weights = None
+        gc.collect()
         
         # for BEAM
         tiny_precompute_embeddings(self.tiny_model, tiny_Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
