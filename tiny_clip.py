@@ -26,8 +26,6 @@ class CachedCLIPSearch:
             )
 
             self.model = self.model.to("cpu").eval()
-            
-            self.tokenizer = open_clip.get_tokenizer(model_name)
 
             self.image_embeddings = {}
             self.image_paths = {}
