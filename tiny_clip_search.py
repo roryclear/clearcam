@@ -1,6 +1,6 @@
 import os
 import pickle
-from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
+from tinygrad import nn, Tensor, TinyJit, Device
 from tinygrad.helpers import fetch
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
@@ -21,31 +21,31 @@ class CLIPSearch:
 
         self.model = TinyModel()
 
-        weights = tiny_nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
+        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
 
         self.model.text_projection = weights["text_projection"].to(device)
         self.model.positional_embedding = weights["positional_embedding"].to(device)
 
-        self.model.token_embedding = tiny_nn.Embedding(49408, 768) # todo unhardcode
+        self.model.token_embedding = nn.Embedding(49408, 768) # todo unhardcode
         self.model.token_embedding.weight = weights["token_embedding.weight"].to(device)
 
-        self.model.ln_final = tiny_nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
+        self.model.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
         self.model.ln_final.weight = weights["ln_final.weight"].to(device)
         self.model.ln_final.bias = weights["ln_final.bias"].to(device)
 
         attn_mask = np.where(np.tri(77, dtype=bool), 0.0, -np.inf).astype(np.float32)
-        self.model.attn_mask = tiny_Tensor(attn_mask) 
+        self.model.attn_mask = Tensor(attn_mask) 
 
         self.model.resblocks = []
         
         for i in range(12):
             resblock = TinyModel()
-            layernorm = tiny_nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            layernorm = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
             layernorm.weight = weights[f"transformer.resblocks.{i}.ln_1.weight"].to(device)
             layernorm.bias = weights[f"transformer.resblocks.{i}.ln_1.bias"].to(device)
             resblock.ln_1 = layernorm
 
-            layernorm = tiny_nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            layernorm = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
             layernorm.weight = weights[f"transformer.resblocks.{i}.ln_2.weight"].to(device)
             layernorm.bias = weights[f"transformer.resblocks.{i}.ln_2.bias"].to(device)
             resblock.ln_2 = layernorm
@@ -56,12 +56,12 @@ class CLIPSearch:
             bias = weights[f"transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
             resblock.attn_out_proj_bias = bias
 
-            mlpcfc = tiny_nn.Linear(3072, 768)
+            mlpcfc = nn.Linear(3072, 768)
             mlpcfc.weight = weights[f"transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
             mlpcfc.bias = weights[f"transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
             resblock.mlp_c_fc = mlpcfc
 
-            mlpcp = tiny_nn.Linear(768, 3072)
+            mlpcp = nn.Linear(768, 3072)
             mlpcp.weight = weights[f"transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
             mlpcp.bias = weights[f"transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
             resblock.mlp_c_proj = mlpcp
@@ -128,7 +128,7 @@ class CLIPSearch:
         tokens += self.tokenizer.encode(query)
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
-        tokens = tiny_Tensor([tokens])
+        tokens = Tensor([tokens])
         text_emb = encode_text(self.model, tokens)
         return text_emb
 
@@ -189,7 +189,7 @@ def encode_text(model, text):
         attn_scores = q.matmul(k.transpose(-2, -1)) * scale  # (B,H,L,L)
         bool_mask = model.attn_mask < 0
         attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
-        attn_probs = tiny_Tensor.softmax(attn_scores)
+        attn_probs = Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
         x = context.matmul(model.resblocks[i].attn_out_proj_weight.T) + model.resblocks[i].attn_out_proj_bias

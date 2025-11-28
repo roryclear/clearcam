@@ -2,12 +2,11 @@ from PIL import Image
 import os
 import pickle
 from datetime import datetime
-from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
+from tinygrad import nn, Tensor, TinyJit, Device
 from tinygrad.helpers import fetch
 from torchvision.transforms import functional as F
 from tinygrad.dtype import dtypes
 import numpy as np
-import gc
 
 class TinyModel: pass
 
@@ -20,21 +19,21 @@ class CachedCLIPSearch:
         self.tiny_model = TinyModel()
         device = Device.DEFAULT
         # convert
-        weights = tiny_nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
+        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
 
-        self.tiny_model.visual_conv1 = tiny_nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
+        self.tiny_model.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
         self.tiny_model.visual_conv1.weight = weights["visual.conv1.weight"].to(device)
 
         self.tiny_model.class_embedding = weights["visual.class_embedding"].to(device)
         self.tiny_model.positional_embedding = weights["visual.positional_embedding"].to(device)
         
  
-        self.tiny_model.ln_pre = tiny_nn.LayerNorm(1024)
+        self.tiny_model.ln_pre = nn.LayerNorm(1024)
         self.tiny_model.ln_pre.weight = weights["visual.ln_pre.weight"].to(device)
         self.tiny_model.ln_pre.bias = weights["visual.ln_pre.bias"].to(device)
         
 
-        self.tiny_model.ln_post = tiny_nn.LayerNorm(1024)
+        self.tiny_model.ln_post = nn.LayerNorm(1024)
         self.tiny_model.ln_post.weight = weights["visual.ln_post.weight"].to(device)
         self.tiny_model.ln_post.bias = weights["visual.ln_post.bias"].to(device)
 
@@ -45,11 +44,11 @@ class CachedCLIPSearch:
         for i in range(24):
             tiny_resblock = TinyModel()
 
-            tiny_resblock.ln_1 = tiny_nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
+            tiny_resblock.ln_1 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
             tiny_resblock.ln_1.weight = weights[f"visual.transformer.resblocks.{i}.ln_1.weight"].to(device)
             tiny_resblock.ln_1.bias = weights[f"visual.transformer.resblocks.{i}.ln_1.bias"].to(device)
 
-            tiny_resblock.ln_2 = tiny_nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
+            tiny_resblock.ln_2 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
             tiny_resblock.ln_2.weight = weights[f"visual.transformer.resblocks.{i}.ln_2.weight"].to(device)
             tiny_resblock.ln_2.bias = weights[f"visual.transformer.resblocks.{i}.ln_2.bias"].to(device)
 
@@ -60,22 +59,21 @@ class CachedCLIPSearch:
             tiny_resblock.out_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
 
 
-            tiny_resblock.mlp_c_fc = tiny_nn.Linear(4096, 1024)
+            tiny_resblock.mlp_c_fc = nn.Linear(4096, 1024)
             tiny_resblock.mlp_c_fc.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
             tiny_resblock.mlp_c_fc.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
 
-            tiny_resblock.mlp_c_proj = tiny_nn.Linear(1024, 4096)
+            tiny_resblock.mlp_c_proj = nn.Linear(1024, 4096)
             tiny_resblock.mlp_c_proj.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
             tiny_resblock.mlp_c_proj.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
 
             self.tiny_model.resblocks.append(tiny_resblock)
         
         weights = None
-        gc.collect()
         
         # for BEAM
-        tiny_precompute_embeddings(self.tiny_model, tiny_Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-        tiny_precompute_embeddings(self.tiny_model, tiny_Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+        tiny_precompute_embeddings(self.tiny_model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+        tiny_precompute_embeddings(self.tiny_model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -150,13 +148,13 @@ class CachedCLIPSearch:
 
             batch_tensors = np.stack([inline_preprocess(img) for img in batch_images])
             if len(batch_images) == batch_size:
-                x = tiny_Tensor(batch_tensors)
+                x = Tensor(batch_tensors)
                 embeddings = tiny_precompute_embeddings(self.tiny_model, x)
                 embeddings = embeddings.numpy()
             else:
                 embeddings = []
                 for i in range(len(batch_images)): # one by one if not batch_size
-                    single_x = tiny_Tensor(batch_tensors[i:i+1])
+                    single_x = Tensor(batch_tensors[i:i+1])
                     single_embedding = tiny_precompute_embedding(self.tiny_model, single_x)
                     single_embedding_torch = single_embedding.numpy()
                     embeddings.append(single_embedding_torch)
@@ -185,7 +183,7 @@ def tiny_precompute_embedding(tiny_model, x):
     x = x.permute(0, 2, 1)
     cls_emb = tiny_model.class_embedding
     cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
-    x = tiny_Tensor.cat(cls_emb, x, dim=1)
+    x = Tensor.cat(cls_emb, x, dim=1)
     x = x + tiny_model.positional_embedding
     x = tiny_model.ln_pre(x)
     # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
@@ -202,7 +200,7 @@ def tiny_precompute_embedding(tiny_model, x):
         v = shape(v)
         scale = 1.0 / (d_head ** 0.5)
         attn_scores = q.matmul(k.transpose(-2, -1)) * scale
-        attn_probs = tiny_Tensor.softmax(attn_scores)
+        attn_probs = Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
         attn_out = context @ tiny_model.resblocks[i].out_proj_weight.T + tiny_model.resblocks[i].out_proj_bias      
