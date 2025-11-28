@@ -2,6 +2,21 @@
 <html>
 <head>
   <style>
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid transparent;
+      border-top: 2px solid currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
     :root {
       --bg-primary: #ffffff;
       --bg-secondary: #f8f9fa;
@@ -917,7 +932,10 @@
       </label>
       <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
         <input type="text" id="imageSearchInput" placeholder="Search text..." style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
-        <button onclick="searchEventImages()" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer;">Search</button>
+        <button onclick="searchEventImages()" id="searchButton" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          <span id="searchText">Search</span>
+          <div id="searchSpinner" class="spinner" style="display: none;"></div>
+        </button>
         <button onclick="clearSearch()" style="padding: 6px 12px; background: var(--text-secondary); color: white; border: none; border-radius: 4px; cursor: pointer;">Clear</button>
       </div>
     </div>
@@ -2346,8 +2364,20 @@
     let currentImageSearchText = '';
     function searchEventImages() {
       const searchInput = document.getElementById('imageSearchInput');
+      const searchButton = document.getElementById('searchButton');
+      const searchText = document.getElementById('searchText');
+      const searchSpinner = document.getElementById('searchSpinner');
+      
       currentImageSearchText = searchInput.value.trim();
-      loadEventImages();
+      searchText.textContent = 'Searching';
+      searchSpinner.style.display = 'block';
+      searchButton.disabled = true;
+      
+      loadEventImages().finally(() => {
+        searchText.textContent = 'Search';
+        searchSpinner.style.display = 'none';
+        searchButton.disabled = false;
+      });
     }
 
     function clearSearch() {
