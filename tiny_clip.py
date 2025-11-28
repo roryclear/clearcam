@@ -174,15 +174,14 @@ class CachedCLIPSearch:
             if len(batch_images) == batch_size:
                 x = tiny_Tensor(batch_tensors.detach().numpy())
                 embeddings = tiny_precompute_embeddings(self.model, x)
-                embeddings = torch.Tensor(embeddings.numpy())
+                embeddings = embeddings.numpy()
             else:
                 embeddings = []
                 for i in range(len(batch_images)): # one by one if not batch_size
                     single_x = tiny_Tensor(batch_tensors[i:i+1].detach().numpy())
                     single_embedding = tiny_precompute_embedding(self.model, single_x)
-                    single_embedding_torch = torch.Tensor(single_embedding.numpy())
+                    single_embedding_torch = single_embedding.numpy()
                     embeddings.append(single_embedding_torch)
-                embeddings = torch.stack(embeddings)
 
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding

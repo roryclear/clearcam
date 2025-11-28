@@ -117,7 +117,7 @@ class CLIPSearch:
             print("No embeddings available.")
             return []
         text_embedding = self._encode_text(query)
-        text_embedding = torch.Tensor(text_embedding.numpy())
+        text_embedding = text_embedding.numpy()
         all_similarities = []
         for path, img_embedding in self.image_embeddings.items():
             normalized_path = path.replace("\\", "/")
