@@ -7,7 +7,6 @@ networkx==3.6
 numpy==2.0.0
 opencv-python-headless==4.10.0.84
 pillow==12.0.0
-regex==2025.11.3
 scipy==1.14.1
 sympy==1.14.0
 tinygrad @ git+https://github.com/roryclear/tinygrad.git@2b13c3de65fb00f28597eae9266d512792f74f44

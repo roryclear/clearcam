@@ -9,11 +9,9 @@ import os
 import random
 import string
 from functools import lru_cache, partial
-from typing import Callable, List, Optional, Union, Dict
-import warnings
-
+from typing import Callable, List, Optional, Union
 import numpy as np
-import regex as re
+import unicodedata
 import torch
 
 # https://stackoverflow.com/q/62691279
@@ -21,6 +19,75 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 _nltk_init = False
 
 DEFAULT_CONTEXT_LENGTH = 77  # default context length for OpenAI CLIP
+
+def is_letter(ch):
+    return unicodedata.category(ch).startswith("L")
+
+def is_number(ch):
+    return unicodedata.category(ch).startswith("N")
+
+def unicode_clip_tokenize(text, special_tokens):
+    """
+    Emulates the regex pattern from CLIP without using the 'regex' package:
+
+        special | 's | 't | 're | 've | 'm | 'll | 'd | letters | numbers | other chars
+    
+    Returns a list of tokens exactly like CLIP regex would.
+    """
+
+    tokens = []
+    i = 0
+    n = len(text)
+    special_sorted = sorted(special_tokens, key=len, reverse=True)
+
+    while i < n:
+        matched = False
+        for sp in special_sorted:
+            if text.startswith(sp, i):
+                tokens.append(sp)
+                i += len(sp)
+                matched = True
+                break
+        if matched:
+            continue
+
+        ch = text[i]
+        for cont in ["'s", "'t", "'re", "'ve", "'m", "'ll", "'d"]:
+            if text.startswith(cont, i):
+                tokens.append(cont)
+                i += len(cont)
+                matched = True
+                break
+        if matched:
+            continue
+
+        if is_letter(ch):
+            start = i
+            i += 1
+            while i < n and is_letter(text[i]):
+                i += 1
+            tokens.append(text[start:i])
+            continue
+
+        if is_number(ch):
+            tokens.append(ch)
+            i += 1
+            continue
+
+        if not ch.isspace():
+            start = i
+            i += 1
+            while (
+                i < n
+                and not text[i].isspace()
+                and not is_letter(text[i])
+                and not is_number(text[i])
+            ):
+                i += 1
+            tokens.append(text[start:i])
+            continue
+        i += 1
+    return tokens
 
 
 @lru_cache()
@@ -155,10 +222,7 @@ class SimpleTokenizer(object):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {t:t for t in special_tokens}
         special = "|".join(special_tokens)
-        self.pat = re.compile(
-            special + r"""|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
-            re.IGNORECASE,
-        )
+        self.special_tokens_set = set(special_tokens)
         self.vocab_size = len(self.encoder)
         self.all_special_ids = [self.encoder[t] for t in special_tokens]
         self.sot_token_id = self.all_special_ids[0]
@@ -211,7 +275,7 @@ class SimpleTokenizer(object):
     def encode(self, text):
         bpe_tokens = []
         text = self.clean_fn(text)
-        for token in re.findall(self.pat, text):
+        for token in unicode_clip_tokenize(text, self.special_tokens_set):
             token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
             bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
         return bpe_tokens
@@ -398,222 +462,3 @@ def get_reduction_mask_fn(type: str):
         return syntax_mask_tokenize  # randomly drop prioritized by syntax
     else:
         assert False, F'Unknown type {type}.'
-
-
-class HFTokenizer:
-    """HuggingFace tokenizer wrapper with support for custom tokenization modes"""
-
-    def __init__(
-            self,
-            tokenizer_name: str,
-            context_length: Optional[int] = DEFAULT_CONTEXT_LENGTH,
-            clean: str = 'whitespace',
-            strip_sep_token: bool = False,
-            language: Optional[str] = None,
-            cache_dir: Optional[str] = None,
-            tokenizer_mode: Optional[str] = None,  # None, 'clips'
-            **kwargs
-    ):
-        self.tokenizer_mode = tokenizer_mode or ''
-        self.context_length = context_length
-        self.clean_fn = get_clean_fn(clean)
-        self.strip_sep_token = strip_sep_token
-
-        # NOTE: Left as example of loading custom tokenizer from file for experimentation
-        # if self.tokenizer_mode == 'bert_clips':
-        #     self.special_tokens = {
-        #         "bos_token": 1,
-        #         "eos_token": 2,
-        #         "cls_token": 101,
-        #         "pad_token": 0
-        #     }
-        #
-        #     # For BERT CLIPS mode with vocab file
-        #     from tokenizers import BertWordPieceTokenizer
-        #     if tokenizer_name.startswith('hf-hub:'):
-        #         from huggingface_hub import hf_hub_download
-        #         # Format: hf-hub:repo_id/filename
-        #         repo_url = tokenizer_name[7:]
-        #         parts = repo_url.split('/')
-        #         filename = parts[-1]
-        #         repo_id = '/'.join(parts[:-1])
-        #         vocab_file = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=cache_dir)
-        #         self.tokenizer = BertWordPieceTokenizer(lowercase=True)
-        #         self.tokenizer = self.tokenizer.from_file(vocab_file)
-        #     else:
-        #         # Assume tokenizer_name is a local path to a vocab file
-        #         self.tokenizer = BertWordPieceTokenizer(lowercase=True)
-        #         self.tokenizer = self.tokenizer.from_file(tokenizer_name)
-
-        # Standard HuggingFace tokenizer initialization
-        from transformers import AutoTokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_name,
-            cache_dir=cache_dir,
-            **kwargs
-        )
-
-        # Set language function if available
-        set_lang_fn = getattr(self.tokenizer, 'set_src_lang_special_tokens', None)
-        if callable(set_lang_fn):
-            self.set_lang_fn = set_lang_fn
-        if language is not None:
-            self.set_language(language)
-
-    def save_pretrained(self, dest):
-        self.tokenizer.save_pretrained(dest)
-
-    def __call__(self, texts: Union[str, List[str]], context_length: Optional[int] = None) -> torch.Tensor:
-        # same cleaning as for default tokenizer, except lowercasing
-        # adding lower (for case-sensitive tokenizers) will make it more robust but less sensitive to nuance
-        if isinstance(texts, str):
-            texts = [texts]
-
-        context_length = context_length or self.context_length
-        assert context_length, 'Please set a valid context length in class init or call.'
-
-        texts = [self.clean_fn(text) for text in texts]
-
-        # Handle different tokenization modes
-        if self.tokenizer_mode == 'clips':
-            return self._clips_tokenize(texts, context_length)
-        else:
-            # Standard tokenization
-            input_ids = self.tokenizer.batch_encode_plus(
-                texts,
-                return_tensors='pt',
-                max_length=context_length,
-                padding='max_length',
-                truncation=True,
-            ).input_ids
-
-            if self.strip_sep_token:
-                input_ids = torch.where(
-                    input_ids == self.tokenizer.sep_token_id,
-                    torch.zeros_like(input_ids),
-                    input_ids,
-                )
-
-            return input_ids
-
-    def set_language(self, src_lang):
-        if hasattr(self, 'set_lang_fn'):
-            self.set_lang_fn(src_lang)
-        else:
-            warnings.warn('Cannot set language for the tokenizer.')
-
-    def _clips_tokenize(self, texts: List[str], context_length: int) -> torch.Tensor:
-        """Use standard HF tokenizer but apply custom post-processing"""
-        # Use standard tokenizer without special tokens - we'll add our own
-        encoded_outputs = self.tokenizer.batch_encode_plus(
-            texts,
-            add_special_tokens=False,
-            padding=False,
-            truncation=False,
-            return_tensors=None
-        )
-
-        encoded = []
-        for tokens in encoded_outputs["input_ids"]:
-            tokens = tokens[:context_length - 3]  # Leave room for special tokens
-            tokens = [self.tokenizer.bos_token_id] + tokens + [self.tokenizer.eos_token_id]
-            encoded.append(tokens)
-
-        # Create result tensor and handle padding + class token
-        result = torch.zeros(len(encoded), context_length, dtype=torch.long)
-        for i, tokens in enumerate(encoded):
-            padded_tokens = self._pad_and_add_class_token(
-                tokens,
-                max_length=context_length,
-                pad_token_id=self.tokenizer.pad_token_id,
-                cls_token_id=self.tokenizer.cls_token_id,
-            )
-            result[i, :len(padded_tokens)] = torch.tensor(padded_tokens)
-
-        return result
-
-    def _pad_and_add_class_token(
-            self,
-            tokens: List[int],
-            max_length: int,
-            pad_token_id: int = 0,
-            cls_token_id: int = 101,
-    ) -> List[int]:
-        """ Add padding with class token at the end """
-        if len(tokens) > max_length - 1:
-            tokens = tokens[:max_length - 1]
-
-        # Add padding to reach max_length-1
-        if len(tokens) < max_length - 1:
-            tokens = tokens + [pad_token_id] * (max_length - 1 - len(tokens))
-
-        # Add class token at the end
-        tokens = tokens + [cls_token_id]
-        return tokens
-
-
-class SigLipTokenizer:
-    """HuggingFace tokenizer wrapper for SigLIP T5 compatible sentencepiece vocabs
-
-    NOTE: this is not needed in normal library use, but is used to import new sentencepiece tokenizers
-    into OpenCLIP. Leaving code here in case future models use new tokenizers.
-    """
-    VOCAB_FILES = {
-        # english, vocab_size=32_000
-        "c4-en": "http://storage.googleapis.com/t5-data/vocabs/cc_en.32000/sentencepiece.model",
-        # used in multilingual models (mT5, PaLI), vocab_size=250_000
-        "mc4": "http://storage.googleapis.com/t5-data/vocabs/mc4.250000.100extra/sentencepiece.model",
-        # used in SigLIP2 models, vocab_size=256000
-        "gemma": "http://storage.googleapis.com/big_vision/gemma_tokenizer.model",
-    }
-
-    def __init__(
-            self,
-            tokenizer_name: str,
-            context_length: Optional[int] = 64,
-    ):
-        if 'gemma' in tokenizer_name:
-            from transformers import GemmaTokenizerFast
-            tokenizer_cls = partial(
-                GemmaTokenizerFast, padding_side='right', add_bos_token=False, add_eos_token=True)
-        else:
-            from transformers import T5TokenizerFast
-            tokenizer_cls = partial(T5TokenizerFast, extra_ids=0)
-
-        if tokenizer_name in self.VOCAB_FILES:
-            # FIXME temporary hack?
-            import tempfile
-            import fsspec
-            vocab_file = self.VOCAB_FILES[tokenizer_name]
-            with tempfile.NamedTemporaryFile('wb') as dst:
-                with fsspec.open(vocab_file, 'rb') as src:
-                    dst.write(src.read())
-                self.tokenizer = tokenizer_cls(dst.name, legacy=False)
-        else:
-            self.tokenizer = tokenizer_cls(tokenizer_name, legacy=False)
-
-        self.tokenizer.pad_token_id = 0 if 'gemma' in tokenizer_name else 1
-        self.tokenizer.eos_token_id = 1
-        self.context_length = context_length
-
-    def save_pretrained(self, dest):
-        self.tokenizer.save_pretrained(dest)
-
-    def __call__(self, texts: Union[str, List[str]], context_length: Optional[int] = None) -> torch.Tensor:
-        # same cleaning as for default tokenizer, except lowercasing
-        # adding lower (for case-sensitive tokenizers) will make it more robust but less sensitive to nuance
-        if isinstance(texts, str):
-            texts = [texts]
-
-        context_length = context_length or self.context_length
-        assert context_length, 'Please set a valid context length in class init or call.'
-
-        texts = [canonicalize_text(basic_clean(text)) for text in texts]
-        output = self.tokenizer(
-            texts,
-            return_tensors='pt',
-            max_length=context_length,
-            padding='max_length',
-            truncation=True,
-        )
-        return output.input_ids
