@@ -1,103 +1,81 @@
-import torch
 from PIL import Image
-import open_clip
 import os
 import pickle
-import time
 from datetime import datetime
-from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
+from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
+from tinygrad.helpers import fetch
 from torchvision.transforms import functional as F
 from tinygrad.dtype import dtypes
-# DO NOT USE WITH BEAM
+import numpy as np
+import gc
+
+class TinyModel: pass
+
+
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
-        print(f"Loading OpenCLIP model: {model_name} ({pretrained_name})")
+        self.image_embeddings = {}
+        self.image_paths = {}
+        
+        self.tiny_model = TinyModel()
+        device = Device.DEFAULT
+        # convert
+        weights = tiny_nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
 
-        if os.path.exists("laion2b_s32b_b82k.pkl"):
-            # Load from existing pickle file
-            with open("laion2b_s32b_b82k.pkl", 'rb') as f:
-                self.model = pickle.load(f)
-            print("Loaded data from pickle file")
-        else:
-            self.model, _, _ = open_clip.create_model_and_transforms(
-                model_name,
-                pretrained=pretrained_name
-            )
+        self.tiny_model.visual_conv1 = tiny_nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
+        self.tiny_model.visual_conv1.weight = weights["visual.conv1.weight"].to(device)
 
-            self.model = self.model.to("cpu").eval()
-            
-            self.tokenizer = open_clip.get_tokenizer(model_name)
+        self.tiny_model.class_embedding = weights["visual.class_embedding"].to(device)
+        self.tiny_model.positional_embedding = weights["visual.positional_embedding"].to(device)
+        
+ 
+        self.tiny_model.ln_pre = tiny_nn.LayerNorm(1024)
+        self.tiny_model.ln_pre.weight = weights["visual.ln_pre.weight"].to(device)
+        self.tiny_model.ln_pre.bias = weights["visual.ln_pre.bias"].to(device)
+        
 
-            self.image_embeddings = {}
-            self.image_paths = {}
+        self.tiny_model.ln_post = tiny_nn.LayerNorm(1024)
+        self.tiny_model.ln_post.weight = weights["visual.ln_post.weight"].to(device)
+        self.tiny_model.ln_post.bias = weights["visual.ln_post.bias"].to(device)
 
-            # convert
-            self.model.visual.tiny_vc = tiny_nn.Conv2d(in_channels=self.model.visual.conv1.in_channels, out_channels=self.model.visual.conv1.out_channels, kernel_size=self.model.visual.conv1.kernel_size, stride=self.model.visual.conv1.stride,\
-            padding=self.model.visual.conv1.padding, dilation=self.model.visual.conv1.dilation, groups=self.model.visual.conv1.groups, bias=False)
-            self.model.visual.tiny_vc.weight = tiny_Tensor(self.model.visual.conv1.weight.detach().numpy().copy())
+        self.tiny_model.proj = weights["visual.proj"].to(device)
 
-            self.model.visual.tiny_class_embedding = tiny_Tensor(self.model.visual.class_embedding.detach().numpy().copy())
-            self.model.visual.tiny_positional_embedding = tiny_Tensor(self.model.visual.positional_embedding.detach().numpy().copy())
+        self.tiny_model.resblocks = []
 
-            self.model.visual.tiny_ln_pre = tiny_nn.LayerNorm(self.model.visual.ln_pre.weight.shape[0])
-            self.model.visual.tiny_ln_pre.weight = tiny_Tensor(self.model.visual.ln_pre.weight.detach().numpy().copy())
-            self.model.visual.tiny_ln_pre.bias = tiny_Tensor(self.model.visual.ln_pre.bias.detach().numpy().copy())
+        for i in range(24):
+            tiny_resblock = TinyModel()
 
-            self.model.visual.tiny_ln_post = tiny_nn.LayerNorm(self.model.visual.ln_post.weight.shape[0])
-            self.model.visual.tiny_ln_post.weight = tiny_Tensor(self.model.visual.ln_post.weight.detach().numpy().copy())
-            self.model.visual.tiny_ln_post.bias = tiny_Tensor(self.model.visual.ln_post.bias.detach().numpy().copy())
-            
-            self.model.tiny_ln_1 = []
-            self.model.tiny_ln_2 = []
-            self.model.tiny_in_proj_weight = []
-            self.model.tiny_in_proj_bias = []
+            tiny_resblock.ln_1 = tiny_nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
+            tiny_resblock.ln_1.weight = weights[f"visual.transformer.resblocks.{i}.ln_1.weight"].to(device)
+            tiny_resblock.ln_1.bias = weights[f"visual.transformer.resblocks.{i}.ln_1.bias"].to(device)
 
-            self.model.tiny_out_proj_weight = []
-            self.model.tiny_out_proj_bias = []
+            tiny_resblock.ln_2 = tiny_nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
+            tiny_resblock.ln_2.weight = weights[f"visual.transformer.resblocks.{i}.ln_2.weight"].to(device)
+            tiny_resblock.ln_2.bias = weights[f"visual.transformer.resblocks.{i}.ln_2.bias"].to(device)
 
-            self.model.tiny_c_fc = []
-            self.model.tiny_c_proj = []
+            tiny_resblock.in_proj_weight = weights[f"visual.transformer.resblocks.{i}.attn.in_proj_weight"].to(device)
+            tiny_resblock.in_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.in_proj_bias"].to(device)
 
-            self.model.visual.tiny_proj = tiny_Tensor(self.model.visual.proj.detach().numpy().copy())
+            tiny_resblock.out_proj_weight = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.weight"].to(device)
+            tiny_resblock.out_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
 
-            for resblock in self.model.visual.transformer.resblocks:
-                layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
-                layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
-                layernorm.bias = tiny_Tensor(resblock.ln_1.bias.detach().numpy().copy())
-                self.model.tiny_ln_1.append(layernorm)
 
-                layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_2.normalized_shape, eps=resblock.ln_2.eps, elementwise_affine=True)
-                layernorm.weight = tiny_Tensor(resblock.ln_2.weight.detach().numpy().copy())
-                layernorm.bias = tiny_Tensor(resblock.ln_2.bias.detach().numpy().copy())
-                self.model.tiny_ln_2.append(layernorm)
+            tiny_resblock.mlp_c_fc = tiny_nn.Linear(4096, 1024)
+            tiny_resblock.mlp_c_fc.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
+            tiny_resblock.mlp_c_fc.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
 
-                w = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy().copy())
-                self.model.tiny_in_proj_weight.append(w)
+            tiny_resblock.mlp_c_proj = tiny_nn.Linear(1024, 4096)
+            tiny_resblock.mlp_c_proj.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
+            tiny_resblock.mlp_c_proj.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
 
-                b = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy().copy())
-                self.model.tiny_in_proj_bias.append(b)
-
-                w = tiny_Tensor(resblock.attn.out_proj.weight.detach().numpy().copy())
-                self.model.tiny_out_proj_weight.append(w)
-
-                b = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy().copy())
-                self.model.tiny_out_proj_bias.append(b)
-
-                linear = tiny_nn.Linear(resblock.mlp.c_fc.weight.shape[0], resblock.mlp.c_fc.weight.shape[1])
-                linear.weight = tiny_Tensor(resblock.mlp.c_fc.weight.detach().numpy().copy())
-                linear.bias = tiny_Tensor(resblock.mlp.c_fc.bias.detach().numpy().copy())
-                self.model.tiny_c_fc.append(linear)
-
-                linear = tiny_nn.Linear(resblock.mlp.c_proj.weight.shape[0], resblock.mlp.c_proj.weight.shape[1])
-                linear.weight = tiny_Tensor(resblock.mlp.c_proj.weight.detach().numpy().copy())
-                linear.bias = tiny_Tensor(resblock.mlp.c_proj.bias.detach().numpy().copy())
-                self.model.tiny_c_proj.append(linear)
-
-            with open('laion2b_s32b_b82k.pkl', 'wb') as f: pickle.dump(self.model, f)
+            self.tiny_model.resblocks.append(tiny_resblock)
+        
+        weights = None
+        gc.collect()
         
         # for BEAM
-        tiny_precompute_embeddings(self.model, tiny_Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-        tiny_precompute_embeddings(self.model, tiny_Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+        tiny_precompute_embeddings(self.tiny_model, tiny_Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+        tiny_precompute_embeddings(self.tiny_model, tiny_Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -170,19 +148,18 @@ class CachedCLIPSearch:
                     print(f"Error loading {img_path}: {e}")
                     continue
 
-            batch_tensors = torch.stack([inline_preprocess(img) for img in batch_images])
+            batch_tensors = np.stack([inline_preprocess(img) for img in batch_images])
             if len(batch_images) == batch_size:
-                x = tiny_Tensor(batch_tensors.detach().numpy())
-                embeddings = tiny_precompute_embeddings(self.model, x)
-                embeddings = torch.Tensor(embeddings.numpy())
+                x = tiny_Tensor(batch_tensors)
+                embeddings = tiny_precompute_embeddings(self.tiny_model, x)
+                embeddings = embeddings.numpy()
             else:
                 embeddings = []
                 for i in range(len(batch_images)): # one by one if not batch_size
-                    single_x = tiny_Tensor(batch_tensors[i:i+1].detach().numpy())
-                    single_embedding = tiny_precompute_embedding(self.model, single_x)
-                    single_embedding_torch = torch.Tensor(single_embedding.numpy())
+                    single_x = tiny_Tensor(batch_tensors[i:i+1])
+                    single_embedding = tiny_precompute_embedding(self.tiny_model, single_x)
+                    single_embedding_torch = single_embedding.numpy()
                     embeddings.append(single_embedding_torch)
-                embeddings = torch.stack(embeddings)
 
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding
@@ -200,25 +177,24 @@ class CachedCLIPSearch:
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
 
 @TinyJit
-def tiny_precompute_embeddings(model, x): return tiny_precompute_embedding(model, x)
+def tiny_precompute_embeddings(tiny_model, x): return tiny_precompute_embedding(tiny_model, x)
 
-def tiny_precompute_embedding(model, x):
-    visual = model.visual
-    x = visual.tiny_vc(x)
+def tiny_precompute_embedding(tiny_model, x):
+    x = tiny_model.visual_conv1(x)
     x = x.reshape(x.shape[0], x.shape[1], -1)
     x = x.permute(0, 2, 1)
-    cls_emb = visual.tiny_class_embedding
+    cls_emb = tiny_model.class_embedding
     cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
     x = tiny_Tensor.cat(cls_emb, x, dim=1)
-    x = x + visual.tiny_positional_embedding
-    x = visual.tiny_ln_pre(x)
+    x = x + tiny_model.positional_embedding
+    x = tiny_model.ln_pre(x)
     # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
-    for i, block in enumerate(visual.transformer.resblocks):
-        x_ln1 = model.tiny_ln_1[i](x)
+    for i in range(len(tiny_model.resblocks)):
+        x_ln1 = tiny_model.resblocks[i].ln_1(x)
         B, L, D = x_ln1.shape
-        H = block.attn.num_heads
+        H = 16 #block.attn.num_heads
         d_head = D // H
-        qkv = x_ln1 @ model.tiny_in_proj_weight[i].T + model.tiny_in_proj_bias[i]           
+        qkv = x_ln1 @ tiny_model.resblocks[i].in_proj_weight.T + tiny_model.resblocks[i].in_proj_bias           
         q, k, v = qkv.split(D, dim=-1)
         def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
         q = shape(q)
@@ -229,18 +205,18 @@ def tiny_precompute_embedding(model, x):
         attn_probs = tiny_Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
-        attn_out = context @ model.tiny_out_proj_weight[i].T + model.tiny_out_proj_bias[i]
-        attn_scaled = block.ls_1(attn_out)
+        attn_out = context @ tiny_model.resblocks[i].out_proj_weight.T + tiny_model.resblocks[i].out_proj_bias      
+        attn_scaled = attn_out
         x = x + attn_scaled
-        x_ln2 = model.tiny_ln_2[i](x)
-        ff = model.tiny_c_fc[i](x_ln2)
+        x_ln2 = tiny_model.resblocks[i].ln_2(x)
+        ff = tiny_model.resblocks[i].mlp_c_fc(x_ln2)
         ff = ff.gelu()
-        ff = model.tiny_c_proj[i](ff)
+        ff = tiny_model.resblocks[i].mlp_c_proj(ff)
         x = x + ff
 
-    x = visual.tiny_ln_post(x)
+    x = tiny_model.ln_post(x)
     image_embeds = x[:, 0, :]
-    embeddings = image_embeds @ visual.tiny_proj
+    embeddings = image_embeds @ tiny_model.proj
     embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
     return embeddings
 
