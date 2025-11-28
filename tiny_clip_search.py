@@ -1,8 +1,12 @@
 import os
 import pickle
 import open_clip
-from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
+from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
 from utils.clip_tokenizer import SimpleTokenizer
+import torch
+
+class TinyModel:
+    pass
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
@@ -16,45 +20,64 @@ class CLIPSearch:
         self.model = self.model.eval()
         self.tokenizer = SimpleTokenizer()
 
-        # convert here
-        # .copy() or trouble
-        self.model.tiny_text_projection = tiny_Tensor(self.model.text_projection.detach().numpy().copy())
-        self.model.tiny_token_embedding = tiny_nn.Embedding(self.model.token_embedding.num_embeddings, self.model.token_embedding.embedding_dim)
-        self.model.tiny_token_embedding.weight = tiny_Tensor(self.model.token_embedding.weight.data.detach().numpy().copy())
+        device = Device.DEFAULT
+
+
+        self.tiny_model = TinyModel()
+
+        weights = tiny_nn.state.safe_load("open_clip_pytorch_model.safetensors")
+        #print(weights)
+        #print(list(weights.keys()))
+        #print(type(weights["visual.transformer.resblocks.9.mlp.c_proj.bias"]))
+        #print(weights["visual.transformer.resblocks.9.mlp.c_proj.bias"].device)
+
+
+        self.tiny_model.text_projection = weights["text_projection"].to(device)
+
+        self.tiny_model.token_embedding = tiny_nn.Embedding(49408, 768) # todo unhardcode
+        self.tiny_model.token_embedding.weight = weights["token_embedding.weight"].to(device)
+
+        self.model.tiny_ln_final = tiny_nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
+        self.model.tiny_ln_final.weight = weights["ln_final.weight"].to(device)
+        self.model.tiny_ln_final.bias = weights["ln_final.bias"].to(device)
         
-        self.model.tiny_ln_1 = []
         self.model.tiny_ln_2 = []
         self.model.out_proj_bias_tiny = []
         self.model.mlp_c_fc = []
         self.model.mlp_c_proj = []
-        for resblock in self.model.transformer.resblocks:
-            layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_1.normalized_shape, eps=resblock.ln_1.eps, elementwise_affine=True)
-            layernorm.weight = tiny_Tensor(resblock.ln_1.weight.detach().numpy().copy())
-            layernorm.bias = tiny_Tensor(resblock.ln_1.bias.detach().numpy().copy())
-            self.model.tiny_ln_1.append(layernorm)
 
-            layernorm = tiny_nn.LayerNorm(normalized_shape=resblock.ln_2.normalized_shape, eps=resblock.ln_2.eps, elementwise_affine=True)
-            layernorm.weight = tiny_Tensor(resblock.ln_2.weight.detach().numpy().copy())
-            layernorm.bias = tiny_Tensor(resblock.ln_2.bias.detach().numpy().copy())
-            self.model.tiny_ln_2.append(layernorm)
+        self.tiny_model.resblocks = []
+        
+        for i in range(12):
+            resblock = TinyModel()
+            layernorm = tiny_nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            layernorm.weight = weights[f"transformer.resblocks.{i}.ln_1.weight"].to(device)
+            layernorm.bias = weights[f"transformer.resblocks.{i}.ln_1.bias"].to(device)
+            resblock.ln_1 = layernorm
 
-            opb = tiny_Tensor(resblock.attn.out_proj.bias.detach().numpy().copy())
-            self.model.out_proj_bias_tiny.append(opb)
+            layernorm = tiny_nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            layernorm.weight = weights[f"transformer.resblocks.{i}.ln_2.weight"].to(device)
+            layernorm.bias = weights[f"transformer.resblocks.{i}.ln_2.bias"].to(device)
+            resblock.ln_2 = layernorm
 
-            # todo
-            mlpcfc = tiny_nn.Linear(resblock.mlp.c_fc.weight.shape[0], resblock.mlp.c_fc.weight.shape[1])
-            mlpcfc.weight = tiny_Tensor(resblock.mlp.c_fc.weight.detach().numpy().copy())
-            mlpcfc.bias = tiny_Tensor(resblock.mlp.c_fc.bias.detach().numpy().copy())
-            self.model.mlp_c_fc.append(mlpcfc)
+            weight = weights[f"transformer.resblocks.{i}.attn.out_proj.weight"].to(device)
+            resblock.attn_out_proj_weight = weight
 
-            mlpcp = tiny_nn.Linear(resblock.mlp.c_proj.weight.shape[0], resblock.mlp.c_proj.weight.shape[1])
-            mlpcp.weight = tiny_Tensor(resblock.mlp.c_proj.weight.detach().numpy().copy())
-            mlpcp.bias = tiny_Tensor(resblock.mlp.c_proj.bias.detach().numpy().copy())
-            self.model.mlp_c_proj.append(mlpcp)
+            bias = weights[f"transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
+            resblock.attn_out_proj_bias = bias
 
-        self.model.tiny_ln_final = tiny_nn.LayerNorm(normalized_shape=self.model.ln_final.normalized_shape, eps=self.model.ln_final.eps, elementwise_affine=True)
-        self.model.tiny_ln_final .weight = tiny_Tensor(self.model.ln_final.weight.detach().numpy().copy())
-        self.model.tiny_ln_final .bias = tiny_Tensor(self.model.ln_final.bias.detach().numpy().copy())
+            mlpcfc = tiny_nn.Linear(3072, 768)
+            mlpcfc.weight = weights[f"transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
+            mlpcfc.bias = weights[f"transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
+            resblock.mlp_c_fc = mlpcfc
+
+            mlpcp = tiny_nn.Linear(768, 3072)
+            mlpcp.weight = weights[f"transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
+            mlpcp.bias = weights[f"transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
+            resblock.mlp_c_proj = mlpcp
+
+            self.tiny_model.resblocks.append(resblock)
+
 
     def _load_single_embeddings_file(self, cache_file):
         try:
@@ -109,7 +132,7 @@ class CLIPSearch:
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
         tokens = tiny_Tensor([tokens])
-        text_emb = encode_text(self.model, tokens)
+        text_emb = encode_text(self.model, self.tiny_model, tokens)
         return text_emb
 
     def search(self, query, top_k=10, cam_name=None, timestamp=None):
@@ -146,15 +169,15 @@ class CLIPSearch:
         return results[:top_k]
 
 @TinyJit
-def encode_text(model, text):
+def encode_text(model, tiny_model, text):
     x = text
-    x = model.tiny_token_embedding(x)
+    x = tiny_model.token_embedding(x)
     if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
     x = x + model.tiny_positional_embedding
     
     for i, resblock in enumerate(model.transformer.resblocks):
         residual = x
-        x = model.tiny_ln_1[i](x)
+        x = tiny_model.resblocks[i].ln_1(x)
         
         B, L, D = x.shape
         H = resblock.attn.num_heads
@@ -162,7 +185,6 @@ def encode_text(model, text):
 
         in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store these
         in_proj_bias_tiny = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy())
-        out_proj_weight_tiny = tiny_Tensor(resblock.attn.out_proj.weight.detach().numpy())
         attn_mask = tiny_Tensor(model.attn_mask.detach().numpy())
         
 
@@ -179,20 +201,20 @@ def encode_text(model, text):
         attn_probs = tiny_Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
-        x = context.matmul(out_proj_weight_tiny.T) + model.out_proj_bias_tiny[i]
+        x = context.matmul(tiny_model.resblocks[i].attn_out_proj_weight.T) + tiny_model.resblocks[i].attn_out_proj_bias
 
         x += residual
         residual = x
-        x = model.tiny_ln_2[i](x)
-        x = model.mlp_c_fc[i](x)
+        x = tiny_model.resblocks[i].ln_2(x)
+        x = tiny_model.resblocks[i].mlp_c_fc(x)
         x = x.gelu()
-        x = model.mlp_c_proj[i](x)
+        x = tiny_model.resblocks[i].mlp_c_proj(x)
         x += residual
 
     x = model.tiny_ln_final(x)  # [batch_size, n_ctx, transformer.width]
     argmax = text.argmax()
     x = x[0][argmax]
-    x = x @ model.tiny_text_projection
+    x = x @ tiny_model.text_projection
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 '''
@@ -205,5 +227,3 @@ if __name__ == "__main__":
     for i, (path, score) in enumerate(results, 1):
         print(f"{i}. Score: {score:.3f} - \"{path}\"")
 '''
-
-
