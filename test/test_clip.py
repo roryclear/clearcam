@@ -1,7 +1,6 @@
 from tiny_clip import CachedCLIPSearch as tiny_CachedCLIPSearch
 from tiny_clip_search import CLIPSearch as tiny_ClipSearch
 import numpy as np
-import torch
 import json
 import os
 
@@ -38,36 +37,6 @@ def test_clip_search_jit():
   assert res[1][0] == "test/clip_images/f40.jpg"
   assert res[0][0] == "test/clip_images/micra.jpg"
 
-def test_tokenizer(s):
-  a = open_clip.tokenize([s]).to(torch.device("cpu")).detach().numpy()
-  b = my_tokenizer(s)
-  np.testing.assert_allclose(b, a)
-
-def my_tokenizer(s):
-  with open("tokenizer.json", "r") as f: tok = json.load(f)
-  vocab = tok["model"]["vocab"]
-  #ret = [49406, 49407]
-  ret = [49406] # start
-  
-  if len(s) > 0: s += "</w>"
-  s = s.replace("  ", " ")
-  s = s.replace(" ", "</w>")
-
-  longest = max(len(k) for k in vocab)
-  i = 0
-  while i < len(s):
-    j = longest
-    while j >= 0 and s[i:i+j] not in vocab: j -= 1
-    token = vocab[s[i:i+j]]
-    ret.append(token)
-    i+=j
-
-  ret.append(49407) # end
-  if len(ret) < 77: ret += [0] * (77 - len(ret))
-  return np.asarray([ret])
-
-#for x in ["", "a", "car", "a car", "a bugatti veyron", "deep learning engineer","sxokwasikwqoiwdjwqdioqjdi"]: test_tokenizer(x) # todo failing, not bpe yet
-#for x in ["mp4-12c"]: test_tokenizer(x) # failing
 setup_clip_test()
 test_clip_search()
 test_clip_search_jit()
