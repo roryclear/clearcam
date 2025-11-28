@@ -8,6 +8,7 @@ from datetime import datetime
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
 from torchvision.transforms import functional as F
 from tinygrad.dtype import dtypes
+import numpy as np
 # DO NOT USE WITH BEAM
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
@@ -170,15 +171,15 @@ class CachedCLIPSearch:
                     print(f"Error loading {img_path}: {e}")
                     continue
 
-            batch_tensors = torch.stack([inline_preprocess(img) for img in batch_images])
+            batch_tensors = np.stack([inline_preprocess(img) for img in batch_images])
             if len(batch_images) == batch_size:
-                x = tiny_Tensor(batch_tensors.detach().numpy())
+                x = tiny_Tensor(batch_tensors)
                 embeddings = tiny_precompute_embeddings(self.model, x)
                 embeddings = embeddings.numpy()
             else:
                 embeddings = []
                 for i in range(len(batch_images)): # one by one if not batch_size
-                    single_x = tiny_Tensor(batch_tensors[i:i+1].detach().numpy())
+                    single_x = tiny_Tensor(batch_tensors[i:i+1])
                     single_embedding = tiny_precompute_embedding(self.model, single_x)
                     single_embedding_torch = single_embedding.numpy()
                     embeddings.append(single_embedding_torch)

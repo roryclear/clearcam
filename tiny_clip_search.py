@@ -3,8 +3,6 @@ import pickle
 import torch
 import open_clip
 from typing import Optional
-from torch.nn import functional as F
-import torch.nn as nn
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
 
 class CLIPSearch:
@@ -12,12 +10,11 @@ class CLIPSearch:
         self.base_path = base_path
         self.image_embeddings = {}
         self.image_paths = {}
-        self.device = torch.device("cpu")
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             'ViT-L-14',
             pretrained='laion2b_s32b_b82k'
         )
-        self.model = self.model.to(self.device).eval()
+        self.model = self.model.eval()
 
         # convert here
         # .copy() or trouble
@@ -107,7 +104,7 @@ class CLIPSearch:
         print(f"\nTotal images loaded: {total_loaded}")
 
     def _encode_text(self, query):
-        tokens = open_clip.tokenize([query]).to(self.device)
+        tokens = open_clip.tokenize([query])
         tokens = tiny_Tensor(tokens.detach().numpy())
         text_emb = encode_text(self.model, tokens)
         return text_emb
