@@ -1837,7 +1837,7 @@ if __name__ == "__main__":
   yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
   if not yolo_variant:
     yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
-    use_clip = input("Would you like to use experimental clip search on events? (see README) (y/n), or press enter to skip:") or False
+    use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
   if rtsp_url is None and userID is None:
