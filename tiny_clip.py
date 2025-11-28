@@ -1,6 +1,4 @@
-import torch
 from PIL import Image
-import open_clip
 import os
 import pickle
 from datetime import datetime
@@ -16,15 +14,6 @@ class TinyModel: pass
 
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
-        print(f"Loading OpenCLIP model: {model_name} ({pretrained_name})")
-
-        self.model, _, _ = open_clip.create_model_and_transforms(
-            model_name,
-            pretrained=pretrained_name
-        )
-
-        self.model = self.model.to("cpu").eval()
-
         self.image_embeddings = {}
         self.image_paths = {}
         
@@ -32,8 +21,6 @@ class CachedCLIPSearch:
         device = Device.DEFAULT
         # convert
         weights = tiny_nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
-
-        print(list(weights.keys()))
 
         self.tiny_model.visual_conv1 = tiny_nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
         self.tiny_model.visual_conv1.weight = weights["visual.conv1.weight"].to(device)
