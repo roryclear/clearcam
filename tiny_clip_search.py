@@ -1,13 +1,8 @@
 import os
 import pickle
-import torch
 import open_clip
-from typing import Optional
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
-import tiktoken
-import regex as re
-import gzip
-from clip_tokenizer import SimpleTokenizer
+from utils.clip_tokenizer import SimpleTokenizer
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):

@@ -3,7 +3,6 @@ from PIL import Image
 import open_clip
 import os
 import pickle
-import time
 from datetime import datetime
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
 from torchvision.transforms import functional as F
