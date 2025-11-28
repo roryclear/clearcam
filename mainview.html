@@ -2386,6 +2386,14 @@
       loadEventImages();
     }
 
+    document.getElementById('imageSearchInput').addEventListener('keypress', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        searchEventImages();
+      }
+    });
+
+
     async function loadEventImages() {
       try {
         let url = `/event_thumbs?folder=${currentStreamDate}`;
