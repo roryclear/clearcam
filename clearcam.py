@@ -1721,7 +1721,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
-        self.max_gb = 40
+        self.max_gb = 70
         self.searcher = None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
