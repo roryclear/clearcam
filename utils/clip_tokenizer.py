@@ -12,7 +12,6 @@ from functools import lru_cache, partial
 from typing import Callable, List, Optional, Union, Dict
 import warnings
 
-import ftfy
 import numpy as np
 import regex as re
 import torch
@@ -64,7 +63,6 @@ def get_pairs(word):
 
 
 def basic_clean(text):
-    text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
     return text.strip()
 

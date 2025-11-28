@@ -1,6 +1,5 @@
 filelock==3.20.0
 fsspec==2025.10.0
-ftfy==6.3.1
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 mpmath==1.3.0
@@ -15,4 +14,3 @@ tinygrad @ git+https://github.com/roryclear/tinygrad.git@2b13c3de65fb00f28597eae
 torch==2.9.1
 torchvision==0.24.1
 typing_extensions==4.15.0
-wcwidth==0.2.14
