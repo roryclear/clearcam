@@ -7,7 +7,6 @@ from tinygrad.helpers import fetch
 from torchvision.transforms import functional as F
 from tinygrad.dtype import dtypes
 import numpy as np
-# DO NOT USE WITH BEAM
 
 class TinyModel: pass
 
