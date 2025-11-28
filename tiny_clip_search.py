@@ -1,9 +1,8 @@
 import os
 import pickle
-import open_clip
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
 from utils.clip_tokenizer import SimpleTokenizer
-import torch
+import numpy as np
 
 class TinyModel:
     pass
@@ -13,40 +12,29 @@ class CLIPSearch:
         self.base_path = base_path
         self.image_embeddings = {}
         self.image_paths = {}
-        self.model, _, _ = open_clip.create_model_and_transforms(
-            'ViT-L-14',
-            pretrained='laion2b_s32b_b82k'
-        )
-        self.model = self.model.eval()
         self.tokenizer = SimpleTokenizer()
 
         device = Device.DEFAULT
 
 
-        self.tiny_model = TinyModel()
+        self.model = TinyModel()
 
         weights = tiny_nn.state.safe_load("open_clip_pytorch_model.safetensors")
-        #print(weights)
-        #print(list(weights.keys()))
-        #print(type(weights["visual.transformer.resblocks.9.mlp.c_proj.bias"]))
-        #print(weights["visual.transformer.resblocks.9.mlp.c_proj.bias"].device)
 
+        self.model.text_projection = weights["text_projection"].to(device)
+        self.model.positional_embedding = weights["positional_embedding"].to(device)
 
-        self.tiny_model.text_projection = weights["text_projection"].to(device)
+        self.model.token_embedding = tiny_nn.Embedding(49408, 768) # todo unhardcode
+        self.model.token_embedding.weight = weights["token_embedding.weight"].to(device)
 
-        self.tiny_model.token_embedding = tiny_nn.Embedding(49408, 768) # todo unhardcode
-        self.tiny_model.token_embedding.weight = weights["token_embedding.weight"].to(device)
+        self.model.ln_final = tiny_nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
+        self.model.ln_final.weight = weights["ln_final.weight"].to(device)
+        self.model.ln_final.bias = weights["ln_final.bias"].to(device)
 
-        self.model.tiny_ln_final = tiny_nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
-        self.model.tiny_ln_final.weight = weights["ln_final.weight"].to(device)
-        self.model.tiny_ln_final.bias = weights["ln_final.bias"].to(device)
-        
-        self.model.tiny_ln_2 = []
-        self.model.out_proj_bias_tiny = []
-        self.model.mlp_c_fc = []
-        self.model.mlp_c_proj = []
+        attn_mask = np.where(np.tri(77, dtype=bool), 0.0, -np.inf).astype(np.float32)
+        self.model.attn_mask = tiny_Tensor(attn_mask) 
 
-        self.tiny_model.resblocks = []
+        self.model.resblocks = []
         
         for i in range(12):
             resblock = TinyModel()
@@ -76,7 +64,13 @@ class CLIPSearch:
             mlpcp.bias = weights[f"transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
             resblock.mlp_c_proj = mlpcp
 
-            self.tiny_model.resblocks.append(resblock)
+            weight = weights[f"transformer.resblocks.{i}.attn.in_proj_weight"].to(device)
+            resblock.in_proj_weight = weight
+
+            bias = weights[f"transformer.resblocks.{i}.attn.in_proj_bias"].to(device)
+            resblock.in_proj_bias = bias            
+
+            self.model.resblocks.append(resblock)
 
 
     def _load_single_embeddings_file(self, cache_file):
@@ -132,7 +126,7 @@ class CLIPSearch:
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
         tokens = tiny_Tensor([tokens])
-        text_emb = encode_text(self.model, self.tiny_model, tokens)
+        text_emb = encode_text(self.model, tokens)
         return text_emb
 
     def search(self, query, top_k=10, cam_name=None, timestamp=None):
@@ -169,26 +163,20 @@ class CLIPSearch:
         return results[:top_k]
 
 @TinyJit
-def encode_text(model, tiny_model, text):
+def encode_text(model, text):
     x = text
-    x = tiny_model.token_embedding(x)
-    if not hasattr(model, 'tiny_positional_embedding'): model.tiny_positional_embedding = tiny_Tensor(model.positional_embedding.detach().numpy())
-    x = x + model.tiny_positional_embedding
+    x = model.token_embedding(x)
+    x = x + model.positional_embedding
     
-    for i, resblock in enumerate(model.transformer.resblocks):
+    for i in range(len(model.resblocks)):
         residual = x
-        x = tiny_model.resblocks[i].ln_1(x)
+        x = model.resblocks[i].ln_1(x)
         
         B, L, D = x.shape
-        H = resblock.attn.num_heads
+        H = 12 #resblock.attn.num_heads
         d_head = D // H
 
-        in_proj_weight_tiny = tiny_Tensor(resblock.attn.in_proj_weight.detach().numpy()) # todo store these
-        in_proj_bias_tiny = tiny_Tensor(resblock.attn.in_proj_bias.detach().numpy())
-        attn_mask = tiny_Tensor(model.attn_mask.detach().numpy())
-        
-
-        qkv = x.matmul(in_proj_weight_tiny.T) + in_proj_bias_tiny
+        qkv = x.matmul(model.resblocks[i].in_proj_weight.T) + model.resblocks[i].in_proj_bias
         q, k, v = qkv.split(D, dim=-1)
         q = q.view(B, L, H, d_head).transpose(1, 2)
         k = k.view(B, L, H, d_head).transpose(1, 2)
@@ -196,25 +184,25 @@ def encode_text(model, tiny_model, text):
 
         scale = 1.0 / (d_head ** 0.5)
         attn_scores = q.matmul(k.transpose(-2, -1)) * scale  # (B,H,L,L)
-        bool_mask = attn_mask < 0
+        bool_mask = model.attn_mask < 0
         attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
         attn_probs = tiny_Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
-        x = context.matmul(tiny_model.resblocks[i].attn_out_proj_weight.T) + tiny_model.resblocks[i].attn_out_proj_bias
+        x = context.matmul(model.resblocks[i].attn_out_proj_weight.T) + model.resblocks[i].attn_out_proj_bias
 
         x += residual
         residual = x
-        x = tiny_model.resblocks[i].ln_2(x)
-        x = tiny_model.resblocks[i].mlp_c_fc(x)
+        x = model.resblocks[i].ln_2(x)
+        x = model.resblocks[i].mlp_c_fc(x)
         x = x.gelu()
-        x = tiny_model.resblocks[i].mlp_c_proj(x)
+        x = model.resblocks[i].mlp_c_proj(x)
         x += residual
 
-    x = model.tiny_ln_final(x)  # [batch_size, n_ctx, transformer.width]
+    x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
     argmax = text.argmax()
     x = x[0][argmax]
-    x = x @ tiny_model.text_projection
+    x = x @ model.text_projection
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 '''
