@@ -1,15 +1,15 @@
 import torch
-from PIL import Image
 import open_clip
 import os
 import pickle
-import time
 from datetime import datetime
+import cv2
+import numpy as np
 
 class CachedCLIPSearch:
     def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
         print(f"Loading OpenCLIP model: {model_name} ({pretrained_name})")
-        self.model, _, self.preprocess = open_clip.create_model_and_transforms(
+        self.model, _, _ = open_clip.create_model_and_transforms(
             model_name,
             pretrained=pretrained_name
         )
@@ -79,23 +79,25 @@ class CachedCLIPSearch:
 
         for i in range(0, len(new_image_list), batch_size):
             batch_paths = new_image_list[i:i + batch_size]
-            batch_images = []
+            batch_np_images = []
 
             for img_path in batch_paths:
                 try:
-                    with Image.open(img_path) as img:
-                        if img.mode != "RGB":
-                            img = img.convert("RGB")
-                        batch_images.append(img.copy())
+                    img = cv2.imread(img_path)
+                    if img is None:
+                        print(f"Failed to load {img_path}")
+                        continue
+
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    batch_np_images.append(img)
+
                 except Exception as e:
                     print(f"Error loading {img_path}: {e}")
                     continue
 
-            if batch_images:
+            if batch_np_images:
                 with torch.no_grad():
-                    batch_tensors = torch.stack(
-                        [self.preprocess(img) for img in batch_images]
-                    )
+                    batch_tensors = torch.stack([preprocess(img) for img in batch_np_images])
                     embeddings = self.model.encode_image(batch_tensors)
                     embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
 
@@ -105,15 +107,21 @@ class CachedCLIPSearch:
 
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
 
-            for img in batch_images:
-                img.close()
-
         # Save updated cache
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
+
+
+def preprocess(image):
+    image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
+    image = image.astype(np.float32) / 255.0
+    image = (image - 0.5) / 0.5
+    image = np.transpose(image, (0, 1, 2))
+    tensor = torch.from_numpy(image).permute(2, 0, 1)  # CHW
+    return tensor
 
 '''
 if __name__ == "__main__":

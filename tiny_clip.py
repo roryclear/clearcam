@@ -1,12 +1,11 @@
-from PIL import Image
 import os
 import pickle
 from datetime import datetime
 from tinygrad import nn, Tensor, TinyJit, Device
 from tinygrad.helpers import fetch
-from torchvision.transforms import functional as F
 from tinygrad.dtype import dtypes
 import numpy as np
+import cv2
 
 class TinyModel: pass
 
@@ -132,41 +131,34 @@ class CachedCLIPSearch:
 
         new_image_list = list(new_images)
 
+
         for i in range(0, len(new_image_list), batch_size):
             batch_paths = new_image_list[i:i + batch_size]
-            batch_images = []
+            batch_np = []
 
             for img_path in batch_paths:
-                try:
-                    with Image.open(img_path) as img:
-                        if img.mode != "RGB":
-                            img = img.convert("RGB")
-                        batch_images.append(img.copy())
-                except Exception as e:
-                    print(f"Error loading {img_path}: {e}")
-                    continue
+                img = cv2.imread(img_path)
+                if img is None: continue
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = preprocess(img)
+                batch_np.append(img)
 
-            batch_tensors = np.stack([inline_preprocess(img) for img in batch_images])
-            if len(batch_images) == batch_size:
-                x = Tensor(batch_tensors)
-                embeddings = tiny_precompute_embeddings(self.tiny_model, x)
-                embeddings = embeddings.numpy()
+            if not batch_np: continue
+            batch_np = np.stack(batch_np)
+
+            if len(batch_np) == batch_size:
+                embeddings = tiny_precompute_embeddings(self.tiny_model, Tensor(batch_np)).numpy()
             else:
                 embeddings = []
-                for i in range(len(batch_images)): # one by one if not batch_size
-                    single_x = Tensor(batch_tensors[i:i+1])
-                    single_embedding = tiny_precompute_embedding(self.tiny_model, single_x)
-                    single_embedding_torch = single_embedding.numpy()
-                    embeddings.append(single_embedding_torch)
+                for j in range(len(batch_np)):
+                    emb = tiny_precompute_embedding(self.tiny_model, Tensor(batch_np[j:j+1])).numpy()
+                    embeddings.append(emb)
 
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
 
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
-
-            for img in batch_images:
-                img.close()
 
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
@@ -218,15 +210,12 @@ def tiny_precompute_embedding(tiny_model, x):
     embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
     return embeddings
 
-def inline_preprocess(image):
-    image = F.resize(image, size=224, interpolation=F.InterpolationMode.BICUBIC, antialias=True)
-    image = F.center_crop(image, output_size=(224, 224))
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
-    image = F.to_tensor(image)
-    image = F.normalize(image, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-   
-    return image
+def preprocess(img):
+    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
+    img = img.astype(np.float32) / 255.0
+    img = (img - 0.5) / 0.5
+    img = np.transpose(img, (2, 0, 1))
+    return img
 
 '''
 if __name__ == "__main__":
