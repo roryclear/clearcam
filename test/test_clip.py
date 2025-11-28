@@ -1,13 +1,15 @@
-from clip import CachedCLIPSearch
+from tiny_clip import CachedCLIPSearch as tiny_CachedCLIPSearch
 from clip_search import CLIPSearch
 from tiny_clip_search import CLIPSearch as tiny_ClipSearch
 import numpy as np
 import open_clip
 import torch
 import json
+import os
 
 def setup_clip_test():
-  scanner = CachedCLIPSearch()
+  if os.path.exists("test/clip_images/embeddings.pkl"): os.remove("test/clip_images/embeddings.pkl")
+  scanner = tiny_CachedCLIPSearch()
   scanner.precompute_embeddings("test/clip_images")
 
 def test_clip_search():
@@ -68,7 +70,7 @@ def my_tokenizer(s):
 
 #for x in ["", "a", "car", "a car", "a bugatti veyron", "deep learning engineer","sxokwasikwqoiwdjwqdioqjdi"]: test_tokenizer(x) # todo failing, not bpe yet
 #for x in ["mp4-12c"]: test_tokenizer(x) # failing
-#setup_clip_test()
+setup_clip_test()
 test_clip_search()
 test_clip_search_jit()
 

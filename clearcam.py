@@ -1840,10 +1840,6 @@ if __name__ == "__main__":
     use_clip = input("Would you like to use experimental clip search on events? (see README) (y/n), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
-  if use_clip:
-    from tiny_clip_search import CLIPSearch
-    from clip import CachedCLIPSearch
-
   if rtsp_url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
@@ -1856,6 +1852,10 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
+  if use_clip:
+    from tiny_clip_search import CLIPSearch
+    from tiny_clip import CachedCLIPSearch
+
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
 
