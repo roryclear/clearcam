@@ -1,6 +1,7 @@
 import os
 import pickle
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit, Device
+from tinygrad.helpers import fetch
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
 
@@ -19,7 +20,7 @@ class CLIPSearch:
 
         self.model = TinyModel()
 
-        weights = tiny_nn.state.safe_load("open_clip_pytorch_model.safetensors")
+        weights = tiny_nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
 
         self.model.text_projection = weights["text_projection"].to(device)
         self.model.positional_embedding = weights["positional_embedding"].to(device)
