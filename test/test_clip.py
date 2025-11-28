@@ -1,8 +1,6 @@
 from tiny_clip import CachedCLIPSearch as tiny_CachedCLIPSearch
-from clip_search import CLIPSearch
 from tiny_clip_search import CLIPSearch as tiny_ClipSearch
 import numpy as np
-import open_clip
 import torch
 import json
 import os
