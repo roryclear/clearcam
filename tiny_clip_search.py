@@ -4,6 +4,10 @@ import torch
 import open_clip
 from typing import Optional
 from tinygrad import nn as tiny_nn, Tensor as tiny_Tensor, TinyJit
+import tiktoken
+import regex as re
+import gzip
+from clip_tokenizer import SimpleTokenizer
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
@@ -15,6 +19,7 @@ class CLIPSearch:
             pretrained='laion2b_s32b_b82k'
         )
         self.model = self.model.eval()
+        self.tokenizer = SimpleTokenizer()
 
         # convert here
         # .copy() or trouble
@@ -104,8 +109,11 @@ class CLIPSearch:
         print(f"\nTotal images loaded: {total_loaded}")
 
     def _encode_text(self, query):
-        tokens = open_clip.tokenize([query])
-        tokens = tiny_Tensor(tokens.detach().numpy())
+        tokens = [49406]
+        tokens += self.tokenizer.encode(query)
+        tokens.append(49407)
+        if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
+        tokens = tiny_Tensor([tokens])
         text_emb = encode_text(self.model, tokens)
         return text_emb
 
@@ -202,4 +210,5 @@ if __name__ == "__main__":
     for i, (path, score) in enumerate(results, 1):
         print(f"{i}. Score: {score:.3f} - \"{path}\"")
 '''
+
 
