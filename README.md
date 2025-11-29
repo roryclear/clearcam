@@ -32,7 +32,7 @@
 <img src="images/kg2.jpg" alt="KG2" width="400" />
 </td>
 <td>
-<img src="images/front.PNG" alt="Front" width="400" />
+<img src="images/zone.PNG" alt="Zone" width="400" />
 </td>
 </tr>
 <tr>
