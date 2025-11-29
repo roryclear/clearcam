@@ -23,6 +23,11 @@
   </tr>
 </table>
 
+<tr>
+  <td colspan="2" align="center">
+    <img src="images/sonata.PNG" alt="Sonata" style="width:100%; max-width:900px;" />
+  </td>
+</tr>
 
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
 <tr valign="top">
