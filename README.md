@@ -28,7 +28,6 @@
 <tr valign="top">
 <td style="padding-right: 10px;">
 <img src="images/server.PNG" alt="Server" width="400" /><br/>
-<img src="images/kg1.jpg" alt="KG1" width="400" /><br/>
 <img src="images/kg2.jpg" alt="KG2" width="400" />
 </td>
 <td>
