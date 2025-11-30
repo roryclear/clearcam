@@ -1723,6 +1723,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_thread = None
         self.max_gb = 70
         self.searcher = None
+        self.lookup = None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1756,9 +1757,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        if not self.searcher: self.searcher = CachedCLIPSearch()
+        if not self.searcher:
+          self.searcher = CachedCLIPSearch()
+        if not self.lookup:
+          self.lookup = CLIPSearch()
         while not self.clip_stop_event.is_set():
             try:
+                self.lookup._load_all_embeddings()
+                self.lookup.search("daewoo matiz")
                 object_folders = self.searcher.find_object_folders("data/cameras")
                 for folder in object_folders:
                     self.searcher.precompute_embeddings(folder)
@@ -1890,8 +1896,8 @@ if __name__ == "__main__":
   searcher = None
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
-      print(f"Serving at http://{get_lan_ip()}:8080")
+      server = ThreadedHTTPServer(('0.0.0.0', 8081), HLSRequestHandler)
+      print(f"Serving at http://{get_lan_ip()}:8081")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
         print("Port in use, server not started.")

@@ -5,6 +5,8 @@ from tinygrad.helpers import fetch
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
 import gc
+import shutil
+import time
 
 class TinyModel:
     pass
@@ -89,6 +91,7 @@ class CLIPSearch:
 
             loaded_count = len(folder_embeddings)
             print(f"Loaded {loaded_count} embeddings from {cache_file}")
+            os.remove(cache_file)
             return loaded_count
             
         except Exception as e:
@@ -163,6 +166,11 @@ class CLIPSearch:
         else:
             results = [(path, score) for path, score, _ in all_similarities]
         results.sort(key=lambda x: x[1], reverse=True)
+        print("rory results =",results,len(results))
+        for path, score in results:
+            if score >= 0.27: shutil.copy(path, f"img_{str(time.time())}.jpg")
+            os.remove(path)
+        self.image_embeddings = {}
         return results[:top_k]
 
 @TinyJit
