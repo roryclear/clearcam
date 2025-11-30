@@ -143,34 +143,35 @@ class CLIPSearch:
         text_embedding = text_embedding.numpy()
         all_similarities = []
         for path, img_embedding in self.image_embeddings.items():
-            normalized_path = path.replace("\\", "/")
-            if cam_name and f"/cameras/{cam_name}/" not in normalized_path:
-                continue
-            if timestamp and f"/objects/{timestamp}/" not in normalized_path:
-                continue
             similarity = (img_embedding @ text_embedding.T).item()
             filename = os.path.basename(path)
             if filename.lower().endswith((".jpg", ".jpeg", ".png")):
                 object_id = filename.split("_")[1].split(".")[0] if "_" in filename else None
                 all_similarities.append((path, similarity, object_id))
         
+        self.image_embeddings = {}
+
         if any(item[2] for item in all_similarities):
             best_per_id = {}
             for path, score, object_id in all_similarities:
                 if object_id is not None:
                     if object_id not in best_per_id or score > best_per_id[object_id][1]:
+                        if object_id in best_per_id: os.remove(best_per_id[object_id][0])
                         best_per_id[object_id] = (path, score)
-
-            items_without_id = [(path, score) for path, score, object_id in all_similarities if object_id is None]
-            results = list(best_per_id.values()) + items_without_id
+                    else:
+                        os.remove(path)
+            results = list(best_per_id.values())
         else:
             results = [(path, score) for path, score, _ in all_similarities]
         results.sort(key=lambda x: x[1], reverse=True)
-        print("rory results =",results,len(results))
         for path, score in results:
-            if score >= 0.27: shutil.copy(path, f"img_{str(time.time())}.jpg")
-            os.remove(path)
-        self.image_embeddings = {}
+            if score >= 0.23:
+                print("COPYING")
+                shutil.copy(path, f"img_{str(time.time())}.jpg")
+                os.remove(path)
+            else:
+                os.remove(path)
+                print("not copying",score)
         return results[:top_k]
 
 @TinyJit
