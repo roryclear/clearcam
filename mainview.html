@@ -988,7 +988,7 @@
     <div id="alertsModal" class="modal">
       <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
         <div class="modal-header">
-          <h3>Alerts & Counts - <span id="alertsCameraName"></span></h3>
+          <h3>Alerts - <span id="alertsCameraName"></span></h3>
           <span class="close" onclick="closeAlertsModal()">&times;</span>
         </div>
         <div class="modal-body">
@@ -998,13 +998,6 @@
             <div style="display: flex; gap: 10px; justify-content: flex-start; margin-top: 10px;">
               <button onclick="openAlertModal()">Add Alert</button>
             </div>
-          </div>
-
-          <div class="counts-wrapper" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 20px; margin: 20px 0;">
-            <table id="objectCounts" style="font-size: 1rem; border-collapse: collapse;">
-              <tbody></tbody>
-            </table>
-            <button onclick="resetCounts()">Reset</button>
           </div>
         </div>
       </div>
