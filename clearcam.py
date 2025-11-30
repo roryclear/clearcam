@@ -1764,7 +1764,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         while not self.clip_stop_event.is_set():
             try:
                 self.lookup._load_all_embeddings()
-                self.lookup.search("daewoo matiz")
+                self.lookup.search("daewoo matiz", cam_name="kyrgyz")
                 object_folders = self.searcher.find_object_folders("data/cameras")
                 for folder in object_folders:
                     self.searcher.precompute_embeddings(folder)

@@ -165,14 +165,78 @@ class CLIPSearch:
             results = [(path, score) for path, score, _ in all_similarities]
         results.sort(key=lambda x: x[1], reverse=True)
         for path, score in results:
-            if score >= 0.23:
-                print("COPYING")
+            if score >= 0.25:
+                
                 shutil.copy(path, f"img_{str(time.time())}.jpg")
+                tweet_image_with_text(
+                    image_path=path,
+                    text=f"spotted in {cam_name}, query: '{query}' score: {score:.2f}",
+                    api_key="",
+                    api_key_secret="",
+                    access_token="",
+                    access_token_secret=""
+                )
                 os.remove(path)
             else:
                 os.remove(path)
                 print("not copying",score)
         return results[:top_k]
+
+
+import tweepy
+
+def tweet_image_with_text(
+    image_path: str,
+    text: str,
+    api_key: str,
+    api_key_secret: str,
+    access_token: str,
+    access_token_secret: str
+):
+    """
+    Tweet a JPG image with a text caption.
+
+    image_path: path to your .jpg file
+    text: tweet text
+    """
+
+    # OAuth1 (required for media upload)
+    auth = tweepy.OAuth1UserHandler(
+        api_key,
+        api_key_secret,
+        access_token,
+        access_token_secret
+    )
+
+    auth = tweepy.OAuth1UserHandler(api_key, api_key_secret, access_token, access_token_secret)
+    api = tweepy.API(auth)
+    try:
+        api.verify_credentials()  # Or api.get_me() in recent Tweepy
+        print("Auth OK")
+    except tweepy.errors.Unauthorized:
+        print("Invalid credentials")
+
+    api = tweepy.API(auth)
+
+    # Upload media
+    media = api.media_upload(image_path)
+
+    # v2 Client for tweeting
+    client = tweepy.Client(
+        consumer_key=api_key,
+        consumer_secret=api_key_secret,
+        access_token=access_token,
+        access_token_secret=access_token_secret
+    )
+
+    # Send tweet
+    response = client.create_tweet(
+        text=text,
+        media_ids=[media.media_id]
+    )
+    return response
+
+
 
 @TinyJit
 def encode_text(model, text):
