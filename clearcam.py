@@ -457,7 +457,7 @@ class VideoCapture:
     self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}_raw' / "streams"
     self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
-    self.counter = RollingClassCounter(cam_name=cam_name)
+    self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.cam_name = cam_name
     self.object_set = set()
     self.object_set_zone = set()
@@ -685,7 +685,7 @@ class VideoCapture:
               if os.path.exists(counters_file):
                   with open(counters_file, 'rb') as f:
                       counter = pickle.load(f)
-                  if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name)
+                  if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name, window_seconds=float('inf'))
                   counter = self.counter
                   with open(counters_file, 'wb') as f:
                       pickle.dump(counter, f)
