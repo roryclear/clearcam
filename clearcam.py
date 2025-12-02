@@ -453,8 +453,8 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
-    self.output_dir = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
-    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}_raw' / "streams"
+    self.output_dir = CAMERA_BASE_DIR / f'{cam_name}_det' / "streams"
+    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
     self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
@@ -823,8 +823,8 @@ class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir = CAMERA_BASE_DIR / self.cam_name / output_dir
-        self.output_dir_raw = CAMERA_BASE_DIR / (f"{self.cam_name}_raw") / output_dir
+        self.output_dir = CAMERA_BASE_DIR / (f"{self.cam_name}_det") / output_dir
+        self.output_dir_raw = CAMERA_BASE_DIR / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -1082,7 +1082,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_det")]
             self.send_200(available_cams)
             return
 

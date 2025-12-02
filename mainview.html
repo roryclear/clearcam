@@ -1943,7 +1943,7 @@
       }
       const checkbox = document.querySelector(`.show-detections-checkbox[data-camera="${camName}"]`);
       const showDetections = checkbox ? checkbox.checked : false;
-      const streamSuffix = showDetections ? "" : "_raw";
+      const streamSuffix = showDetections ? "_det" : "";
       
       const encoded = encodeURIComponent(camName);
       const baseUrl = window.location.origin;
@@ -2063,7 +2063,7 @@
       const streamInfo = activeVideoStreams.get(cameraName);
       if (!streamInfo) return;
 
-      const streamSuffix = showDetections ? "" : "_raw";
+      const streamSuffix = showDetections ? "_det" : "";
       const newStreamUrl = `${window.location.origin}/${encodeURIComponent(cameraName)}${streamSuffix}/streams/${currentStreamDate}/stream.m3u8`;
       if (streamInfo.streamUrl !== newStreamUrl) {
         console.log(`Updating stream for ${cameraName} to ${showDetections ? 'with' : 'without'} detections`);
@@ -2275,7 +2275,7 @@
 
       cams.forEach(cam => {
         const encoded = encodeURIComponent(cam);
-        const videoUrl = `${base}/${encoded}_raw/streams/${currentStreamDate}/stream.m3u8`;
+        const videoUrl = `${base}/${encoded}/streams/${currentStreamDate}/stream.m3u8`;
 
         const wrapper = document.createElement('div');
         wrapper.className = 'video-wrapper';
