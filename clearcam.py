@@ -1878,6 +1878,8 @@ if __name__ == "__main__":
   if rtsp_url:
     yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
     state_dict = safe_load(get_weights_location(yolo_variant))
+    for k, _ in state_dict.items(): # todo hack because https://github.com/tinygrad/tinygrad/commit/565a7a6218e5ab920360c21d23af6bcae8df82b5
+      if k.endswith("num_batches_tracked"): state_dict[k] = Tensor.empty()
     load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
