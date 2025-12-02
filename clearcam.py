@@ -343,9 +343,7 @@ import threading
 BASE = Path(__file__).parent / "data"
 CAMERA_BASE_DIR = BASE / "cameras"
 CAMS_FILE = BASE / "cams.pkl"
-NEW_DIR = BASE / "newdir"
 CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
-NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
@@ -453,8 +451,8 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
-    self.output_dir = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
-    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}_raw' / "streams"
+    self.output_dir_det = CAMERA_BASE_DIR / f'{cam_name}_det' / "streams"
+    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
     self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
@@ -508,7 +506,7 @@ class VideoCapture:
   def _get_new_stream_dir(self):
       timestamp = datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw / timestamp
-      stream_dir = self.output_dir / timestamp
+      stream_dir = self.output_dir_det / timestamp
       self.dir = stream_dir_raw
       stream_dir.mkdir(parents=True, exist_ok=True)
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
@@ -823,8 +821,8 @@ class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir = CAMERA_BASE_DIR / self.cam_name / output_dir
-        self.output_dir_raw = CAMERA_BASE_DIR / (f"{self.cam_name}_raw") / output_dir
+        self.output_dir_det = CAMERA_BASE_DIR / (f"{self.cam_name}_det") / output_dir
+        self.output_dir_raw = CAMERA_BASE_DIR / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -832,21 +830,20 @@ class HLSStreamer:
         self.start_time = time.time()
         self.feeding_frames = False
         self._stop_event = threading.Event()
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.output_dir_det.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
     
     def _get_new_stream_dir(self):
         timestamp = datetime.now().strftime("%Y-%m-%d")
-        stream_dir = self.output_dir / timestamp
+        stream_dir_det = self.output_dir_det / timestamp
         stream_dir_raw = self.output_dir_raw / timestamp
-        self.cam.dir = stream_dir
-        stream_dir.mkdir(exist_ok=True)
+        stream_dir_det.mkdir(exist_ok=True)
         stream_dir_raw.mkdir(exist_ok=True)
-        return stream_dir, stream_dir_raw
+        return stream_dir_det, stream_dir_raw
         
     def start(self):
         self.running = True
-        self.current_stream_dir, self.current_stream_dir_raw = self._get_new_stream_dir()
+        self.current_stream_dir_det, self.current_stream_dir_raw = self._get_new_stream_dir()
         self.recent_segments_raw = deque()
         self.recent_segments_raw_live = deque()
         self.start_time = time.time()
@@ -869,9 +866,8 @@ class HLSStreamer:
             "-hls_list_size", "0",
             "-hls_flags", "delete_segments",
             "-hls_allow_cache", "0",
-            str(self.current_stream_dir / "stream.m3u8")
+            str(self.current_stream_dir_det / "stream.m3u8")
         ]
-
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
     def export_clip(self,output_path: Path,live=False):
@@ -1082,7 +1078,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_raw")]
+            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_det")]
             self.send_200(available_cams)
             return
 
@@ -1237,12 +1233,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name parameter")
                 return
             
-            cam_name_raw = cam_name + "_raw"
-            cam_path = CAMERA_BASE_DIR / cam_name
-            cam_path_raw = CAMERA_BASE_DIR / cam_name_raw
-            if cam_path.exists() and cam_path.is_dir():
+            cam_name_raw = cam_name
+            cam_path_det = CAMERA_BASE_DIR / (cam_name + "_det")
+            cam_path_raw = CAMERA_BASE_DIR / cam_name
+            if cam_path_det.exists() and cam_path_det.is_dir():
                 try:
-                    shutil.rmtree(cam_path)
+                    shutil.rmtree(cam_path_det)
                     shutil.rmtree(cam_path_raw)
                     cams.pop(cam_name, None)
                     cams.pop(cam_name_raw, None) # todo needed?
@@ -1797,8 +1793,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       recordings.sort(key=lambda x: x[1])
       oldest_recording = recordings[0][0]
       shutil.rmtree(oldest_recording)
-      event_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("event_images") / Path(oldest_recording.name) # todo, remove _raw
-      object_images_dir = largest_cam.with_name(largest_cam.name.replace("_raw", "")) / Path("objects") / Path(oldest_recording.name) # todo, remove _raw
+      event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
+      object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
       if event_images_dir.exists(): shutil.rmtree(event_images_dir)
       if object_images_dir.exists(): shutil.rmtree(object_images_dir)
       print(f"Deleted oldest recording: {oldest_recording}")
