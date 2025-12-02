@@ -1237,7 +1237,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             cam_name_raw = cam_name
             cam_path_det = CAMERA_BASE_DIR / (cam_name + "_det")
-            cam_path_raw = CAMERA_BASE_DIR / cam_name_raw
+            cam_path_raw = CAMERA_BASE_DIR / cam_name
             if cam_path_det.exists() and cam_path_det.is_dir():
                 try:
                     shutil.rmtree(cam_path_det)
