@@ -343,9 +343,7 @@ import threading
 BASE = Path(__file__).parent / "data"
 CAMERA_BASE_DIR = BASE / "cameras"
 CAMS_FILE = BASE / "cams.pkl"
-NEW_DIR = BASE / "newdir"
 CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
-NEW_DIR.mkdir(parents=True, exist_ok=True) 
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
