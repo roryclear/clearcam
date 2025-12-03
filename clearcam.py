@@ -1166,7 +1166,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_det")]
+            cams = database.run_get("cams", "links")
+            available_cams = list(cams["links"].keys()) if "links" in cams else []
             self.send_200(available_cams)
             return
 
@@ -1179,7 +1180,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
-            cams[cam_name] = rtsp
             if not self.db: self.db = db()
             self.db.run_put("cams", "links", [cam_name, rtsp])
 
@@ -1320,24 +1320,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name parameter")
                 return
             
-            cam_name_raw = cam_name
             cam_path_det = CAMERA_BASE_DIR / (cam_name + "_det")
             cam_path_raw = CAMERA_BASE_DIR / cam_name
-            if cam_path_det.exists() and cam_path_det.is_dir():
-                try:
-                    shutil.rmtree(cam_path_det)
-                    shutil.rmtree(cam_path_raw)
-                    cams.pop(cam_name, None)
-                    cams.pop(cam_name_raw, None)
-                        
-                    if not self.db: self.db = db()
-                    self.db.run_put("cams", "links", [cam_name, None])
-                except Exception as e:
-                    self.send_error(500, f"Error deleting camera: {e}")
-                    return
-            else:
-                self.send_error(404, "Camera not found")
-                return
+            try:
+              shutil.rmtree(cam_path_det)
+              shutil.rmtree(cam_path_raw)
+                  
+              if not self.db: self.db = db()
+              self.db.run_put("cams", "links", [cam_name, None])
+            except Exception as e:
+              self.send_error(500, f"Error deleting camera: {e}")
+              return
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
