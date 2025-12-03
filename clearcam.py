@@ -1057,7 +1057,10 @@ class db():
     if not d: d = {}
     if key not in d: d[key] = {}
     if value != []:
-      d[key][value[0]] = value[1] # todo
+      if value[1] is not None:
+        d[key][value[0]] = value[1] # todo
+      else:
+        del d[key][value[0]]
       diskcache_put(table, key, d)
     return 0 #todo
   
@@ -1073,12 +1076,11 @@ def run_get(db_q, db, table, key="default"):
   db_q.put(res)
   return res
 
-
 def run_put(db_q, db, table, key=None, value=None):
   res = db.put(table, key, value)
   db_q.put(res)
 
-def run_delete(db_q, db, table, key=None):
+def run_delete(db_q, db, table, key):
   res = db.delete(table, key)
   db_q.put(res)
 
@@ -1290,10 +1292,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     cams.pop(cam_name_raw, None) # todo needed?
                     with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
-
+                        
                     if not self.db: self.db = db()
                     db_q = multiprocessing.Queue()
-                    p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", cam_name, rtsp))
+                    p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", [cam_name, None]))
                     p.start()
                     results = db_q.get(timeout=1)
                     p.join()
