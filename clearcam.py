@@ -343,7 +343,6 @@ import threading
 
 BASE = Path(__file__).parent / "data"
 CAMERA_BASE_DIR = BASE / "cameras"
-CAMS_FILE = BASE / "cams.pkl"
 CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
@@ -1133,10 +1132,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
             cams[cam_name] = rtsp
-
-            with open(CAMS_FILE, 'wb') as f:
-              pickle.dump(cams, f)
-
             if not self.db: self.db = db()
             db_q = multiprocessing.Queue()
             p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", [cam_name, rtsp]))
@@ -1289,9 +1284,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     shutil.rmtree(cam_path_det)
                     shutil.rmtree(cam_path_raw)
                     cams.pop(cam_name, None)
-                    cams.pop(cam_name_raw, None) # todo needed?
-                    with open(CAMS_FILE, 'wb') as f:
-                        pickle.dump(cams, f)
+                    cams.pop(cam_name_raw, None)
                         
                     if not self.db: self.db = db()
                     db_q = multiprocessing.Queue()
