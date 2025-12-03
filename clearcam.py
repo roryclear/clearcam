@@ -1898,26 +1898,12 @@ if __name__ == "__main__":
   elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
 
   database = db()
-  '''
-  p = multiprocessing.Process(target=run_put, args=(db_q, database, "cams", "links", ["cam1","link1"]))
-  p.start()
-  results = db_q.get(timeout=1)
-  p.join()
-
-  db_q = multiprocessing.Queue()
-  p = multiprocessing.Process(target=run_put, args=(db_q, database, "cams", "links", ["cam2","link2"]))
-  p.start()
-  results = db_q.get(timeout=1)
-  p.join()
-  '''
 
   cams = database.run_get("cams", "links")
   if cams and "links" in cams:
     cams = cams["links"]
   else:
     cams = {}
-  print("RORY CAMS =",cams)
-  #exit()
          
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
