@@ -3,6 +3,7 @@ from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.device import is_dtype_supported
 from tinygrad import dtypes
+from tinygrad.helpers import diskcache_put, diskcache_get
 import numpy as np
 from itertools import chain
 from pathlib import Path
@@ -1044,11 +1045,41 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
+class db():
+  def __init__(self):
+     pass
+  
+  def get(self, table, key=None): return diskcache_get(table, key if key else table)
+
+  def put(self, table, key=None, value=None):
+    if not key: key = table
+    d = self.get(table, key)
+    if not d: d = {}
+    d[key] = value
+    diskcache_put(table, key, d)
+    return 0 #todo
+  
+  def delete(self, table, key=None):
+    if not key: key = table
+    d = self.get(table, key)
+    del d[key]
+    diskcache_put(table, key, d)
+    return 0 #todo
+
+def run_put(db_q, db, table, key=None, value=None):
+  res = db.put(table, key, value)
+  db_q.put(res)
+
+def run_delete(db_q, db, table, key=None):
+  res = db.delete(table, key)
+  db_q.put(res)
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         self.searcher = None
+        self.db = None
         super().__init__(*args, **kwargs)
 
     def send_200(self, body=None):
@@ -1094,7 +1125,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             cams[cam_name] = rtsp
 
             with open(CAMS_FILE, 'wb') as f:
-              pickle.dump(cams, f)  
+              pickle.dump(cams, f)
+
+            if not self.db: self.db = db()
+            db_q = multiprocessing.Queue()
+            p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", cam_name, rtsp))
+            p.start()
+            results = db_q.get(timeout=1)
+            p.join()
 
             # Redirect back to home
             self.send_response(302)
@@ -1244,6 +1282,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     cams.pop(cam_name_raw, None) # todo needed?
                     with open(CAMS_FILE, 'wb') as f:
                         pickle.dump(cams, f)
+
+                    if not self.db: self.db = db()
+                    db_q = multiprocessing.Queue()
+                    p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", cam_name, rtsp))
+                    p.start()
+                    results = db_q.get(timeout=1)
+                    p.join()
+
                 except Exception as e:
                     self.send_error(500, f"Error deleting camera: {e}")
                     return
@@ -1815,14 +1861,13 @@ if __name__ == "__main__":
   if platform.system() == 'Darwin': subprocess.Popen(['caffeinate', '-dimsu'])
   elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
   elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
-
   if os.path.exists(CAMS_FILE):
       with open(CAMS_FILE, 'rb') as f:
         cams = pickle.load(f)
   else:
       with open(CAMS_FILE, 'wb') as f:
-         pickle.dump(cams, f)  
-
+        pickle.dump(cams, f)
+         
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
