@@ -1039,6 +1039,7 @@ def point_not_in_polygon(coords, poly):
     return True
 
 import multiprocessing
+import atexit
 
 def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
@@ -1046,42 +1047,89 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
 
 class db():
   def __init__(self):
-     pass
+    self._process_pool = []
+    self._cleanup_registered = False
+    self._register_cleanup()
   
-  def get(self, table, key=None):
-    return diskcache_get(table, key if key else table)
-
+  @staticmethod
+  def _run_get(result_queue, table, key="default"):
+    result = diskcache_get(table, key if key else table)
+    result_queue.put(result)
+  
+  @staticmethod
+  def _run_put(result_queue, table, key, value):
+    d = diskcache_get(table, key if key else table)
+    if not d: d = {}
+    if key not in d: d[key] = {}
+    if value != []:
+      if value[1] is not None:
+        d[key][value[0]] = value[1]
+      else:
+        del d[key][value[0]]
+      diskcache_put(table, key, d)
+    result_queue.put(0)
+      
+  def _register_cleanup(self):
+    if not self._cleanup_registered:
+      atexit.register(self._cleanup_all)
+      self._cleanup_registered = True
+  
+  def _cleanup_all(self):
+    for process in self._process_pool:
+      if process.is_alive():
+          try:
+            process.terminate()
+            process.join(timeout=1)
+          except:
+            try:
+                process.kill()
+                process.join(timeout=0.5)
+            except:
+              pass
+  
+  def get(self, table, key=None): return diskcache_get(table, key if key else table)
+  
   def put(self, table, key, value):
     d = self.get(table, key)
     if not d: d = {}
     if key not in d: d[key] = {}
     if value != []:
       if value[1] is not None:
-        d[key][value[0]] = value[1] # todo
+        d[key][value[0]] = value[1]
       else:
         del d[key][value[0]]
       diskcache_put(table, key, d)
-    return 0 #todo
+    return 0
+
+  def _run_in_process(self, func, *args, timeout=30):
+    result_queue = multiprocessing.Queue()
+    process = multiprocessing.Process(
+      target=func,
+      args=(result_queue, *args),
+      daemon=True
+    )
+    
+    self._process_pool.append(process)
+    process.start()
+    
+    try:
+      result = result_queue.get(timeout=timeout)
+      process.join(timeout=5)
+      return result
+    except multiprocessing.TimeoutError:
+      if process.is_alive():
+        process.terminate()
+        process.join(timeout=2)
+        if process.is_alive():
+          process.kill()
+          process.join(timeout=1)
+      return
+    finally:
+      if process in self._process_pool: self._process_pool.remove(process)
   
-  def delete(self, table, key="default"):
-    d = self.get(table, key)
-    del d[table][key]
-    diskcache_put(table, key, d)
-    return 0 #todo
-
-def run_get(db_q, db, table, key="default"):
-  if not key: key = table
-  res = db.get(table, key)
-  db_q.put(res)
-  return res
-
-def run_put(db_q, db, table, key=None, value=None):
-  res = db.put(table, key, value)
-  db_q.put(res)
-
-def run_delete(db_q, db, table, key):
-  res = db.delete(table, key)
-  db_q.put(res)
+  def run_get(self, table, key="default"): return self._run_in_process(self._run_get, table, key)
+  
+  def run_put(self, table, key, value): return self._run_in_process(self._run_put, table, key, value)
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -1133,11 +1181,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
             cams[cam_name] = rtsp
             if not self.db: self.db = db()
-            db_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", [cam_name, rtsp]))
-            p.start()
-            results = db_q.get(timeout=60)
-            p.join()
+            self.db.run_put("cams", "links", [cam_name, rtsp])
 
             # Redirect back to home
             self.send_response(302)
@@ -1287,12 +1331,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     cams.pop(cam_name_raw, None)
                         
                     if not self.db: self.db = db()
-                    db_q = multiprocessing.Queue()
-                    p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", [cam_name, None]))
-                    p.start()
-                    results = db_q.get(timeout=1)
-                    p.join()
-
+                    self.db.run_put("cams", "links", [cam_name, None])
                 except Exception as e:
                     self.send_error(500, f"Error deleting camera: {e}")
                     return
@@ -1866,7 +1905,6 @@ if __name__ == "__main__":
   elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
 
   database = db()
-  db_q = multiprocessing.Queue()
   '''
   p = multiprocessing.Process(target=run_put, args=(db_q, database, "cams", "links", ["cam1","link1"]))
   p.start()
@@ -1880,10 +1918,7 @@ if __name__ == "__main__":
   p.join()
   '''
 
-  p = multiprocessing.Process(target=run_get, args=(db_q, database, "cams", "links"))
-  p.start()
-  cams = db_q.get(timeout=1)
-  p.join()
+  cams = database.run_get("cams", "links")
   if cams and "links" in cams:
     cams = cams["links"]
   else:
