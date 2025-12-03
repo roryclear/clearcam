@@ -1049,22 +1049,30 @@ class db():
   def __init__(self):
      pass
   
-  def get(self, table, key=None): return diskcache_get(table, key if key else table)
+  def get(self, table, key=None):
+    return diskcache_get(table, key if key else table)
 
-  def put(self, table, key=None, value=None):
-    if not key: key = table
+  def put(self, table, key, value):
     d = self.get(table, key)
     if not d: d = {}
-    d[key] = value
-    diskcache_put(table, key, d)
+    if key not in d: d[key] = []
+    if value != []:
+      d[key].append(value)
+      diskcache_put(table, key, d)
     return 0 #todo
   
-  def delete(self, table, key=None):
-    if not key: key = table
+  def delete(self, table, key="default"):
     d = self.get(table, key)
-    del d[key]
+    del d[table][key]
     diskcache_put(table, key, d)
     return 0 #todo
+
+def run_get(db_q, db, table, key="default"):
+  if not key: key = table
+  res = db.get(table, key)
+  db_q.put(res)
+  return res
+
 
 def run_put(db_q, db, table, key=None, value=None):
   res = db.put(table, key, value)
@@ -1129,9 +1137,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if not self.db: self.db = db()
             db_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", cam_name, rtsp))
+            p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", {cam_name: rtsp}))
             p.start()
-            results = db_q.get(timeout=1)
+            results = db_q.get(timeout=60)
             p.join()
 
             # Redirect back to home
@@ -1861,9 +1869,31 @@ if __name__ == "__main__":
   if platform.system() == 'Darwin': subprocess.Popen(['caffeinate', '-dimsu'])
   elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
   elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
-  if os.path.exists(CAMS_FILE):
-      with open(CAMS_FILE, 'rb') as f:
-        cams = pickle.load(f)
+
+  database = db()
+  db_q = multiprocessing.Queue()
+  '''
+  p = multiprocessing.Process(target=run_put, args=(db_q, database, "cams", "links", ["cam1","link1"]))
+  p.start()
+  results = db_q.get(timeout=1)
+  p.join()
+
+  db_q = multiprocessing.Queue()
+  p = multiprocessing.Process(target=run_put, args=(db_q, database, "cams", "links", ["cam2","link2"]))
+  p.start()
+  results = db_q.get(timeout=1)
+  p.join()
+  '''
+
+  p = multiprocessing.Process(target=run_get, args=(db_q, database, "cams", "links"))
+  p.start()
+  cams = db_q.get(timeout=1)
+  p.join()
+  print("RORY CAMS =",cams)
+  if not cams: cams = {}
+  #exit()
+
+
   else:
       with open(CAMS_FILE, 'wb') as f:
         pickle.dump(cams, f)
