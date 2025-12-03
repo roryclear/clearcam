@@ -35,8 +35,10 @@ def test_yolo_infer():
   depth, width, ratio = get_variant_multiples("s")
   yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
   state_dict = safe_load(get_weights_location("s"))
+  for k, _ in state_dict.items(): # todo hack because https://github.com/tinygrad/tinygrad/commit/565a7a6218e5ab920360c21d23af6bcae8df82b5
+    if k.endswith("num_batches_tracked"): state_dict[k] = Tensor.empty()
   load_state_dict(yolo_infer, state_dict)
-  frame = cv2.VideoCapture("test/MOT16-03.mp4").read()[1]
+  frame = cv2.VideoCapture("test/videos/MOT16-03.mp4").read()[1]
   frame = Tensor(frame)
   preds = do_inf(frame, yolo_infer).numpy()
   counts = defaultdict(int)
@@ -78,7 +80,6 @@ def test_bytetracker():
     assert total_time2 <= (total_time * 1.0), "slower"
 
 test_bytetracker()
-#test_yolo_infer()
-#test_linear_sum_assigment()
-#test_linear_sum_assigment_speed()
-
+test_yolo_infer()
+test_linear_sum_assigment()
+test_linear_sum_assigment_speed()
