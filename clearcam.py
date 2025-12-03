@@ -1055,9 +1055,9 @@ class db():
   def put(self, table, key, value):
     d = self.get(table, key)
     if not d: d = {}
-    if key not in d: d[key] = []
+    if key not in d: d[key] = {}
     if value != []:
-      d[key].append(value)
+      d[key][value[0]] = value[1] # todo
       diskcache_put(table, key, d)
     return 0 #todo
   
@@ -1137,7 +1137,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if not self.db: self.db = db()
             db_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", {cam_name: rtsp}))
+            p = multiprocessing.Process(target=run_put, args=(db_q, self.db, "cams", "links", [cam_name, rtsp]))
             p.start()
             results = db_q.get(timeout=60)
             p.join()
@@ -1889,14 +1889,12 @@ if __name__ == "__main__":
   p.start()
   cams = db_q.get(timeout=1)
   p.join()
-  print("RORY CAMS =",cams)
-  if not cams: cams = {}
-  #exit()
-
-
+  if cams and "links" in cams:
+    cams = cams["links"]
   else:
-      with open(CAMS_FILE, 'wb') as f:
-        pickle.dump(cams, f)
+    cams = {}
+  print("RORY CAMS =",cams)
+  #exit()
          
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
