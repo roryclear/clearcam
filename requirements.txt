@@ -1,4 +1,4 @@
-git+https://github.com/tinygrad/tinygrad.git@0874ba8cc89fb89a46217ff75e1ef2701b2b010a
+git+https://github.com/tinygrad/tinygrad.git@42f6cf3a906dd17bc47c63894b7b5ca8f9c99a66
 numpy==2.0.0
 opencv-python-headless==4.10.0.84
 scipy==1.14.1
