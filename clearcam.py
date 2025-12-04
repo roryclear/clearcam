@@ -669,10 +669,11 @@ class VideoCapture:
 
               counters = database.run_get("counters", self.cam_name)
               if counters is not None:
-                counters = counters[self.cam_name]["counter"]
-                if counters.reset:
-                  self.counter.reset_counts()
-                  self.counter.reset = False
+                if self.cam_name in counters and "counter" in counters[self.cam_name]:
+                  counters = counters[self.cam_name]["counter"]
+                  if counters.reset:
+                    self.counter.reset_counts()
+                    self.counter.reset = False
               database.run_put("counters", cam_name, ["counter", self.counter])
               
               alerts = database.run_get("alerts", self.cam_name)
@@ -687,8 +688,8 @@ class VideoCapture:
                 self.alert_counters[id] = a
                 for c in a.classes: classes.add(str(c))
               
-              settings = database.run_get("settings", self.cam_name)
-              if settings: self.settings = settings[self.cam_name]["settings"]
+                settings = database.run_get("settings", self.cam_name)
+                if settings and self.cam_name in settings and "settings" in settings[self.cam_name]: self.settings = settings[self.cam_name]["settings"]
                   
             if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                 last_live_seg = time.time()
@@ -1212,7 +1213,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/get_settings":
             zone = database.run_get("settings",cam_name)
             if zone is not None:
-              zone = zone[cam_name]["settings"]
+              if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
             else:
               zone = {}
             
@@ -1252,8 +1253,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             try:
               shutil.rmtree(cam_path_det)
               shutil.rmtree(cam_path_raw)
+              # todo, alerts
               database.run_put("cams", "links", [cam_name, None])
-              database.run_put("alerts", cam_name, [cam_name, None]) # todo, deletes for now
               database.run_put("settings", cam_name, ["settings", None])
               database.run_put("counters", cam_name, ["counter", None])
             except Exception as e:
