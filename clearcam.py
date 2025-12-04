@@ -480,9 +480,6 @@ class VideoCapture:
 
     self.db = db()
     
-    settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    
     alerts = self.db.run_get("alerts",self.cam_name)
     if alerts:
       self.alert_counters = alerts[self.cam_name]
@@ -492,14 +489,7 @@ class VideoCapture:
       self.alert_counters[id] = alert_counter
       self.db.run_put("alerts", self.cam_name, [id, alert_counter])
 
-    try:
-        with open(settings_file, "rb") as f:
-            self.settings = pickle.load(f)
-    except Exception:
-        print("zone file not found")
-
     self.lock = threading.Lock()
-
     self._open_ffmpeg()
 
     # Start threads
@@ -1000,22 +990,6 @@ class HLSStreamer:
                 self.ffmpeg_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
-
-
-def append_to_pickle_list(pkl_path, item): # todo, still needed?
-    pkl_path = Path(pkl_path)
-    if pkl_path.exists():
-        try:
-            with open(pkl_path, 'rb') as f:
-                data = pickle.load(f)
-        except Exception as e:
-            data = []
-    else:
-        data = []
-    data.append(item)
-    with open(pkl_path, 'wb') as f:
-        pickle.dump(data, f)
-
 
 def point_not_in_polygon(coords, poly):
     n = len(poly)
