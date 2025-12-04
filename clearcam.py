@@ -1,16 +1,13 @@
 from tinygrad.nn import Conv2d, BatchNorm2d
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
-from tinygrad.device import is_dtype_supported
-from tinygrad import dtypes
-from tinygrad.helpers import diskcache_put, diskcache_get
+from tinygrad.helpers import diskcache_put, diskcache_get, fetch
 import numpy as np
 from itertools import chain
 from pathlib import Path
 import cv2
 from collections import defaultdict, deque
 import time, sys
-from tinygrad.helpers import fetch
 from tinygrad.nn.state import safe_load, load_state_dict
 import json
 import http
@@ -24,9 +21,7 @@ import urllib
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 import struct
-import pickle
-from urllib.parse import unquote
-from urllib.parse import quote
+from urllib.parse import unquote, quote
 import platform
 import ctypes
 import zlib
