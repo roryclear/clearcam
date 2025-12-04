@@ -1248,11 +1248,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name parameter")
                 return
             
-            cam_path_det = CAMERA_BASE_DIR / (cam_name + "_det")
-            cam_path_raw = CAMERA_BASE_DIR / cam_name
             try:
-              shutil.rmtree(cam_path_det)
-              shutil.rmtree(cam_path_raw)
+              shutil.rmtree(CAMERA_BASE_DIR / (cam_name + "_det"), ignore_errors=True)
+              shutil.rmtree(CAMERA_BASE_DIR / cam_name, ignore_errors=True)
               # todo clean
               alerts = database.run_get("alerts", cam_name)
               if alerts: alerts = alerts[cam_name]
