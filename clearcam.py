@@ -685,6 +685,7 @@ class VideoCapture:
               for id,a in alerts.items():
                 if not a.new: continue
                 a.new = False
+                alerts = database.run_put("alerts", self.cam_name,[id, a])
                 if a is None:
                   del self.alert_counters[id]
                   continue
@@ -1172,7 +1173,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             raw_alerts = database.run_get("alerts", cam_name)
             if raw_alerts: raw_alerts = raw_alerts[cam_name]
-            print("RORY RAW_ALERTS =",raw_alerts)
 
             alert = None
             alert_id = query.get("id", [None])[0]
