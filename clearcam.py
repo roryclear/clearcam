@@ -684,7 +684,7 @@ class VideoCapture:
               
               alerts = self.db.run_get("alerts", self.cam_name)
               if alerts: alerts = alerts[self.cam_name]
-              for id,a in alerts:
+              for id,a in alerts.items():
                 if not a.new: continue
                 a.new = False
                 if a is None:
