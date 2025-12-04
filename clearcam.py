@@ -1253,7 +1253,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             try:
               shutil.rmtree(cam_path_det)
               shutil.rmtree(cam_path_raw)
-              # todo, alerts
+              # todo clean
+              alerts = database.run_get("alerts", cam_name)
+              if alerts: alerts = alerts[cam_name]
+              for id, _ in alerts.items():
+                database.run_put("alerts", cam_name,[id, None])
               database.run_put("cams", "links", [cam_name, None])
               database.run_put("settings", cam_name, ["settings", None])
               database.run_put("counters", cam_name, ["counter", None])
