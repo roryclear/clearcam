@@ -681,7 +681,7 @@ class VideoCapture:
               for id,a in alerts.items():
                 if not a.new: continue
                 a.new = False
-                alerts = database.run_put("alerts", self.cam_name,[id, a])
+                database.run_put("alerts", self.cam_name,[id, a])
                 if a is None:
                   del self.alert_counters[id]
                   continue
@@ -690,7 +690,8 @@ class VideoCapture:
               
                 settings = database.run_get("settings", self.cam_name)
                 if settings and self.cam_name in settings and "settings" in settings[self.cam_name]: self.settings = settings[self.cam_name]["settings"]
-                  
+              self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+
             if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                 last_live_seg = time.time()
                 mp4_filename = f"segment.mp4"
