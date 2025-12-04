@@ -1049,15 +1049,15 @@ class db:
           elif action == "put":
             d = diskcache_get(table, key if key else table)
             if not d:
-                d = {}
+              d = {}
             if key not in d:
                 d[key] = {}
             if value != []:
                 k, v = value
                 if v is not None:
-                    d[key][k] = v
+                  d[key][k] = v
                 else:
-                    d[key].pop(k, None)
+                  del d[key][k]
                 diskcache_put(table, key, d)
             resp_q.put(("ok", 0))
         except Exception as e:
@@ -1146,8 +1146,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam or id")
                 return
             zone = database.run_get("settings", cam_name)
-            if zone: zone = zone[cam_name]["settings"]
+            if zone: zone = zone[cam_name]
             if zone is None: zone = {}
+            zone = zone["settings"] if "settings" in zone else {}
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
@@ -1256,8 +1257,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             try:
               shutil.rmtree(cam_path_det)
               shutil.rmtree(cam_path_raw)
-                  
               database.run_put("cams", "links", [cam_name, None])
+              database.run_put("alerts", cam_name, [cam_name, None]) # todo, deletes for now
+              database.run_put("settings", cam_name, ["settings", None])
+              database.run_put("counters", cam_name, ["counter", None])
             except Exception as e:
               self.send_error(500, f"Error deleting camera: {e}")
               return
