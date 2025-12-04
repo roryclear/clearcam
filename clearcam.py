@@ -358,6 +358,7 @@ class RollingClassCounter:
     self.is_notif = True
     self.zone = True
     self.reset = False
+    self.new = True
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -479,20 +480,18 @@ class VideoCapture:
 
     self.db = db()
     
-    alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-    alerts_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
     settings_file.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(alerts_file, "rb") as f:
-            self.alert_counters = pickle.load(f)
-            for _,a in self.alert_counters.items():
-              for c in a.classes: classes.add(str(c))
-    except Exception:
-        with open(alerts_file, 'wb') as f:
-            self.alert_counters = dict()
-            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
-            pickle.dump(self.alert_counters, f)
+    
+    alerts = self.db.run_get("alerts",self.cam_name)
+    if alerts:
+      self.alert_counters = alerts[self.cam_name]
+    else:
+      self.alert_counters = dict()
+      id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
+      self.alert_counters[id] = alert_counter
+      self.db.run_put("alerts", self.cam_name, [id, alert_counter])
+
     try:
         with open(settings_file, "rb") as f:
             self.settings = pickle.load(f)
@@ -686,23 +685,23 @@ class VideoCapture:
               last_counter_update = time.time()
 
               counters = self.db.run_get("counters", self.cam_name)
-              if counters is not None: counters = counters[self.cam_name]["counter"]
-              if counters.reset:
-                self.counter.reset_counts()
-                self.counter.reset = False
+              if counters is not None:
+                counters = counters[self.cam_name]["counter"]
+                if counters.reset:
+                  self.counter.reset_counts()
+                  self.counter.reset = False
               self.db.run_put("counters", cam_name, ["counter", self.counter])
               
-              added_alerts_file = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
-              if added_alerts_file.exists():
-                with open(added_alerts_file, 'rb') as f:
-                  added_alerts = pickle.load(f)
-                  for id,a in added_alerts:
-                    if a is None:
-                      del self.alert_counters[id]
-                      continue
-                    self.alert_counters[id] = a
-                    for c in a.classes: classes.add(str(c))
-                  added_alerts_file.unlink()
+              alerts = self.db.run_get("alerts", self.cam_name)
+              if alerts: alerts = alerts[self.cam_name]
+              for id,a in alerts:
+                if not a.new: continue
+                a.new = False
+                if a is None:
+                  del self.alert_counters[id]
+                  continue
+                self.alert_counters[id] = a
+                for c in a.classes: classes.add(str(c))
               
               edited_settings_file = CAMERA_BASE_DIR / self.cam_name / "edited_settings.pkl"
               if edited_settings_file.exists():
@@ -1228,9 +1227,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-            with open(alerts_file, "rb") as f:
-                raw_alerts = pickle.load(f)
+
+            raw_alerts = self.db.run_get("alerts", cam_name)
+            if raw_alerts: raw_alerts = raw_alerts[cam_name]
+            print("RORY RAW_ALERTS =",raw_alerts)
+
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
@@ -1259,11 +1260,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
                 if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
                 alert = raw_alerts[alert_id]
+                alert.new = True
               else:
                 del raw_alerts[alert_id]
-            with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
-            added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
-            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, alert])
+            self.db.run_put("alerts", cam_name, [alert_id, alert])
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1293,28 +1293,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
 
-            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            raw_alerts = self.db.run_get("alerts",cam_name)[cam_name]
             alert_info = []
-            if alerts_file.exists():
-                try:
-                    with open(alerts_file, "rb") as f:
-                        raw_alerts = pickle.load(f) 
-                        for key,alert in raw_alerts.items():
-                            sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
-                            alert_info.append({
-                                "window": alert.window,
-                                "max": alert.max,
-                                "classes": list(alert.classes),
-                                "id": str(key),
-                                "sched": sched,
-                                "is_on": alert.is_on,
-                                "is_notif": alert.is_notif,
-                                "zone": alert.zone,
-                            })
-                except Exception as e:
-                    self.send_error(500, f"Failed to load alerts: {e}")
-                    return
-
+            for key,alert in raw_alerts.items():
+                sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
+                alert_info.append({
+                    "window": alert.window,
+                    "max": alert.max,
+                    "classes": list(alert.classes),
+                    "id": str(key),
+                    "sched": sched,
+                    "is_on": alert.is_on,
+                    "is_notif": alert.is_notif,
+                    "zone": alert.zone,
+                })
             self.send_200(alert_info)
             return
 
