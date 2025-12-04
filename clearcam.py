@@ -703,12 +703,8 @@ class VideoCapture:
                 self.alert_counters[id] = a
                 for c in a.classes: classes.add(str(c))
               
-              edited_settings_file = CAMERA_BASE_DIR / self.cam_name / "edited_settings.pkl"
-              if edited_settings_file.exists():
-                with open(edited_settings_file, 'rb') as f:
-                  zone = pickle.load(f)
-                  self.settings = zone
-                edited_settings_file.unlink()
+              settings = self.db.run_get("settings", self.cam_name)
+              if settings: self.settings = settings[self.cam_name]["settings"]
                   
             if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                 last_live_seg = time.time()
@@ -1196,15 +1192,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
-            edited_settings_file = CAMERA_BASE_DIR / cam_name / "edited_settings.pkl"
-            settings_file.parent.mkdir(parents=True, exist_ok=True)
-            if not settings_file.exists():
-                with open(settings_file, "wb") as f:
-                    pickle.dump(None, f)
-            settings_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(settings_file, "rb") as f:
-               zone = pickle.load(f)
+            zone = self.db.run_get("settings", cam_name)
+            if zone: zone = zone[cam_name]["settings"]
             if zone is None: zone = {}
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
@@ -1215,8 +1204,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
-            with open(settings_file, 'wb') as f: pickle.dump(zone, f)
-            with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
+            
+            self.db.run_put("settings", cam_name, ["settings", zone]) # todo, key for each
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1272,18 +1262,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_settings":
-            zone = {}
-            if not cam_name:
-                self.send_error(400, "Missing cam parameter")
-                return
-            settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
-            if settings_file.exists():
-                try:
-                    with open(settings_file, "rb") as f:
-                        zone = pickle.load(f)
-                except Exception as e:
-                    self.send_error(500, f"Failed to load zone: {e}")
-                    return
+            zone = self.db.run_get("settings",cam_name)
+            if zone is not None:
+              zone = zone[cam_name]["settings"]
+            else:
+              zone = {}
             
             self.send_200(zone)
             return
