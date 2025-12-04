@@ -357,6 +357,7 @@ class RollingClassCounter:
     self.is_on = True
     self.is_notif = True
     self.zone = True
+    self.reset = False
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -373,6 +374,7 @@ class RollingClassCounter:
   def reset_counts(self):
     for class_id, _ in self.data.items():
        self.data[class_id] = deque() # todo, use in reset endpoint?
+    self.reset = True
 
   def get_counts(self):
     window = self.window if self.window else (60 if self.is_notif else 1)
@@ -474,6 +476,8 @@ class VideoCapture:
     self.dir = None
 
     self.settings = None
+
+    self.db = db()
     
     alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
     alerts_file.parent.mkdir(parents=True, exist_ok=True)
@@ -679,14 +683,14 @@ class VideoCapture:
                 last_live_check = time.time()
                 threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
             if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-              counters_file = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
-              if os.path.exists(counters_file):
-                  with open(counters_file, 'rb') as f:
-                      counter = pickle.load(f)
-                  if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name, window_seconds=float('inf'))
-                  counter = self.counter
-                  with open(counters_file, 'wb') as f:
-                      pickle.dump(counter, f)
+              last_counter_update = time.time()
+
+              counters = self.db.run_get("counters", self.cam_name)
+              if counters is not None: counters = counters[self.cam_name]["counter"]
+              if counters.reset:
+                self.counter.reset_counts()
+                self.counter.reset = False
+              self.db.run_put("counters", cam_name, ["counter", self.counter])
               
               added_alerts_file = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
               if added_alerts_file.exists():
@@ -1136,7 +1140,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         self.searcher = None
-        self.db = None
+        self.db = db()
         super().__init__(*args, **kwargs)
 
     def send_200(self, body=None):
@@ -1338,35 +1342,24 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"status":"deleted"}')
             return
 
-        if parsed_path.path == "/get_counts":
+        if parsed_path.path == "/get_counts": # todo error fetching counts on first
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-            counters_file = CAMERA_BASE_DIR / cam_name / "counters.pkl"
-            try:
-                with open(counters_file, "rb") as f:
-                    counter = pickle.load(f)
-            except Exception:
-                with open(counters_file, 'wb') as f:
-                    counter = RollingClassCounter(cam_name=cam_name)
-                    pickle.dump(counter, f)
-
-            if not counter:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b"{}")
-                return
-
-            raw_counts = counter.get_counts()[0]
-            labeled_counts = {
-                class_labels[int(k)]: v
-                for k, v in raw_counts.items()
-                if int(k) < len(class_labels)
-            }
-
-            self.send_200(labeled_counts)
-            return
+            
+            counters = self.db.run_get("counters", cam_name)
+            if counters is not None and cam_name in counters:
+              raw_counts = counters[cam_name]["counter"].get_counts()[0]
+              labeled_counts = {
+                  class_labels[int(k)]: v
+                  for k, v in raw_counts.items()
+                  if int(k) < len(class_labels)
+              }
+              self.send_200(labeled_counts)
+              return
+            else:
+              self.db.run_put("counters", cam_name, ["counter", RollingClassCounter(cam_name=cam_name)])
+              self.send_200([])
         
         if parsed_path.path == "/shutdown": 
           threading.Thread(target=self.server.shutdown).start()
@@ -1382,22 +1375,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           sys.exit(0)
 
         if parsed_path.path == "/reset_counts":
-            if not cam_name:
-                self.send_error(400, "Missing cam parameter")
-                return
-            counters_file = CAMERA_BASE_DIR / cam_name / "counters.pkl"
-
-            with open(counters_file, "rb") as f:
-                counter = pickle.load(f)
-            counter = None
-            with open(counters_file, 'wb') as f:
-                pickle.dump(counter, f)
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b"{}")
+          if not cam_name:
+            self.send_error(400, "Missing cam parameter")
             return
+          counter = self.db.run_get("counters",cam_name)
+          if counter:
+            counter = counter[cam_name]["counter"]
+          else:
+            self.send_error(400, "Missing cam parameter")
+            return
+          counter.reset_counts()
+          self.db.run_put("counters", cam_name, ["counter", counter])
+          self.send_response(200)
+          self.send_header("Content-Type", "application/json")
+          self.end_headers()
+          self.wfile.write(b"{}")
+          return
 
 
         if parsed_path.path == '/' and "cam" not in query:
