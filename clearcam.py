@@ -1140,7 +1140,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/list_cameras":
             cams = database.run_get("cams", "links")
-            available_cams = list(cams["links"].keys()) if "links" in cams else []
+            available_cams = list(cams.get("links", {}).keys()) if isinstance(cams, dict) else []
             self.send_200(available_cams)
             return
 
