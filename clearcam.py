@@ -686,7 +686,7 @@ class VideoCapture:
                 self.alert_counters[id] = a
                 for c in a.classes: classes.add(str(c))
               
-                settings = database.run_get("settings", self.cam_name)
+                settings = database2.run_get("settings", self.cam_name)
                 if settings and self.cam_name in settings and "settings" in settings[self.cam_name]: self.settings = settings[self.cam_name]["settings"]
               self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
@@ -1140,10 +1140,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            zone = database.run_get("settings", cam_name)
-            if zone: zone = zone[cam_name]
+            zone = database2.run_get("settings", cam_name)
             if zone is None: zone = {}
-            zone = zone["settings"] if "settings" in zone else {}
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
@@ -1154,7 +1152,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
             
-            database.run_put("settings", cam_name, ["settings", zone]) # todo, key for each
+            database2.run_put("settings", cam_name, zone) # todo, key for each
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1212,7 +1210,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_settings":
-            zone = database.run_get("settings",cam_name)
+            zone = database2.run_get("settings",cam_name)
             if zone is not None:
               if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
             else:
@@ -1257,7 +1255,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               for id, _ in alerts.items():
                 database2.run_delete("alerts", cam_name, id=id)
               database2.run_delete("links", cam_name)
-              database.run_put("settings", cam_name, ["settings", None])
+              database2.run_delete("settings", cam_name)
               database2.run_delete("counters", cam_name)
             except Exception as e:
               self.send_error(500, f"Error deleting camera: {e}")
