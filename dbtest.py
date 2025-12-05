@@ -187,3 +187,6 @@ if __name__ == "__main__":
   assert x == {"zone": "x", "det": "y"}
   x = cache_db.run_get("settings", "cam1", "zone")
   assert x == "x"
+  cache_db.run_put("settings", "cam1", None, id="zone")
+  x = cache_db.run_get("settings", None)
+  assert x == {'cam1': {'det': 'y'}}
