@@ -1,16 +1,19 @@
 import os, sqlite3, contextlib, pickle
 from typing import Any
+from tinygrad.helpers import diskcache_get
 
 _db_tables = set()
 cache_dir: str = "data/"
-CACHEDB = os.path.abspath(os.path.join(cache_dir, "cache.db"))
+CACHEDB = os.path.abspath(os.path.join(cache_dir, "cc_cache.db"))
 _db_connection = None
 VERSION = 1
 def db_connection():
   global _db_connection
   if _db_connection is None:
-    _db_connection = sqlite3.connect(CACHEDB, timeout=60, isolation_level="IMMEDIATE")
-    with contextlib.suppress(sqlite3.OperationalError): _db_connection.execute("PRAGMA journal_mode=WAL").fetchone()
+    _db_connection = sqlite3.connect(CACHEDB, timeout=60, isolation_level=None, check_same_thread=False)
+    with contextlib.suppress(sqlite3.OperationalError):
+      _db_connection.execute("PRAGMA journal_mode=WAL").fetchone()
+      _db_connection.execute("PRAGMA busy_timeout = 60000;")
   return _db_connection
 
 def diskcache_put(table: str, key: dict|str|int, val: Any,  id: int|str|None = None, prepickled=False, replace=True):

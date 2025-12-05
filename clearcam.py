@@ -1734,6 +1734,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 if __name__ == "__main__":
+  multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
          
