@@ -474,14 +474,14 @@ class VideoCapture:
 
     self.settings = None
     
-    alerts = database.run_get("alerts",self.cam_name)
+    alerts = database2.run_get("alerts",self.cam_name)
     if alerts:
       self.alert_counters = alerts[self.cam_name]
     else:
       self.alert_counters = dict()
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
       self.alert_counters[id] = alert_counter
-      database.run_put("alerts", self.cam_name, [id, alert_counter])
+      database2.run_put("alerts", self.cam_name, alert_counter, id=id)
 
     self.lock = threading.Lock()
     self._open_ffmpeg()
@@ -677,12 +677,12 @@ class VideoCapture:
                     self.counter.reset = False
               database.run_put("counters", cam_name, ["counter", self.counter])
               
-              alerts = database.run_get("alerts", self.cam_name)
+              alerts = database2.run_get("alerts", self.cam_name)
               if alerts: alerts = alerts[self.cam_name]
               for id,a in alerts.items():
                 if not a.new: continue
                 a.new = False
-                database.run_put("alerts", self.cam_name,[id, a])
+                database2.run_put("alerts", self.cam_name, a, id=id)
                 if a is None:
                   del self.alert_counters[id]
                   continue
@@ -1170,9 +1170,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam or id")
                 return
 
-            raw_alerts = database.run_get("alerts", cam_name)
-            if raw_alerts: raw_alerts = raw_alerts[cam_name]
-
+            raw_alerts = database2.run_get("alerts", cam_name)
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
@@ -1204,7 +1202,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 alert.new = True
               else:
                 del raw_alerts[alert_id]
-            database.run_put("alerts", cam_name, [alert_id, alert])
+            if alert is not None:
+              database2.run_put("alerts", cam_name, alert, alert_id)
+            else:
+              database2.run_delete("alerts", cam_name, alert_id)
+               
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1227,7 +1229,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
 
-            raw_alerts = database.run_get("alerts",cam_name)[cam_name]
+            raw_alerts = database2.run_get("alerts",cam_name)
             alert_info = []
             for key,alert in raw_alerts.items():
                 sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
@@ -1254,10 +1256,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               shutil.rmtree(CAMERA_BASE_DIR / (cam_name + "_det"), ignore_errors=True)
               shutil.rmtree(CAMERA_BASE_DIR / cam_name, ignore_errors=True)
               # todo clean
-              alerts = database.run_get("alerts", cam_name)
-              if alerts: alerts = alerts[cam_name]
+              alerts = database2.run_get("alerts", cam_name)
               for id, _ in alerts.items():
-                database.run_put("alerts", cam_name,[id, None])
+                database2.run_delete("alerts", cam_name, id=id)
               database2.run_delete("links", cam_name)
               database.run_put("settings", cam_name, ["settings", None])
               database.run_put("counters", cam_name, ["counter", None])
