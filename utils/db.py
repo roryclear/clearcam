@@ -66,38 +66,40 @@ def diskcache_delete(table: str, key: dict|str|int, id: int|str|None = None):
 
 def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
   cur = db_connection().cursor()
-  if key is None:
-    try: res = cur.execute(f"SELECT * FROM '{table}_{VERSION}'")
-    except sqlite3.OperationalError:  return {}
-    out = {}
-    for row in res.fetchall():
-        row_id, user_key, pickled_val = row[0], row[1], row[-1]
-        val = pickle.loads(pickled_val)
-        if val is None: continue
-        if user_key not in out: out[user_key] = {row_id: val} if row_id != "1" else val
-        elif isinstance(out[user_key], dict):  out[user_key][row_id] = val
-        else:  out[user_key] = {"1": out[user_key], row_id: val}
-    for k in list(out.keys()):
-      if isinstance(out[k], dict) and len(out[k]) == 1 and "1" in out[k]: out[k] = out[k]["1"]
-    return out
-  if id is not None:
-    try:
-      res = cur.execute(f"SELECT val FROM '{table}_{VERSION}' WHERE key=? AND id=?", (key, str(id)))
-      row = res.fetchone()
-      return pickle.loads(row[0]) if row else None
-    except sqlite3.OperationalError:
+  try:
+    if key is None:
+      try: res = cur.execute(f"SELECT * FROM '{table}_{VERSION}'")
+      except sqlite3.OperationalError:  return {}
+      out = {}
+      for row in res.fetchall():
+          row_id, user_key, pickled_val = row[0], row[1], row[-1]
+          val = pickle.loads(pickled_val)
+          if val is None: continue
+          if user_key not in out: out[user_key] = {row_id: val} if row_id != "1" else val
+          elif isinstance(out[user_key], dict):  out[user_key][row_id] = val
+          else:  out[user_key] = {"1": out[user_key], row_id: val}
+      for k in list(out.keys()):
+        if isinstance(out[k], dict) and len(out[k]) == 1 and "1" in out[k]: out[k] = out[k]["1"]
+      return out
+    if id is not None:
+      try:
+        res = cur.execute(f"SELECT val FROM '{table}_{VERSION}' WHERE key=? AND id=?", (key, str(id)))
+        row = res.fetchone()
+        return pickle.loads(row[0]) if row else None
+      except sqlite3.OperationalError:
+          return {}
+    else:
+      try:
+          res = cur.execute(f"SELECT id, val FROM '{table}_{VERSION}' WHERE key=?", (key,))
+          rows = res.fetchall()
+      except sqlite3.OperationalError:
+          return {}
+      if not rows: 
         return {}
-  else:
-    try:
-        res = cur.execute(f"SELECT id, val FROM '{table}_{VERSION}' WHERE key=?", (key,))
-        rows = res.fetchall()
-    except sqlite3.OperationalError:
-        return {}
-    if not rows: 
-      return {}
-    if len(rows) == 1 and rows[0][0] == "1":
-        return pickle.loads(rows[0][1])
-    return {row_id: pickle.loads(val) for row_id, val in rows}
+      if len(rows) == 1 and rows[0][0] == "1":
+          return pickle.loads(rows[0][1])
+      return {row_id: pickle.loads(val) for row_id, val in rows}
+  finally: cur.close()
 
 
 import multiprocessing
