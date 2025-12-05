@@ -56,6 +56,7 @@ def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
     for row in res.fetchall():
         row_id, user_key, pickled_val = row[0], row[1], row[-1]
         val = pickle.loads(pickled_val)
+        if val is None: continue  # <-- ADD THIS LINE
         if user_key not in out: out[user_key] = {row_id: val} if row_id != "1" else val
         elif isinstance(out[user_key], dict): out[user_key][row_id] = val
         else: out[user_key] = {"1": out[user_key], row_id: val}
@@ -158,28 +159,31 @@ class db:
         return result
 
 if __name__ == "__main__":    
-    cache_db = db()
-    x = cache_db.run_get("links", None)
-    assert x == {}
-    cache_db.run_put("links", "cam1", "https://link1")
-    cache_db.run_put("links", "cam2", "https://link2")
-    x = cache_db.run_get("links", "cam1")
-    assert x == "https://link1"
-    x = cache_db.run_get("links", None)
-    assert x == {'cam1': 'https://link1', 'cam2': 'https://link2'}
-    cache_db.run_put("alerts", "cam1", "a", replace=False)
-    cache_db.run_put("alerts", "cam1", "b", replace=False)
-    x = cache_db.run_get("alerts", "cam1")
-    assert x == {'1': 'a', '2': 'b'}
-    cache_db.run_put("alerts", "cam1", "b", replace=True)
-    x = cache_db.run_get("alerts", "cam1")
-    assert x == 'b'
-    cache_db.run_put("alerts", "cam1", None, replace=True)
-    x = cache_db.run_get("alerts", "cam1")
-    assert x == None
-    cache_db.run_put("settings", "cam1", "x", id="zone")
-    cache_db.run_put("settings", "cam1", "y", id="det")
-    x = cache_db.run_get("settings", "cam1")
-    assert x == {"zone": "x", "det": "y"}
-    x = cache_db.run_get("settings", "cam1", "zone")
-    assert x == "x"
+  cache_db = db()
+  x = cache_db.run_get("links", None)
+  assert x == {}
+  cache_db.run_put("links", "cam1", "https://link1")
+  cache_db.run_put("links", "cam2", "https://link2")
+  x = cache_db.run_get("links", "cam1")
+  assert x == "https://link1"
+  x = cache_db.run_get("links", None)
+  assert x == {'cam1': 'https://link1', 'cam2': 'https://link2'}
+  cache_db.run_put("links", "cam2", None)
+  x = cache_db.run_get("links", None)
+  assert x == {'cam1': 'https://link1'}
+  cache_db.run_put("alerts", "cam1", "a", replace=False)
+  cache_db.run_put("alerts", "cam1", "b", replace=False)
+  x = cache_db.run_get("alerts", "cam1")
+  assert x == {'1': 'a', '2': 'b'}
+  cache_db.run_put("alerts", "cam1", "b", replace=True)
+  x = cache_db.run_get("alerts", "cam1")
+  assert x == 'b'
+  cache_db.run_put("alerts", "cam1", None, replace=True)
+  x = cache_db.run_get("alerts", "cam1")
+  assert x == None
+  cache_db.run_put("settings", "cam1", "x", id="zone")
+  cache_db.run_put("settings", "cam1", "y", id="det")
+  x = cache_db.run_get("settings", "cam1")
+  assert x == {"zone": "x", "det": "y"}
+  x = cache_db.run_get("settings", "cam1", "zone")
+  assert x == "x"
