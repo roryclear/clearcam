@@ -25,6 +25,7 @@ from urllib.parse import unquote, quote
 import platform
 import ctypes
 import zlib
+from dbtest import db as db2
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1116,8 +1117,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            cams = database.run_get("cams", "links")
-            available_cams = list(cams.get("links", {}).keys()) if isinstance(cams, dict) else []
+            cams = database2.run_get("links", None)
+            available_cams = list(cams.keys())
             self.send_200(available_cams)
             return
 
@@ -1130,7 +1131,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
-            database.run_put("cams", "links", [cam_name, rtsp])
+            database2.run_put("links", cam_name, rtsp)
 
             # Redirect back to home
             self.send_response(302)
@@ -1257,7 +1258,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               if alerts: alerts = alerts[cam_name]
               for id, _ in alerts.items():
                 database.run_put("alerts", cam_name,[id, None])
-              database.run_put("cams", "links", [cam_name, None])
+              database2.run_put("links", cam_name, None)
               database.run_put("settings", cam_name, ["settings", None])
               database.run_put("counters", cam_name, ["counter", None])
             except Exception as e:
@@ -1815,17 +1816,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   database = db()
+  database2 = db2()
   if platform.system() == 'Darwin': subprocess.Popen(['caffeinate', '-dimsu'])
   elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
   elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
 
   database = db()
 
-  cams = database.run_get("cams", "links")
-  if cams and "links" in cams:
-    cams = cams["links"]
-  else:
-    cams = {}
+  cams = database2.run_get("links", None)
          
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
