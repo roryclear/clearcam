@@ -79,32 +79,105 @@ def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
           return pickle.loads(rows[0][1])
       return {row_id: pickle.loads(val) for row_id, val in rows}
 
-diskcache_put("links", "cam1", "https://link1")
-diskcache_put("links", "cam2", "https://link2")
-x = diskcache_get("links","cam1")
-print(x)
-assert x == "https://link1"
-x = diskcache_get("links", None)
-print(x)
-assert x == {'cam1': 'https://link1', 'cam2': 'https://link2'}
-diskcache_put("alerts","cam1","a", replace=False)
-diskcache_put("alerts","cam1","b", replace=False)
-x = diskcache_get("alerts","cam1")
-print(x)
-assert x == {'1': 'a', '2': 'b'}
-diskcache_put("alerts","cam1","b", replace=True)
-x = diskcache_get("alerts","cam1")
-print(x)
-assert x == 'b'
-diskcache_put("alerts","cam1", None, replace=True)
-x = diskcache_get("alerts","cam1")
-print(x)
-assert x == None
 
-diskcache_put("settings","cam1","x", id="zone")
-diskcache_put("settings","cam1","y", id="det")
-x = diskcache_get("settings","cam1")
-assert x == {"zone": "x", "det": "y"}
-x = diskcache_get("settings", "cam1","zone")
-assert x == "x"
+import multiprocessing
+import queue
+import atexit
 
+class db:
+    def __init__(self):
+        self._req_q = multiprocessing.Queue()
+        self._resp_q = multiprocessing.Queue()
+        self._stop = multiprocessing.Event()
+
+        self._proc = multiprocessing.Process(
+            target=self._worker_loop,
+            args=(self._req_q, self._resp_q, self._stop),
+            daemon=True
+        )
+        self._proc.start()
+
+        atexit.register(self._cleanup)
+
+    @staticmethod
+    def _worker_loop(req_q, resp_q, stop_event):
+        # Initialize database connection in worker process
+        db_connection()
+        while not stop_event.is_set():
+            try:
+                action, table, key, value = req_q.get(timeout=0.2)
+                if action == "exit":
+                    break
+                    
+                try:
+                    if action == "get":
+                        # value here contains the 'id' parameter if provided
+                        if value is not None:
+                            result = diskcache_get(table, key, value)
+                        else:
+                            result = diskcache_get(table, key)
+                        resp_q.put(("ok", result))
+                        
+                    elif action == "put":
+                        # value is a tuple of (val, id, replace)
+                        val, id_val, replace = value if value else (None, None, True)
+                        result = diskcache_put(table, key, val, id=id_val, replace=replace)
+                        resp_q.put(("ok", result))
+                        
+                except Exception as e:
+                    resp_q.put(("err", str(e)))
+                    
+            except queue.Empty:
+                continue
+
+    def _cleanup(self):
+        if hasattr(self, "_stop"):
+            self._stop.set()
+            try:
+                self._req_q.put(("exit", None, None, None))
+            except:
+                pass
+
+        if hasattr(self, "_proc") and self._proc.is_alive():
+            self._proc.join(timeout=1)
+            if self._proc.is_alive():
+                self._proc.kill()
+
+    def run_get(self, table, key=None, id=None, timeout=5):
+        self._req_q.put(("get", table, key, id))
+        status, result = self._resp_q.get(timeout=timeout)
+        if status == "err":
+            raise Exception(result)
+        return result
+
+    def run_put(self, table, key, val=None, id=None, replace=True, timeout=5):
+        self._req_q.put(("put", table, key, (val, id, replace)))
+        status, result = self._resp_q.get(timeout=timeout)
+        if status == "err":
+            raise Exception(result)
+        return result
+
+if __name__ == "__main__":    
+    cache_db = db()
+    cache_db.run_put("links", "cam1", "https://link1")
+    cache_db.run_put("links", "cam2", "https://link2")
+    x = cache_db.run_get("links", "cam1")
+    assert x == "https://link1"
+    x = cache_db.run_get("links", None)
+    assert x == {'cam1': 'https://link1', 'cam2': 'https://link2'}
+    cache_db.run_put("alerts", "cam1", "a", replace=False)
+    cache_db.run_put("alerts", "cam1", "b", replace=False)
+    x = cache_db.run_get("alerts", "cam1")
+    assert x == {'1': 'a', '2': 'b'}
+    cache_db.run_put("alerts", "cam1", "b", replace=True)
+    x = cache_db.run_get("alerts", "cam1")
+    assert x == 'b'
+    cache_db.run_put("alerts", "cam1", None, replace=True)
+    x = cache_db.run_get("alerts", "cam1")
+    assert x == None
+    cache_db.run_put("settings", "cam1", "x", id="zone")
+    cache_db.run_put("settings", "cam1", "y", id="det")
+    x = cache_db.run_get("settings", "cam1")
+    assert x == {"zone": "x", "det": "y"}
+    x = cache_db.run_get("settings", "cam1", "zone")
+    assert x == "x"
