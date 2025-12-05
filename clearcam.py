@@ -1145,8 +1145,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
-              if isinstance(coords, list) and len(coords) >= 3:
-                 zone["coords"] = [[float(x), float(y)] for x, y in coords]
+              if isinstance(coords, list):
+                if len(coords) >= 3:
+                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
+                else:
+                  if "coords" in zone: del zone["coords"]
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
