@@ -597,7 +597,7 @@ class VideoCapture:
     count = 0
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        try:
+        if 1==1:
           raw_bytes = self.proc.stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
             fail_count += 1
@@ -668,17 +668,14 @@ class VideoCapture:
             if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
               last_counter_update = time.time()
 
-              counters = database.run_get("counters", self.cam_name)
-              if counters is not None:
-                if self.cam_name in counters and "counter" in counters[self.cam_name]:
-                  counters = counters[self.cam_name]["counter"]
-                  if counters.reset:
-                    self.counter.reset_counts()
-                    self.counter.reset = False
-              database.run_put("counters", cam_name, ["counter", self.counter])
+              counters = database2.run_get("counters", self.cam_name)
+              if counters not in [None, {}]:
+                if counters.reset:
+                  self.counter.reset_counts()
+                  self.counter.reset = False
+              database2.run_put("counters", cam_name, self.counter)
               
               alerts = database2.run_get("alerts", self.cam_name)
-              if alerts: alerts = alerts[self.cam_name]
               for id,a in alerts.items():
                 if not a.new: continue
                 a.new = False
@@ -706,10 +703,10 @@ class VideoCapture:
               self.raw_frame = frame.copy()
               if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
           time.sleep(1 / 30)
-        except Exception as e:
-            print("Error in capture_loop:", e)
-            self._open_ffmpeg()
-            time.sleep(1)
+        #except Exception as e:
+        #    print("Error in capture_loop:", e)
+        #    self._open_ffmpeg()
+        #    time.sleep(1)
   
   def inference_loop(self):
     prev_time = time.time()
@@ -1261,7 +1258,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 database2.run_delete("alerts", cam_name, id=id)
               database2.run_delete("links", cam_name)
               database.run_put("settings", cam_name, ["settings", None])
-              database.run_put("counters", cam_name, ["counter", None])
+              database2.run_delete("counters", cam_name)
             except Exception as e:
               self.send_error(500, f"Error deleting camera: {e}")
               return
@@ -1277,18 +1274,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
             
-            counters = database.run_get("counters", cam_name)
-            if counters is not None and cam_name in counters:
-              raw_counts = counters[cam_name]["counter"].get_counts()[0]
+            counter = database2.run_get("counters", cam_name)
+            if counter:
               labeled_counts = {
-                  class_labels[int(k)]: v
-                  for k, v in raw_counts.items()
-                  if int(k) < len(class_labels)
+                class_labels[int(k)]: len(v)
+                for k, v in counter.data.items()
+                if int(k) < len(class_labels)
               }
               self.send_200(labeled_counts)
               return
             else:
-              database.run_put("counters", cam_name, ["counter", RollingClassCounter(cam_name=cam_name)])
+              database2.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
               self.send_200([])
         
         if parsed_path.path == "/shutdown": 
@@ -1308,14 +1304,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           if not cam_name:
             self.send_error(400, "Missing cam parameter")
             return
-          counter = database.run_get("counters",cam_name)
-          if counter:
-            counter = counter[cam_name]["counter"]
-          else:
-            self.send_error(400, "Missing cam parameter")
-            return
-          counter.reset_counts()
-          database.run_put("counters", cam_name, ["counter", counter])
+          counter = database2.run_get("counters",cam_name)
+          if counter: counter.reset_counts()
+          database2.run_put("counters", cam_name, counter)
           self.send_response(200)
           self.send_header("Content-Type", "application/json")
           self.end_headers()
