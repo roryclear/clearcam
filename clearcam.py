@@ -22,10 +22,9 @@ from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 import struct
 from urllib.parse import unquote, quote
-import platform
-import ctypes
 import zlib
 from utils.db import db
+import multiprocessing
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -474,10 +473,8 @@ class VideoCapture:
 
     self.settings = None
     
-    alerts = database.run_get("alerts",self.cam_name)
-    if alerts:
-      self.alert_counters = alerts[self.cam_name]
-    else:
+    self.alert_counters = database.run_get("alerts",self.cam_name)
+    if not self.alert_counters:
       self.alert_counters = dict()
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
       self.alert_counters[id] = alert_counter
@@ -1004,6 +1001,10 @@ def point_not_in_polygon(coords, poly):
       if inside:
         return False
     return True
+
+def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
+  res = searcher.search(image_text, top_k, cam_name, selected_dir)
+  return_q.put(res)
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
