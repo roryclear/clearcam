@@ -51,7 +51,7 @@ def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
   cur = db_connection().cursor()
   if key is None:
     try: res = cur.execute(f"SELECT * FROM '{table}_{VERSION}'")
-    except sqlite3.OperationalError: return None
+    except sqlite3.OperationalError: return {}
     out = {}
     for row in res.fetchall():
         row_id, user_key, pickled_val = row[0], row[1], row[-1]
@@ -67,14 +67,14 @@ def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
         row = res.fetchone()
         return pickle.loads(row[0]) if row else None
       except sqlite3.OperationalError:
-          return None
+          return {}
   else:
       try:
           res = cur.execute(f"SELECT id, val FROM '{table}_{VERSION}' WHERE key=?", (key,))
           rows = res.fetchall()
       except sqlite3.OperationalError:
-          return None
-      if not rows: return None
+          return {}
+      if not rows: return {}
       if len(rows) == 1 and rows[0][0] == "1":
           return pickle.loads(rows[0][1])
       return {row_id: pickle.loads(val) for row_id, val in rows}
@@ -159,6 +159,8 @@ class db:
 
 if __name__ == "__main__":    
     cache_db = db()
+    x = cache_db.run_get("links", None)
+    assert x == {}
     cache_db.run_put("links", "cam1", "https://link1")
     cache_db.run_put("links", "cam2", "https://link2")
     x = cache_db.run_get("links", "cam1")
