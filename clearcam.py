@@ -1,7 +1,7 @@
 from tinygrad.nn import Conv2d, BatchNorm2d
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
-from tinygrad.helpers import diskcache_put, diskcache_get, fetch
+from tinygrad.helpers import fetch
 import numpy as np
 from itertools import chain
 from pathlib import Path
@@ -25,7 +25,7 @@ from urllib.parse import unquote, quote
 import platform
 import ctypes
 import zlib
-from dbtest import db as db2
+from utils.db import db
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -474,14 +474,14 @@ class VideoCapture:
 
     self.settings = None
     
-    alerts = database2.run_get("alerts",self.cam_name)
+    alerts = database.run_get("alerts",self.cam_name)
     if alerts:
       self.alert_counters = alerts[self.cam_name]
     else:
       self.alert_counters = dict()
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
       self.alert_counters[id] = alert_counter
-      database2.run_put("alerts", self.cam_name, alert_counter, id=id)
+      database.run_put("alerts", self.cam_name, alert_counter, id=id)
 
     self.lock = threading.Lock()
     self._open_ffmpeg()
@@ -668,25 +668,25 @@ class VideoCapture:
             if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
               last_counter_update = time.time()
 
-              counters = database2.run_get("counters", self.cam_name)
+              counters = database.run_get("counters", self.cam_name)
               if counters not in [None, {}]:
                 if counters.reset:
                   self.counter.reset_counts()
                   self.counter.reset = False
-              database2.run_put("counters", cam_name, self.counter)
+              database.run_put("counters", cam_name, self.counter)
               
-              alerts = database2.run_get("alerts", self.cam_name)
+              alerts = database.run_get("alerts", self.cam_name)
               for id,a in alerts.items():
                 if not a.new: continue
                 a.new = False
-                database2.run_put("alerts", self.cam_name, a, id=id)
+                database.run_put("alerts", self.cam_name, a, id=id)
                 if a is None:
                   del self.alert_counters[id]
                   continue
                 self.alert_counters[id] = a
                 for c in a.classes: classes.add(str(c))
               
-                settings = database2.run_get("settings", self.cam_name)
+                settings = database.run_get("settings", self.cam_name)
                 if settings and self.cam_name in settings and "settings" in settings[self.cam_name]: self.settings = settings[self.cam_name]["settings"]
               self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
@@ -1005,81 +1005,6 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
-import multiprocessing
-import atexit
-
-def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
-  res = searcher.search(image_text, top_k, cam_name, selected_dir)
-  return_q.put(res)
-
-import threading, queue, atexit
-
-class db:
-    def __init__(self):
-        self._req_q = multiprocessing.Queue()
-        self._resp_q = multiprocessing.Queue()
-        self._stop = multiprocessing.Event()
-
-        self._proc = multiprocessing.Process(
-            target=self._worker_loop,
-            args=(self._req_q, self._resp_q, self._stop),
-            daemon=True
-        )
-        self._proc.start()
-
-        atexit.register(self._cleanup)
-
-    @staticmethod
-    def _worker_loop(req_q, resp_q, stop_event):
-      diskcache_get("__init__", "__init__")
-      while not stop_event.is_set():
-        try:
-          action, table, key, value = req_q.get(timeout=0.2)
-        except queue.Empty:
-          continue
-        try:
-          if action == "get":
-            result = diskcache_get(table, key if key else table)
-            resp_q.put(("ok", result))
-          elif action == "put":
-            d = diskcache_get(table, key if key else table)
-            if not d:
-              d = {}
-            if key not in d:
-                d[key] = {}
-            if value != []:
-                k, v = value
-                if v is not None:
-                  d[key][k] = v
-                else:
-                  del d[key][k]
-                diskcache_put(table, key, d)
-            resp_q.put(("ok", 0))
-        except Exception as e:
-            resp_q.put(("err", str(e)))
-
-    def _cleanup(self):
-      if hasattr(self, "_stop"):
-        self._stop.set()
-        try:
-            self._req_q.put(("exit", None, None, None))
-        except:
-            pass
-
-      if hasattr(self, "_proc") and self._proc.is_alive():
-        self._proc.join(timeout=1)
-        if self._proc.is_alive(): self._proc.kill()
-
-    def run_get(self, table, key="default", timeout=5):
-        self._req_q.put(("get", table, key, None))
-        _, result = self._resp_q.get(timeout=timeout)
-        return result
-
-    def run_put(self, table, key, value, timeout=5):
-        self._req_q.put(("put", table, key, value))
-        _, result = self._resp_q.get(timeout=timeout)
-        return result
-
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
@@ -1114,7 +1039,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            cams = database2.run_get("links", None)
+            cams = database.run_get("links", None)
             available_cams = list(cams.keys())
             self.send_200(available_cams)
             return
@@ -1128,7 +1053,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
-            database2.run_put("links", cam_name, rtsp)
+            database.run_put("links", cam_name, rtsp)
 
             # Redirect back to home
             self.send_response(302)
@@ -1140,7 +1065,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            zone = database2.run_get("settings", cam_name)
+            zone = database.run_get("settings", cam_name)
             if zone is None: zone = {}
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
@@ -1155,7 +1080,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
             
-            database2.run_put("settings", cam_name, zone) # todo, key for each
+            database.run_put("settings", cam_name, zone) # todo, key for each
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1168,7 +1093,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam or id")
                 return
 
-            raw_alerts = database2.run_get("alerts", cam_name)
+            raw_alerts = database.run_get("alerts", cam_name)
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
@@ -1201,9 +1126,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               else:
                 del raw_alerts[alert_id]
             if alert is not None:
-              database2.run_put("alerts", cam_name, alert, alert_id)
+              database.run_put("alerts", cam_name, alert, alert_id)
             else:
-              database2.run_delete("alerts", cam_name, alert_id)
+              database.run_delete("alerts", cam_name, alert_id)
                
 
             self.send_response(200)
@@ -1213,7 +1138,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_settings":
-            zone = database2.run_get("settings",cam_name)
+            zone = database.run_get("settings",cam_name)
             if zone is not None:
               if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
             else:
@@ -1227,7 +1152,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
 
-            raw_alerts = database2.run_get("alerts",cam_name)
+            raw_alerts = database.run_get("alerts",cam_name)
             alert_info = []
             for key,alert in raw_alerts.items():
                 sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
@@ -1254,12 +1179,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               shutil.rmtree(CAMERA_BASE_DIR / (cam_name + "_det"), ignore_errors=True)
               shutil.rmtree(CAMERA_BASE_DIR / cam_name, ignore_errors=True)
               # todo clean
-              alerts = database2.run_get("alerts", cam_name)
+              alerts = database.run_get("alerts", cam_name)
               for id, _ in alerts.items():
-                database2.run_delete("alerts", cam_name, id=id)
-              database2.run_delete("links", cam_name)
-              database2.run_delete("settings", cam_name)
-              database2.run_delete("counters", cam_name)
+                database.run_delete("alerts", cam_name, id=id)
+              database.run_delete("links", cam_name)
+              database.run_delete("settings", cam_name)
+              database.run_delete("counters", cam_name)
             except Exception as e:
               self.send_error(500, f"Error deleting camera: {e}")
               return
@@ -1275,7 +1200,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
             
-            counter = database2.run_get("counters", cam_name)
+            counter = database.run_get("counters", cam_name)
             if counter:
               labeled_counts = {
                 class_labels[int(k)]: len(v)
@@ -1285,7 +1210,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               self.send_200(labeled_counts)
               return
             else:
-              database2.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
+              database.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
               self.send_200([])
         
         if parsed_path.path == "/shutdown": 
@@ -1305,9 +1230,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           if not cam_name:
             self.send_error(400, "Missing cam parameter")
             return
-          counter = database2.run_get("counters",cam_name)
+          counter = database.run_get("counters",cam_name)
           if counter: counter.reset_counts()
-          database2.run_put("counters", cam_name, counter)
+          database.run_put("counters", cam_name, counter)
           self.send_response(200)
           self.send_header("Content-Type", "application/json")
           self.end_headers()
@@ -1809,14 +1734,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
   database = db()
-  database2 = db2()
-  if platform.system() == 'Darwin': subprocess.Popen(['caffeinate', '-dimsu'])
-  elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
-  elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
-
-  database = db()
-
-  cams = database2.run_get("links", None)
+  cams = database.run_get("links", None)
          
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
