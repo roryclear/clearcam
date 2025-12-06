@@ -1,15 +1,13 @@
 from tinygrad.nn import Conv2d, BatchNorm2d
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
-from tinygrad.device import is_dtype_supported
-from tinygrad import dtypes
+from tinygrad.helpers import fetch
 import numpy as np
 from itertools import chain
 from pathlib import Path
 import cv2
 from collections import defaultdict, deque
 import time, sys
-from tinygrad.helpers import fetch
 from tinygrad.nn.state import safe_load, load_state_dict
 import json
 import http
@@ -23,12 +21,10 @@ import urllib
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 import struct
-import pickle
-from urllib.parse import unquote
-from urllib.parse import quote
-import platform
-import ctypes
+from urllib.parse import unquote, quote
 import zlib
+from utils.db import db
+import multiprocessing
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -342,7 +338,6 @@ import threading
 
 BASE = Path(__file__).parent / "data"
 CAMERA_BASE_DIR = BASE / "cameras"
-CAMS_FILE = BASE / "cams.pkl"
 CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
@@ -357,6 +352,8 @@ class RollingClassCounter:
     self.is_on = True
     self.is_notif = True
     self.zone = True
+    self.reset = False
+    self.new = True
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -373,6 +370,7 @@ class RollingClassCounter:
   def reset_counts(self):
     for class_id, _ in self.data.items():
        self.data[class_id] = deque() # todo, use in reset endpoint?
+    self.reset = True
 
   def get_counts(self):
     window = self.window if self.window else (60 if self.is_notif else 1)
@@ -475,28 +473,14 @@ class VideoCapture:
 
     self.settings = None
     
-    alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-    alerts_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(alerts_file, "rb") as f:
-            self.alert_counters = pickle.load(f)
-            for _,a in self.alert_counters.items():
-              for c in a.classes: classes.add(str(c))
-    except Exception:
-        with open(alerts_file, 'wb') as f:
-            self.alert_counters = dict()
-            self.alert_counters[str(uuid.uuid4())] = RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
-            pickle.dump(self.alert_counters, f)
-    try:
-        with open(settings_file, "rb") as f:
-            self.settings = pickle.load(f)
-    except Exception:
-        print("zone file not found")
+    self.alert_counters = database.run_get("alerts",self.cam_name)
+    if not self.alert_counters:
+      self.alert_counters = dict()
+      id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
+      self.alert_counters[id] = alert_counter
+      database.run_put("alerts", self.cam_name, alert_counter, id=id)
 
     self.lock = threading.Lock()
-
     self._open_ffmpeg()
 
     # Start threads
@@ -610,7 +594,7 @@ class VideoCapture:
     count = 0
     while self.running:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        try:
+        if 1==1:
           raw_bytes = self.proc.stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
             fail_count += 1
@@ -679,35 +663,30 @@ class VideoCapture:
                 last_live_check = time.time()
                 threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
             if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-              counters_file = CAMERA_BASE_DIR / self.cam_name / "counters.pkl"
-              if os.path.exists(counters_file):
-                  with open(counters_file, 'rb') as f:
-                      counter = pickle.load(f)
-                  if counter is None: self.counter = RollingClassCounter(cam_name=self.cam_name, window_seconds=float('inf'))
-                  counter = self.counter
-                  with open(counters_file, 'wb') as f:
-                      pickle.dump(counter, f)
+              last_counter_update = time.time()
+
+              counters = database.run_get("counters", self.cam_name)
+              if counters not in [None, {}]:
+                if counters.reset:
+                  self.counter.reset_counts()
+                  self.counter.reset = False
+              database.run_put("counters", cam_name, self.counter)
               
-              added_alerts_file = CAMERA_BASE_DIR / self.cam_name / "added_alerts.pkl"
-              if added_alerts_file.exists():
-                with open(added_alerts_file, 'rb') as f:
-                  added_alerts = pickle.load(f)
-                  for id,a in added_alerts:
-                    if a is None:
-                      del self.alert_counters[id]
-                      continue
-                    self.alert_counters[id] = a
-                    for c in a.classes: classes.add(str(c))
-                  added_alerts_file.unlink()
+              alerts = database.run_get("alerts", self.cam_name)
+              for id,a in alerts.items():
+                if not a.new: continue
+                a.new = False
+                database.run_put("alerts", self.cam_name, a, id=id)
+                if a is None:
+                  del self.alert_counters[id]
+                  continue
+                self.alert_counters[id] = a
+                for c in a.classes: classes.add(str(c))
               
-              edited_settings_file = CAMERA_BASE_DIR / self.cam_name / "edited_settings.pkl"
-              if edited_settings_file.exists():
-                with open(edited_settings_file, 'rb') as f:
-                  zone = pickle.load(f)
-                  self.settings = zone
-                edited_settings_file.unlink()
-                  
-            if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+              self.settings = database.run_get("settings", self.cam_name)
+              self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+
+            if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                 last_live_seg = time.time()
                 mp4_filename = f"segment.mp4"
                 self.streamer.export_clip(Path(mp4_filename), live=True)
@@ -720,10 +699,10 @@ class VideoCapture:
               self.raw_frame = frame.copy()
               if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
           time.sleep(1 / 30)
-        except Exception as e:
-            print("Error in capture_loop:", e)
-            self._open_ffmpeg()
-            time.sleep(1)
+        #except Exception as e:
+        #    print("Error in capture_loop:", e)
+        #    self._open_ffmpeg()
+        #    time.sleep(1)
   
   def inference_loop(self):
     prev_time = time.time()
@@ -1002,22 +981,6 @@ class HLSStreamer:
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
 
-
-def append_to_pickle_list(pkl_path, item): # todo, still needed?
-    pkl_path = Path(pkl_path)
-    if pkl_path.exists():
-        try:
-            with open(pkl_path, 'rb') as f:
-                data = pickle.load(f)
-        except Exception as e:
-            data = []
-    else:
-        data = []
-    data.append(item)
-    with open(pkl_path, 'wb') as f:
-        pickle.dump(data, f)
-
-
 def point_not_in_polygon(coords, poly):
     n = len(poly)
     for j in range(len(coords)):
@@ -1037,8 +1000,6 @@ def point_not_in_polygon(coords, poly):
       if inside:
         return False
     return True
-
-import multiprocessing
 
 def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
@@ -1078,7 +1039,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir() and not d.name.endswith("_det")]
+            cams = database.run_get("links", None)
+            available_cams = list(cams.keys())
             self.send_200(available_cams)
             return
 
@@ -1091,10 +1053,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
-            cams[cam_name] = rtsp
-
-            with open(CAMS_FILE, 'wb') as f:
-              pickle.dump(cams, f)  
+            database.run_put("links", cam_name, rtsp)
 
             # Redirect back to home
             self.send_response(302)
@@ -1106,27 +1065,23 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
-            edited_settings_file = CAMERA_BASE_DIR / cam_name / "edited_settings.pkl"
-            settings_file.parent.mkdir(parents=True, exist_ok=True)
-            if not settings_file.exists():
-                with open(settings_file, "wb") as f:
-                    pickle.dump(None, f)
-            settings_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(settings_file, "rb") as f:
-               zone = pickle.load(f)
+            zone = database.run_get("settings", cam_name)
             if zone is None: zone = {}
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
               coords = json.loads(coords_json)
-              if isinstance(coords, list) and len(coords) >= 3:
-                 zone["coords"] = [[float(x), float(y)] for x, y in coords]
+              if isinstance(coords, list):
+                if len(coords) >= 3:
+                  zone["coords"] = [[float(x), float(y)] for x, y in coords]
+                else:
+                  if "coords" in zone: del zone["coords"]
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
-            with open(settings_file, 'wb') as f: pickle.dump(zone, f)
-            with open(edited_settings_file, 'wb') as f: pickle.dump(zone, f)
+            
+            database.run_put("settings", cam_name, zone) # todo, key for each
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1137,9 +1092,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
-            with open(alerts_file, "rb") as f:
-                raw_alerts = pickle.load(f)
+
+            raw_alerts = database.run_get("alerts", cam_name)
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
@@ -1168,11 +1122,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
                 if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
                 alert = raw_alerts[alert_id]
+                alert.new = True
               else:
                 del raw_alerts[alert_id]
-            with open(alerts_file, 'wb') as f: pickle.dump(raw_alerts, f)
-            added_alerts_file = CAMERA_BASE_DIR / cam_name / "added_alerts.pkl"
-            append_to_pickle_list(pkl_path=added_alerts_file,item=[alert_id, alert])
+            if alert is not None:
+              database.run_put("alerts", cam_name, alert, alert_id)
+            else:
+              database.run_delete("alerts", cam_name, alert_id)
+               
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1181,18 +1138,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_settings":
-            zone = {}
-            if not cam_name:
-                self.send_error(400, "Missing cam parameter")
-                return
-            settings_file = CAMERA_BASE_DIR / cam_name / "settings.pkl"
-            if settings_file.exists():
-                try:
-                    with open(settings_file, "rb") as f:
-                        zone = pickle.load(f)
-                except Exception as e:
-                    self.send_error(500, f"Failed to load zone: {e}")
-                    return
+            zone = database.run_get("settings",cam_name)
+            if zone is not None:
+              if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
+            else:
+              zone = {}
             
             self.send_200(zone)
             return
@@ -1202,28 +1152,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
 
-            alerts_file = CAMERA_BASE_DIR / cam_name / "alerts.pkl"
+            raw_alerts = database.run_get("alerts",cam_name)
             alert_info = []
-            if alerts_file.exists():
-                try:
-                    with open(alerts_file, "rb") as f:
-                        raw_alerts = pickle.load(f) 
-                        for key,alert in raw_alerts.items():
-                            sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
-                            alert_info.append({
-                                "window": alert.window,
-                                "max": alert.max,
-                                "classes": list(alert.classes),
-                                "id": str(key),
-                                "sched": sched,
-                                "is_on": alert.is_on,
-                                "is_notif": alert.is_notif,
-                                "zone": alert.zone,
-                            })
-                except Exception as e:
-                    self.send_error(500, f"Failed to load alerts: {e}")
-                    return
-
+            for key,alert in raw_alerts.items():
+                sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
+                alert_info.append({
+                    "window": alert.window,
+                    "max": alert.max,
+                    "classes": list(alert.classes),
+                    "id": str(key),
+                    "sched": sched,
+                    "is_on": alert.is_on,
+                    "is_notif": alert.is_notif,
+                    "zone": alert.zone,
+                })
             self.send_200(alert_info)
             return
 
@@ -1233,23 +1175,19 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name parameter")
                 return
             
-            cam_name_raw = cam_name
-            cam_path_det = CAMERA_BASE_DIR / (cam_name + "_det")
-            cam_path_raw = CAMERA_BASE_DIR / cam_name
-            if cam_path_det.exists() and cam_path_det.is_dir():
-                try:
-                    shutil.rmtree(cam_path_det)
-                    shutil.rmtree(cam_path_raw)
-                    cams.pop(cam_name, None)
-                    cams.pop(cam_name_raw, None) # todo needed?
-                    with open(CAMS_FILE, 'wb') as f:
-                        pickle.dump(cams, f)
-                except Exception as e:
-                    self.send_error(500, f"Error deleting camera: {e}")
-                    return
-            else:
-                self.send_error(404, "Camera not found")
-                return
+            try:
+              shutil.rmtree(CAMERA_BASE_DIR / (cam_name + "_det"), ignore_errors=True)
+              shutil.rmtree(CAMERA_BASE_DIR / cam_name, ignore_errors=True)
+              # todo clean
+              alerts = database.run_get("alerts", cam_name)
+              for id, _ in alerts.items():
+                database.run_delete("alerts", cam_name, id=id)
+              database.run_delete("links", cam_name)
+              database.run_delete("settings", cam_name)
+              database.run_delete("counters", cam_name)
+            except Exception as e:
+              self.send_error(500, f"Error deleting camera: {e}")
+              return
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1257,35 +1195,23 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"status":"deleted"}')
             return
 
-        if parsed_path.path == "/get_counts":
+        if parsed_path.path == "/get_counts": # todo error fetching counts on first
             if not cam_name:
                 self.send_error(400, "Missing cam parameter")
                 return
-            counters_file = CAMERA_BASE_DIR / cam_name / "counters.pkl"
-            try:
-                with open(counters_file, "rb") as f:
-                    counter = pickle.load(f)
-            except Exception:
-                with open(counters_file, 'wb') as f:
-                    counter = RollingClassCounter(cam_name=cam_name)
-                    pickle.dump(counter, f)
-
-            if not counter:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b"{}")
-                return
-
-            raw_counts = counter.get_counts()[0]
-            labeled_counts = {
-                class_labels[int(k)]: v
-                for k, v in raw_counts.items()
+            
+            counter = database.run_get("counters", cam_name)
+            if counter:
+              labeled_counts = {
+                class_labels[int(k)]: len(v)
+                for k, v in counter.data.items()
                 if int(k) < len(class_labels)
-            }
-
-            self.send_200(labeled_counts)
-            return
+              }
+              self.send_200(labeled_counts)
+              return
+            else:
+              database.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
+              self.send_200([])
         
         if parsed_path.path == "/shutdown": 
           threading.Thread(target=self.server.shutdown).start()
@@ -1301,22 +1227,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           sys.exit(0)
 
         if parsed_path.path == "/reset_counts":
-            if not cam_name:
-                self.send_error(400, "Missing cam parameter")
-                return
-            counters_file = CAMERA_BASE_DIR / cam_name / "counters.pkl"
-
-            with open(counters_file, "rb") as f:
-                counter = pickle.load(f)
-            counter = None
-            with open(counters_file, 'wb') as f:
-                pickle.dump(counter, f)
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b"{}")
+          if not cam_name:
+            self.send_error(400, "Missing cam parameter")
             return
+          counter = database.run_get("counters",cam_name)
+          if counter: counter.reset_counts()
+          database.run_put("counters", cam_name, counter)
+          self.send_response(200)
+          self.send_header("Content-Type", "application/json")
+          self.end_headers()
+          self.wfile.write(b"{}")
+          return
 
 
         if parsed_path.path == '/' and "cam" not in query:
@@ -1812,17 +1733,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 if __name__ == "__main__":
-  if platform.system() == 'Darwin': subprocess.Popen(['caffeinate', '-dimsu'])
-  elif platform.system() == 'Windows': ctypes.windll.kernel32.SetThreadExecutionState(0x80000002 | 0x00000001)
-  elif platform.system() == 'Linux': subprocess.Popen(['systemd-inhibit', '--why=Running script', '--mode=block', 'sleep', '999999'])
-
-  if os.path.exists(CAMS_FILE):
-      with open(CAMS_FILE, 'rb') as f:
-        cams = pickle.load(f)
-  else:
-      with open(CAMS_FILE, 'wb') as f:
-         pickle.dump(cams, f)  
-
+  multiprocessing.set_start_method("spawn", force=True)
+  database = db()
+  cams = database.run_get("links", None)
+         
   rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
@@ -1878,14 +1792,11 @@ if __name__ == "__main__":
   if rtsp_url:
     yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
     state_dict = safe_load(get_weights_location(yolo_variant))
-    for k, _ in state_dict.items(): # todo hack because https://github.com/tinygrad/tinygrad/commit/565a7a6218e5ab920360c21d23af6bcae8df82b5
-      if k.endswith("num_batches_tracked"): state_dict[k] = Tensor.empty()
     load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
   
-  searcher = None
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)

@@ -1745,10 +1745,10 @@
                 
                 return [x, y];
             });
+        } else if (points.length === 0) {
+            coords = [0];
         }
-
         const outside = document.getElementById("outsideZoneCheckbox").checked;
-
         const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
         const threshold = thresholdPercent / 100;
         
@@ -1832,11 +1832,11 @@
         points.forEach(point => point.remove());
         zoneEditorState.firstPoint = null;
         zoneEditorState.isPolygonComplete = false;
-        if (zoneEditorState.polygonPath) {
-            zoneEditorState.polygonPath.setAttribute('d', '');
-            zoneEditorState.polygonPath.setAttribute('fill', 'none');
-            zoneEditorState.polygonPath.setAttribute('stroke', '#ff0000');
+        const svg = overlay.querySelector('svg');
+        if (svg) {
+            svg.remove();
         }
+        initPolygonOverlay();
         const previewEl = document.getElementById("zonePreview");
         previewEl.addEventListener('click', handlePreviewClick);
     }
