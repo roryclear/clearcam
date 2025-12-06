@@ -687,7 +687,7 @@ class VideoCapture:
                 if settings and self.cam_name in settings and "settings" in settings[self.cam_name]: self.settings = settings[self.cam_name]["settings"]
               self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
-            if userID and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+            if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
                 last_live_seg = time.time()
                 mp4_filename = f"segment.mp4"
                 self.streamer.export_clip(Path(mp4_filename), live=True)
