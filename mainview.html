@@ -1451,9 +1451,6 @@
     const activeVideoStreams = new Map();
     let wasHidden = false;
     let currentStreamDate = new Date().toLocaleDateString('en-CA');
-    let userIsInteracting = false;
-
-
     
     let zoneEditorState = {
         polygonSvg: null,
@@ -1484,28 +1481,6 @@
     }, 5000);
 
     });
-
-    function isToday(dateString) {
-      const today = new Date().toLocaleDateString('en-CA');
-      return dateString === today;
-    }
-
-    function setupUserInteractionTracking(video) {
-      video.addEventListener('seeking', () => {
-        userIsInteracting = true;
-        console.log('User is scrubbing - disabling auto-seek');
-      });
-      
-      video.addEventListener('seeked', () => {
-        setTimeout(() => {
-          userIsInteracting = false;
-        }, 3000);
-      });
-      
-      video.addEventListener('play', () => {
-        userIsInteracting = false;
-      });
-    }
 
     function restartAllStreams() {
       console.log('Restarting all streams for date:', currentStreamDate);
