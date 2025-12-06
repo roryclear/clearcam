@@ -683,8 +683,7 @@ class VideoCapture:
                 self.alert_counters[id] = a
                 for c in a.classes: classes.add(str(c))
               
-                settings = database.run_get("settings", self.cam_name)
-                if settings and self.cam_name in settings and "settings" in settings[self.cam_name]: self.settings = settings[self.cam_name]["settings"]
+              self.settings = database.run_get("settings", self.cam_name)
               self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
             if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
