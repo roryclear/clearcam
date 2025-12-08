@@ -3,29 +3,12 @@ from collections import defaultdict
 from clearcam import YOLOv8, get_variant_multiples, get_weights_location, resize, copy_make_border
 from tinygrad.nn.state import safe_load, load_state_dict
 from tinygrad import TinyJit
+from tinygrad.helpers import fetch
 import cv2
 import os
 from tinygrad import Tensor
 import numpy as np
 import time
-
-# todo, make jit for different sizes?
-def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
-  shape = image.shape[:2]  # current shape [height, width]
-  new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
-  r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-  r = min(r, 1.0) if not scaleup else r
-  new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
-  dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-  dw, dh = (np.mod(dw, stride), np.mod(dh, stride)) if auto else (0.0, 0.0)
-  new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
-  dw /= 2
-  dh /= 2
-  image = resize(image, new_unpad)
-  top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-  left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-  image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
-  return image
 
 def to_square(x):
   h, w = x.shape[:2]
@@ -47,6 +30,24 @@ def do_inf(im, yolo_infer):
   predictions = yolo_infer(im)
   return predictions
 
+def precision_recall_f1(gt, pred):
+    classes = set(gt.keys()).union(set(pred.keys()))
+
+    TP = FP = FN = 0
+
+    for cls in classes:
+        gt_count = gt[cls]
+        pred_count = pred[cls]
+
+        TP += min(gt_count, pred_count)
+        FP += max(pred_count - gt_count, 0)
+        FN += max(gt_count - pred_count, 0)
+
+    precision = TP / (TP + FP) if (TP + FP) else 0
+    recall = TP / (TP + FN) if (TP + FN) else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0
+
+    return [precision, recall, f1]
 
 if __name__ == "__main__":
   labels = data = json.load(open('dataset/annotations/instances_val2017.json'))
@@ -59,16 +60,18 @@ if __name__ == "__main__":
 
   #print(image_data)
 
-  yolo_variant = "s"
+  yolo_variant = "m"
   depth, width, ratio = get_variant_multiples(yolo_variant)
   yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
   state_dict = safe_load(get_weights_location(yolo_variant))
   load_state_dict(yolo_infer, state_dict)
+  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
 
   i = 0
   total_time = 0
+  scores = [0,0,0] # pres, recall, f1
   t = time.time()
-  for k in list(image_data.keys())[0:100]:
+  for k in list(image_data.keys()):
     x = cv2.imread(f'dataset/val2017/{image_data[k][0]}')
     x = to_square(x) # just use 1280x1280 square cos the dataset has different shapes
     x = Tensor(x)
@@ -77,10 +80,19 @@ if __name__ == "__main__":
     if i > 3: total_time += (time.time() - t)
     counts = defaultdict(int)
     for p in preds:
-      if p[-2] >= 0.25: counts[int(p[-1])] += 1
-    print(counts, image_data[k][1])
+      if p[-2] >= 0.25: counts[int(p[-1]) + 1] += 1 # +1 to class needed
+
+    correct = image_data[k][1]
+    
+    score = precision_recall_f1(correct, counts)
+    scores[0] += score[0]
+    scores[1] += score[1]
+    scores[2] += score[2]
 
     i+=1
     print(i, len(image_data.keys()))
     
   print("time taken:",total_time)
+
+  print("scores =", scores[0] / i, scores[1] / i, scores[2] / i)
+  
