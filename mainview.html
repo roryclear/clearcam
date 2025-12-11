@@ -2508,7 +2508,12 @@
         const data = await res.json();
         
         if (data.images && data.images.length > 0 && !currentImageSearchText) {
-          data.images.sort((a, b) => b.timestamp - a.timestamp);
+          data.images.sort((a, b) => {
+            if (a.folder !== b.folder) {
+              return b.folder.localeCompare(a.folder);
+            }
+            return b.timestamp - a.timestamp;
+          });
         }
         
         if (JSON.stringify(data) === JSON.stringify(previousEventImages)) {
