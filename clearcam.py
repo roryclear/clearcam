@@ -1267,13 +1267,24 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
                             
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
-          selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+          selected_dir = parse_qs(parsed_path.query).get("folder", [None])[0]
           name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
           image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
           if cam_name:
             camera_dirs = [self.base_dir / cam_name]
           else:
             camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
+          
+          if selected_dir:
+            selected_dirs = [selected_dir]
+          else:
+            selected_dirs = list({
+              subdir.name 
+              for camera_dir in camera_dirs 
+              for subdir in (camera_dir / "streams").iterdir() 
+              if subdir.is_dir()
+            })          
+
           if image_text and use_clip:
             if not self.searcher:
               self.searcher = CLIPSearch()
@@ -1315,24 +1326,25 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
           image_data = []
           for camera_dir in camera_dirs:
-            event_image_path = camera_dir / "event_images" / selected_dir
-            if not event_image_path.exists(): continue
-            event_images = sorted(
-              event_image_path.glob("*.jpg"),
-              key=lambda p: int(p.stem.split('_')[0]),
-              reverse=True
-            )
-            for img in event_images:
-              if name_contains and name_contains not in img.name: continue
-              ts = int(img.stem.split('_')[0])
-              image_url = f"/{img.relative_to(self.base_dir.parent)}"
-              image_data.append({
-                "url": image_url,
-                "timestamp": ts,
-                "filename": img.name,
-                "cam_name": camera_dir.name,
-                "folder": selected_dir
-              })
+            for selected_dir in selected_dirs:
+              event_image_path = camera_dir / "event_images" / selected_dir
+              if not event_image_path.exists(): continue
+              event_images = sorted(
+                event_image_path.glob("*.jpg"),
+                key=lambda p: int(p.stem.split('_')[0]),
+                reverse=True
+              )
+              for img in event_images:
+                if name_contains and name_contains not in img.name: continue
+                ts = int(img.stem.split('_')[0])
+                image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                image_data.append({
+                  "url": image_url,
+                  "timestamp": ts,
+                  "filename": img.name,
+                  "cam_name": camera_dir.name,
+                  "folder": selected_dir
+                })
 
           image_data.sort(key=lambda x: x["timestamp"], reverse=True)
 
