@@ -127,7 +127,9 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 15px;
+      flex-wrap: wrap;
     }
+
 
     .events-filter label {
       font-weight: 500;
@@ -142,6 +144,7 @@
       background: var(--bg-primary);
       color: var(--text-primary);
       cursor: pointer;
+      min-width: 120px;
     }
 
     .camera-card .detection-toggle {
@@ -944,13 +947,25 @@
   <div class="events-section">
     <h3>Detected Events</h3>
     <div class="events-filter">
-      <select id="cameraFilter">
-        <option value="">All Cameras</option>
-      </select>
+      <div class="filter-group">
+        <label for="cameraFilter">Camera:</label>
+        <select id="cameraFilter">
+          <option value="">All Cameras</option>
+        </select>
+      </div>
+      
+      <div class="filter-group">
+        <label for="eventDateFilter">Date:</label>
+        <select id="eventDateFilter">
+          <option value="">Loading dates...</option>
+        </select>
+      </div>
+      
       <label style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
         <input type="checkbox" id="alertsOnlyCheckbox">
         Alerts Only
       </label>
+      
       <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
         <input type="text" id="imageSearchInput" placeholder="Search text..." style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
         <button onclick="searchEventImages()" id="searchButton" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
@@ -1485,6 +1500,7 @@
     const activeVideoStreams = new Map();
     let wasHidden = false;
     let currentStreamDate = new Date().toLocaleDateString('en-CA');
+    let currentEventDateFilter = new Date().toLocaleDateString('en-CA');
     
     let zoneEditorState = {
         polygonSvg: null,
@@ -1495,8 +1511,18 @@
 
     document.addEventListener('DOMContentLoaded', function() {
       const dateSelect = document.getElementById('streamDateSelect');
-      function populateDateDropdown(dates) {
-        dateSelect.innerHTML = '';
+      const eventDateFilter = document.getElementById('eventDateFilter');
+      
+      function populateDateDropdown(dates, dropdown, isEventFilter = false) {
+        dropdown.innerHTML = '';
+        
+        if (isEventFilter) {
+          const allTimeOption = document.createElement('option');
+          allTimeOption.value = '';
+          allTimeOption.textContent = 'All time';
+          dropdown.appendChild(allTimeOption);
+        }
+        
         dates.sort((a, b) => new Date(b) - new Date(a));
         dates.forEach(date => {
           const option = document.createElement('option');
@@ -1508,16 +1534,25 @@
             day: 'numeric'
           });
           option.textContent = displayDate;
-          
-          dateSelect.appendChild(option);
+          dropdown.appendChild(option);
         });
         const today = new Date().toISOString().split('T')[0];
         if (dates.includes(today)) {
-          dateSelect.value = today;
-          currentStreamDate = today;
+          if (isEventFilter) {
+            dropdown.value = today;
+            currentEventDateFilter = today;
+          } else {
+            dropdown.value = today;
+            currentStreamDate = today;
+          }
         } else if (dates.length > 0) {
-          dateSelect.value = dates[0];
-          currentStreamDate = dates[0];
+          if (isEventFilter) {
+            dropdown.value = dates[0];
+            currentEventDateFilter = dates[0];
+          } else {
+            dropdown.value = dates[0];
+            currentStreamDate = dates[0];
+          }
         }
       }
       
@@ -1525,16 +1560,20 @@
         .then(res => res.json())
         .then(dates => {
           if (dates && dates.length > 0) {
-            populateDateDropdown(dates);
+            populateDateDropdown(dates, dateSelect, false);
+            populateDateDropdown(dates, eventDateFilter, true);
           } else {
             dateSelect.innerHTML = '<option value="">No dates available</option>';
+            eventDateFilter.innerHTML = '<option value="">No dates available</option>';
           }
         })
         .catch(err => {
           console.error('Failed to load dates:', err);
           dateSelect.innerHTML = '<option value="">Error loading dates</option>';
+          eventDateFilter.innerHTML = '<option value="">Error loading dates</option>';
         });
       
+      // Stream date dropdown listener
       dateSelect.addEventListener('change', function() {
         const selectedDate = this.value;
         if (selectedDate) {
@@ -1543,6 +1582,13 @@
           restartAllStreams();
           loadEventImages();
         }
+      });
+      
+      // Event date filter dropdown listener
+      eventDateFilter.addEventListener('change', function() {
+        currentEventDateFilter = this.value;
+        console.log('Event date filter changed to:', currentEventDateFilter);
+        loadEventImages();
       });
       
       loadEventImages();
@@ -2446,7 +2492,7 @@
 
     async function loadEventImages() {
       try {
-        let url = `/event_thumbs?folder=${currentStreamDate}`;
+        let url = `/event_thumbs?folder=${currentEventDateFilter}`;
         if (currentEventCameraFilter) {
           url += `&cam=${encodeURIComponent(currentEventCameraFilter)}`;
         }
