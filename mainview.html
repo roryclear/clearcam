@@ -2490,6 +2490,8 @@
     });
 
 
+    let previousEventImages = null;
+
     async function loadEventImages() {
       try {
         let url = `/event_thumbs?folder=${currentEventDateFilter}`;
@@ -2505,8 +2507,11 @@
         
         const res = await fetch(url);
         const data = await res.json();
+        if (JSON.stringify(data) === JSON.stringify(previousEventImages)) {
+          return;
+        }
+        previousEventImages = data;
         const container = document.getElementById("eventImagesContainer");
-        
         if (data.images && data.images.length > 0) {
           let html = '';
           data.images.forEach(img => {
