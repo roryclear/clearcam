@@ -892,6 +892,24 @@
     .close:hover {
         color: var(--text-primary);
     }
+
+    .date-picker-container select {
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 14px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      cursor: pointer;
+      min-width: 120px;
+    }
+
+    .date-picker-container select:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+
   </style>
 </head>
 <body>
@@ -899,7 +917,9 @@
   <div class="multi-view-wrapper">
     <button onclick="toggleMultiView()">Multi View</button>
     <div class="date-picker-container">
-      <input type="date" id="streamDatePicker">
+      <select id="streamDateSelect" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
+        <option value="">Loading dates...</option>
+      </select>
     </div>
   </div>
 
@@ -1474,19 +1494,48 @@
     };
 
     document.addEventListener('DOMContentLoaded', function() {
-      const datePicker = document.getElementById('streamDatePicker');
+      const dateSelect = document.getElementById('streamDateSelect');
+      function populateDateDropdown(dates) {
+        dateSelect.innerHTML = '';
+        dates.sort((a, b) => new Date(b) - new Date(a));
+        dates.forEach(date => {
+          const option = document.createElement('option');
+          option.value = date;
+          const dateObj = new Date(date);
+          const displayDate = dateObj.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+          option.textContent = displayDate;
+          
+          dateSelect.appendChild(option);
+        });
+        const today = new Date().toISOString().split('T')[0];
+        if (dates.includes(today)) {
+          dateSelect.value = today;
+          currentStreamDate = today;
+        } else if (dates.length > 0) {
+          dateSelect.value = dates[0];
+          currentStreamDate = dates[0];
+        }
+      }
+      
       fetch('/list_days')
         .then(res => res.json())
         .then(dates => {
-          datePicker.innerHTML = '';
-          dates.forEach(date => {
-            const option = new Option(date, date);
-            datePicker.appendChild(option);
-          });
-          datePicker.value = currentStreamDate || dates[0];
+          if (dates && dates.length > 0) {
+            populateDateDropdown(dates);
+          } else {
+            dateSelect.innerHTML = '<option value="">No dates available</option>';
+          }
         })
-        .catch(err => console.error('Failed to load dates:', err));
-      datePicker.addEventListener('change', function() {
+        .catch(err => {
+          console.error('Failed to load dates:', err);
+          dateSelect.innerHTML = '<option value="">Error loading dates</option>';
+        });
+      
+      dateSelect.addEventListener('change', function() {
         const selectedDate = this.value;
         if (selectedDate) {
           currentStreamDate = selectedDate;
@@ -1495,6 +1544,7 @@
           loadEventImages();
         }
       });
+      
       loadEventImages();
       setInterval(() => {
         if (!currentImageSearchText) {

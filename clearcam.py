@@ -25,6 +25,7 @@ from urllib.parse import unquote, quote
 import zlib
 from utils.db import db
 import multiprocessing
+import re
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1043,6 +1044,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             available_cams = list(cams.keys())
             self.send_200(available_cams)
             return
+      
+
+        if parsed_path.path == "/list_days":          
+          base_path = "data/cameras"
+          days = set()
+          date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+          if os.path.exists(base_path):
+            for cam_name in os.listdir(base_path):
+              cam_path = os.path.join(base_path, cam_name, "streams")    
+              if os.path.exists(cam_path):
+                for date_folder in os.listdir(cam_path):
+                  date_folder_path = os.path.join(cam_path, date_folder)
+                  if os.path.isdir(date_folder_path) and date_pattern.match(date_folder): days.add(date_folder)
+          days_list = sorted(list(days), reverse=True, key=lambda x: datetime.strptime(x, "%Y-%m-%d"))
+          self.send_200(days_list)
+          return
 
         if parsed_path.path == '/add_camera':
             cam_name = query.get("cam_name", [None])[0]
