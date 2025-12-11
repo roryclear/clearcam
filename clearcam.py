@@ -1310,13 +1310,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 "timestamp": ts,
                 "filename": img_path.name,
                 "cam_name": cam,
-                "folder": selected_dir
+                "folder": img_path.parts[-2]
               })
             response_data = {
               "images": image_data,
               "count": len(image_data),
-              "folder": selected_dir,
-              "cam_name": cam_name if cam_name else "all_cameras"
             }
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -1351,8 +1349,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           response_data = {
             "images": image_data,
             "count": len(image_data),
-            "folder": selected_dir,
-            "cam_name": cam_name if cam_name else "all_cameras"
           }
 
           self.send_response(200)
