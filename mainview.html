@@ -1475,7 +1475,17 @@
 
     document.addEventListener('DOMContentLoaded', function() {
       const datePicker = document.getElementById('streamDatePicker');
-      datePicker.value = currentStreamDate;
+      fetch('/list_days')
+        .then(res => res.json())
+        .then(dates => {
+          datePicker.innerHTML = '';
+          dates.forEach(date => {
+            const option = new Option(date, date);
+            datePicker.appendChild(option);
+          });
+          datePicker.value = currentStreamDate || dates[0];
+        })
+        .catch(err => console.error('Failed to load dates:', err));
       datePicker.addEventListener('change', function() {
         const selectedDate = this.value;
         if (selectedDate) {
@@ -1485,16 +1495,14 @@
           loadEventImages();
         }
       });
-
       loadEventImages();
       setInterval(() => {
-      // Only refresh if there's no active search
-      if (!currentImageSearchText) {
-        loadEventImages();
-      }
-    }, 5000);
-
+        if (!currentImageSearchText) {
+          loadEventImages();
+        }
+      }, 5000);
     });
+
 
     function restartAllStreams() {
       console.log('Restarting all streams for date:', currentStreamDate);
@@ -1509,6 +1517,8 @@
         });
       }
     }
+    
+    
 
     async function fetchCameras() {
       const res = await fetch('/list_cameras');
