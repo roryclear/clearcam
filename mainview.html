@@ -2506,14 +2506,35 @@
         const res = await fetch(url);
         const data = await res.json();
         const container = document.getElementById("eventImagesContainer");
+        const hasImageItems = container.querySelector('.event-image-item');
         
         if (data.images && data.images.length > 0) {
-          let html = '';
+          const noEventsMsg = container.querySelector('p[style*="color:#666"]');
+          if (noEventsMsg) {
+            noEventsMsg.remove();
+          }
+          const existingImages = new Map();
+          container.querySelectorAll('.event-image-item img').forEach(img => {
+            existingImages.set(img.src, img);
+          });
+          const newImageUrls = new Set();
+          const newImageData = new Map();
+          
           data.images.forEach(img => {
-            const timeStr = secondsToTimeString(img.timestamp);
-            const dateTime = `${img.folder} ${secondsToTimeString(img.timestamp)}`;
-            html += `
-              <div class="event-image-item">
+            newImageUrls.add(img.url);
+            newImageData.set(img.url, img);
+          });
+          Array.from(existingImages.entries()).forEach(([url, imgElement]) => {
+            if (!newImageUrls.has(url)) {
+              imgElement.closest('.event-image-item').remove();
+            }
+          });
+          data.images.forEach(img => {
+            if (!existingImages.has(img.url)) {
+              const timeStr = secondsToTimeString(img.timestamp);
+              const div = document.createElement('div');
+              div.className = 'event-image-item';
+              div.innerHTML = `
                 <img src="${img.url}" alt="Event" loading="lazy" onclick="viewImage('${img.url}')">
                 <div class="event-image-info">
                   <strong>${img.cam_name || 'Camera'}</strong>
@@ -2537,17 +2558,47 @@
                     </span>
                   </button>
                 </div>
-              </div>
-            `;
+              `;
+              container.appendChild(div);
+            }
           });
-          container.innerHTML = html;
+          existingImages.forEach((imgElement, url) => {
+            if (newImageUrls.has(url)) {
+              const imgData = newImageData.get(url);
+              const infoDiv = imgElement.closest('.event-image-item').querySelector('.event-image-info');
+              const timeStr = secondsToTimeString(imgData.timestamp);
+              infoDiv.innerHTML = `
+                <strong>${imgData.cam_name || 'Camera'}</strong>
+                <br>
+                <small>${imgData.folder} ${timeStr}</small>
+              `;
+              const actionsDiv = imgElement.closest('.event-image-item').querySelector('.event-image-actions');
+              actionsDiv.querySelector('button[title="Play"]').onclick = () => 
+                playVideoAtTime(imgData.cam_name, imgData.timestamp, imgData.folder);
+              actionsDiv.querySelector('button[title="Play All"]').onclick = () => 
+                playAllCamerasAtTime(imgData.timestamp, imgData.folder);
+            }
+          });
+          
         } else {
-          container.innerHTML = '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
+          if (!hasImageItems) {
+            const existingMsg = container.querySelector('p[style*="color:#666"]');
+            if (!existingMsg) {
+              container.innerHTML = '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
+            }
+          } else {
+            container.innerHTML = '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
+          }
         }
       } catch (err) {
         console.error("Failed to load event images:", err);
         const container = document.getElementById("eventImagesContainer");
-        container.innerHTML = '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
+        if (!container.querySelector('.event-image-item')) {
+          const existingError = container.querySelector('p[style*="color:red"]');
+          if (!existingError) {
+            container.innerHTML = '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
+          }
+        }
       }
     }
 
