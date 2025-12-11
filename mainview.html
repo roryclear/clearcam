@@ -2404,11 +2404,15 @@
         if (data.images && data.images.length > 0) {
           let html = '';
           data.images.forEach(img => {
+            const timeStr = secondsToTimeString(img.timestamp);
+            const dateTime = `${img.folder} ${secondsToTimeString(img.timestamp)}`;
             html += `
               <div class="event-image-item">
                 <img src="${img.url}" alt="Event" onclick="viewImage('${img.url}')">
                 <div class="event-image-info">
                   <strong>${img.cam_name || 'Camera'}</strong>
+                  <br>
+                  <small>${img.folder} ${timeStr}</small>
                 </div>
                 <div class="event-image-actions">
                   <button title="View" onclick="viewImage('${img.url}')">
@@ -2439,6 +2443,14 @@
         const container = document.getElementById("eventImagesContainer");
         container.innerHTML = '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
       }
+    }
+
+    function secondsToTimeString(seconds) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      const pad = (num) => num.toString().padStart(2, '0');
+      return `${pad(hours)}:${pad(minutes)}:${pad(secs)}`;
     }
 
     function viewImage(imageSrc) {
