@@ -2468,7 +2468,7 @@
             const dateTime = `${img.folder} ${secondsToTimeString(img.timestamp)}`;
             html += `
               <div class="event-image-item">
-                <img src="${img.url}" alt="Event" onclick="viewImage('${img.url}')">
+                <img src="${img.url}" alt="Event" loading="lazy" onclick="viewImage('${img.url}')">
                 <div class="event-image-info">
                   <strong>${img.cam_name || 'Camera'}</strong>
                   <br>
