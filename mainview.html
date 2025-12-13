@@ -2591,6 +2591,8 @@
       const video = document.getElementById(videoId);
       if(folder != document.getElementById('streamDateSelect').value){
         document.getElementById('streamDateSelect').value = folder;
+        currentStreamDate = folder;
+        restartAllStreams();
       }
       
       if (video) {
@@ -2612,6 +2614,8 @@
     function playAllCamerasAtTime(timestamp, folder) {
       if(folder != document.getElementById('streamDateSelect').value){
         document.getElementById('streamDateSelect').value = folder;
+        currentStreamDate = folder;
+        restartAllStreams();
       }
       if (window.currentCameras && window.currentCameras.length > 0) {
         window.currentCameras.forEach(camName => {
