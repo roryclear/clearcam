@@ -25,6 +25,7 @@ from urllib.parse import unquote, quote
 import zlib
 from utils.db import db
 import multiprocessing
+import re
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1043,6 +1044,22 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             available_cams = list(cams.keys())
             self.send_200(available_cams)
             return
+      
+
+        if parsed_path.path == "/list_days":          
+          base_path = "data/cameras"
+          days = set()
+          date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+          if os.path.exists(base_path):
+            for cam_name in os.listdir(base_path):
+              cam_path = os.path.join(base_path, cam_name, "streams")    
+              if os.path.exists(cam_path):
+                for date_folder in os.listdir(cam_path):
+                  date_folder_path = os.path.join(cam_path, date_folder)
+                  if os.path.isdir(date_folder_path) and date_pattern.match(date_folder): days.add(date_folder)
+          days_list = sorted(list(days), reverse=True, key=lambda x: datetime.strptime(x, "%Y-%m-%d"))
+          self.send_200(days_list)
+          return
 
         if parsed_path.path == '/add_camera':
             cam_name = query.get("cam_name", [None])[0]
@@ -1250,13 +1267,24 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
                             
         if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
-          selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
+          selected_dir = parse_qs(parsed_path.query).get("folder", [None])[0]
           name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
           image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
           if cam_name:
             camera_dirs = [self.base_dir / cam_name]
           else:
             camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
+          
+          if selected_dir:
+            selected_dirs = [selected_dir]
+          else:
+            selected_dirs = list({
+              subdir.name 
+              for camera_dir in camera_dirs 
+              for subdir in (camera_dir / "streams").iterdir() 
+              if subdir.is_dir()
+            })          
+
           if image_text and use_clip:
             if not self.searcher:
               self.searcher = CLIPSearch()
@@ -1282,13 +1310,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 "timestamp": ts,
                 "filename": img_path.name,
                 "cam_name": cam,
-                "folder": selected_dir
+                "folder": img_path.parts[-2]
               })
             response_data = {
               "images": image_data,
               "count": len(image_data),
-              "folder": selected_dir,
-              "cam_name": cam_name if cam_name else "all_cameras"
             }
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -1298,32 +1324,31 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
           image_data = []
           for camera_dir in camera_dirs:
-            event_image_path = camera_dir / "event_images" / selected_dir
-            if not event_image_path.exists(): continue
-            event_images = sorted(
-              event_image_path.glob("*.jpg"),
-              key=lambda p: int(p.stem.split('_')[0]),
-              reverse=True
-            )
-            for img in event_images:
-              if name_contains and name_contains not in img.name: continue
-              ts = int(img.stem.split('_')[0])
-              image_url = f"/{img.relative_to(self.base_dir.parent)}"
-              image_data.append({
-                "url": image_url,
-                "timestamp": ts,
-                "filename": img.name,
-                "cam_name": camera_dir.name,
-                "folder": selected_dir
-              })
+            for selected_dir in selected_dirs:
+              event_image_path = camera_dir / "event_images" / selected_dir
+              if not event_image_path.exists(): continue
+              event_images = sorted(
+                event_image_path.glob("*.jpg"),
+                key=lambda p: int(p.stem.split('_')[0]),
+                reverse=True
+              )
+              for img in event_images:
+                if name_contains and name_contains not in img.name: continue
+                ts = int(img.stem.split('_')[0])
+                image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                image_data.append({
+                  "url": image_url,
+                  "timestamp": ts,
+                  "filename": img.name,
+                  "cam_name": camera_dir.name,
+                  "folder": selected_dir
+                })
 
           image_data.sort(key=lambda x: x["timestamp"], reverse=True)
 
           response_data = {
             "images": image_data,
             "count": len(image_data),
-            "folder": selected_dir,
-            "cam_name": cam_name if cam_name else "all_cameras"
           }
 
           self.send_response(200)
@@ -1638,7 +1663,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
-        self.max_gb = 70
+        self.max_gb = 256
         self.searcher = None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
