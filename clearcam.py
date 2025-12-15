@@ -594,6 +594,7 @@ class VideoCapture:
     pred_occs = {}
     count = 0
     while self.running:
+      try:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if 1==1:
           raw_bytes = self.proc.stdout.read(frame_size)
@@ -700,10 +701,10 @@ class VideoCapture:
               self.raw_frame = frame.copy()
               if self.streamer.feeding_frames: self.annotated_frame = self.draw_predictions(frame.copy(), filtered_preds)
           time.sleep(1 / 30)
-        #except Exception as e:
-        #    print("Error in capture_loop:", e)
-        #    self._open_ffmpeg()
-        #    time.sleep(1)
+      except Exception as e:
+            print("Error in capture_loop:", e)
+            self._open_ffmpeg()
+            time.sleep(1)
   
   def inference_loop(self):
     prev_time = time.time()
