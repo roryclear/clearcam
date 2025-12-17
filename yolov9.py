@@ -155,7 +155,6 @@ class Concat():
 
 class DDetect():
     def __init__(self, a=64, b=96, c=128, d=80, f=[15, 18, 21]):  # detection layer
-        self.stride = Tensor([0 ,0 ,0])
         self.anchors = Tensor.empty((2, 22680))
         self.strides = Tensor.empty((1, 22680))
         self.dfl = DFL(c1=16)
@@ -201,13 +200,12 @@ class DDetect():
       
     def __call__(self, x):
         shape = x[0].shape  # BCHW
-        int_stride = self.stride.int().tolist() # todo remove
         for i in range(self.nl):
             x0 = self.cv2[i](x[i])
             x1 = self.cv3[i](x[i])
             x[i] = Tensor.cat(x0, x1, dim=1)
 
-        self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, int_stride, 0.5))
+        self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, [8, 16, 32], 0.5))
         self.shape = shape        
         processed_tensors = []
         for xi in x:
