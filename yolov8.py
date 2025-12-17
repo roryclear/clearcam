@@ -194,6 +194,9 @@ class YOLOv8:
     # TODO: postprocess needs to be in the model to be compiled to webgpu
     return postprocess(x)
 
+def get_variant_multiples(variant):
+  return {'n':(0.33, 0.25, 2.0), 's':(0.33, 0.50, 2.0), 'm':(0.67, 0.75, 1.5), 'l':(1.0, 1.0, 1.0), 'x':(1, 1.25, 1.0) }.get(variant, None)
+
 def convert_f16_safetensor_to_f32(input_file: Path, output_file: Path):
   with open(input_file, 'rb') as f:
     metadata_length = int.from_bytes(f.read(8), 'little')

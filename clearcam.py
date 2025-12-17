@@ -1,9 +1,8 @@
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.helpers import fetch
-from yolov9 import DetectionModel, SIZES, safe_load, load_state_dict, Sequential, Silence, Conv, RepNCSPELAN4, AConv,\
-ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch, rescale_bounding_boxes, draw_bounding_boxes_and_save
-from yolov8 import YOLOv8, get_weights_location
+from yolov9 import safe_load, load_state_dict, DetectionModel, SIZES
+from yolov8 import YOLOv8, get_weights_location, get_variant_multiples
 import numpy as np
 from pathlib import Path
 import cv2
@@ -71,9 +70,6 @@ def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
     boxes_np = clip_boxes(boxes_np, img0_shape)
     pred[:4] = boxes_np
   return predictions
-
-def get_variant_multiples(variant):
-  return {'n':(0.33, 0.25, 2.0), 's':(0.33, 0.50, 2.0), 'm':(0.67, 0.75, 1.5), 'l':(1.0, 1.0, 1.0), 'x':(1, 1.25, 1.0) }.get(variant, None)
 
 @TinyJit
 def do_inf(im, yolo_infer):
@@ -1529,7 +1525,7 @@ if __name__ == "__main__":
   if use_clip: use_clip = use_clip != "False" # str to bool
   yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
   if not yolo_variant:
-    yolo_variant = input("Select YOLOV8 size from [n,s,m,l,x], or press enter to skip (defaults to n):") or "n"
+    yolo_variant = input("Select YOLOV9 size from [t,s,m,c,e], or press enter to skip (defaults to t):") or "t"
     use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
@@ -1571,12 +1567,12 @@ if __name__ == "__main__":
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
-  depth, width, ratio = get_variant_multiples(yolo_variant)
+  #depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
-    yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-    #yolo_infer = DetectionModel(*SIZES["t"])
-    state_dict = safe_load(get_weights_location(yolo_variant))
-    #state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-t.safetensors'))
+    #yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
+    yolo_infer = DetectionModel(*SIZES["t"])
+    #state_dict = safe_load(get_weights_location(yolo_variant))
+    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-t.safetensors'))
     load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
