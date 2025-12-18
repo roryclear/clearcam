@@ -1,8 +1,7 @@
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.helpers import fetch
-from yolov9 import safe_load, load_state_dict, YOLOv9, SIZES
-from yolov8 import YOLOv8, get_weights_location, get_variant_multiples
+from detection.yolov9 import safe_load, load_state_dict, YOLOv9, SIZES
 import numpy as np
 from pathlib import Path
 import cv2
@@ -1569,9 +1568,7 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
-    #yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
     yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
-    #state_dict = safe_load(get_weights_location(yolo_variant))
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
     load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
