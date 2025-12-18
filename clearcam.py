@@ -1570,9 +1570,9 @@ if __name__ == "__main__":
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
     #yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-    yolo_infer = YOLOv9(*SIZES["t"])
+    yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
     #state_dict = safe_load(get_weights_location(yolo_variant))
-    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-t.safetensors'))
+    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
     load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(rtsp_url,cam_name=cam_name)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
