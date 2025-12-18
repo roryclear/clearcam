@@ -118,7 +118,7 @@ NSString *sessionID;
         @[NSLocalizedString(@"toothbrush", nil), [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0]]
     ];
 
-    NSString *fileName = @"batch_data";
+    NSString *fileName = @"yolov9t";
     NSString *filePath = [[NSBundle mainBundle] pathForResource:fileName ofType:nil];
     NSData *ns_data = nil;
     if (filePath) ns_data = [NSData dataWithContentsOfFile:filePath];
