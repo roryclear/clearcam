@@ -1,7 +1,7 @@
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.helpers import fetch
-from yolov9 import safe_load, load_state_dict, DetectionModel, SIZES
+from yolov9 import safe_load, load_state_dict, YOLOv9, SIZES
 from yolov8 import YOLOv8, get_weights_location, get_variant_multiples
 import numpy as np
 from pathlib import Path
@@ -1570,7 +1570,7 @@ if __name__ == "__main__":
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:
     #yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-    yolo_infer = DetectionModel(*SIZES["t"])
+    yolo_infer = YOLOv9(*SIZES["t"])
     #state_dict = safe_load(get_weights_location(yolo_variant))
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-t.safetensors'))
     load_state_dict(yolo_infer, state_dict)

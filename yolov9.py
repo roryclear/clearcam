@@ -294,33 +294,33 @@ class Silence():
     def __init__(self, f=-1): self.f = f
     def __call__(self, x): return x
 
-class DetectionModel():
-  def __init__(self, a=16, c=64, e=96, f=24, g=128, h=256, i=224, j=160, k=48, l=144, m=192, n=80, o=32, q=16, s=3, u=96, v=32, y=64, z=128, a1=64, a2=64, a4=128, size=None):
+class YOLOv9():
+  def __init__(self, a=16, b=64, c=96, d=24, e=128, f=256, g=224, h=160, i=48, j=144, k=192, l=80, m=32, n=16, p=3, q=96, r=32, s=64, t=128, u=64, v=64, w=128, size=None):
     if size is not None:
       self.model = Sequential(size=23)
       self.model[0] = Conv(in_channels=3, out_channels=a, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
       self.model[1] = Conv(in_channels=a, out_channels=a*2, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1),  groups=1, bias=True)
-      self.model[2] = ELAN1(ch0=a*2, ch1=o, ch2=a, ch3=c) if size in ["t", "s"] else RepNCSPELAN4(y, 32, z, n=s)
-      self.model[3] = ADown() if size == "c" else AConv(in_channels=o, out_channels=a1, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-      self.model[4] = RepNCSPELAN4(c, q, a2, n=s)
-      self.model[5] = ADown(256) if size == "c" else AConv(in_channels=c, out_channels=u, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-      self.model[6] = RepNCSPELAN4(e, f, e, n=s)
-      self.model[7] = ADown(256) if size == "c" else AConv(in_channels=u, out_channels=g, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-      self.model[8] = RepNCSPELAN4(a4, v, a4, n=s)
-      self.model[9] = SPPELAN(ch0=a4, ch1=c, ch2=h, ch3=a4)
+      self.model[2] = ELAN1(ch0=a*2, ch1=m, ch2=a, ch3=b) if size in ["t", "s"] else RepNCSPELAN4(s, 32, t, n=p)
+      self.model[3] = ADown() if size == "c" else AConv(in_channels=m, out_channels=u, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+      self.model[4] = RepNCSPELAN4(b, n, v, n=p)
+      self.model[5] = ADown(256) if size == "c" else AConv(in_channels=b, out_channels=q, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+      self.model[6] = RepNCSPELAN4(c, d, c, n=p)
+      self.model[7] = ADown(256) if size == "c" else AConv(in_channels=q, out_channels=e, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+      self.model[8] = RepNCSPELAN4(w, r, w, n=p)
+      self.model[9] = SPPELAN(ch0=w, ch1=b, ch2=f, ch3=w)
       self.model[10] = Upsample()
       self.model[11] = Concat(f=[-1, 6])
-      self.model[12] = RepNCSPELAN4(i, f, e, n=s)
+      self.model[12] = RepNCSPELAN4(g, d, c, n=p)
       self.model[13] = Upsample()
       self.model[14] = Concat(f=[-1, 4])
-      self.model[15] = RepNCSPELAN4(j, q, c, n=s)
-      self.model[16] = ADown(128) if size == "c" else AConv(in_channels=a2, out_channels=k, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+      self.model[15] = RepNCSPELAN4(h, n, b, n=p)
+      self.model[16] = ADown(128) if size == "c" else AConv(in_channels=v, out_channels=i, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
       self.model[17] = Concat(f=[-1, 12])
-      self.model[18] = RepNCSPELAN4(l, f, e, n=s)
-      self.model[19] = ADown(256) if size == "c" else AConv(in_channels=u, out_channels=c, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+      self.model[18] = RepNCSPELAN4(j, d, c, n=p)
+      self.model[19] = ADown(256) if size == "c" else AConv(in_channels=q, out_channels=b, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
       self.model[20] = Concat(f=[-1, 9])
-      self.model[21] = RepNCSPELAN4(m, v, a4, n=s)
-      self.model[22] = DDetect(c, e, a4, n, f=[15, 18, 21])
+      self.model[21] = RepNCSPELAN4(k, r, w, n=p)
+      self.model[22] = DDetect(b, c, w, l, f=[15, 18, 21])
     else:
       self.model = Sequential(size=43)
       self.model[0] = Silence()
@@ -367,7 +367,6 @@ class DetectionModel():
       self.model[41] = RepNCSPELAN4(1024, 256, 512, n=2)
       self.model[42] = DDetect(a=256, b=512, c=512, d=256, f=[35, 38, 41]) 
   def __call__(self, x):
-    print("rory input =",type(x), x.shape, x.dtype)
     y = []  # outputs
     for i in range(len(self.model)):
       m = self.model[i]
@@ -531,7 +530,7 @@ if __name__ == '__main__':
     print('Error in image loading. Check your image file.')
     sys.exit(1)
   pre_processed_image = preprocess(image)
-  yolo_infer = DetectionModel(*SIZES[yolo_variant])
+  yolo_infer = YOLOv9(*SIZES[yolo_variant])
   state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
   load_state_dict(yolo_infer, state_dict)
   st = time.time()
