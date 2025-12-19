@@ -1171,10 +1171,11 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
+
         videocapture._open_ffmpeg() #restart 
-        hls_streamer.stop()
-        time.sleep(10) # todo can get away with none or less?
-        hls_streamer.start()
+        sys.stdout.flush()
+        python = sys.executable
+        os.execv(python, [python] + sys.argv)
 
 def send_notif(session_token: str, text=None):
     host = "www.rors.ai"
