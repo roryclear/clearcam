@@ -915,6 +915,28 @@
     }
 
     @media (max-width: 768px) {
+      #zoneModal .form-actions {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+      }
+
+      #zoneModal .form-actions > div:last-child {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 8px !important;
+        width: 100% !important;
+        flex-wrap: nowrap !important;
+      }
+
+      #zoneModal .form-actions button {
+        flex: 1 !important;
+        width: auto !important;
+        padding: 10px 8px !important;
+        font-size: 16px !important;
+        white-space: nowrap !important;
+      }
+
       input,
       select,
       textarea,
