@@ -915,6 +915,14 @@
     }
 
     @media (max-width: 768px) {
+      .multi-view-button, 
+      [class*="multi-view"], 
+      [data-testid="multi-view"],
+      #multi-view-toggle,
+      .split-view-toggle {
+        display: none !important;
+      }
+
       #zoneModal .form-actions {
         flex-direction: column !important;
         align-items: stretch !important;
