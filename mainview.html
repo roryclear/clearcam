@@ -916,12 +916,16 @@
 
     @media (max-width: 768px) {
       .multi-view-button, 
-      [class*="multi-view"], 
       [data-testid="multi-view"],
       #multi-view-toggle,
       .split-view-toggle {
         display: none !important;
       }
+
+      .multi-view-wrapper button:first-child {
+        display: none !important;
+      }
+  
 
       #zoneModal .form-actions {
         flex-direction: column !important;
