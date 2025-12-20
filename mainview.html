@@ -937,6 +937,31 @@
         white-space: nowrap !important;
       }
 
+      #alertsModal .modal-content {
+        zoom: 0.85 !important;
+        transform-origin: top center !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        margin: 0 !important;
+        padding: 10px !important;
+        max-height: 100vh !important;
+        overflow-y: auto !important;
+      }
+      
+      #alertsContainer table {
+        font-size: 0.75rem !important;
+        display: block !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+      
+      #alertsContainer th,
+      #alertsContainer td {
+        padding: 4px 6px !important;
+        min-width: 60px !important;
+      }
+
       input,
       select,
       textarea,
@@ -1182,6 +1207,21 @@
     }
 
     @media (max-width: 480px) {
+
+      #alertsModal .modal-content {
+        zoom: 0.7 !important;
+        padding: 5px !important;
+      }
+      
+      #alertsContainer table {
+        font-size: 0.65rem !important;
+      }
+      
+      #alertsContainer th,
+      #alertsContainer td {
+        padding: 3px 4px !important;
+      }
+
       .event-image-item img {
         height: 150px !important;
       }
