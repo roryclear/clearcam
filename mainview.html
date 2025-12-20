@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
 
     .spinner {
       width: 16px;
@@ -911,6 +912,294 @@
       outline: none;
       border-color: var(--accent-primary);
       box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+
+    @media (max-width: 768px) {
+      input,
+      select,
+      textarea,
+      button {
+        font-size: 16px !important;
+      }
+      .camera-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 15px !important;
+        padding: 0 10px !important;
+        flex-wrap: nowrap !important;
+      }
+      .camera-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: unset !important;
+        margin: 0 auto !important;
+      }
+      .camera-info {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+        padding: 10px !important;
+      }
+      
+      .camera-card .button-group {
+        display: flex !important;
+        width: 100% !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+      }
+
+      .icon-button {
+        padding: 10px 15px !important;
+        font-size: 16px !important;
+        flex: 1 !important;
+        min-width: 60px !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+      }
+      
+      .detection-toggle {
+        margin-left: 0 !important;
+        margin-bottom: 8px !important;
+        width: 100% !important;
+        justify-content: space-between !important;
+      }
+      
+      .form-section {
+        padding: 0 10px !important;
+        margin-top: 15px !important;
+      }
+      
+      .form-section input {
+        width: calc(100% - 12px) !important;
+        margin: 4px 0 !important;
+        box-sizing: border-box !important;
+      }
+      
+      .max-storage-control {
+        width: 100% !important;
+        margin-top: 15px !important;
+        padding: 0 10px !important;
+        box-sizing: border-box !important;
+      }
+      
+      .max-storage-control > div {
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 8px !important;
+        align-items: center !important;
+        flex-wrap: nowrap !important;
+      }
+      
+      .max-storage-control label {
+        width: 100% !important;
+        margin-bottom: 6px !important;
+        font-size: 14px !important;
+      }
+      
+      .max-storage-control input {
+        width: 60% !important;
+        flex: 1 !important;
+        margin: 0 !important;
+        min-width: 0 !important;
+      }
+      
+      #setMaxStorageBtn {
+        width: 35% !important;
+        min-width: 80px !important;
+        padding: 8px 12px !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+      }
+      
+      .events-section {
+        padding: 0 10px !important;
+        margin-top: 15px !important;
+      }
+      
+      #eventImagesContainer {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 15px !important;
+        flex-wrap: nowrap !important;
+      }
+      
+      .event-image-item {
+        width: 100% !important;
+        max-width: 400px !important;
+      }
+      
+      .event-image-item img {
+        height: 180px !important;
+      }
+      
+      .events-filter {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+        flex-wrap: nowrap !important;
+      }
+      
+      .filter-group {
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+      }
+      
+      .events-filter select {
+        width: 100% !important;
+        min-width: unset !important;
+      }
+      
+      .events-filter > label,
+      .events-filter > div {
+        width: 100% !important;
+      }
+      
+      .multi-view-wrapper {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+        padding: 0 10px !important;
+        margin-top: 15px !important;
+      }
+      
+      .date-picker-container {
+        width: 100% !important;
+      }
+      
+      .date-picker-container select {
+        width: 100% !important;
+      }
+      
+      .modal-content {
+        width: 95% !important;
+        padding: 15px !important;
+        max-width: 95% !important;
+      }
+
+      #alertsContainer table {
+        font-size: 0.8rem !important;
+      }
+      
+      #alertsContainer th,
+      #alertsContainer td {
+        padding: 6px 4px !important;
+      }
+
+      #zoneModal .modal-content {
+        max-width: 95% !important;
+        padding: 15px !important;
+      }
+      
+      #zonePreview {
+        max-height: 300px !important;
+      }
+      
+      #alertModal .checkbox-container {
+        grid-template-columns: 1fr !important;
+      }
+
+      .shutdown-wrapper button {
+        width: 100% !important;
+        padding: 10px !important;
+        font-size: 16px !important;
+        margin-top: 10px !important;
+      }
+
+      #imageSearchInput {
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+
+      .counts-wrapper {
+        flex-direction: column !important;
+        gap: 15px !important;
+        padding: 10px !important;
+      }
+      
+      #objectCounts {
+        width: 100% !important;
+      }
+  
+      .tooltip .tooltiptext {
+        width: 280px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+      }
+      
+      .camera-name {
+        font-size: 16px !important;
+        margin-bottom: 5px !important;
+      }
+
+      .form-section button:not(#setMaxStorageBtn):not(.icon-button) {
+        width: 100% !important;
+        padding: 10px !important;
+        margin-top: 5px !important;
+      }
+ 
+      #addCameraForm {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+      }
+      
+      .icon {
+        width: 20px !important;
+        height: 20px !important;
+      }
+
+      #addCameraForm button[type="submit"] {
+        width: 100% !important;
+        padding: 12px !important;
+        font-size: 16px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .event-image-item img {
+        height: 150px !important;
+      }
+      
+      .event-image-info {
+        font-size: 11px !important;
+      }
+      
+      .event-image-actions button {
+        padding: 8px 6px !important;
+        font-size: 12px !important;
+      }
+      
+      .modal-header h3 {
+        font-size: 1.1rem !important;
+      }
+      
+      .camera-name {
+        font-size: 15px !important;
+      }
+
+      .max-storage-control > div {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 8px !important;
+        width: 100% !important;
+      }
+
+      .max-storage-control input {
+        flex: 1 !important;
+        width: auto !important;
+        min-width: 0 !important;
+      }
+
+      #setMaxStorageBtn {
+        width: auto !important;
+        min-width: 80px !important;
+        white-space: nowrap !important;
+      }
     }
 
   </style>
