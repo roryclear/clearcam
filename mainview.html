@@ -1888,6 +1888,7 @@
           option.value = date;
           const dateObj = new Date(date);
           const displayDate = dateObj.toLocaleDateString('en-US', {
+            weekday: 'short',  // Add this line for day of week
             year: 'numeric',
             month: 'short',
             day: 'numeric'
@@ -1895,6 +1896,7 @@
           option.textContent = displayDate;
           dropdown.appendChild(option);
         });
+        
         const today = new Date().toISOString().split('T')[0];
         if (dates.includes(today)) {
           if (isEventFilter) {
