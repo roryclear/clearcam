@@ -376,37 +376,41 @@ class YOLOv9():
     return postprocess(x[0])
 
 def compute_iou_matrix(boxes):
-  x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
-  areas = (x2 - x1) * (y2 - y1)
-  x1 = Tensor.maximum(x1[:, None], x1[None, :])
-  y1 = Tensor.maximum(y1[:, None], y1[None, :])
-  x2 = Tensor.minimum(x2[:, None], x2[None, :])
-  y2 = Tensor.minimum(y2[:, None], y2[None, :])
+  x1s = boxes[:, :, 0]
+  y1s = boxes[:, :, 1]
+  x2s = boxes[:, :, 2]
+  y2s = boxes[:, :, 3]
+  areas = (x2s - x1s) * (y2s - y1s)
+  x1 = Tensor.maximum(x1s[:, :, None], x1s[:, None, :])
+  y1 = Tensor.maximum(y1s[:, :, None], y1s[:, None, :])
+  x2 = Tensor.minimum(x2s[:, :, None], x2s[:, None, :])
+  y2 = Tensor.minimum(y2s[:, :, None], y2s[:, None, :])
   w = Tensor.maximum(Tensor(0), x2 - x1)
   h = Tensor.maximum(Tensor(0), y2 - y1)
   intersection = w * h
-  union = areas[:, None] + areas[None, :] - intersection
+  union = areas[:, :, None] + areas[:, None, :] - intersection
   return intersection / union
 
 def postprocess(output, max_det=300, conf_threshold=0.25, iou_threshold=0.45):
-  xc, yc, w, h, class_scores = output[0][0], output[0][1], output[0][2], output[0][3], output[0][4:]
-  class_ids = Tensor.argmax(class_scores, axis=0)
-  probs = Tensor.max(class_scores, axis=0)
-  probs = Tensor.where(probs >= conf_threshold, probs, 0)
+  xc, yc, w, h, class_scores = output[:, 0], output[:, 1], output[:, 2], output[:, 3], output[:, 4:]
   x1 = xc - w / 2
   y1 = yc - h / 2
   x2 = xc + w / 2
   y2 = yc + h / 2
-  boxes = Tensor.stack(x1, y1, x2, y2, probs, class_ids, dim=1)
-  order = Tensor.topk(probs, max_det)[1]
-  boxes = boxes[order]
-  iou = compute_iou_matrix(boxes[:, :4])
-  iou = Tensor.triu(iou, diagonal=1)
-  same_class_mask = boxes[:, -1][:, None] == boxes[:, -1][None, :]
-  high_iou_mask = (iou > iou_threshold) & same_class_mask
-  no_overlap_mask = high_iou_mask.sum(axis=0) == 0
-  boxes = boxes * no_overlap_mask.unsqueeze(-1)
-  return boxes
+  class_ids = Tensor.argmax(class_scores, axis=1)
+  probs = class_scores.max(axis=1)
+  probs = Tensor.where(probs >= conf_threshold, probs, 0)
+  boxes = Tensor.stack(x1, y1, x2, y2, probs, class_ids, dim=2)
+  order_all = Tensor.topk(probs, max_det)[1]
+  batch_idx = Tensor.arange(order_all.shape[0]).reshape(-1, 1)
+  boxes = boxes[batch_idx, order_all]
+  ious = compute_iou_matrix(boxes[:, :, :4])
+  ious = Tensor.triu(ious, diagonal=1)
+  class_ids = boxes[:, :, -1]
+  same_class_mask = class_ids[:, :, None] == class_ids[:, None, :]
+  high_iou_mask = (ious > iou_threshold) & same_class_mask
+  no_overlap_mask = high_iou_mask.sum(axis=1) == 0
+  return boxes * no_overlap_mask.unsqueeze(-1)
 
 def compute_transform(image, new_shape=(1280, 1280), auto=False, scaleFill=False, scaleup=True, stride=32) -> Tensor:
   shape = image.shape[:2]  # current shape [height, width]
