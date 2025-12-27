@@ -1465,7 +1465,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
       size_gb = total_size / (1000 ** 3)
-      if size_gb > self.max_gb: self._cleanup_oldest_files()
+      free_gb = shutil.disk_usage(CAMERA_BASE_DIR).free / (1000 ** 3)
+      if size_gb > self.max_gb or free_gb < 5: self._cleanup_oldest_files() # todo unhardcode
 
     def _cleanup_oldest_files(self):
       camera_dirs = []
