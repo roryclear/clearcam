@@ -80,8 +80,8 @@ if __name__ == "__main__":
     #   if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
     #   preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
 
-    print(oc_online_targets,"\n\n",preds)
-    print("\n\n\n\n\n\n\n\n\n")
+    #print(oc_online_targets,"\n\n",preds)
+    #print("\n\n\n\n\n\n\n\n\n")
     print("ppl =",len(ppl))
     #pred = pred[pred[:, 4] >= 0.25]
     _, buffer = cv2.imencode(".jpg", im0)
