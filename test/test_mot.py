@@ -35,6 +35,14 @@ def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scal
     return im, ratio, (dw, dh)
 
 if __name__ == "__main__":
+  from yolox.tracker.byte_tracker import BYTETracker
+  class Args:
+    def __init__(self):
+        self.track_buffer = 60 # frames, was 30
+        self.mot20 = False
+        self.match_thresh = 0.9
+  tracker = BYTETracker(Args())
+
   size = "t"
   model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
   state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
@@ -56,9 +64,13 @@ if __name__ == "__main__":
     if len(im.shape) == 3:
         im = im[None]
     pred = do_inf(im, model).numpy()[0]
-    pred = pred[pred[:, 4] >= 0.25]
+    online_targets = tracker.update(pred, [960,960], [960,960], 0.25)
+    preds = []
+    for x in online_targets:
+      preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
+    #pred = pred[pred[:, 4] >= 0.25]
     _, buffer = cv2.imencode(".jpg", im0)
-    out.write(draw_bounding_boxes(buffer, pred, class_labels))
+    out.write(draw_bounding_boxes(buffer, preds, class_labels))
     i+=1
     print("frame",i)
   cap.release()

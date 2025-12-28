@@ -477,9 +477,9 @@ def draw_bounding_boxes(orig_img_path, predictions, class_labels):
   box_thickness = int((height + width) / 400)
   font_scale = (height + width) / 2500
   object_count = defaultdict(int)
-
+  
   for pred in predictions:
-    x1, y1, x2, y2, conf, class_id = pred
+    x1, y1, x2, y2, conf, class_id, _ = pred
     if conf == 0:
         continue
 
