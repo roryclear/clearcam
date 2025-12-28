@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment as scipy_linear_sum_assignment
 from yolox.tracker.matching import linear_sum_assignment2
 import time
-from clearcam import YOLOv9, do_inf
+from clearcam import YOLOv9, do_inf, preprocess, SIZES
 from tinygrad.nn.state import safe_load, load_state_dict
 from tinygrad import Tensor
 import cv2
@@ -66,6 +66,27 @@ def test_bytetracker():
       np.testing.assert_allclose(output[j].class_id, output2[j].class_id)
     assert total_time2 <= (total_time * 1.0), "slower"
 
-test_bytetracker()
-test_linear_sum_assigment()
-test_linear_sum_assigment_speed()
+
+def test_tracker():
+  yolo_variant = "t"
+  yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
+  class Args:
+    def __init__(self):
+      self.track_buffer = 60
+      self.mot20 = False
+      self.match_thresh = 0.9
+  tracker = BYTETracker(Args())
+
+  cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
+  while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret: break
+    frame = Tensor(frame)
+    pre = preprocess(frame)
+    preds = do_inf(pre, yolo_infer)[0].numpy()
+  cap.release()
+
+test_tracker()
+#test_bytetracker()
+#test_linear_sum_assigment()
+#test_linear_sum_assigment_speed()
