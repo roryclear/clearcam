@@ -5,7 +5,7 @@ from __future__ import print_function
 
 import numpy as np
 from .association import *
-
+from yolox.tracker.STrack import STrack
 
 def k_previous_obs(observations, cur_age, k):
     if len(observations) == 0:
@@ -219,6 +219,7 @@ class OCSort(object):
         remain_inds = scores > det_thresh
         dets = dets[remain_inds]
         class_ids = class_ids[remain_inds]
+        scores = scores[remain_inds]
 
         # get predicted locations from existing trackers.
         trks = np.zeros((len(self.trackers), 5))
@@ -302,6 +303,7 @@ class OCSort(object):
         for i in unmatched_dets:
             trk = KalmanBoxTracker(dets[i, :], delta_t=self.delta_t)
             trk.class_id = class_ids[i]
+            trk.score = scores[i]
             self.trackers.append(trk)
         i = len(self.trackers)
         for trk in reversed(self.trackers):
@@ -315,14 +317,14 @@ class OCSort(object):
                 d = trk.last_observation[:4]
             if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
                 # +1 as MOT benchmark requires positive
-                ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id])).reshape(1, -1))
+                ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id, trk.score])).reshape(1, -1))
             i -= 1
             # remove dead tracklet
             if(trk.time_since_update > self.max_age):
                 self.trackers.pop(i)
         if(len(ret) > 0):
-            return np.concatenate(ret)
-        return np.empty((0, 6))
+          return np.concatenate(ret)
+        return np.empty((0, 8))
 
     def update_public(self, dets, cates, scores):
         self.frame_count += 1
