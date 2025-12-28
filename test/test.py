@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment as scipy_linear_sum_assignment
 from yolox.tracker.matching import linear_sum_assignment2
 import time
-from clearcam import YOLOv8, get_weights_location, get_variant_multiples, do_inf
+from clearcam import YOLOv9, do_inf
 from tinygrad.nn.state import safe_load, load_state_dict
 from tinygrad import Tensor
 import cv2
@@ -31,39 +31,6 @@ def test_linear_sum_assigment_speed():
     t_scipy = time.perf_counter() - st
     total_scipy += t_scipy
   print("time vs scipy =", f"{(total / total_scipy) * 100:.1f}%")
-
-def test_yolo_infer():
-  depth, width, ratio = get_variant_multiples("s")
-  yolo_infer = YOLOv8(w=width, r=ratio, d=depth, num_classes=80)
-  state_dict = safe_load(get_weights_location("s"))
-  for k, _ in state_dict.items(): # todo hack because https://github.com/tinygrad/tinygrad/commit/565a7a6218e5ab920360c21d23af6bcae8df82b5
-    if k.endswith("num_batches_tracked"): state_dict[k] = Tensor.empty()
-  load_state_dict(yolo_infer, state_dict)
-
-  cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
-
-  frames = []
-  with Context(BEAM=2):
-    for i in range(10):
-      ret, frame = cap.read()
-      frame_tensor = Tensor(frame)
-      preds = do_inf(frame_tensor, yolo_infer).numpy()
-      counts = defaultdict(int)
-      for x in preds:
-        if x[-2] > 0: counts[int(x[-1])] += 1
-      #print(f"{dict(counts)},")
-      frames.append(dict(counts))
-    assert frames == [{2: 1, 0: 35, 1: 2, 3: 1},
-              {2: 1, 0: 35, 1: 2, 3: 1},
-              {2: 1, 0: 36, 1: 2, 3: 1},
-              {2: 1, 0: 36, 3: 1, 1: 2},
-              {2: 1, 0: 38, 3: 1, 1: 2},
-              {2: 1, 0: 39, 3: 1, 1: 1},
-              {2: 1, 0: 38, 3: 2, 1: 1},
-              {2: 1, 0: 35, 1: 1, 3: 2},
-              {2: 1, 0: 36, 3: 1, 1: 2},
-              {2: 1, 0: 35, 1: 2, 3: 1}]
-    cap.release()
 
 
 import pickle
@@ -99,7 +66,6 @@ def test_bytetracker():
       np.testing.assert_allclose(output[j].class_id, output2[j].class_id)
     assert total_time2 <= (total_time * 1.0), "slower"
 
-#test_bytetracker()
-test_yolo_infer()
-#test_linear_sum_assigment()
-#test_linear_sum_assigment_speed()
+test_bytetracker()
+test_linear_sum_assigment()
+test_linear_sum_assigment_speed()
