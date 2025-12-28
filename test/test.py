@@ -80,6 +80,7 @@ def test_tracker():
   tracker = BYTETracker(Args())
 
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
+  out = cv2.VideoWriter('output.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 30, (960, 540))
   while cap.isOpened():
     ret, f = cap.read()
     if not ret: break
@@ -92,8 +93,9 @@ def test_tracker():
     for x in tracker_preds:
       preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
     annotated_frame = draw_predictions(f, preds, class_labels, color_dict)
-    print(type(annotated_frame), annotated_frame.shape)
+    out.write(annotated_frame)
   cap.release()
+  out.release()
 
 test_tracker()
 #test_bytetracker()
