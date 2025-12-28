@@ -48,7 +48,7 @@ if __name__ == "__main__":
   while True:
     ret, im0 = cap.read()
     if not ret: break
-    im = letterbox(im0, new_shape=(1280, 1280), stride=32, auto=True)[0]
+    im = letterbox(im0, new_shape=(960, 960), stride=32, auto=True)[0]
     im = im.transpose((2, 0, 1))[::-1]
     im = np.ascontiguousarray(im)
     im = Tensor(im).cast(dtypes.float32)
@@ -57,7 +57,6 @@ if __name__ == "__main__":
         im = im[None]
     pred = do_inf(im, model).numpy()[0]
     pred = pred[pred[:, 4] >= 0.25]
-    pred = rescale_bounding_boxes(pred, from_size=(im.shape[2:][::-1]), to_size=im0.shape[:2][::-1])
     _, buffer = cv2.imencode(".jpg", im0)
     out.write(draw_bounding_boxes(buffer, pred, class_labels))
     i+=1
