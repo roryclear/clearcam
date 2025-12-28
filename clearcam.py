@@ -388,7 +388,7 @@ class VideoCapture:
                         timestamp = datetime.now().strftime("%Y-%m-%d")
                         filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
                         filepath.mkdir(parents=True, exist_ok=True)
-                        self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds)
+                        self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
                         # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                         ts = int(time.time() - self.streamer.start_time - 10)
                         filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
@@ -451,7 +451,7 @@ class VideoCapture:
               count+=1
           with self.lock:
               self.raw_frame = frame.copy()
-              if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds)
+              if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
           time.sleep(1 / 30)
       except Exception as e:
             print("Error in capture_loop:", e)
@@ -538,17 +538,17 @@ def is_bright_color(color):
   brightness = (r * 299 + g * 587 + b * 114) / 1000
   return brightness > 127
 
-def draw_predictions(frame, preds):
-    for x1, y1, x2, y2, conf, cls, _ in preds:
-        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-        label = f"{class_labels[int(cls)]}:{conf:.2f}"
-        color = color_dict[class_labels[int(cls)]]
-        frame = draw_rectangle_numpy(frame, (x1, y1), (x2, y2), color, 3)
-        (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        font_color = (0, 0, 0) if is_bright_color(color) else (255, 255, 255)
-        frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
-        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
-    return frame
+def draw_predictions(frame, preds, class_labels, color_dict):
+  for x1, y1, x2, y2, conf, cls, _ in preds:
+    x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+    label = f"{class_labels[int(cls)]}:{conf:.2f}"
+    color = color_dict[class_labels[int(cls)]]
+    frame = draw_rectangle_numpy(frame, (x1, y1), (x2, y2), color, 3)
+    (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+    font_color = (0, 0, 0) if is_bright_color(color) else (255, 255, 255)
+    frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
+    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
+  return frame
 
 class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
@@ -1566,7 +1566,6 @@ if __name__ == "__main__":
       start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if rtsp_url:

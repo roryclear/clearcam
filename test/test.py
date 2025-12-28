@@ -2,12 +2,12 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment as scipy_linear_sum_assignment
 from yolox.tracker.matching import linear_sum_assignment2
 import time
-from clearcam import YOLOv9, do_inf, preprocess, SIZES
+from clearcam import YOLOv9, do_inf, preprocess, SIZES, scale_boxes, draw_predictions
 from tinygrad.nn.state import safe_load, load_state_dict
 from tinygrad import Tensor
 import cv2
 from collections import defaultdict
-from tinygrad.helpers import Context
+from tinygrad.helpers import Context, fetch
 
 def test_linear_sum_assigment():
   for i in range(1,300):
@@ -68,6 +68,8 @@ def test_bytetracker():
 
 
 def test_tracker():
+  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
+  color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   yolo_variant = "t"
   yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
   class Args:
@@ -79,11 +81,18 @@ def test_tracker():
 
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   while cap.isOpened():
-    ret, frame = cap.read()
+    ret, f = cap.read()
     if not ret: break
-    frame = Tensor(frame)
+    frame = Tensor(f)
     pre = preprocess(frame)
     preds = do_inf(pre, yolo_infer)[0].numpy()
+    preds = scale_boxes(pre.shape[:2], preds, frame.shape)
+    tracker_preds = tracker.update(preds, [1280,1280], [1280,1280], 0.25) # thresh 0.25
+    preds = []
+    for x in tracker_preds:
+      preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
+    annotated_frame = draw_predictions(f, preds, class_labels, color_dict)
+    print(type(annotated_frame), annotated_frame.shape)
   cap.release()
 
 test_tracker()
