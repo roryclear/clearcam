@@ -67,18 +67,14 @@ if __name__ == "__main__":
     if len(im.shape) == 3:
         im = im[None]
     pred = do_inf(im, model).numpy()[0]
-    online_targets = tracker.update(pred, [960,960], [960,960], 0.25)
-    oc_online_targets = ocs_tracker.update(pred, [960,960], [960,960], 0.25)
-
-    #preds = []
-    #for x in oc_online_targets:
-    #   if x[6] == 0 and x[4] not in ppl: ppl.add(x[4])
-    #   preds.append(np.array([x[0], x[1], x[2], x[3], x[4], x[6]]))
+    #online_targets = tracker.update(pred, [960,960], [960,960], 0.25)
+    online_targets = ocs_tracker.update(pred, [960,960], [960,960], 0.25)
 
     preds = []
     for x in online_targets:
        if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
        preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.track_id,x.class_id,x.score]))
+    #tlx tly w h, track_id, age, class_id, score
 
     #print(oc_online_targets,"\n\n",preds)
     #print("\n\n\n\n\n\n\n\n\n")

@@ -322,9 +322,11 @@ class OCSort(object):
             # remove dead tracklet
             if(trk.time_since_update > self.max_age):
                 self.trackers.pop(i)
-        if(len(ret) > 0):
-          return np.concatenate(ret)
-        return np.empty((0, 8))
+        # tlx tly w h, track_id, age, class_id, score
+        out = []
+        for x in ret:
+          out.append(STrack(tlwh=x[0][:4], score=x[0][7], class_id=x[0][6], track_id=x[0][4]))
+        return out
 
     def update_public(self, dets, cates, scores):
         self.frame_count += 1
