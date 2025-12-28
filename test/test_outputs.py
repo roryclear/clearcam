@@ -1,10 +1,13 @@
 from detection.yolov9 import YOLOv9, SIZES, safe_load, load_state_dict, Sequential, Silence, Conv, RepNCSPELAN4, AConv,\
-ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch, rescale_bounding_boxes, draw_bounding_boxes_and_save
+ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch, rescale_bounding_boxes, draw_bounding_boxes
 import cv2
-from tinygrad import Tensor
+from tinygrad import Tensor, TinyJit
 from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
+
+@TinyJit
+def do_inf(im, model): return model(im)
 
 def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
     shape = im.shape[:2]
@@ -32,32 +35,32 @@ def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scal
     return im, ratio, (dw, dh)
 
 if __name__ == "__main__":
-  for size in ["t", "s", "m", "c", "e"]:
-    weights = f'./yolov9-{size}-tiny.pkl'
-    imgsz = (640,640)
-    model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
-    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
-    load_state_dict(model, state_dict)
-    source = "test/videos/MOT16-03.mp4"
-    cap = cv2.VideoCapture(source)
+  size = "t"
+  model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
+  state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
+  load_state_dict(model, state_dict)
+  cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
+  w, h = int(cap.get(3)), int(cap.get(4))
+  out = cv2.VideoWriter(f"outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
+  Path('./outputs').mkdir(parents=True, exist_ok=True)
+  i = 0
+  while True:
     ret, im0 = cap.read()
-    success, buffer = cv2.imencode(".jpg", im0)
-    if not success: raise RuntimeError("Failed to encode frame")
-    source = buffer
-
-    cap.release()
+    if not ret: break
     im = letterbox(im0, new_shape=(1280, 1280), stride=32, auto=True)[0]
     im = im.transpose((2, 0, 1))[::-1]
     im = np.ascontiguousarray(im)
     im = Tensor(im).cast(dtypes.float32)
     im /= 255
-    if len(im.shape) == 3: im = im[None]
-    
-    pred = model(im)
-    pred = pred.numpy()[0]
+    if len(im.shape) == 3:
+        im = im[None]
+    pred = do_inf(im, model).numpy()[0]
     pred = pred[pred[:, 4] >= 0.25]
-    class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
     pred = rescale_bounding_boxes(pred, from_size=(im.shape[2:][::-1]), to_size=im0.shape[:2][::-1])
-    Path('./outputs').mkdir(parents=True, exist_ok=True)
-    draw_bounding_boxes_and_save(source, f"outputs/out_{size}.jpg", pred, class_labels)
-
+    _, buffer = cv2.imencode(".jpg", im0)
+    out.write(draw_bounding_boxes(buffer, pred, class_labels))
+    i+=1
+    print("frame",i)
+  cap.release()
+  out.release()
