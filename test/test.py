@@ -66,38 +66,6 @@ def test_bytetracker():
       np.testing.assert_allclose(output[j].class_id, output2[j].class_id)
     assert total_time2 <= (total_time * 1.0), "slower"
 
-
-def test_tracker():
-  class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
-  yolo_variant = "t"
-  yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
-  class Args:
-    def __init__(self):
-      self.track_buffer = 60
-      self.mot20 = False
-      self.match_thresh = 0.9
-  tracker = BYTETracker(Args())
-
-  cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
-  out = cv2.VideoWriter('output.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 30, (960, 540))
-  while cap.isOpened():
-    ret, f = cap.read()
-    if not ret: break
-    frame = Tensor(f)
-    pre = preprocess(frame)
-    preds = do_inf(pre, yolo_infer)[0].numpy()
-    preds = scale_boxes(pre.shape[:2], preds, frame.shape)
-    tracker_preds = tracker.update(preds, [1280,1280], [1280,1280], 0.25) # thresh 0.25
-    preds = []
-    for x in tracker_preds:
-      preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
-    annotated_frame = draw_predictions(f, preds, class_labels, color_dict)
-    out.write(annotated_frame)
-  cap.release()
-  out.release()
-
-test_tracker()
-#test_bytetracker()
-#test_linear_sum_assigment()
-#test_linear_sum_assigment_speed()
+test_bytetracker()
+test_linear_sum_assigment()
+test_linear_sum_assigment_speed()
