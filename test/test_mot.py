@@ -43,7 +43,7 @@ if __name__ == "__main__":
         self.mot20 = False
         self.match_thresh = 0.9
   tracker = BYTETracker(Args())
-  ocs_tracker = ocsort.OCSort(det_thresh=0.25)
+  ocs_tracker = ocsort.OCSort()
 
   size = "t"
   model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
@@ -68,7 +68,7 @@ if __name__ == "__main__":
         im = im[None]
     pred = do_inf(im, model).numpy()[0]
     online_targets = tracker.update(pred, [960,960], [960,960], 0.25)
-    oc_online_targets = ocs_tracker.update(pred, [960,960], [960,960])
+    oc_online_targets = ocs_tracker.update(pred, [960,960], [960,960], 0.25)
 
     preds = []
     for x in oc_online_targets:
