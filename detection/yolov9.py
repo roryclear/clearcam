@@ -479,7 +479,10 @@ def draw_bounding_boxes(orig_img_path, predictions, class_labels):
   object_count = defaultdict(int)
   
   for pred in predictions:
-    x1, y1, x2, y2, conf, class_id, _ = pred
+    if len(pred) == 7: # todo
+      x1, y1, x2, y2, conf, class_id, _ = pred
+    else:
+      x1, y1, x2, y2, conf, class_id = pred
     if conf == 0:
         continue
 
