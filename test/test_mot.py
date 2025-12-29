@@ -35,7 +35,7 @@ def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scal
     return im, ratio, (dw, dh)
 
 if __name__ == "__main__":
-  from yolox.ocsort_tracker import ocsort
+  from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort()
 
   size = "t"

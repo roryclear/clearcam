@@ -1548,7 +1548,7 @@ if __name__ == "__main__":
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
 
-  from yolox.ocsort_tracker import ocsort
+  from ocsort_tracker import ocsort
   tracker = ocsort.OCSort()
   live_link = dict()
   
