@@ -35,14 +35,7 @@ def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scal
     return im, ratio, (dw, dh)
 
 if __name__ == "__main__":
-  from yolox.tracker.byte_tracker import BYTETracker
   from yolox.ocsort_tracker import ocsort
-  class Args:
-    def __init__(self):
-        self.track_buffer = 60 # frames, was 30
-        self.mot20 = False
-        self.match_thresh = 0.9
-  tracker = BYTETracker(Args())
   ocs_tracker = ocsort.OCSort()
 
   size = "t"
@@ -52,8 +45,8 @@ if __name__ == "__main__":
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./outputs').mkdir(parents=True, exist_ok=True)
 
-  trackers = [tracker, ocs_tracker]
-  excepted_ppl = [241, 288]
+  trackers = [ocs_tracker]
+  excepted_ppl = [288]
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")

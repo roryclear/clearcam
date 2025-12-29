@@ -5,7 +5,7 @@ from __future__ import print_function
 
 import numpy as np
 from .association import *
-from yolox.tracker.STrack import STrack
+from yolox.ocsort_tracker.STrack import STrack
 from collections import defaultdict
 
 def k_previous_obs(observations, cur_age, k):
