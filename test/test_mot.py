@@ -53,7 +53,7 @@ if __name__ == "__main__":
   Path('./outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [tracker, ocs_tracker]
-  excepted_ppl = [241, 286]
+  excepted_ppl = [241, 288]
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
@@ -86,6 +86,6 @@ if __name__ == "__main__":
       out.write(draw_bounding_boxes(buffer, preds, class_labels))
       i+=1
       print("frame",i)
-    assert len(ppl) == excepted_ppl[j]
     cap.release()
     out.release()
+    assert len(ppl) == excepted_ppl[j]

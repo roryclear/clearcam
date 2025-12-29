@@ -6,6 +6,7 @@ from __future__ import print_function
 import numpy as np
 from .association import *
 from yolox.tracker.STrack import STrack
+from collections import defaultdict
 
 def k_previous_obs(observations, cur_age, k):
     if len(observations) == 0:
@@ -91,6 +92,7 @@ class KalmanBoxTracker(object):
         self.hits = 0
         self.hit_streak = 0
         self.age = 0
+        self.occurrences = defaultdict(float)
         """
         NOTE: [-1,-1,-1,-1,-1] is a compromising placeholder for non-observation status, the same for the return of 
         function k_previous_obs. It is ugly and I do not like it. But to support generate observation array in a 
@@ -102,11 +104,14 @@ class KalmanBoxTracker(object):
         self.velocity = None
         self.delta_t = delta_t
 
-    def update(self, bbox):
+    def update(self, bbox, score=None, class_id=None):
         """
         Updates the state vector with observed bbox.
         """
         if bbox is not None:
+            if score is not None:
+              self.occurrences[class_id] += score
+              self.class_id = max(self.occurrences, key=self.occurrences.get)
             if self.last_observation.sum() >= 0:  # no previous observation
                 previous_box = None
                 for i in range(self.delta_t):
@@ -216,6 +221,8 @@ class OCSort(object):
         inds_high = scores < det_thresh
         inds_second = np.logical_and(inds_low, inds_high)  # self.det_thresh > score > 0.1, for second matching
         dets_second = dets[inds_second]  # detections for second matching
+        class_ids_second = class_ids[inds_second]
+        scores_second = scores[inds_second]
         remain_inds = scores > det_thresh
         dets = dets[remain_inds]
         class_ids = class_ids[remain_inds]
@@ -246,7 +253,7 @@ class OCSort(object):
         matched, unmatched_dets, unmatched_trks = associate(
             dets, trks, self.iou_threshold, velocities, k_observations, self.inertia)
         for m in matched:
-            self.trackers[m[1]].update(dets[m[0], :])
+            self.trackers[m[1]].update(dets[m[0], :], scores[m[0]], class_ids[m[0]])
 
         """
             Second round of associaton by OCR
@@ -268,7 +275,7 @@ class OCSort(object):
                     det_ind, trk_ind = m[0], unmatched_trks[m[1]]
                     if iou_left[m[0], m[1]] < self.iou_threshold:
                         continue
-                    self.trackers[trk_ind].update(dets_second[det_ind, :])
+                    self.trackers[trk_ind].update(dets_second[det_ind, :], scores_second[det_ind], class_ids_second[det_ind])
                     to_remove_trk_indices.append(trk_ind)
                 unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk_indices))
 
@@ -290,7 +297,7 @@ class OCSort(object):
                     det_ind, trk_ind = unmatched_dets[m[0]], unmatched_trks[m[1]]
                     if iou_left[m[0], m[1]] < self.iou_threshold:
                         continue
-                    self.trackers[trk_ind].update(dets[det_ind, :])
+                    self.trackers[trk_ind].update(dets[det_ind, :], scores[det_ind], class_ids[det_ind])
                     to_remove_det_indices.append(det_ind)
                     to_remove_trk_indices.append(trk_ind)
                 unmatched_dets = np.setdiff1d(unmatched_dets, np.array(to_remove_det_indices))
@@ -304,6 +311,7 @@ class OCSort(object):
             trk = KalmanBoxTracker(dets[i, :], delta_t=self.delta_t)
             trk.class_id = class_ids[i]
             trk.score = scores[i]
+            trk.occurrences[class_ids[i]] += 1
             self.trackers.append(trk)
         i = len(self.trackers)
         for trk in reversed(self.trackers):
@@ -327,109 +335,5 @@ class OCSort(object):
         for x in ret:
           out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5]))
         return out
-
-    def update_public(self, dets, cates, scores):
-        self.frame_count += 1
-
-        det_scores = np.ones((dets.shape[0], 1))
-        dets = np.concatenate((dets, det_scores), axis=1)
-
-        remain_inds = scores > self.det_thresh
-        
-        cates = cates[remain_inds]
-        dets = dets[remain_inds]
-
-        trks = np.zeros((len(self.trackers), 5))
-        to_del = []
-        ret = []
-        for t, trk in enumerate(trks):
-            pos = self.trackers[t].predict()[0]
-            cat = self.trackers[t].cate
-            trk[:] = [pos[0], pos[1], pos[2], pos[3], cat]
-            if np.any(np.isnan(pos)):
-                to_del.append(t)
-        trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
-        for t in reversed(to_del):
-            self.trackers.pop(t)
-
-        velocities = np.array([trk.velocity if trk.velocity is not None else np.array((0,0)) for trk in self.trackers])
-        last_boxes = np.array([trk.last_observation for trk in self.trackers])
-        k_observations = np.array([k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
-
-        matched, unmatched_dets, unmatched_trks = associate_kitti\
-              (dets, trks, cates, self.iou_threshold, velocities, k_observations, self.inertia)
-          
-        for m in matched:
-            self.trackers[m[1]].update(dets[m[0], :])
-          
-        if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
-            """
-                The re-association stage by OCR.
-                NOTE: at this stage, adding other strategy might be able to continue improve
-                the performance, such as BYTE association by ByteTrack. 
-            """
-            left_dets = dets[unmatched_dets]
-            left_trks = last_boxes[unmatched_trks]
-            left_dets_c = left_dets.copy()
-            left_trks_c = left_trks.copy()
-
-            iou_left = self.asso_func(left_dets_c, left_trks_c)
-            iou_left = np.array(iou_left)
-            det_cates_left = cates[unmatched_dets]
-            trk_cates_left = trks[unmatched_trks][:,4]
-            num_dets = unmatched_dets.shape[0]
-            num_trks = unmatched_trks.shape[0]
-            cate_matrix = np.zeros((num_dets, num_trks))
-            for i in range(num_dets):
-                for j in range(num_trks):
-                    if det_cates_left[i] != trk_cates_left[j]:
-                            """
-                                For some datasets, such as KITTI, there are different categories,
-                                we have to avoid associate them together.
-                            """
-                            cate_matrix[i][j] = -1e6
-            iou_left = iou_left + cate_matrix
-            if iou_left.max() > self.iou_threshold - 0.1:
-                rematched_indices = linear_assignment(-iou_left)
-                to_remove_det_indices = []
-                to_remove_trk_indices = []
-                for m in rematched_indices:
-                    det_ind, trk_ind = unmatched_dets[m[0]], unmatched_trks[m[1]]
-                    if iou_left[m[0], m[1]] < self.iou_threshold - 0.1:
-                          continue
-                    self.trackers[trk_ind].update(dets[det_ind, :])
-                    to_remove_det_indices.append(det_ind)
-                    to_remove_trk_indices.append(trk_ind) 
-                unmatched_dets = np.setdiff1d(unmatched_dets, np.array(to_remove_det_indices))
-                unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk_indices))
-
-        for i in unmatched_dets:
-            trk = KalmanBoxTracker(dets[i,:])
-            trk.cate = cates[i]
-            self.trackers.append(trk)
-        i = len(self.trackers)
-
-        for trk in reversed(self.trackers):
-            if trk.last_observation.sum() > 0:
-                d = trk.last_observation[:4]
-            else:
-                d = trk.get_state()[0]
-            if (trk.time_since_update < 1):
-                if (self.frame_count <= self.min_hits) or (trk.hit_streak >= self.min_hits):
-                    # id+1 as MOT benchmark requires positive
-                    ret.append(np.concatenate((d, [trk.id+1], [trk.cate], [0])).reshape(1,-1)) 
-                if trk.hit_streak == self.min_hits:
-                    # Head Padding (HP): recover the lost steps during initializing the track
-                    for prev_i in range(self.min_hits - 1):
-                        prev_observation = trk.history_observations[-(prev_i+2)]
-                        ret.append((np.concatenate((prev_observation[:4], [trk.id+1], [trk.cate], 
-                            [-(prev_i+1)]))).reshape(1,-1))
-            i -= 1 
-            if (trk.time_since_update > self.max_age):
-                  self.trackers.pop(i)
-        
-        if(len(ret)>0):
-            return np.concatenate(ret)
-        return np.empty((0, 7))
 
 
