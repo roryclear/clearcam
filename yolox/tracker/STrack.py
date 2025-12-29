@@ -5,7 +5,7 @@ from .basetrack import BaseTrack, TrackState
 
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
-    def __init__(self, tlwh, score, class_id, track_id=None):
+    def __init__(self, tlwh, score, class_id, track_id=None, age=0):
         self.occurrences = defaultdict(float)
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float64)
@@ -15,8 +15,8 @@ class STrack(BaseTrack):
 
         self.score = score
         self.class_id = class_id
-        self.tracklet_len = 0
         self.track_id = track_id
+        self.tracklet_len = age
 
     def predict(self):
         mean_state = self.mean.copy()

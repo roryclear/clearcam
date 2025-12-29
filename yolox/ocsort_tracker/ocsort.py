@@ -325,7 +325,7 @@ class OCSort(object):
         # tlx tly w h, track_id, age, class_id, score
         out = []
         for x in ret:
-          out.append(STrack(tlwh=x[0][:4], score=x[0][7], class_id=x[0][6], track_id=x[0][4]))
+          out.append(STrack(tlwh=x[0][:4], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5]))
         return out
 
     def update_public(self, dets, cates, scores):
