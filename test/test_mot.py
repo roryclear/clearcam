@@ -49,40 +49,43 @@ if __name__ == "__main__":
   model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
   state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
   load_state_dict(model, state_dict)
-  cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
-  w, h = int(cap.get(3)), int(cap.get(4))
-  out = cv2.VideoWriter(f"outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./outputs').mkdir(parents=True, exist_ok=True)
-  i = 0
-  ppl = set()
-  while True:
-    ret, im0 = cap.read()
-    if not ret: break
-    im = letterbox(im0, new_shape=(960, 960), stride=32, auto=True)[0]
-    im = im.transpose((2, 0, 1))[::-1]
-    im = np.ascontiguousarray(im)
-    im = Tensor(im).cast(dtypes.float32)
-    im /= 255
-    if len(im.shape) == 3:
-        im = im[None]
-    pred = do_inf(im, model).numpy()[0]
-    #online_targets = tracker.update(pred, [960,960], [960,960], 0.25)
-    online_targets = ocs_tracker.update(pred, [960,960], [960,960], 0.25)
 
-    preds = []
-    for x in online_targets:
-       if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
-       preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.track_id,x.class_id,x.score]))
-    #tlx tly w h, track_id, age, class_id, score
+  trackers = [tracker, ocs_tracker]
+  excepted_ppl = [241, 286]
+  for j,t in enumerate(trackers):
 
-    #print(oc_online_targets,"\n\n",preds)
-    #print("\n\n\n\n\n\n\n\n\n")
-    print("ppl =",len(ppl))
-    #pred = pred[pred[:, 4] >= 0.25]
-    _, buffer = cv2.imencode(".jpg", im0)
-    out.write(draw_bounding_boxes(buffer, preds, class_labels))
-    i+=1
-    print("frame",i)
-  cap.release()
-  out.release()
+    cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
+    w, h = int(cap.get(3)), int(cap.get(4))
+    out = cv2.VideoWriter(f"outputs/out_{size}_{j}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+
+    i = 0
+    ppl = set()
+    while True:
+      ret, im0 = cap.read()
+      if not ret: break
+      im = letterbox(im0, new_shape=(960, 960), stride=32, auto=True)[0]
+      im = im.transpose((2, 0, 1))[::-1]
+      im = np.ascontiguousarray(im)
+      im = Tensor(im).cast(dtypes.float32)
+      im /= 255
+      if len(im.shape) == 3:
+          im = im[None]
+      pred = do_inf(im, model).numpy()[0]
+      online_targets = t.update(pred, [960,960], [960,960], 0.25)
+
+      preds = []
+      for x in online_targets:
+        if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
+        preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.track_id,x.class_id,x.score]))
+      #tlx tly w h, track_id, age, class_id, score
+
+      print("ppl =",len(ppl))
+      _, buffer = cv2.imencode(".jpg", im0)
+      out.write(draw_bounding_boxes(buffer, preds, class_labels))
+      i+=1
+      print("frame",i)
+    assert len(ppl) == excepted_ppl[j]
+    cap.release()
+    out.release()
