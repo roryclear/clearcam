@@ -66,13 +66,9 @@ class KalmanBoxTracker(object):
         Initialises a tracker using initial bounding box.
 
         """
-        # define constant velocity model
-        if not orig:
-          from .kalmanfilter import KalmanFilterNew as KalmanFilter
-          self.kf = KalmanFilter(dim_x=7, dim_z=4)
-        else:
-          from filterpy.kalman import KalmanFilter
-          self.kf = KalmanFilter(dim_x=7, dim_z=4)
+
+        from .kalmanfilter import KalmanFilterNew as KalmanFilter
+        self.kf = KalmanFilter(dim_x=7, dim_z=4)
         self.kf.F = np.array([[1, 0, 0, 0, 1, 0, 0], [0, 1, 0, 0, 0, 1, 0], [0, 0, 1, 0, 0, 0, 1], [
                             0, 0, 0, 1, 0, 0, 0],  [0, 0, 0, 0, 1, 0, 0], [0, 0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 0, 1]])
         self.kf.H = np.array([[1, 0, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0, 0],

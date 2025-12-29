@@ -102,9 +102,6 @@ import sys
 import numpy as np
 from numpy import dot, zeros, eye, isscalar, shape
 import numpy.linalg as linalg
-from filterpy.stats import logpdf
-from filterpy.common import pretty_str, reshape_z
-
 
 class KalmanFilterNew(object):
     """ Implements a Kalman filter. You are responsible for setting the
@@ -335,7 +332,6 @@ class KalmanFilterNew(object):
         self.attr_saved = None
         self.observed = False 
 
-
     def predict(self, u=None, B=None, F=None, Q=None):
         """
         Predict next state (prior) using the Kalman filter state propagation
@@ -432,7 +428,6 @@ class KalmanFilterNew(object):
                 self.update(new_box)
                 if not i == (index2-index1-1):
                     self.predict()
-
 
     def update(self, z, R=None, H=None):
         """
@@ -1579,3 +1574,24 @@ def rts_smoother(Xs, Ps, Fs, Qs):
         P[k] += dot(dot(K[k], P[k+1] - pP[k]), K[k].T)
 
     return (x, P, K, pP)
+
+
+def reshape_z(z, dim_z, ndim):
+    """ensure z is a (dim_z, 1) shaped vector"""
+
+    z = np.atleast_2d(z)
+    if z.shape[1] == dim_z:
+        z = z.T
+
+    if z.shape != (dim_z, 1):
+        raise ValueError(
+            "z (shape {}) must be convertible to shape ({}, 1)".format(z.shape, dim_z)
+        )
+
+    if ndim == 1:
+        z = z[:, 0]
+
+    if ndim == 0:
+        z = z[0, 0]
+
+    return z

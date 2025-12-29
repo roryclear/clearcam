@@ -188,15 +188,11 @@ def speed_direction_batch(dets, tracks):
 
 def linear_assignment_scipy(cost_matrix):
     from scipy.optimize import linear_sum_assignment
-    t = time.time()
     x, y = linear_sum_assignment(cost_matrix)
-    ret = np.array(list(zip(x, y)))
-    print("time =",(time.time() - t))
-    return ret
+    return np.array(list(zip(x, y)))
 
 
 def linear_assignment(cost_matrix):
-    t = time.time()
     if cost_matrix.size == 0:
         return np.empty((0, 2), dtype=int)
     cost = cost_matrix.copy()
@@ -216,9 +212,7 @@ def linear_assignment(cost_matrix):
             if row_used.all() or col_used.all():
                 break
     
-    ret = np.array(assignments)
-    print("time =",(time.time() - t))
-    return ret
+    return np.array(assignments)
 
 def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
     """
