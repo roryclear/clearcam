@@ -1478,6 +1478,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           
       largest_cam = max(camera_dirs, key=lambda x: x[1])[0]
       streams_dir = largest_cam / "streams"
+      # todo, removing _det version
+      shutil.rmtree(largest_cam.with_name(largest_cam.name + "_det") / "streams", ignore_errors=True)
       
       if not streams_dir.exists():
         shutil.rmtree(largest_cam)
