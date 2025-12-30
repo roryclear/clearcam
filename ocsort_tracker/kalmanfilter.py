@@ -59,63 +59,60 @@ class KalmanFilterNew(object):
         self.x = dot(self.F, self.x)
         self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
 
-    def freeze(self): self.attr_saved = deepcopy(self.__dict__)
-
     def unfreeze(self):
-        if self.attr_saved is not None:
-            new_history = deepcopy(self.history_obs)
-            self.__dict__ = self.attr_saved
-            # self.history_obs = new_history 
-            self.history_obs = self.history_obs[:-1]
-            occur = [int(d is None) for d in new_history]
-            indices = np.where(np.array(occur)==0)[0]
-            index1 = indices[-2]
-            index2 = indices[-1]
-            box1 = new_history[index1]
-            x1, y1, s1, r1 = box1 
-            w1 = np.sqrt(s1 * r1)
-            h1 = np.sqrt(s1 / r1)
-            box2 = new_history[index2]
-            x2, y2, s2, r2 = box2 
-            w2 = np.sqrt(s2 * r2)
-            h2 = np.sqrt(s2 / r2)
-            time_gap = index2 - index1
-            dx = (x2-x1)/time_gap
-            dy = (y2-y1)/time_gap 
-            dw = (w2-w1)/time_gap 
-            dh = (h2-h1)/time_gap
-            for i in range(index2 - index1):
-                """
-                    The default virtual trajectory generation is by linear
-                    motion (constant speed hypothesis), you could modify this 
-                    part to implement your own. 
-                """
-                x = x1 + (i+1) * dx 
-                y = y1 + (i+1) * dy 
-                w = w1 + (i+1) * dw 
-                h = h1 + (i+1) * dh
-                s = w * h 
-                r = w / float(h)
-                new_box = np.array([x, y, s, r]).reshape((4, 1))
-                """
-                    I still use predict-update loop here to refresh the parameters,
-                    but this can be faster by directly modifying the internal parameters
-                    as suggested in the paper. I keep this naive but slow way for 
-                    easy read and understanding
-                """
-                self.update(new_box)
-                if not i == (index2-index1-1):
-                    self.predict()
+      new_history = deepcopy(self.history_obs)
+      self.__dict__ = self.attr_saved
+      # self.history_obs = new_history 
+      self.history_obs = self.history_obs[:-1]
+      occur = [int(d is None) for d in new_history]
+      indices = np.where(np.array(occur)==0)[0]
+      index1 = indices[-2]
+      index2 = indices[-1]
+      box1 = new_history[index1]
+      x1, y1, s1, r1 = box1 
+      w1 = np.sqrt(s1 * r1)
+      h1 = np.sqrt(s1 / r1)
+      box2 = new_history[index2]
+      x2, y2, s2, r2 = box2 
+      w2 = np.sqrt(s2 * r2)
+      h2 = np.sqrt(s2 / r2)
+      time_gap = index2 - index1
+      dx = (x2-x1)/time_gap
+      dy = (y2-y1)/time_gap 
+      dw = (w2-w1)/time_gap 
+      dh = (h2-h1)/time_gap
+      for i in range(index2 - index1):
+        """
+            The default virtual trajectory generation is by linear
+            motion (constant speed hypothesis), you could modify this 
+            part to implement your own. 
+        """
+        x = x1 + (i+1) * dx 
+        y = y1 + (i+1) * dy 
+        w = w1 + (i+1) * dw 
+        h = h1 + (i+1) * dh
+        s = w * h 
+        r = w / float(h)
+        new_box = np.array([x, y, s, r]).reshape((4, 1))
+        """
+            I still use predict-update loop here to refresh the parameters,
+            but this can be faster by directly modifying the internal parameters
+            as suggested in the paper. I keep this naive but slow way for 
+            easy read and understanding
+        """
+        self.update(new_box)
+        if not i == (index2-index1-1): self.predict()
 
     def update(self, z, R=None, H=None):
         self.history_obs.append(z)
         if z is None:
-            if self.observed: self.freeze()
+            if self.observed:
+                self.attr_saved = deepcopy(self.__dict__)
             self.observed = False 
             self.z = np.array([[None]*self.dim_z]).T
             self.y = zeros((self.dim_z, 1))
             return
-        if not self.observed: self.unfreeze()
+        if not self.observed and self.attr_saved: self.unfreeze()
         self.observed = True
         R = self.R
         z = reshape_z(z, self.dim_z, self.x.ndim)

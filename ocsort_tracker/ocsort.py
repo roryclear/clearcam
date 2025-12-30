@@ -144,7 +144,6 @@ class KalmanBoxTracker(object):
         """
         if((self.kf.x[6]+self.kf.x[2]) <= 0):
             self.kf.x[6] *= 0.0
-
         self.kf.predict()
         self.age += 1
         if(self.time_since_update > 0):
