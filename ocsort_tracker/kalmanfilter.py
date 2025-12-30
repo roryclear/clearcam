@@ -60,18 +60,15 @@ class KalmanFilterNew(object):
         self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
 
     def unfreeze(self):
-      new_history = deepcopy(self.history_obs)
-      self.__dict__ = self.attr_saved
-      self.history_obs = self.history_obs[:-1]
-      occur = [int(d is None) for d in new_history]
+      occur = [int(d is None) for d in self.history_obs]
       indices = np.where(np.array(occur)==0)[0]
       index1 = indices[-2]
       index2 = indices[-1]
-      box1 = new_history[index1]
+      box1 = self.history_obs[index1]
       x1, y1, s1, r1 = box1 
       w1 = np.sqrt(s1 * r1)
       h1 = np.sqrt(s1 / r1)
-      box2 = new_history[index2]
+      box2 = self.history_obs[index2]
       x2, y2, s2, r2 = box2 
       w2 = np.sqrt(s2 * r2)
       h2 = np.sqrt(s2 / r2)
@@ -80,6 +77,7 @@ class KalmanFilterNew(object):
       dy = (y2-y1)/time_gap 
       dw = (w2-w1)/time_gap 
       dh = (h2-h1)/time_gap
+      self.__dict__ = self.attr_saved
       for i in range(index2 - index1):
         """
             The default virtual trajectory generation is by linear
