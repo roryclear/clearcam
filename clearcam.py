@@ -53,17 +53,22 @@ def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, 
 def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)):
     return img.pad(((top,top),(left,left),(0,0)))
 
-def scale_boxes(img1_shape, predictions, img0_shape):
-    if predictions.ndim == 1: return predictions
-    gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
-    pad_x = (img1_shape[1] - img0_shape[1] * gain) / 2
-    pad_y = (img1_shape[0] - img0_shape[0] * gain) / 2
-    predictions[:, [0, 2]] -= pad_x
-    predictions[:, [1, 3]] -= pad_y
-    predictions[:, :4] /= gain
-    predictions[:, [0, 2]] = np.minimum(np.maximum(predictions[:, [0, 2]], 0), img0_shape[1])
-    predictions[:, [1, 3]] = np.minimum(np.maximum(predictions[:, [1, 3]], 0), img0_shape[0])
-    return predictions
+def clip_boxes(boxes, shape):
+  boxes[..., [0, 2]] = np.clip(boxes[..., [0, 2]], 0, shape[1])  # x1, x2
+  boxes[..., [1, 3]] = np.clip(boxes[..., [1, 3]], 0, shape[0])  # y1, y2
+  return boxes
+
+def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
+  gain = ratio_pad if ratio_pad else min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
+  pad = ((img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2)
+  for pred in predictions:
+    boxes_np = pred[:4].numpy() if isinstance(pred[:4], Tensor) else pred[:4]
+    boxes_np[..., [0, 2]] -= pad[0]
+    boxes_np[..., [1, 3]] -= pad[1]
+    boxes_np[..., :4] /= gain
+    boxes_np = clip_boxes(boxes_np, img0_shape)
+    pred[:4] = boxes_np
+  return predictions
 
 @TinyJit
 def do_inf(im, yolo_infer):
