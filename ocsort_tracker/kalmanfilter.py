@@ -42,10 +42,6 @@ class KalmanFilterNew(object):
         # identity matrix. Do not alter this.
         self._I = np.eye(dim_x)
 
-        # these will always be a copy of x,P after predict() is called
-        self.x_prior = self.x.copy()
-        self.P_prior = self.P.copy()
-
         # these will always be a copy of x,P after update() is called
         self.x_post = self.x.copy()             
         self.P_post = self.P.copy()
@@ -63,34 +59,11 @@ class KalmanFilterNew(object):
         self.attr_saved = None
         self.observed = False 
 
-    def predict(self, u=None, B=None, F=None, Q=None):
-        if B is None:
-            B = self.B
-        if F is None:
-            F = self.F
-        if Q is None:
-            Q = self.Q
-        elif isscalar(Q):
-            Q = eye(self.dim_x) * Q
-
-
-        # x = Fx + Bu
-        if B is not None and u is not None:
-            self.x = dot(F, self.x) + dot(B, u)
-        else:
-            self.x = dot(F, self.x)
-
-        # P = FPF' + Q
-        self.P = self._alpha_sq * dot(dot(F, self.P), F.T) + Q
-
-        # save prior
-        self.x_prior = self.x.copy()
-        self.P_prior = self.P.copy()
-
-
+    def predict(self):
+        self.x = dot(self.F, self.x)
+        self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
 
     def freeze(self): self.attr_saved = deepcopy(self.__dict__)
-
 
     def unfreeze(self):
         if self.attr_saved is not None:
