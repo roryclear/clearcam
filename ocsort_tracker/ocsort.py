@@ -97,8 +97,8 @@ class KalmanBoxTracker(object):
         self.last_observation = np.array([-1, -1, -1, -1, -1])  # placeholder
         self.observations = dict()
         self.history_observations = []
-        self.velocity = None
         self.delta_t = delta_t
+        self.velocity = np.array((0, 0))
 
     def update(self, bbox, score=None, class_id=None):
         """
@@ -214,9 +214,8 @@ class OCSort(object):
         for t, trk in enumerate(trks):
             pos = self.trackers[t].predict()[0]
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
-
-        velocities = np.array(
-            [trk.velocity if trk.velocity is not None else np.array((0, 0)) for trk in self.trackers])
+        
+        velocities = np.array([trk.velocity for trk in self.trackers])
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
         k_observations = np.array(
             [k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
