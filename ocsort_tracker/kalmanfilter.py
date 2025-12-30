@@ -62,7 +62,6 @@ class KalmanFilterNew(object):
     def unfreeze(self):
       new_history = deepcopy(self.history_obs)
       self.__dict__ = self.attr_saved
-      # self.history_obs = new_history 
       self.history_obs = self.history_obs[:-1]
       occur = [int(d is None) for d in new_history]
       indices = np.where(np.array(occur)==0)[0]
@@ -94,14 +93,11 @@ class KalmanFilterNew(object):
         s = w * h 
         r = w / float(h)
         new_box = np.array([x, y, s, r]).reshape((4, 1))
-        """
-            I still use predict-update loop here to refresh the parameters,
-            but this can be faster by directly modifying the internal parameters
-            as suggested in the paper. I keep this naive but slow way for 
-            easy read and understanding
-        """
         self.update(new_box)
-        if not i == (index2-index1-1): self.predict()
+        if not i == (index2-index1-1): # self.predict
+          self.x = dot(self.F, self.x)
+          self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
+
 
     def update(self, z, R=None, H=None):
         self.history_obs.append(z)
