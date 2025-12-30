@@ -42,10 +42,6 @@ class KalmanFilterNew(object):
         # identity matrix. Do not alter this.
         self._I = np.eye(dim_x)
 
-        # these will always be a copy of x,P after update() is called
-        self.x_post = self.x.copy()             
-        self.P_post = self.P.copy()
-
         # Only computed only if requested via property
         self._log_likelihood = log(sys.float_info.min)
         self._likelihood = sys.float_info.min
@@ -112,76 +108,26 @@ class KalmanFilterNew(object):
                     self.predict()
 
     def update(self, z, R=None, H=None):
-        # set to None to force recompute
-        self._log_likelihood = None
-        self._likelihood = None
-        self._mahalanobis = None
-
-        # append the observation
         self.history_obs.append(z)
-        
         if z is None:
-            if self.observed:
-                """
-                    Got no observation so freeze the current parameters for future
-                    potential online smoothing.
-                """
-                self.freeze()
+            if self.observed: self.freeze()
             self.observed = False 
             self.z = np.array([[None]*self.dim_z]).T
-            self.x_post = self.x.copy()
-            self.P_post = self.P.copy()
             self.y = zeros((self.dim_z, 1))
             return
-        
-        # self.observed = True
-        if not self.observed:
-            """
-                Get observation, use online smoothing to re-update parameters
-            """
-            self.unfreeze()
+        if not self.observed: self.unfreeze()
         self.observed = True
-
-        if R is None:
-            R = self.R
-        elif isscalar(R):
-            R = eye(self.dim_z) * R
-
-        if H is None:
-            z = reshape_z(z, self.dim_z, self.x.ndim)
-            H = self.H
-
-        # y = z - Hx
-        # error (residual) between measurement and prediction
+        R = self.R
+        z = reshape_z(z, self.dim_z, self.x.ndim)
+        H = self.H
         self.y = z - dot(H, self.x)
-
-        # common subexpression for speed
         PHT = dot(self.P, H.T)
-
-        # S = HPH' + R
-        # project system uncertainty into measurement space
         self.S = dot(H, PHT) + R
         self.SI = self.inv(self.S)
-        # K = PH'inv(S)
-        # map system uncertainty into kalman gain
         self.K = dot(PHT, self.SI)
-
-        # x = x + Ky
-        # predict new x with residual scaled by the kalman gain
         self.x = self.x + dot(self.K, self.y)
-
-        # P = (I-KH)P(I-KH)' + KRK'
-        # This is more numerically stable
-        # and works for non-optimal K vs the equation
-        # P = (I-KH)P usually seen in the literature.
-
         I_KH = self._I - dot(self.K, H)
         self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
-
-        # save measurement and posterior state
-        self.z = deepcopy(z)
-        self.x_post = self.x.copy()
-        self.P_post = self.P.copy()
 
 def reshape_z(z, dim_z, ndim):
     """ensure z is a (dim_z, 1) shaped vector"""
