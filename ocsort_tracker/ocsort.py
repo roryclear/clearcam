@@ -169,7 +169,6 @@ class OCSort(object):
         self.iou_threshold = iou_threshold
         self.trackers = []
         self.frame_count = 0
-        self.det_thresh = det_thresh
         self.delta_t = delta_t
         self.asso_func = iou_batch
         self.inertia = inertia
@@ -200,7 +199,7 @@ class OCSort(object):
         dets = np.concatenate((bboxes, np.expand_dims(scores, axis=-1)), axis=1)
         inds_low = scores > 0.1
         inds_high = scores < det_thresh
-        inds_second = np.logical_and(inds_low, inds_high)  # self.det_thresh > score > 0.1, for second matching
+        inds_second = np.logical_and(inds_low, inds_high)
         dets_second = dets[inds_second]  # detections for second matching
         class_ids_second = class_ids[inds_second]
         scores_second = scores[inds_second]
@@ -211,16 +210,10 @@ class OCSort(object):
 
         # get predicted locations from existing trackers.
         trks = np.zeros((len(self.trackers), 5))
-        to_del = []
         ret = []
         for t, trk in enumerate(trks):
             pos = self.trackers[t].predict()[0]
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
-            if np.any(np.isnan(pos)):
-                to_del.append(t)
-        trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
-        for t in reversed(to_del):
-            self.trackers.pop(t)
 
         velocities = np.array(
             [trk.velocity if trk.velocity is not None else np.array((0, 0)) for trk in self.trackers])
