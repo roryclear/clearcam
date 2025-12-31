@@ -68,7 +68,6 @@ https://x.com/RoryClear/status/1959249250811785405
 - tinygrad
 - numpy
 - cv2
-- scipy
 
 ## install iOS App from source
 1. git clone https://github.com/roryclear/clearcam.git
