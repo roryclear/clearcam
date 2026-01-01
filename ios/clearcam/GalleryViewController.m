@@ -544,37 +544,66 @@
         [self loadExistingVideos];
         return;
     }
-    
     self.isLoadingVideos = YES;
-    dispatch_queue_t serialQueue = dispatch_queue_create("com.yourapp.serialDownloadQueue", DISPATCH_QUEUE_SERIAL);
+    dispatch_group_t downloadGroup = dispatch_group_create();
     
-    dispatch_async(serialQueue, ^{
-        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-        
-        for (NSString *fileURL in fileURLs) {
-            NSURL *url = [NSURL URLWithString:fileURL];
-            NSString *saveFileName = [url lastPathComponent];
-            NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
-            
-            NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-            [request setHTTPMethod:@"GET"];
-            
-            [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-                if (!error && [(NSHTTPURLResponse *)response statusCode] == 200) {
-                    NSError *moveError;
-                    NSURL *destURL = [NSURL fileURLWithPath:destPath];
-                    [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
-                }
-                dispatch_semaphore_signal(semaphore);
-            }] resume];
-            
-            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.isLoadingVideos = NO;
-            [self loadExistingVideos];
+    for (NSString *fileURL in fileURLs) {
+        dispatch_group_enter(downloadGroup);
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            [self downloadSingleFile:fileURL completion:^(BOOL success) {
+                dispatch_group_leave(downloadGroup);
+            }];
         });
+    }
+    
+    dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
+        self.isLoadingVideos = NO;
+        [self loadExistingVideos];
     });
+}
+
+- (void)downloadSingleFile:(NSString *)fileURL completion:(void(^)(BOOL success))completion {
+    NSURL *url = [NSURL URLWithString:fileURL];
+    NSString *saveFileName = [url lastPathComponent];
+    NSString *destPath = [self.downloadDirectory stringByAppendingPathComponent:saveFileName];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:destPath]) {
+        completion(YES);
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setHTTPMethod:@"GET"];
+    request.timeoutInterval = 60.0;
+    
+    [[self.downloadSession downloadTaskWithRequest:request completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+        NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
+        if (statusCode == 404 || statusCode >= 400) {
+            NSLog(@"HTTP %ld for %@ - skipping", (long)statusCode, fileURL);
+            completion(NO);
+            return;
+        }
+        if (!error && statusCode == 200) {
+            NSError *moveError;
+            NSURL *destURL = [NSURL fileURLWithPath:destPath];
+            [[NSFileManager defaultManager] moveItemAtURL:location toURL:destURL error:&moveError];
+            
+            if (!moveError) {
+                completion(YES);
+                return;
+            }
+        }
+        if (error.code == NSURLErrorTimedOut ||
+            error.code == NSURLErrorCannotConnectToHost ||
+            error.code == NSURLErrorNetworkConnectionLost ||
+            error.code == NSURLErrorNotConnectedToInternet) {
+            NSLog(@"Network error for %@ - retrying in 2s", fileURL);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)),
+                          dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+                [self downloadSingleFile:fileURL completion:completion];
+            });
+        } else {
+            completion(NO);
+        }
+    }] resume];
 }
 
 - (void)loadExistingVideos {
