@@ -1032,7 +1032,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           else:
             selected_dirs = list({
               subdir.name 
-              for camera_dir in camera_dirs 
+              for camera_dir in camera_dirs
+              if (camera_dir / "streams").is_dir()
               for subdir in (camera_dir / "streams").iterdir() 
               if subdir.is_dir()
             })          
