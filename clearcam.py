@@ -1543,8 +1543,8 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip:
-    from tiny_clip_search import CLIPSearch
-    from tiny_clip import CachedCLIPSearch
+    from clip_search import CLIPSearch
+    from clip import CachedCLIPSearch
 
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
