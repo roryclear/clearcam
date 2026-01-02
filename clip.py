@@ -169,13 +169,10 @@ class CachedCLIPSearch:
 
     def precompute_embedding_bs1_np(self, img):
       img = f"data/cameras{img}" # todo base path?
-      for _ in range(100): print("rory here 0", img)
       img = cv2.imread(img)
-      for _ in range(100): print("rory here 1")
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
       img = [preprocess(img)]
       ret = precompute_embedding_bs1(self.model, Tensor(img)).numpy()
-      print("rory embeddings =",ret)
       return ret
       
 @TinyJit
