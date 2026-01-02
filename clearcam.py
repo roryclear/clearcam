@@ -765,10 +765,10 @@ def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
+        self.clip = kwargs.pop('clip_instance', None)
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         self.searcher = None
-        self.clip = None
         super().__init__(*args, **kwargs)
 
     def send_200(self, body=None):
@@ -1051,7 +1051,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               self.searcher._load_all_embeddings()
 
           if similar_img and use_clip:
-            if not self.clip: self.clip = CachedCLIPSearch(prewarm=False) # todo, class name is dumb
             return_q = multiprocessing.Queue()
             p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir,))
             p.start()
@@ -1456,17 +1455,18 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, RequestHandlerClass):
+    def __init__(self, server_address, use_clip, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 256
-        self.clip = None
+        self.clip = CachedCLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
 
+    def finish_request(self, request, client_address): self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
@@ -1496,7 +1496,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        if not self.clip: self.clip = CachedCLIPSearch()
         while not self.clip_stop_event.is_set():
             try:
                 object_folders = self.clip.find_object_folders("data/cameras")
@@ -1614,7 +1613,7 @@ if __name__ == "__main__":
   
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip, HLSRequestHandler)
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
