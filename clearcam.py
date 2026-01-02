@@ -1028,10 +1028,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
           
           if selected_dir:
-            selected_dirs = {cd.name: [selected_dir] for cd in camera_dirs}
+            selected_dirs = [selected_dir]
           else:
-            selected_dirs = {cd.name: [d.name for d in (cd / "streams").iterdir() if d.is_dir()]
-            for cd in camera_dirs if (cd / "streams").is_dir()}      
+            selected_dirs = list({
+              subdir.name 
+              for camera_dir in camera_dirs
+              if (camera_dir / "streams").is_dir()
+              for subdir in (camera_dir / "streams").iterdir() 
+              if subdir.is_dir()
+            })          
 
           if image_text and use_clip:
             if not self.searcher:
@@ -1072,7 +1077,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
           image_data = []
           for camera_dir in camera_dirs:
-            for selected_dir in selected_dirs.get(camera_dir.name, []):
+            for selected_dir in selected_dirs:
               event_image_path = camera_dir / "event_images" / selected_dir
               if not event_image_path.exists(): continue
               event_images = sorted(
