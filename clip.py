@@ -11,7 +11,7 @@ class Model: pass
 
 
 class CachedCLIPSearch:
-    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
+    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True):
         self.image_embeddings = {}
         self.image_paths = {}
         
@@ -71,8 +71,9 @@ class CachedCLIPSearch:
         weights = None
         
         # for BEAM
-        precompute_embeddings(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-        precompute_embeddings(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+        if prewarm:
+          precompute_embeddings(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+          precompute_embeddings(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -166,6 +167,17 @@ class CachedCLIPSearch:
 
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
 
+    def precompute_embedding_bs1_np(self, img):
+      img = f"data/cameras{img}" # todo base path?
+      for _ in range(100): print("rory here 0", img)
+      img = cv2.imread(img)
+      for _ in range(100): print("rory here 1")
+      img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+      img = [preprocess(img)]
+      ret = precompute_embedding_bs1(self.model, Tensor(img)).numpy()
+      print("rory embeddings =",ret)
+      return ret
+      
 @TinyJit
 def precompute_embeddings(model, x): return precompute_embedding(model, x)
 

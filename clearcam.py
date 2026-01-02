@@ -758,11 +758,16 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
+def run_clip(return_q, clip, im):
+  res = clip.precompute_embedding_bs1_np(im)
+  return_q.put(res)
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         self.searcher = None
+        self.clip = None
         super().__init__(*args, **kwargs)
 
     def send_200(self, body=None):
@@ -1022,6 +1027,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           selected_dir = parse_qs(parsed_path.query).get("folder", [None])[0]
           name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
           image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
+          similar_img = parse_qs(parsed_path.query).get("similar_img", [None])[0]
           if cam_name:
             camera_dirs = [self.base_dir / cam_name]
           else:
@@ -1037,6 +1043,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               for subdir in (camera_dir / "streams").iterdir() 
               if subdir.is_dir()
             })          
+
+          if similar_img and use_clip:
+            if not self.clip: self.clip = CachedCLIPSearch(prewarm=False) # todo, class name is dumb
+            return_q = multiprocessing.Queue()
+            p = p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, similar_img,))
+            p.start()
+            results = return_q.get(timeout=3600)
+            p.join()
 
           if image_text and use_clip:
             if not self.searcher:
