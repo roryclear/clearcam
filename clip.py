@@ -151,7 +151,7 @@ class CachedCLIPSearch:
             else:
                 embeddings = []
                 for j in range(len(batch_np)):
-                    emb = precompute_embedding(self.model, Tensor(batch_np[j:j+1])).numpy()
+                    emb = precompute_embedding_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
                     embeddings.append(emb)
 
             for path, embedding in zip(batch_paths, embeddings):
@@ -168,6 +168,9 @@ class CachedCLIPSearch:
 
 @TinyJit
 def precompute_embeddings(model, x): return precompute_embedding(model, x)
+
+@TinyJit
+def precompute_embedding_bs1(model, x): return precompute_embedding(model, x)
 
 def precompute_embedding(model, x):
     x = model.visual_conv1(x)
