@@ -2867,6 +2867,7 @@
         }
         if (currentSimilarImage) {
             url += `&similar_img=/${encodeURIComponent(currentSimilarImage)}`;
+            currentSimilarImage = null;
         } else if (currentImageSearchText) {
             url += `&image_text=${encodeURIComponent(currentImageSearchText)}`;
         }
@@ -2934,7 +2935,7 @@
       }
     }
 
-    let currentSimilarImage = '';
+    let currentSimilarImage = null;
     function searchWithImage(imageUrl) {
         const match = imageUrl.match(/\/([^/]+\/objects\/[^/]+\/[^/]+\.jpg)/);
         if (!match) return;
