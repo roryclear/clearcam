@@ -43,7 +43,7 @@ if __name__ == "__main__":
   state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
   load_state_dict(model, state_dict)
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
-  Path('./outputs').mkdir(parents=True, exist_ok=True)
+  Path('./test_outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [ocs_tracker]
   excepted_ppl = [288]
@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
     w, h = int(cap.get(3)), int(cap.get(4))
-    out = cv2.VideoWriter(f"outputs/out_{size}_{j}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+    out = cv2.VideoWriter(f"test_outputs/out_{size}_{j}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
     i = 0
     ppl = set()
@@ -66,17 +66,23 @@ if __name__ == "__main__":
       if len(im.shape) == 3:
           im = im[None]
       pred = do_inf(im, model).numpy()[0]
-      online_targets = t.update(pred, [960,960], [960,960], 0.25)
 
+      # no tracker, todo clean
+      #pred = pred[pred[:, 4] >= 0.25]
+      #pred = rescale_bounding_boxes(pred, from_size=(im.shape[2:][::-1]), to_size=im0.shape[:2][::-1])
+      #_, buffer = cv2.imencode(".jpg", im0)
+      #out.write(draw_bounding_boxes(buffer, pred, class_labels))
+      
+      online_targets = t.update(pred, [960,960], [960,960], 0.25)
       preds = []
       for x in online_targets:
         if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
         preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.track_id,x.class_id,x.score]))
       #tlx tly w h, track_id, age, class_id, score
-
       print("ppl =",len(ppl))
       _, buffer = cv2.imencode(".jpg", im0)
       out.write(draw_bounding_boxes(buffer, preds, class_labels))
+      
       i+=1
       print("frame",i)
     cap.release()
