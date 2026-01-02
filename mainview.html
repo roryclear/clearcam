@@ -2865,8 +2865,10 @@
         if (alertsOnlyFilter) {
           url += `&name_contains=_notif`;
         }
-        if (currentImageSearchText) {
-          url += `&image_text=${encodeURIComponent(currentImageSearchText)}`;
+        if (currentSimilarImage) {
+            url += `&similar_img=/${encodeURIComponent(currentSimilarImage)}`;
+        } else if (currentImageSearchText) {
+            url += `&image_text=${encodeURIComponent(currentImageSearchText)}`;
         }
         
         const res = await fetch(url);
@@ -2902,7 +2904,7 @@
                   <small>${img.folder} ${timeStr}</small>
                 </div>
                 <div class="event-image-actions">
-                  <button title="View" onclick="viewImage('${img.url}')">
+                  <button title="Search Similar" onclick="searchWithImage('${img.url}')">
                     <span class="icon">
                       <svg><use href="#icon-magnify"></use></svg>
                     </span>
@@ -2930,6 +2932,16 @@
         const container = document.getElementById("eventImagesContainer");
         container.innerHTML = '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
       }
+    }
+
+    let currentSimilarImage = '';
+    function searchWithImage(imageUrl) {
+        const match = imageUrl.match(/\/([^/]+\/objects\/[^/]+\/[^/]+\.jpg)/);
+        if (!match) return;
+        const imagePath = match[1];
+        currentSimilarImage = imagePath;
+        document.getElementById('imageSearchInput').value = '';
+        loadEventImages();
     }
 
     function secondsToTimeString(seconds) {

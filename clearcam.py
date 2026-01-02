@@ -1057,6 +1057,34 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             p.start()
             results = return_q.get(timeout=3600)
             p.join()
+            # todo dup!
+            image_data = []
+            for path_str, score in results:
+              if score < 0.21: break
+              img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
+              ts = int(img_path.stem.split('_')[0])
+              parts = img_path.parts
+              cam_index = parts.index("cameras") + 1
+              cam = parts[cam_index]
+              rel = img_path.relative_to(self.base_dir)
+              image_url = f"/{rel}"
+              image_data.append({
+                "url": image_url,
+                "timestamp": ts,
+                "filename": img_path.name,
+                "cam_name": cam,
+                "folder": img_path.parts[-2]
+              })
+            response_data = {
+              "images": image_data,
+              "count": len(image_data),
+            }
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+            return
+
 
           if image_text and use_clip:
             return_q = multiprocessing.Queue()
