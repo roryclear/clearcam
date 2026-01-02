@@ -1462,7 +1462,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 256
-        self.searcher = None
+        self.clip = None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1496,12 +1496,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        if not self.searcher: self.searcher = CachedCLIPSearch()
+        if not self.clip: self.clip = CachedCLIPSearch()
         while not self.clip_stop_event.is_set():
             try:
-                object_folders = self.searcher.find_object_folders("data/cameras")
+                object_folders = self.clip.find_object_folders("data/cameras")
                 for folder in object_folders:
-                    self.searcher.precompute_embeddings(folder)
+                    self.clip.precompute_embeddings(folder)
             except Exception as e:
                 print(f"CLIP error: {e}")
             self.clip_stop_event.wait(timeout=60)
