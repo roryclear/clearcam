@@ -25,6 +25,7 @@ import zlib
 from utils.db import db
 import multiprocessing
 import re
+import base64
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1116,6 +1117,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             name_contains = data.get("name_contains")
             image_text   = data.get("image_text")
             similar_img  = data.get("similar_img")
+            uploaded_image = data.get("uploaded_image")
+
+            if uploaded_image:
+              image_bytes = base64.b64decode(uploaded_image)
+              nparr = np.frombuffer(image_bytes, np.uint8)
+              img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+              print("rory img shape", img.shape)
 
             if cam_name:
               camera_dirs = [self.base_dir / cam_name]
