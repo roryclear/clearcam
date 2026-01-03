@@ -1048,85 +1048,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.wfile.write(html.encode('utf-8'))
           return
                             
-        if parsed_path.path == '/event_thumbs' or parsed_path.path.endswith('/event_thumbs'):
-          selected_dir = parse_qs(parsed_path.query).get("folder", [None])[0]
-          name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
-          image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
-          similar_img = parse_qs(parsed_path.query).get("similar_img", [None])[0]
-          if cam_name:
-            camera_dirs = [self.base_dir / cam_name]
-          else:
-            camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
-          
-          if selected_dir:
-            selected_dirs = [selected_dir]
-          else:
-            selected_dirs = list({
-              subdir.name 
-              for camera_dir in camera_dirs
-              if (camera_dir / "streams").is_dir()
-              for subdir in (camera_dir / "streams").iterdir() 
-              if subdir.is_dir()
-            })          
-
-          if (image_text or similar_img) and use_clip:
-            if not self.searcher:
-              self.searcher = CLIPSearch()
-              self.searcher._load_all_embeddings()
-
-          if similar_img and use_clip:
-            return_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir,))
-            p.start()
-            results = return_q.get(timeout=3600)
-            p.join()
-            self.send_results(results)
-            return
-
-          if image_text and use_clip:
-            return_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=run_search, args=(return_q, self.searcher, image_text, 100, cam_name, selected_dir,))
-            p.start()
-            results = return_q.get(timeout=3600)
-            p.join()
-            self.send_results(results)
-            return
-
-          image_data = []
-          for camera_dir in camera_dirs:
-            for selected_dir in selected_dirs:
-              event_image_path = camera_dir / "event_images" / selected_dir
-              if not event_image_path.exists(): continue
-              event_images = sorted(
-                event_image_path.glob("*.jpg"),
-                key=lambda p: int(p.stem.split('_')[0]),
-                reverse=True
-              )
-              for img in event_images:
-                if name_contains and name_contains not in img.name: continue
-                ts = int(img.stem.split('_')[0])
-                image_url = f"/{img.relative_to(self.base_dir.parent)}"
-                image_data.append({
-                  "url": image_url,
-                  "timestamp": ts,
-                  "filename": img.name,
-                  "cam_name": camera_dir.name,
-                  "folder": selected_dir
-                })
-
-          image_data.sort(key=lambda x: x["timestamp"], reverse=True)
-
-          response_data = {
-            "images": image_data,
-            "count": len(image_data),
-          }
-
-          self.send_response(200)
-          self.send_header('Content-type', 'application/json')
-          self.end_headers()
-          self.wfile.write(json.dumps(response_data).encode('utf-8'))
-          return
-
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
@@ -1177,6 +1098,98 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         with open(file_path, 'rb') as f:
             shutil.copyfileobj(f, self.wfile)
 
+    def do_POST(self):
+        parsed_path = urlparse(self.path)
+
+        if parsed_path.path == "/event_thumbs":
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw_body = self.rfile.read(content_length)
+
+            try:
+                data = json.loads(raw_body)
+            except json.JSONDecodeError:
+                self.send_error(400, "Invalid JSON")
+                return
+
+            cam_name     = data.get("cam")
+            selected_dir = data.get("folder")
+            name_contains = data.get("name_contains")
+            image_text   = data.get("image_text")
+            similar_img  = data.get("similar_img")
+
+            if cam_name:
+              camera_dirs = [self.base_dir / cam_name]
+            else:
+              camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
+            
+            if selected_dir:
+              selected_dirs = [selected_dir]
+            else:
+              selected_dirs = list({
+                subdir.name 
+                for camera_dir in camera_dirs
+                if (camera_dir / "streams").is_dir()
+                for subdir in (camera_dir / "streams").iterdir() 
+                if subdir.is_dir()
+              })          
+
+            if (image_text or similar_img) and use_clip:
+              if not self.searcher:
+                self.searcher = CLIPSearch()
+                self.searcher._load_all_embeddings()
+
+            if similar_img and use_clip:
+              return_q = multiprocessing.Queue()
+              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir,))
+              p.start()
+              results = return_q.get(timeout=3600)
+              p.join()
+              self.send_results(results)
+              return
+
+            if image_text and use_clip:
+              return_q = multiprocessing.Queue()
+              p = multiprocessing.Process(target=run_search, args=(return_q, self.searcher, image_text, 100, cam_name, selected_dir,))
+              p.start()
+              results = return_q.get(timeout=3600)
+              p.join()
+              self.send_results(results)
+              return
+
+            image_data = []
+            for camera_dir in camera_dirs:
+              for selected_dir in selected_dirs:
+                event_image_path = camera_dir / "event_images" / selected_dir
+                if not event_image_path.exists(): continue
+                event_images = sorted(
+                  event_image_path.glob("*.jpg"),
+                  key=lambda p: int(p.stem.split('_')[0]),
+                  reverse=True
+                )
+                for img in event_images:
+                  if name_contains and name_contains not in img.name: continue
+                  ts = int(img.stem.split('_')[0])
+                  image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                  image_data.append({
+                    "url": image_url,
+                    "timestamp": ts,
+                    "filename": img.name,
+                    "cam_name": camera_dir.name,
+                    "folder": selected_dir
+                  })
+
+            image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            response_data = {
+              "images": image_data,
+              "count": len(image_data),
+            }
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+            return
 
 def schedule_daily_restart(hls_streamer, videocapture, restart_time):
     while True:
