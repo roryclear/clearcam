@@ -2846,6 +2846,9 @@
       const searchText = document.getElementById('searchText');
       const searchSpinner = document.getElementById('searchSpinner');
       const magnifyButtons = document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
+
+      uploadedImageData = null;
+      document.getElementById('imageUpload').value = '';
       
       currentImageSearchText = searchInput.value.trim();
       searchText.textContent = 'Searching';
@@ -3048,6 +3051,9 @@
       searchButton.disabled = true;
       magnifyButtons.forEach(btn => btn.disabled = true);
       
+      uploadedImageData = null;
+      document.getElementById('imageUpload').value = '';
+
       currentSimilarImage = match[1];
       document.getElementById('imageSearchInput').value = '';
       
