@@ -16,7 +16,7 @@ class CLIPSearch:
         self.tokenizer = SimpleTokenizer()
 
         device = Device.DEFAULT
-
+        self.running = False
 
         self.model = Model()
 
@@ -95,6 +95,8 @@ class CLIPSearch:
             return 0
 
     def _load_all_embeddings(self):
+        if self.running: return
+        self.running = True
         total_loaded = 0
 
         if not os.path.exists(self.base_path):
@@ -119,7 +121,7 @@ class CLIPSearch:
 
                 if os.path.exists(cache_file):
                     total_loaded += self._load_single_embeddings_file(cache_file)
-
+        self.running = False
         print(f"\nTotal images loaded: {total_loaded}")
 
     def _encode_text(self, query):

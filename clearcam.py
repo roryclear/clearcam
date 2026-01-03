@@ -756,12 +756,14 @@ def point_not_in_polygon(coords, poly):
     return True
 
 def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
+  searcher._load_all_embeddings()
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
   if not clip.warm: return []
   embedding = clip.precompute_embedding_bs1_np(im)
+  searcher._load_all_embeddings()
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
   return_q.put(res)
 
@@ -1119,7 +1121,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             similar_img  = data.get("similar_img")
             uploaded_image = data.get("uploaded_image")
 
-            if (image_text or similar_img or uploaded_image) and use_clip: self.server.searcher._load_all_embeddings()
             if uploaded_image:
               image_bytes = base64.b64decode(uploaded_image)
               nparr = np.frombuffer(image_bytes, np.uint8)
