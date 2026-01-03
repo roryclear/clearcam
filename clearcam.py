@@ -1119,11 +1119,24 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             similar_img  = data.get("similar_img")
             uploaded_image = data.get("uploaded_image")
 
+            if (image_text or similar_img or uploaded_image) and use_clip:
+              if not self.searcher:
+                self.searcher = CLIPSearch()
+                self.searcher._load_all_embeddings()
+
             if uploaded_image:
               image_bytes = base64.b64decode(uploaded_image)
               nparr = np.frombuffer(image_bytes, np.uint8)
               img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-              print("rory img shape", img.shape)
+              return_q = multiprocessing.Queue()
+              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, img, 100, cam_name, selected_dir,))
+              p.start()
+              results = return_q.get(timeout=3600)
+              p.join()
+              self.send_results(results)
+              return
+
+
 
             if cam_name:
               camera_dirs = [self.base_dir / cam_name]
@@ -1140,11 +1153,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 for subdir in (camera_dir / "streams").iterdir() 
                 if subdir.is_dir()
               })          
-
-            if (image_text or similar_img) and use_clip:
-              if not self.searcher:
-                self.searcher = CLIPSearch()
-                self.searcher._load_all_embeddings()
 
             if similar_img and use_clip:
               return_q = multiprocessing.Queue()
