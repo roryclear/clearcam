@@ -2968,6 +2968,7 @@
       
       const match = imageUrl.match(/\/([^/]+\/objects\/[^/]+\/[^/]+\.jpg)/);
       if (!match) return;
+      document.querySelector('.events-section').scrollIntoView({ behavior: 'smooth' });
       searchText.textContent = 'Searching';
       searchSpinner.style.display = 'block';
       searchButton.disabled = true;
