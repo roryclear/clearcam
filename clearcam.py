@@ -760,6 +760,7 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   return_q.put(res)
 
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
+  if not clip.warm: return []
   embedding = clip.precompute_embedding_bs1_np(im)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
   return_q.put(res)
@@ -1501,9 +1502,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def _clip_task(self):
         while not self.clip_stop_event.is_set():
             try:
+                if not self.clip.warm: continue
                 object_folders = self.clip.find_object_folders("data/cameras")
                 for folder in object_folders:
-                    self.clip.precompute_embeddings(folder)
+                  self.clip.precompute_embeddings(folder)
             except Exception as e:
                 print(f"CLIP error: {e}")
             self.clip_stop_event.wait(timeout=60)
