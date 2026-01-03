@@ -758,8 +758,14 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
+def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
+  embedding = clip.precompute_embedding_bs1_np(im)
+  res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
+  return_q.put(res)
+
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
+        self.clip = kwargs.pop('clip_instance', None)
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         self.searcher = None
@@ -1022,6 +1028,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           selected_dir = parse_qs(parsed_path.query).get("folder", [None])[0]
           name_contains = parse_qs(parsed_path.query).get("name_contains", [None])[0]
           image_text = parse_qs(parsed_path.query).get("image_text", [None])[0]
+          similar_img = parse_qs(parsed_path.query).get("similar_img", [None])[0]
           if cam_name:
             camera_dirs = [self.base_dir / cam_name]
           else:
@@ -1038,11 +1045,47 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               if subdir.is_dir()
             })          
 
-          if image_text and use_clip:
+          if (image_text or similar_img) and use_clip:
             if not self.searcher:
               self.searcher = CLIPSearch()
               self.searcher._load_all_embeddings()
 
+          if similar_img and use_clip:
+            return_q = multiprocessing.Queue()
+            p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir,))
+            p.start()
+            results = return_q.get(timeout=3600)
+            p.join()
+            # todo dup!
+            image_data = []
+            for path_str, score in results:
+              if score < 0.21: break
+              img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
+              ts = int(img_path.stem.split('_')[0])
+              parts = img_path.parts
+              cam_index = parts.index("cameras") + 1
+              cam = parts[cam_index]
+              rel = img_path.relative_to(self.base_dir)
+              image_url = f"/{rel}"
+              image_data.append({
+                "url": image_url,
+                "timestamp": ts,
+                "filename": img_path.name,
+                "cam_name": cam,
+                "folder": img_path.parts[-2]
+              })
+            response_data = {
+              "images": image_data,
+              "count": len(image_data),
+            }
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+            return
+
+
+          if image_text and use_clip:
             return_q = multiprocessing.Queue()
             p = multiprocessing.Process(target=run_search, args=(return_q, self.searcher, image_text, 100, cam_name, selected_dir,))
             p.start()
@@ -1412,17 +1455,18 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, RequestHandlerClass):
+    def __init__(self, server_address, use_clip, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 256
-        self.searcher = None
+        self.clip = CachedCLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
 
+    def finish_request(self, request, client_address): self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
@@ -1452,12 +1496,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        if not self.searcher: self.searcher = CachedCLIPSearch()
         while not self.clip_stop_event.is_set():
             try:
-                object_folders = self.searcher.find_object_folders("data/cameras")
+                object_folders = self.clip.find_object_folders("data/cameras")
                 for folder in object_folders:
-                    self.searcher.precompute_embeddings(folder)
+                    self.clip.precompute_embeddings(folder)
             except Exception as e:
                 print(f"CLIP error: {e}")
             self.clip_stop_event.wait(timeout=60)
@@ -1570,7 +1613,7 @@ if __name__ == "__main__":
   
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip, HLSRequestHandler)
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:

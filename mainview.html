@@ -2828,22 +2828,36 @@
       const searchButton = document.getElementById('searchButton');
       const searchText = document.getElementById('searchText');
       const searchSpinner = document.getElementById('searchSpinner');
+      const magnifyButtons = document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
       
       currentImageSearchText = searchInput.value.trim();
       searchText.textContent = 'Searching';
       searchSpinner.style.display = 'block';
       searchButton.disabled = true;
+      magnifyButtons.forEach(btn => btn.disabled = true);
       
       loadEventImages().finally(() => {
         searchText.textContent = 'Search';
         searchSpinner.style.display = 'none';
         searchButton.disabled = false;
+        magnifyButtons.forEach(btn => btn.disabled = false);
       });
     }
 
     function clearSearch() {
+      const searchButton = document.getElementById('searchButton');
+      const searchText = document.getElementById('searchText');
+      const searchSpinner = document.getElementById('searchSpinner');
+      const magnifyButtons = document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
+      
+      searchText.textContent = 'Search';
+      searchSpinner.style.display = 'none';
+      searchButton.disabled = false;
+      magnifyButtons.forEach(btn => btn.disabled = false);
+      
       document.getElementById('imageSearchInput').value = '';
       currentImageSearchText = '';
+      currentSimilarImage = null;
       loadEventImages();
     }
 
@@ -2865,8 +2879,11 @@
         if (alertsOnlyFilter) {
           url += `&name_contains=_notif`;
         }
-        if (currentImageSearchText) {
-          url += `&image_text=${encodeURIComponent(currentImageSearchText)}`;
+        if (currentSimilarImage) {
+            url += `&similar_img=/${encodeURIComponent(currentSimilarImage)}`;
+            currentSimilarImage = null;
+        } else if (currentImageSearchText) {
+            url += `&image_text=${encodeURIComponent(currentImageSearchText)}`;
         }
         
         const res = await fetch(url);
@@ -2902,7 +2919,7 @@
                   <small>${img.folder} ${timeStr}</small>
                 </div>
                 <div class="event-image-actions">
-                  <button title="View" onclick="viewImage('${img.url}')">
+                  <button title="Search Similar" onclick="searchWithImage('${img.url}')">
                     <span class="icon">
                       <svg><use href="#icon-magnify"></use></svg>
                     </span>
@@ -2929,7 +2946,43 @@
         console.error("Failed to load event images:", err);
         const container = document.getElementById("eventImagesContainer");
         container.innerHTML = '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
+      } finally {
+        const searchButton = document.getElementById('searchButton');
+        const searchText = document.getElementById('searchText');
+        const searchSpinner = document.getElementById('searchSpinner');
+        const magnifyButtons = document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
+        
+        searchText.textContent = 'Search';
+        searchSpinner.style.display = 'none';
+        searchButton.disabled = false;
+        magnifyButtons.forEach(btn => btn.disabled = false);
       }
+    }
+
+    let currentSimilarImage = null;
+    function searchWithImage(imageUrl) {
+      const searchButton = document.getElementById('searchButton');
+      const searchText = document.getElementById('searchText');
+      const searchSpinner = document.getElementById('searchSpinner');
+      const magnifyButtons = document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
+      
+      const match = imageUrl.match(/\/([^/]+\/objects\/[^/]+\/[^/]+\.jpg)/);
+      if (!match) return;
+      document.querySelector('.events-section').scrollIntoView({ behavior: 'smooth' });
+      searchText.textContent = 'Searching';
+      searchSpinner.style.display = 'block';
+      searchButton.disabled = true;
+      magnifyButtons.forEach(btn => btn.disabled = true);
+      
+      currentSimilarImage = match[1];
+      document.getElementById('imageSearchInput').value = '';
+      
+      loadEventImages().finally(() => {
+        searchText.textContent = 'Search';
+        searchSpinner.style.display = 'none';
+        searchButton.disabled = false;
+        magnifyButtons.forEach(btn => btn.disabled = false);
+      });
     }
 
     function secondsToTimeString(seconds) {
