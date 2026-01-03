@@ -1331,6 +1331,17 @@
       
       <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
         <input type="text" id="imageSearchInput" placeholder="Search text..." style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+        <label for="imageUpload" style="cursor: pointer; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); display: flex; align-items: center; justify-content: center;" title="Search by image">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19,5v14H5V5H19 M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z"/>
+            <rect x="7" y="7" width="4" height="4"/>
+            <polygon points="19,15 15,15 15,19 19,19"/>
+            <polygon points="19,11 15,11 15,7 19,7"/>
+            <polygon points="11,15 7,15 7,19 11,19"/>
+            <polygon points="11,11 7,11 7,7 11,7"/>
+          </svg>
+        </label>
+        <input type="file" id="imageUpload" accept="image/*" style="display: none;">
         <button onclick="searchEventImages()" id="searchButton" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
           <span id="searchText">Search</span>
           <div id="searchSpinner" class="spinner" style="display: none;"></div>
@@ -1534,7 +1545,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
-
+    let uploadedImageData = null;
     const classLabels = {
       0: 'person',
       1: 'bicycle',
@@ -2856,10 +2867,43 @@
       magnifyButtons.forEach(btn => btn.disabled = false);
       
       document.getElementById('imageSearchInput').value = '';
+      document.getElementById('imageUpload').value = '';
+      
       currentImageSearchText = '';
       currentSimilarImage = null;
+      uploadedImageData = null;
+      
       loadEventImages();
     }
+
+    document.getElementById('imageUpload').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        // Get the full data URL
+        const fullDataUrl = e.target.result;
+        // Extract just the base64 part
+        uploadedImageData = fullDataUrl.split(',')[1]; // Store only the base64 data
+        
+        document.getElementById('imageSearchInput').value = '';
+        currentSimilarImage = null;
+        const searchText = document.getElementById('searchText');
+        const searchSpinner = document.getElementById('searchSpinner');
+        
+        searchText.textContent = 'Searching';
+        searchSpinner.style.display = 'block';
+        document.getElementById('searchButton').disabled = true;
+        
+        loadEventImages().finally(() => {
+          searchText.textContent = 'Search';
+          searchSpinner.style.display = 'none';
+          document.getElementById('searchButton').disabled = false;
+        });
+      };
+      
+      reader.readAsDataURL(file);
+    });
 
     document.getElementById('imageSearchInput').addEventListener('keypress', function(event) {
       if (event.key === 'Enter') {
@@ -2868,7 +2912,12 @@
       }
     });
 
+    document.querySelector('label[for="imageUpload"]').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('imageUpload').click();
+    });
 
+    
     let previousEventImages = null;
     async function loadEventImages() {
       try {
@@ -2878,9 +2927,13 @@
           name_contains: alertsOnlyFilter ? "_notif" : null,
           image_text: null,
           similar_img: null,
+          uploaded_image: null
         };
 
-        if (currentSimilarImage) {
+        // Priority order: uploaded image > similar image > text search
+        if (uploadedImageData) {
+          payload.uploaded_image = uploadedImageData; // This is now just the base64 data
+        } else if (currentSimilarImage) {
           payload.similar_img = `/${currentSimilarImage}`;
           currentSimilarImage = null;
         } else if (currentImageSearchText) {
