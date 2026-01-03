@@ -770,7 +770,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.clip = kwargs.pop('clip_instance', None)
         self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
-        self.searcher = None
         super().__init__(*args, **kwargs)
 
     def send_results(self, results):
@@ -1120,17 +1119,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             similar_img  = data.get("similar_img")
             uploaded_image = data.get("uploaded_image")
 
-            if (image_text or similar_img or uploaded_image) and use_clip:
-              if not self.searcher:
-                self.searcher = CLIPSearch()
-                self.searcher._load_all_embeddings()
-
+            if (image_text or similar_img or uploaded_image) and use_clip: self.server.searcher._load_all_embeddings()
             if uploaded_image:
               image_bytes = base64.b64decode(uploaded_image)
               nparr = np.frombuffer(image_bytes, np.uint8)
               img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
               return_q = multiprocessing.Queue()
-              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, img, 100, cam_name, selected_dir,))
+              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.server.searcher, img, 100, cam_name, selected_dir,))
               p.start()
               results = return_q.get(timeout=3600)
               p.join()
@@ -1157,7 +1152,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if similar_img and use_clip:
               return_q = multiprocessing.Queue()
-              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir,))
+              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.server.searcher, similar_img, 100, cam_name, selected_dir,))
               p.start()
               results = return_q.get(timeout=3600)
               p.join()
@@ -1166,7 +1161,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if image_text and use_clip:
               return_q = multiprocessing.Queue()
-              p = multiprocessing.Process(target=run_search, args=(return_q, self.searcher, image_text, 100, cam_name, selected_dir,))
+              p = multiprocessing.Process(target=run_search, args=(return_q, self.server.searcher, image_text, 100, cam_name, selected_dir,))
               p.start()
               results = return_q.get(timeout=3600)
               p.join()
@@ -1466,6 +1461,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_thread = None
         self.max_gb = 256
         self.clip = CachedCLIPSearch() if use_clip else None
+        self.searcher = CLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
