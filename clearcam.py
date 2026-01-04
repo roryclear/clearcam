@@ -1498,6 +1498,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
+        clip = None
         while not self.clip_stop_event.is_set():
             try:
                 clip = CachedCLIPSearch()
