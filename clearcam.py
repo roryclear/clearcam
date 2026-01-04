@@ -1452,11 +1452,10 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
 cams = dict()
 active_subprocesses = []
 import socket
-from concurrent.futures import ThreadPoolExecutor
-class ThreadedHTTPServer(HTTPServer):
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def __init__(self, server_address, use_clip, RequestHandlerClass):
+        ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
-        self.executor = ThreadPoolExecutor(max_workers=2)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 256
@@ -1465,17 +1464,6 @@ class ThreadedHTTPServer(HTTPServer):
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
-
-    def process_request(self, request, client_address):
-        self.executor.submit(self._process_request_safe, request, client_address)
-
-    def _process_request_safe(self, request, client_address):
-        try:
-            self.finish_request(request, client_address)
-            self.shutdown_request(request)
-        except Exception:
-            self.handle_error(request, client_address)
-            self.shutdown_request(request)
 
     def finish_request(self, request, client_address):
       self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip, searcher_instance=self.searcher)
@@ -1564,9 +1552,6 @@ class ThreadedHTTPServer(HTTPServer):
             self.clip_stop_event.set()
         if hasattr(self, 'clip_thread') and self.clip_thread:
             self.clip_thread.join(timeout=5)
-        if hasattr(self, "executor"):
-          self.executor.shutdown(wait=True)
-
 
         super().server_close()
 
