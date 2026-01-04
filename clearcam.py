@@ -1134,9 +1134,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })          
 
             if (image_text or similar_img) and use_clip:
-              if not self.searcher:
-                self.searcher = CLIPSearch()
-                self.searcher._load_all_embeddings()
+              self.searcher = CLIPSearch()
+              self.searcher._load_all_embeddings()
 
             if similar_img and use_clip:
               return_q = multiprocessing.Queue()
