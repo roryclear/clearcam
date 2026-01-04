@@ -1460,7 +1460,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, RequestHandlerClass):
+    def __init__(self, server_address, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
@@ -1468,6 +1468,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.max_gb = 256
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
+        self.clip = None
         self._setup_cleanup_and_clip_thread()
 
     def _setup_cleanup_and_clip_thread(self):
@@ -1498,13 +1499,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        clip = None
+        if not self.clip: self.clip = CachedCLIPSearch()
         while not self.clip_stop_event.is_set():
             try:
-                clip = CachedCLIPSearch()
-                object_folders = clip.find_object_folders("data/cameras")
+                object_folders = self.clip.find_object_folders("data/cameras")
                 for folder in object_folders:
-                  clip.precompute_embeddings(folder)
+                  self.clip.precompute_embeddings(folder)
             except Exception as e:
                 print(f"CLIP error: {e}")
             self.clip_stop_event.wait(timeout=60)
@@ -1613,7 +1613,7 @@ if __name__ == "__main__":
   
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip, HLSRequestHandler)
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), HLSRequestHandler)
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
