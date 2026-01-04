@@ -25,6 +25,7 @@ import zlib
 from utils.db import db
 import multiprocessing
 import re
+import base64
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1116,6 +1117,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             name_contains = data.get("name_contains")
             image_text   = data.get("image_text")
             similar_img  = data.get("similar_img")
+            uploaded_image = data.get("uploaded_image")
+            if uploaded_image:
+              if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
+              uploaded_image = base64.b64decode(uploaded_image)
 
             if cam_name:
               camera_dirs = [self.base_dir / cam_name]
@@ -1134,6 +1139,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })          
 
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
+
+            if uploaded_image and use_clip:
+              return_q = multiprocessing.Queue()
+              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.searcher, uploaded_image, 100, cam_name, selected_dir,))
+              p.start()
+              results = return_q.get(timeout=3600)
+              p.join()
+              self.send_results(results)
+              return
 
             if similar_img and use_clip:
               return_q = multiprocessing.Queue()

@@ -168,8 +168,11 @@ class CachedCLIPSearch:
         print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
 
     def precompute_embedding_bs1_np(self, img):
-      img = f"data/cameras{img}" # todo base path?
-      img = cv2.imread(img)
+      if type(img) == bytes: # todo, another level up?
+        img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
+      else:
+        img = f"data/cameras{img}"
+        img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
       img = [preprocess(img)]
       ret = precompute_embedding_bs1(self.model, Tensor(img)).numpy()

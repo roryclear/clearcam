@@ -63,6 +63,7 @@
     }
 
     .tooltip {
+      margin-left: 4px;
       position: relative;
       display: inline-flex;
       align-items: center;
@@ -1329,18 +1330,34 @@
         Alerts Only
       </label>
       
-      <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
-        <input type="text" id="imageSearchInput" placeholder="Search text..." style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
-        <button onclick="searchEventImages()" id="searchButton" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-          <span id="searchText">Search</span>
-          <div id="searchSpinner" class="spinner" style="display: none;"></div>
-        </button>
-        <button onclick="clearSearch()" style="padding: 6px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;">Clear</button>
-      </div>
+  <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+    <div style="position: relative; display: flex; align-items: center;">
+      <label for="imageUpload" style="cursor: pointer; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); display: flex; align-items: center; justify-content: center;" title="Search by image">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+        <polyline points="21 15 16 10 5 21"></polyline>
+      </svg>
+      </label>
+      <span class="tooltip">
+        <span class="tooltip-icon">?</span>
+        <span class="tooltiptext">Use an image to find similar objects in your footage.</span>
+      </span>
+      <input type="file" id="imageUpload" accept="image/*" style="display: none;">
     </div>
-    <div id="eventImagesContainer">
-      <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
-    </div>
+
+    <input type="text" id="imageSearchInput" placeholder="Search text..." style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+
+    <button onclick="searchEventImages()" id="searchButton" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+      <span id="searchText">Search</span>
+      <div id="searchSpinner" class="spinner" style="display: none;"></div>
+    </button>
+
+    <button onclick="clearSearch()" style="padding: 6px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;">Clear</button>
+  </div>
+  <div id="eventImagesContainer">
+    <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
+  </div>
   </div>
   
   <div id="multiView"></div>
@@ -1534,7 +1551,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
-
+    let uploadedImageData = null;
     const classLabels = {
       0: 'person',
       1: 'bicycle',
@@ -2829,6 +2846,9 @@
       const searchText = document.getElementById('searchText');
       const searchSpinner = document.getElementById('searchSpinner');
       const magnifyButtons = document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
+
+      uploadedImageData = null;
+      document.getElementById('imageUpload').value = '';
       
       currentImageSearchText = searchInput.value.trim();
       searchText.textContent = 'Searching';
@@ -2856,10 +2876,41 @@
       magnifyButtons.forEach(btn => btn.disabled = false);
       
       document.getElementById('imageSearchInput').value = '';
+      document.getElementById('imageUpload').value = '';
+      
       currentImageSearchText = '';
       currentSimilarImage = null;
+      uploadedImageData = null;
+      
       loadEventImages();
     }
+
+    document.getElementById('imageUpload').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const fullDataUrl = e.target.result;
+        uploadedImageData = fullDataUrl.split(',')[1];
+        
+        document.getElementById('imageSearchInput').value = '';
+        currentSimilarImage = null;
+        const searchText = document.getElementById('searchText');
+        const searchSpinner = document.getElementById('searchSpinner');
+        
+        searchText.textContent = 'Searching';
+        searchSpinner.style.display = 'block';
+        document.getElementById('searchButton').disabled = true;
+        
+        loadEventImages().finally(() => {
+          searchText.textContent = 'Search';
+          searchSpinner.style.display = 'none';
+          document.getElementById('searchButton').disabled = false;
+        });
+      };
+      
+      reader.readAsDataURL(file);
+    });
 
     document.getElementById('imageSearchInput').addEventListener('keypress', function(event) {
       if (event.key === 'Enter') {
@@ -2868,7 +2919,12 @@
       }
     });
 
+    document.querySelector('label[for="imageUpload"]').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('imageUpload').click();
+    });
 
+    
     let previousEventImages = null;
     async function loadEventImages() {
       try {
@@ -2878,9 +2934,12 @@
           name_contains: alertsOnlyFilter ? "_notif" : null,
           image_text: null,
           similar_img: null,
+          uploaded_image: null
         };
 
-        if (currentSimilarImage) {
+        if (uploadedImageData) {
+          payload.uploaded_image = uploadedImageData;
+        } else if (currentSimilarImage) {
           payload.similar_img = `/${currentSimilarImage}`;
           currentSimilarImage = null;
         } else if (currentImageSearchText) {
@@ -2989,6 +3048,9 @@
       searchButton.disabled = true;
       magnifyButtons.forEach(btn => btn.disabled = true);
       
+      uploadedImageData = null;
+      document.getElementById('imageUpload').value = '';
+
       currentSimilarImage = match[1];
       document.getElementById('imageSearchInput').value = '';
       
