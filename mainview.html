@@ -1976,7 +1976,7 @@
       
       loadEventImages();
       setInterval(() => {
-        if (!currentImageSearchText) {
+        if (!currentImageSearchText && !currentSimilarImage && !uploadedImageData) {
           loadEventImages();
         }
       }, 5000);
