@@ -26,6 +26,8 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
+from clip_search import CLIPSearch
+from clip import CachedCLIPSearch
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -755,13 +757,15 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
-def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
+def run_search(return_q, image_text, top_k, cam_name, selected_dir):
+  searcher = CLIPSearch()
   searcher._load_all_embeddings()
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
-def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
-  if not clip.warm: return []
+def run_clip(return_q, im, top_k, cam_name, selected_dir):
+  clip = CachedCLIPSearch()
+  searcher = CLIPSearch()
   embedding = clip.precompute_embedding_bs1_np(im)
   searcher._load_all_embeddings()
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
@@ -1126,10 +1130,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               nparr = np.frombuffer(image_bytes, np.uint8)
               img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
               return_q = multiprocessing.Queue()
-              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.server.searcher, img, 100, cam_name, selected_dir,))
+              p = multiprocessing.Process(target=run_clip, args=(return_q, img, 100, cam_name, selected_dir,))
               p.start()
               results = return_q.get(timeout=3600)
               p.join()
+              p.close()
               self.send_results(results)
               return
 
@@ -1153,7 +1158,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if similar_img and use_clip:
               return_q = multiprocessing.Queue()
-              p = multiprocessing.Process(target=run_clip, args=(return_q, self.clip, self.server.searcher, similar_img, 100, cam_name, selected_dir,))
+              p = multiprocessing.Process(target=run_clip, args=(return_q, similar_img, 100, cam_name, selected_dir,))
               p.start()
               results = return_q.get(timeout=3600)
               p.join()
@@ -1162,7 +1167,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if image_text and use_clip:
               return_q = multiprocessing.Queue()
-              p = multiprocessing.Process(target=run_search, args=(return_q, self.server.searcher, image_text, 100, cam_name, selected_dir,))
+              p = multiprocessing.Process(target=run_search, args=(return_q, image_text, 100, cam_name, selected_dir,))
               p.start()
               results = return_q.get(timeout=3600)
               p.join()
@@ -1461,13 +1466,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         self.max_gb = 256
-        self.clip = CachedCLIPSearch() if use_clip else None
-        self.searcher = CLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
-
-    def finish_request(self, request, client_address): self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
@@ -1499,10 +1500,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def _clip_task(self):
         while not self.clip_stop_event.is_set():
             try:
-                if not self.clip.warm: continue
-                object_folders = self.clip.find_object_folders("data/cameras")
+                clip = CachedCLIPSearch()
+                object_folders = clip.find_object_folders("data/cameras")
                 for folder in object_folders:
-                  self.clip.precompute_embeddings(folder)
+                  clip.precompute_embeddings(folder)
             except Exception as e:
                 print(f"CLIP error: {e}")
             self.clip_stop_event.wait(timeout=60)
@@ -1587,10 +1588,6 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip:
-    from clip_search import CLIPSearch
-    from clip import CachedCLIPSearch
-
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
 
