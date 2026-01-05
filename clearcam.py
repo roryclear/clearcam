@@ -284,7 +284,7 @@ class VideoCapture:
     ]
     self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    time.sleep(8)
+    time.sleep(15)
     command = [
         ffmpeg_path,
         "-live_start_index", "-1",
@@ -349,111 +349,110 @@ class VideoCapture:
     while self.running:
       try:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        if 1==1:
-          raw_bytes = self.proc.stdout.read(frame_size)
-          if len(raw_bytes) != frame_size:
-            fail_count += 1
-            if fail_count > 5:
-              print(f"FFmpeg frame read failed (count={fail_count}), restarting stream...")
-              self._open_ffmpeg()
-              fail_count = 0
-            time.sleep(0.5)
-            continue
-          else:
+        raw_bytes = self.proc.stdout.read(frame_size)
+        if len(raw_bytes) != frame_size:
+          fail_count += 1
+          if fail_count > 5:
+            print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
+            self._open_ffmpeg()
             fail_count = 0
-          frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-          filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
-          for p in filtered_preds:
-            if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
-            if p[6] not in pred_occs: pred_occs[p[6]] = [time.time()]
-            if (len(pred_occs[p[6]]) < 20 and (time.time() - pred_occs[p[6]][-1]) > 1) or (time.time() - pred_occs[p[6]][-1]) > 600:
-              pred_occs[p[6]].append(time.time())
-            else:
-              continue
-            self.save_object(p)
-
-          if count > 10:
-            if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
-              last_preview_time = time.time()
-              filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
-              write_png(filename, self.raw_frame)
-            for _,alert in self.alert_counters.items():
-                if not alert.is_active():
-                  alert.reset_counts()
-                  continue
-                window = alert.window if alert.window else (60 if alert.is_notif else 1)
-                if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
-                if alert.get_counts()[1]:
-                    if time.time() - alert.last_det >= window:
-                        if alert.is_notif: send_det = True
-                        timestamp = datetime.now().strftime("%Y-%m-%d")
-                        filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
-                        filepath.mkdir(parents=True, exist_ok=True)
-                        self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
-                        # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                        ts = int(time.time() - self.streamer.start_time - 10)
-                        filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                        cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
-                        if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
-                          plain.unlink() # only one image per event
-                          filename = filepath / f"{ts}_notif.jpg"
-                        text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
-                        if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                        last_det = time.time()
-                        alert.last_det = time.time()
-            if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
-                os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
-                mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-                temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-                self.streamer.export_clip(Path(mp4_filename))
-
-                # img preview?
-                subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
-                os.replace(temp_output, mp4_filename)
-                encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
-                os.unlink(mp4_filename)
-                send_det = False
-            if userID and (time.time() - last_live_check) >= 5:
-                last_live_check = time.time()
-                threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
-            if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-              last_counter_update = time.time()
-
-              counters = database.run_get("counters", self.cam_name)
-              if counters not in [None, {}]:
-                if counters.reset:
-                  self.counter.reset_counts()
-                  self.counter.reset = False
-              database.run_put("counters", cam_name, self.counter)
-              
-              alerts = database.run_get("alerts", self.cam_name)
-              for id,a in alerts.items():
-                if not a.new: continue
-                a.new = False
-                database.run_put("alerts", self.cam_name, a, id=id)
-                if a is None:
-                  del self.alert_counters[id]
-                  continue
-                self.alert_counters[id] = a
-                for c in a.classes: classes.add(str(c))
-              
-              self.settings = database.run_get("settings", self.cam_name)
-              self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
-
-            if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
-                last_live_seg = time.time()
-                mp4_filename = f"segment.mp4"
-                self.streamer.export_clip(Path(mp4_filename), live=True)
-                encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                Path(mp4_filename).unlink()
-                threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
+          time.sleep(0.5)
+          continue
+        else:
+          fail_count = 0
+        frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+        filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
+        for p in filtered_preds:
+          if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
+          if p[6] not in pred_occs: pred_occs[p[6]] = [time.time()]
+          if (len(pred_occs[p[6]]) < 20 and (time.time() - pred_occs[p[6]][-1]) > 1) or (time.time() - pred_occs[p[6]][-1]) > 600:
+            pred_occs[p[6]].append(time.time())
           else:
-              count+=1
-          with self.lock:
-              self.raw_frame = frame.copy()
-              if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
-          time.sleep(1 / 30)
+            continue
+          self.save_object(p)
+
+        if count > 10:
+          if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
+            last_preview_time = time.time()
+            filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+            write_png(filename, self.raw_frame)
+          for _,alert in self.alert_counters.items():
+              if not alert.is_active():
+                alert.reset_counts()
+                continue
+              window = alert.window if alert.window else (60 if alert.is_notif else 1)
+              if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
+              if alert.get_counts()[1]:
+                  if time.time() - alert.last_det >= window:
+                      if alert.is_notif: send_det = True
+                      timestamp = datetime.now().strftime("%Y-%m-%d")
+                      filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
+                      filepath.mkdir(parents=True, exist_ok=True)
+                      self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
+                      # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                      ts = int(time.time() - self.streamer.start_time - 10)
+                      filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
+                      cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                      if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                        plain.unlink() # only one image per event
+                        filename = filepath / f"{ts}_notif.jpg"
+                      text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
+                      if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                      last_det = time.time()
+                      alert.last_det = time.time()
+          if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
+              os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
+              mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+              temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+              self.streamer.export_clip(Path(mp4_filename))
+
+              # img preview?
+              subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+              os.replace(temp_output, mp4_filename)
+              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+              threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+              os.unlink(mp4_filename)
+              send_det = False
+          if userID and (time.time() - last_live_check) >= 5:
+              last_live_check = time.time()
+              threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
+          if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
+            last_counter_update = time.time()
+
+            counters = database.run_get("counters", self.cam_name)
+            if counters not in [None, {}]:
+              if counters.reset:
+                self.counter.reset_counts()
+                self.counter.reset = False
+            database.run_put("counters", cam_name, self.counter)
+            
+            alerts = database.run_get("alerts", self.cam_name)
+            for id,a in alerts.items():
+              if not a.new: continue
+              a.new = False
+              database.run_put("alerts", self.cam_name, a, id=id)
+              if a is None:
+                del self.alert_counters[id]
+                continue
+              self.alert_counters[id] = a
+              for c in a.classes: classes.add(str(c))
+            
+            self.settings = database.run_get("settings", self.cam_name)
+            self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+
+          if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+              last_live_seg = time.time()
+              mp4_filename = f"segment.mp4"
+              self.streamer.export_clip(Path(mp4_filename), live=True)
+              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+              Path(mp4_filename).unlink()
+              threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
+        else:
+            count+=1
+        with self.lock:
+            self.raw_frame = frame.copy()
+            if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
+        time.sleep(1 / 30)
       except Exception as e:
             print("Error in capture_loop:", e)
             self._open_ffmpeg()
