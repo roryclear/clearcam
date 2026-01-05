@@ -609,8 +609,6 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
                 [self storeSessionTokenInKeychain:sessionToken];
             }
             [[NSNotificationCenter defaultCenter] postNotificationName:StoreManagerSubscriptionStatusDidChangeNotification object:nil];
-        } else {
-            [self clearSessionTokenFromKeychain];
         }
         [[NSUserDefaults standardUserDefaults] setBool:isSubscribed forKey:@"isSubscribed"];
         [[NSUserDefaults standardUserDefaults] synchronize];
