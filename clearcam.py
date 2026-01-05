@@ -791,6 +791,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
       image_data = []
       for path_str, score in results:
         if score < 0.21: break
+        print("rory score =",score)
         img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
         ts = int(img_path.stem.split('_')[0])
         parts = img_path.parts
@@ -803,7 +804,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           "timestamp": ts,
           "filename": img_path.name,
           "cam_name": cam,
-          "folder": img_path.parts[-2]
+          "folder": img_path.parts[-2],
+          "score": score,
         })
       response_data = {
         "images": image_data,
@@ -1189,7 +1191,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     "timestamp": ts,
                     "filename": img.name,
                     "cam_name": camera_dir.name,
-                    "folder": selected_dir
+                    "folder": selected_dir,
                   })
 
             image_data.sort(key=lambda x: x["timestamp"], reverse=True)

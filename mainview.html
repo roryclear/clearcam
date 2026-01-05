@@ -2972,18 +2972,21 @@
         previousEventImages = data;
 
         const container = document.getElementById("eventImagesContainer");
-
+        
         if (data.images && data.images.length > 0) {
           let html = '';
-          data.images.forEach(img => {
+          [...data.images].forEach(img => {
             const timeStr = secondsToTimeString(img.timestamp);
+            const scoreHtml = typeof img.score === 'number' ? ` | Match: ${img.score.toFixed(2)}` : '';
             html += `
               <div class="event-image-item">
                 <img src="${img.url}" alt="Event" loading="lazy"
                     onclick="viewImage('${img.url}')">
                 <div class="event-image-info">
                   <strong>${img.cam_name || 'Camera'}</strong><br>
-                  <small>${img.folder} ${timeStr}</small>
+                  <small>
+                    ${img.folder} ${secondsToTimeString(img.timestamp)}${scoreHtml}
+                  </small>
                 </div>
                 <div class="event-image-actions">
                   <button title="Search Similar"
