@@ -790,7 +790,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
       image_data = []
       for path_str, score in results:
         if score < 0.21: break
-        print("rory score =",score)
         img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
         ts = int(img_path.stem.split('_')[0])
         parts = img_path.parts
