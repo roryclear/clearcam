@@ -96,29 +96,31 @@ class CLIPSearch:
 
     def _load_all_embeddings(self):
         total_loaded = 0
-
-        if not os.path.exists(self.base_path):
-            print(f"Base path {self.base_path} does not exist!")
-            return
-
+        valid_paths = set()
+        if not os.path.exists(self.base_path): return
         for camera_folder in os.listdir(self.base_path):
-            camera_path = os.path.join(self.base_path, camera_folder)
-            if not os.path.isdir(camera_path):
-                continue
+          camera_path = os.path.join(self.base_path, camera_folder)
+          if not os.path.isdir(camera_path): continue
 
-            objects_path = os.path.join(camera_path, "objects")
-            if not os.path.isdir(objects_path):
-                continue
+          objects_path = os.path.join(camera_path, "objects")
+          if not os.path.isdir(objects_path): continue
+          for date_folder in os.listdir(objects_path):
+            date_path = os.path.join(objects_path, date_folder)
+            if not os.path.isdir(date_path): continue
+            cache_file = os.path.join(date_path, "embeddings.pkl")
+            if not os.path.exists(cache_file): continue
+            with open(cache_file, "rb") as f: cache = pickle.load(f)
+            folder_embeddings = cache.get("embeddings", {})
+            folder_paths = cache.get("paths", {})
+            valid_paths.update(folder_embeddings.keys())
+            self.image_embeddings.update(folder_embeddings)
+            self.image_paths.update(folder_paths)
+            total_loaded += len(folder_embeddings)
 
-            for date_folder in os.listdir(objects_path):
-                date_path = os.path.join(objects_path, date_folder)
-                if not os.path.isdir(date_path):
-                    continue
-
-                cache_file = os.path.join(date_path, "embeddings.pkl")
-
-                if os.path.exists(cache_file):
-                    total_loaded += self._load_single_embeddings_file(cache_file)
+        stale_keys = set(self.image_embeddings.keys()) - valid_paths
+        for k in stale_keys:
+            del self.image_embeddings[k]
+            self.image_paths.pop(k, None)
 
         print(f"\nTotal images loaded: {total_loaded}")
 
