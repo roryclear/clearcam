@@ -70,6 +70,9 @@
     self.usernameTextField.delegate = self;
     [container addSubview:self.usernameTextField];
     
+    NSString *savedToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
+    if (savedToken) self.usernameTextField.text = savedToken;
+    
     self.loginButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.loginButton setTitle:NSLocalizedString(@"log_in", nil) forState:UIControlStateNormal];
     self.loginButton.backgroundColor = [UIColor systemGray5Color];
