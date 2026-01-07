@@ -1597,7 +1597,7 @@ if __name__ == "__main__":
 
 
   from ocsort_tracker import ocsort
-  tracker = ocsort.OCSort()
+  tracker = ocsort.OCSort(max_age=100)
   live_link = dict()
   
   if rtsp_url is None:

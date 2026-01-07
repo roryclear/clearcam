@@ -36,7 +36,7 @@ def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scal
 
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
-  ocs_tracker = ocsort.OCSort()
+  ocs_tracker = ocsort.OCSort(max_age=60)
 
   size = "t"
   model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
@@ -46,7 +46,7 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [ocs_tracker]
-  excepted_ppl = [288]
+  excepted_ppl = [241]
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
