@@ -46,7 +46,7 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [ocs_tracker]
-  excepted_ppl = [241]
+  excepted_ppl = [241] # same as byte-track's was
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
