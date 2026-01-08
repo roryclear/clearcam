@@ -2,7 +2,7 @@ from collections import defaultdict
 import numpy as np
 
 class STrack:
-    def __init__(self, tlwh, score, class_id, track_id=None, age=0):
+    def __init__(self, tlwh, score, class_id, track_id=None, age=0, speed=0):
         self.occurrences = defaultdict(float)
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float64)
@@ -14,6 +14,7 @@ class STrack:
         self.class_id = class_id
         self.track_id = track_id
         self.tracklet_len = age
+        self.speed = speed
 
     @property
     # @jit(nopython=True)

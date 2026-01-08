@@ -486,7 +486,7 @@ class VideoCapture:
         online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
         preds = []
         for x in online_targets:
-          if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives
+          if x.tracklet_len < 1 or x.speed < 2: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
           outside = False
           if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
             outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
