@@ -98,7 +98,8 @@ class KalmanBoxTracker(object):
         self.history_observations = []
         self.delta_t = delta_t
         self.velocity = np.array((0, 0))
-        self.speed = np.array((0, 0))
+        self.avg_vel = np.array((0, 0))
+        self.speed = 0
 
     def update(self, bbox, score=None, class_id=None):
         """
@@ -121,7 +122,8 @@ class KalmanBoxTracker(object):
                   Estimate the track speed direction with observations \Delta t steps away
                 """
                 dist, self.velocity = speed_direction(previous_box, bbox)
-                self.speed = [s + d / float(self.age) for s, d in zip(self.speed, dist)]
+                self.avg_vel = [s + d / float(self.age) for s, d in zip(self.avg_vel, dist)]
+                self.speed = abs(self.avg_vel[0]) + abs(self.avg_vel[1])
             """
               Insert new observations. This is a ugly way to maintain both self.observations
               and self.history_observations. Bear it for the moment.
@@ -298,11 +300,11 @@ class OCSort(object):
                 d = trk.last_observation[:4]
             if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
                 # +1 as MOT benchmark requires positive
-                ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id, trk.score, abs(trk.speed[0]) + abs(trk.speed[1])])).reshape(1, -1))
+                ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id, trk.score, trk.speed])).reshape(1, -1))
             i -= 1
             # remove dead tracklet
             if(trk.time_since_update > self.max_age):
-                if abs(trk.speed[0]) + abs(trk.speed[1]) > 2 or trk.time_since_update > 600: self.trackers.pop(i)
+                if trk.speed > 2 or trk.time_since_update > 600: self.trackers.pop(i)
         # tlx tly w h, track_id, age, class_id, score
         out = []
         for x in ret:
