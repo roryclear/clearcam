@@ -46,10 +46,11 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [ocs_tracker]
-  excepted_ppl = [241] # same as byte-track's was
+  excepted_ppl = [162]
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
+    #cap = cv2.VideoCapture("test/videos/rain_long.mp4")
     w, h = int(cap.get(3)), int(cap.get(4))
     out = cv2.VideoWriter(f"test_outputs/out_{size}_{j}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
@@ -76,6 +77,7 @@ if __name__ == "__main__":
       online_targets = t.update(pred, [960,960], [960,960], 0.25)
       preds = []
       for x in online_targets:
+        if x.tracklet_len < 1 or x.speed < 2.5: continue
         if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
         preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.track_id,x.class_id,x.score]))
       #tlx tly w h, track_id, age, class_id, score

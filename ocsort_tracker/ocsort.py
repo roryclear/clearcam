@@ -52,7 +52,7 @@ def speed_direction(bbox1, bbox2):
     cx2, cy2 = (bbox2[0]+bbox2[2]) / 2.0, (bbox2[1]+bbox2[3])/2.0
     speed = np.array([cy2-cy1, cx2-cx1])
     norm = np.sqrt((cy2-cy1)**2 + (cx2-cx1)**2) + 1e-6
-    return speed / norm
+    return speed, speed / norm
 
 
 class KalmanBoxTracker(object):
@@ -98,6 +98,8 @@ class KalmanBoxTracker(object):
         self.history_observations = []
         self.delta_t = delta_t
         self.velocity = np.array((0, 0))
+        self.avg_vel = np.array((0, 0))
+        self.speed = 0
 
     def update(self, bbox, score=None, class_id=None):
         """
@@ -119,8 +121,9 @@ class KalmanBoxTracker(object):
                 """
                   Estimate the track speed direction with observations \Delta t steps away
                 """
-                self.velocity = speed_direction(previous_box, bbox)
-
+                dist, self.velocity = speed_direction(previous_box, bbox)
+                self.avg_vel = [s + d / float(self.age) for s, d in zip(self.avg_vel, dist)]
+                self.speed = abs(self.avg_vel[0]) + abs(self.avg_vel[1])
             """
               Insert new observations. This is a ugly way to maintain both self.observations
               and self.history_observations. Bear it for the moment.
@@ -297,13 +300,13 @@ class OCSort(object):
                 d = trk.last_observation[:4]
             if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
                 # +1 as MOT benchmark requires positive
-                ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id, trk.score])).reshape(1, -1))
+                ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id, trk.score, trk.speed])).reshape(1, -1))
             i -= 1
             # remove dead tracklet
             if(trk.time_since_update > self.max_age):
-                self.trackers.pop(i)
+                if trk.speed > 2 or trk.time_since_update > 600: self.trackers.pop(i)
         # tlx tly w h, track_id, age, class_id, score
         out = []
         for x in ret:
-          out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5]))
+          out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5], speed=x[0][8]))
         return out
