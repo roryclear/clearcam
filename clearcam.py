@@ -1222,7 +1222,7 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
         os.execv(python, [python] + sys.argv)
 
 def send_notif(session_token: str, text=None):
-    host = "www.rors.ai"
+    host = "www.clearcam.org"
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"
     content_type = f"multipart/form-data; boundary={boundary}"
@@ -1323,7 +1323,7 @@ def upload_file(file_path: Path, session_token: str):
             "size": str(file_size)
         }
         query_string = urllib.parse.urlencode(params)
-        url = f"https://rors.ai/upload?{query_string}"
+        url = f"https://clearcam.org/upload?{query_string}"
         
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -1417,7 +1417,7 @@ def check_upload_link(cam_name="clearcampy"):
         "name": quote(cam_name),
         "session_token": userID
     })
-    url = f"https://rors.ai/get_stream_upload_link?{query_params}"
+    url = f"https://clearcam.org/get_stream_upload_link?{query_params}"
     
     req = urllib.request.Request(url)
     with urllib.request.urlopen(req) as response:
