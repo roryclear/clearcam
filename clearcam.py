@@ -276,7 +276,7 @@ class VideoCapture:
         "-c", "copy",
         "-f", "hls",
         "-hls_list_size", "0",
-        "-hls_flags", "+append_list",
+        "-hls_flags", "append_list+temp_file",
         "-hls_playlist_type", "event",
         "-an",  # No audio
         "-hls_segment_filename", str(path/ "stream_%06d.ts"),
