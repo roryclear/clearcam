@@ -214,7 +214,7 @@
         return;
     }
     
-    NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", enteredToken];
+    NSString *urlString = [NSString stringWithFormat:@"https://clearcam.org/validate_user?session_token=%@", enteredToken];
     NSURL *url = [NSURL URLWithString:urlString];
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url

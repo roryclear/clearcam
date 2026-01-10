@@ -498,7 +498,7 @@
     
     self.isLoadingVideos = YES;
     
-    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/events"];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
@@ -1012,7 +1012,7 @@
         
         if (sessionToken) {
             NSString *backendFilename = [filename hasSuffix:@".aes"] ? filename : [filename stringByAppendingPathExtension:@"aes"];
-            NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/video"];
+            NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/video"];
             components.queryItems = @[
                 [NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken],
                 [NSURLQueryItem queryItemWithName:@"name" value:backendFilename]

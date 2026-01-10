@@ -717,7 +717,7 @@
         return;
     }
     
-    NSString *endpoint = deleteToken ? @"https://rors.ai/delete_device" : @"https://rors.ai/add_device";
+    NSString *endpoint = deleteToken ? @"https://clearcam.org/delete_device" : @"https://clearcam.org/add_device";
     
     [FileServer performPostRequestWithURL:endpoint
                                        method:@"POST"

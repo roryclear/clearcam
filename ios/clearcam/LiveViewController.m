@@ -111,7 +111,7 @@
         return;
     }
     NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_live_devicesv2"];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/get_live_devicesv2"];
     components.queryItems = @[
         [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
     ];
@@ -275,7 +275,7 @@
         return;
     }
 
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/toggle_alerts"];
+    NSURL *url = [NSURL URLWithString:@"https://clearcam.org/toggle_alerts"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];

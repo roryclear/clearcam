@@ -67,7 +67,7 @@
     NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
 
-    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/get_stream_download_link"];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/get_stream_download_link"];
     components.queryItems = @[
         [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
         [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]
@@ -288,7 +288,7 @@
     NSString *encodedDeviceName = [deviceName stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     NSString *encodedSessionToken = [sessionToken stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
 
-    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://rors.ai/delete_stream_download_link"];
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/delete_stream_download_link"];
     components.queryItems = @[
         [NSURLQueryItem queryItemWithName:@"name" value:encodedDeviceName],
         [NSURLQueryItem queryItemWithName:@"session_token" value:encodedSessionToken]

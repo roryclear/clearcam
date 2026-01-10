@@ -482,7 +482,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
 }
 
 - (void)checkInternetWithCompletion:(void (^)(BOOL hasInternet))completion {
-    NSURL *url = [NSURL URLWithString:@"https://rors.ai/ping"];
+    NSURL *url = [NSURL URLWithString:@"https://clearcam.org/ping"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url
                                                            cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                                        timeoutInterval:3.0];
@@ -519,7 +519,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         return;
     }
     
-    NSString *urlString = [NSString stringWithFormat:@"https://rors.ai/validate_user?session_token=%@", sessionToken];
+    NSString *urlString = [NSString stringWithFormat:@"https://clearcam.org/validate_user?session_token=%@", sessionToken];
     NSURL *url = [NSURL URLWithString:urlString];
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
@@ -583,7 +583,7 @@ NSString *const StoreManagerSubscriptionStatusDidChangeNotification = @"StoreMan
         return;
     }
 
-    [FileServer performPostRequestWithURL:@"https://www.rors.ai/verify_receipt"
+    [FileServer performPostRequestWithURL:@"https://www.clearcam.org/verify_receipt"
                                    method:@"POST"
                               contentType:@"application/json"
                                      body:jsonData

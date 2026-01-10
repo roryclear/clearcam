@@ -16,7 +16,7 @@
 }
 
 - (void)sendNotification {
-    NSString *server = @"https://www.rors.ai";
+    NSString *server = @"https://www.clearcam.org";
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
         if(!server) server = @"http://192.168.1.1:8080";
@@ -49,7 +49,7 @@
 
 
 - (void)uploadImageAtPath:(NSString *)imagePath {
-    NSString *server = @"https://www.rors.ai";
+    NSString *server = @"https://www.clearcam.org";
 
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"use_own_server_enabled"]) {
         server = [[NSUserDefaults standardUserDefaults] valueForKey:@"own_notification_server_address"];
