@@ -2663,7 +2663,11 @@
           const res = await fetch(url, { cache: "no-store" });
           if (res.ok) {
             const text = await res.text();
-            if (text.includes("#EXTINF")) return true;
+            const segmentCount = (text.match(/#EXTINF/g) || []).length;
+            if (segmentCount >= 1) {
+              console.log(`Manifest ready with ${segmentCount} segments`);
+              return true;
+            }
           }
         } catch (err) {
           // ignore / retry
