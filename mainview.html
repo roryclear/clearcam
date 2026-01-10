@@ -2924,48 +2924,125 @@
       document.getElementById('imageUpload').click();
     });
 
-    let eventStart = 0, eventLoading = false;
-    window.onscroll = () => { if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) loadEventImages(true); };
-
-    async function loadEventImages(append = false) {
-      if (!append) { eventStart = 0; if (currentImageSearchText || uploadedImageData) currentSimilarImage = null; }
-      if (eventLoading) return;
-      eventLoading = true;
-      if (!append) eventStart = 0;
-      const payload = { folder: currentEventDateFilter, cam: currentEventCameraFilter, name_contains: alertsOnlyFilter ? "_notif" : null, image_text: currentImageSearchText, similar_img: currentSimilarImage ? '/' + currentSimilarImage : null, uploaded_image: uploadedImageData, start: eventStart, count: 100 };
+    
+    let previousEventImages = null;
+    async function loadEventImages() {
       try {
-        const data = await (await fetch("/event_thumbs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
-        if (!append) document.getElementById("eventImagesContainer").innerHTML = '';
+        const payload = {
+          folder: currentEventDateFilter || null,
+          cam: currentEventCameraFilter || null,
+          name_contains: alertsOnlyFilter ? "_notif" : null,
+          image_text: null,
+          similar_img: null,
+          uploaded_image: null
+        };
+
+        if (uploadedImageData) {
+          payload.uploaded_image = uploadedImageData;
+        } else if (currentSimilarImage) {
+          payload.similar_img = `/${currentSimilarImage}`;
+          currentSimilarImage = null;
+        } else if (currentImageSearchText) {
+          payload.image_text = currentImageSearchText;
+        }
+
+        const res = await fetch("/event_thumbs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (data.images && data.images.length > 0) {
+          if (data.images[0].score !== undefined) {
+            data.images.sort((a, b) => b.score - a.score);
+          }
+          else if (!currentImageSearchText && !uploadedImageData && !currentSimilarImage) {
+            data.images.sort((a, b) => {
+              if (a.folder !== b.folder) {
+                return b.folder.localeCompare(a.folder);
+              }
+              return b.timestamp - a.timestamp;
+            });
+          }
+        }
+
+        if (JSON.stringify(data) === JSON.stringify(previousEventImages)) {
+          return;
+        }
+        previousEventImages = data;
+
+        const container = document.getElementById("eventImagesContainer");
         
-        if (data.images?.length) {
-          eventStart += data.images.length;
-          const html = data.images.map(img => `
-            <div class="event-image-item">
-              <img src="${img.url}" loading="lazy" onclick="viewImage('${img.url}')">
-              <div class="event-image-info">
-                <strong>${img.cam_name||'Cam'}</strong><br>
-                <small>${img.folder} ${secondsToTimeString(img.timestamp)}${img.score? ' | '+img.score.toFixed(2):''}</small>
+        if (data.images && data.images.length > 0) {
+          let html = '';
+          [...data.images].forEach(img => {
+            const timeStr = secondsToTimeString(img.timestamp);
+            const scoreHtml = typeof img.score === 'number' ? ` | Match: ${img.score.toFixed(2)}` : '';
+            html += `
+              <div class="event-image-item">
+                <img src="${img.url}" alt="Event" loading="lazy"
+                    onclick="viewImage('${img.url}')">
+                <div class="event-image-info">
+                  <strong>${img.cam_name || 'Camera'}</strong><br>
+                  <small>
+                    ${img.folder} ${secondsToTimeString(img.timestamp)}${scoreHtml}
+                  </small>
+                </div>
+                <div class="event-image-actions">
+                  <button title="Search Similar"
+                          onclick="searchWithImage('${img.url}')">
+                    <span class="icon">
+                      <svg><use href="#icon-magnify"></use></svg>
+                    </span>
+                  </button>
+                  <button title="Play"
+                          onclick="playVideoAtTime('${img.cam_name}', ${img.timestamp}, '${img.folder}')">
+                    <span class="icon">
+                      <svg><use href="#icon-play"></use></svg>
+                    </span>
+                  </button>
+                  <button title="Play All"
+                          onclick="playAllCamerasAtTime(${img.timestamp}, '${img.folder}')">
+                    <span class="icon">
+                      <svg><use href="#icon-play-all"></use></svg>
+                    </span>
+                  </button>
+                </div>
               </div>
-              <div class="event-image-actions">
-                <button title="Search Similar" onclick="searchWithImage('${img.url}')">
-                  <span class="icon"><svg><use href="#icon-magnify"></use></svg></span>
-                </button>
-                <button title="Play" onclick="playVideoAtTime('${img.cam_name}', ${img.timestamp}, '${img.folder}')">
-                  <span class="icon"><svg><use href="#icon-play"></use></svg></span>
-                </button>
-                <button title="Play All" onclick="playAllCamerasAtTime(${img.timestamp}, '${img.folder}')">
-                  <span class="icon"><svg><use href="#icon-play-all"></use></svg></span>
-                </button>
-              </div>
-            </div>`).join('');
-          document.getElementById("eventImagesContainer").insertAdjacentHTML('beforeend', html);
-        } else if (!append) document.getElementById("eventImagesContainer").innerHTML = '<p style="text-align:center;width:100%;color:#666;">No events detected.</p>';
-      } catch (e) { console.error(e); } finally { eventLoading = false; document.getElementById('searchSpinner').style.display = 'none'; document.getElementById('searchText').textContent = 'Search'; document.getElementById('searchButton').disabled = false; document.querySelectorAll('.event-image-actions button').forEach(b => b.disabled = false); }
+            `;
+          });
+          container.innerHTML = html;
+        } else {
+          container.innerHTML =
+            '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
+        }
+
+      } catch (err) {
+        console.error("Failed to load event images:", err);
+        document.getElementById("eventImagesContainer").innerHTML =
+          '<p style="text-align:center; color:red; width:100%;">Error loading events.</p>';
+
+      } finally {
+        const searchButton = document.getElementById('searchButton');
+        const searchText = document.getElementById('searchText');
+        const searchSpinner = document.getElementById('searchSpinner');
+        const magnifyButtons =
+          document.querySelectorAll('.event-image-actions button[title="Search Similar"]');
+
+        searchText.textContent = 'Search';
+        searchSpinner.style.display = 'none';
+        searchButton.disabled = false;
+        magnifyButtons.forEach(btn => btn.disabled = false);
+      }
     }
+
 
     let currentSimilarImage = null;
     function searchWithImage(imageUrl) {
-      currentImageSearchText = '';
       const searchButton = document.getElementById('searchButton');
       const searchText = document.getElementById('searchText');
       const searchSpinner = document.getElementById('searchSpinner');
