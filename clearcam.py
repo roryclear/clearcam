@@ -1132,6 +1132,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             name_contains = data.get("name_contains")
             image_text   = data.get("image_text")
             similar_img  = data.get("similar_img")
+            offset = data.get("offset")
+            limit = data.get("limit")
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
               if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
@@ -1193,6 +1195,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                   })
 
             image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+            if offset is not None and limit is not None: image_data = image_data[offset:offset+limit]
 
             response_data = {
               "images": image_data,
