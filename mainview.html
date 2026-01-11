@@ -1371,22 +1371,9 @@
   </div>
 
   <div style="width:100vw; display:flex; justify-content:center; margin-top:12px;">
-    <button id="loadMoreEventsBtn"
-            onclick="loadMoreEventImages()"
-            class="load-more-btn"
-            style="
-              padding: 6px 12px;
-              background: var(--accent-primary);
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-              display: none;
-              align-items: center;
-              gap: 6px;
-            ">
+    <button onclick="loadMoreEventImages()" id="loadMoreEventsBtn" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
       <span id="loadMoreText">More results</span>
-      <div id="loadMoreSpinner" class="spinner" style="width:14px; height:14px; display:none;"></div>
+      <div id="loadMoreSpinner" class="spinner" style="display: none;"></div>
     </button>
   </div>
   </div>
@@ -3101,10 +3088,12 @@
       const spinner = document.getElementById('loadMoreSpinner');
       btn.disabled = true;
       text.textContent = 'Searching';
-      spinner.style.display = 'inline-block';
-      spinner.style.marginLeft = '8px';
-      spinner.style.verticalAlign = 'text-bottom';
-      spinner.style.marginBottom = '1px';
+      spinner.style.display = 'block';
+
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.gap = '4px';
 
       try {
         await loadEventImages(true);
