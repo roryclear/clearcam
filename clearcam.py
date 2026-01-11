@@ -1160,17 +1160,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
             if uploaded_image and use_clip:
-              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, 100, cam_name, selected_dir)
+              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
             if similar_img and use_clip:
-              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir)
+              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = self.process_with_clip_lock(run_search, self.searcher, image_text, 100, cam_name, selected_dir)
+              results = self.process_with_clip_lock(run_search, self.searcher, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
