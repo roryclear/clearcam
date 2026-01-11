@@ -917,6 +917,16 @@
     }
 
     @media (max-width: 768px) {
+      .load-more-btn {
+        margin-bottom: 20px;
+        position: relative;
+        z-index: 10;
+      }
+
+      .events-section {
+        padding-bottom: 20px;
+      }
+
       .multi-view-button, 
       [data-testid="multi-view"],
       #multi-view-toggle,
@@ -1360,11 +1370,23 @@
     <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
   </div>
 
-  <div style="display:flex; justify-content:center; margin-top:12px;"></div>
+  <div style="width:100vw; display:flex; justify-content:center; margin-top:12px;">
     <button id="loadMoreEventsBtn"
             onclick="loadMoreEventImages()"
-            style="display:none; padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-      More results
+            class="load-more-btn"
+            style="
+              padding: 6px 12px;
+              background: var(--accent-primary);
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              display: none;
+              align-items: center;
+              gap: 6px;
+            ">
+      <span id="loadMoreText">More results</span>
+      <div id="loadMoreSpinner" class="spinner" style="width:14px; height:14px; display:none;"></div>
     </button>
   </div>
   </div>
@@ -2978,6 +3000,12 @@
         document.getElementById('loadMoreEventsBtn').style.display =
         hasMoreEvents ? 'inline-block' : 'none';
 
+        if (append && (!data.images || data.images.length === 0)) {
+          hasMoreEvents = false;
+          document.getElementById('loadMoreEventsBtn').style.display = 'none';
+          return;
+        }
+
         if (data.images && data.images.length > 0) {
           if (data.images[0].score !== undefined) {
             data.images.sort((a, b) => b.score - a.score);
@@ -3066,9 +3094,25 @@
       }
     }
 
-    function loadMoreEventImages() {
+    async function loadMoreEventImages() {
       if (!hasMoreEvents) return;
-      loadEventImages(true);
+      const btn = document.getElementById('loadMoreEventsBtn');
+      const text = document.getElementById('loadMoreText');
+      const spinner = document.getElementById('loadMoreSpinner');
+      btn.disabled = true;
+      text.textContent = 'Searching';
+      spinner.style.display = 'inline-block';
+      spinner.style.marginLeft = '8px';
+      spinner.style.verticalAlign = 'text-bottom';
+      spinner.style.marginBottom = '1px';
+
+      try {
+        await loadEventImages(true);
+      } finally {
+        btn.disabled = false;
+        text.textContent = 'More results';
+        spinner.style.display = 'none';
+      }
     }
 
     let currentSimilarImage = null;
