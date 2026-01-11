@@ -786,7 +786,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         finally:
             self.server.clip_lock.release()
 
-    def send_results(self, results):
+    def send_results(self, results, start=0, count=100):
       image_data = []
       for path_str, score in results:
         if score < 0.21: break
@@ -805,6 +805,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           "folder": img_path.parts[-2],
           "score": score,
         })
+      image_data = image_data[start:start+count]
       response_data = {
         "images": image_data,
         "count": len(image_data),
@@ -1134,6 +1135,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             similar_img  = data.get("similar_img")
             start = data.get("start")
             count = data.get("count")
+            if start is None: start, count = 0, 100
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
               if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
@@ -1159,17 +1161,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if uploaded_image and use_clip:
               results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, 100, cam_name, selected_dir)
-              self.send_results(results)
+              self.send_results(results, start, count)
               return
 
             if similar_img and use_clip:
               results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, 100, cam_name, selected_dir)
-              self.send_results(results)
+              self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
               results = self.process_with_clip_lock(run_search, self.searcher, image_text, 100, cam_name, selected_dir)
-              self.send_results(results)
+              self.send_results(results, start, count)
               return
 
             image_data = []
