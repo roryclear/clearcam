@@ -831,6 +831,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/set_max_storage":
           max_gb = float(query.get("max", [None])[0])
           self.server.max_gb = max_gb
+          database.run_put("max_storage", "all", max_gb)
           self.send_200()
           return
         
@@ -1466,7 +1467,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
-        self.max_gb = 256
+        max_gb = database.run_get("max_storage", None)
+        for _ in range(100): print(max_gb)
+        if max_gb == {}:
+          database.run_put("max_storage", "all", 256)
+          max_gb = database.run_get("max_storage", None)
+        self.max_gb = max_gb["all"]
         self.clip = CachedCLIPSearch() if use_clip else None
         self.searcher = CLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
