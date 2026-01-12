@@ -1468,7 +1468,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.cleanup_stop_event = threading.Event()
         self.cleanup_thread = None
         max_gb = database.run_get("max_storage", None)
-        for _ in range(100): print(max_gb)
         if max_gb == {}:
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
