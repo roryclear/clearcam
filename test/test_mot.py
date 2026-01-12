@@ -9,7 +9,7 @@ from pathlib import Path
 @TinyJit
 def do_inf(im, model): return model(im)
 
-def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+def letterbox(im, new_shape=(960, 960), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
     shape = im.shape[:2]
     if isinstance(new_shape, int): new_shape = (new_shape, new_shape)
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
@@ -33,6 +33,12 @@ def letterbox(im, new_shape=(1280, 1280), color=(114, 114, 114), auto=True, scal
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
     return im, ratio, (dw, dh)
+
+def scale_coords(boxes, ratio, dwdh):
+  boxes[:, [0, 2]] -= dwdh[0]
+  boxes[:, [1, 3]] -= dwdh[1]
+  boxes[:, :4] /= ratio[0]
+  return boxes
 
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
@@ -59,7 +65,7 @@ if __name__ == "__main__":
     while True:
       ret, im0 = cap.read()
       if not ret: break
-      im = letterbox(im0, new_shape=(960, 960), stride=32, auto=True)[0]
+      im, ratio, (dw, dh) = letterbox(im0, new_shape=(960, 960), stride=32, auto=True)
       im = im.transpose((2, 0, 1))[::-1]
       im = np.ascontiguousarray(im)
       im = Tensor(im).cast(dtypes.float32)
@@ -67,19 +73,20 @@ if __name__ == "__main__":
       if len(im.shape) == 3:
           im = im[None]
       pred = do_inf(im, model).numpy()[0]
-
+      pred[:, :4] = scale_coords(pred[:, :4], ratio, (dw, dh))
       # no tracker, todo clean
       #pred = pred[pred[:, 4] >= 0.25]
       #pred = rescale_bounding_boxes(pred, from_size=(im.shape[2:][::-1]), to_size=im0.shape[:2][::-1])
       #_, buffer = cv2.imencode(".jpg", im0)
       #out.write(draw_bounding_boxes(buffer, pred, class_labels))
       
-      online_targets = t.update(pred, [960,960], [960,960], 0.25)
+      h0, w0 = im0.shape[:2]
+      online_targets = t.update(pred, [w0, h0], [w0, h0], 0.25)
       preds = []
       for x in online_targets:
         if x.tracklet_len < 1 or x.speed < 2.5: continue
         if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
-        preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.track_id,x.class_id,x.score]))
+        preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
       #tlx tly w h, track_id, age, class_id, score
       print("ppl =",len(ppl))
       _, buffer = cv2.imencode(".jpg", im0)
