@@ -917,6 +917,16 @@
     }
 
     @media (max-width: 768px) {
+      .load-more-btn {
+        margin-bottom: 20px;
+        position: relative;
+        z-index: 10;
+      }
+
+      .events-section {
+        padding-bottom: 20px;
+      }
+
       .multi-view-button, 
       [data-testid="multi-view"],
       #multi-view-toggle,
@@ -1359,6 +1369,13 @@
   <div id="eventImagesContainer">
     <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
   </div>
+
+  <div style="width:100vw; display:flex; justify-content:center; margin-top:12px;">
+    <button onclick="loadMoreEventImages()" id="loadMoreEventsBtn" style="padding: 6px 12px; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+      <span id="loadMoreText">More results</span>
+      <div id="loadMoreSpinner" class="spinner" style="display: none;"></div>
+    </button>
+  </div>
   </div>
   
   <div id="multiView"></div>
@@ -1585,6 +1602,10 @@
       66: 'keyboard',
       67: 'cell phone',
     };
+
+    let eventStart = 0;
+    const EVENT_PAGE_SIZE = 50;
+    let hasMoreEvents = true;
 
     function openAlertsModal(cameraName) {
       currentAlertsCamera = cameraName;
@@ -1963,7 +1984,6 @@
           currentStreamDate = selectedDate;
           console.log('Date changed to:', currentStreamDate);
           restartAllStreams();
-          loadEventImages();
         }
       });
       
@@ -1971,7 +1991,7 @@
       eventDateFilter.addEventListener('change', function() {
         currentEventDateFilter = this.value;
         console.log('Event date filter changed to:', currentEventDateFilter);
-        loadEventImages();
+        loadEventImages(false);
       });
       
       loadEventImages();
@@ -2054,11 +2074,11 @@
       const cameraFilter = document.getElementById('cameraFilter');
       cameraFilter.addEventListener('change', function() {
         currentEventCameraFilter = this.value;
-        loadEventImages();
+        loadEventImages(false);
       });
       alertsOnlyCheckbox.addEventListener('change', function() {
         alertsOnlyFilter = this.checked;
-        loadEventImages();
+        loadEventImages(false);
       });
     });
 
@@ -2856,7 +2876,7 @@
       searchButton.disabled = true;
       magnifyButtons.forEach(btn => btn.disabled = true);
       
-      loadEventImages().finally(() => {
+      loadEventImages(false).finally(() => {
         searchText.textContent = 'Search';
         searchSpinner.style.display = 'none';
         searchButton.disabled = false;
@@ -2882,7 +2902,7 @@
       currentSimilarImage = null;
       uploadedImageData = null;
       
-      loadEventImages();
+      loadEventImages(false);
     }
 
     document.getElementById('imageUpload').addEventListener('change', function(event) {
@@ -2902,7 +2922,7 @@
         searchSpinner.style.display = 'block';
         document.getElementById('searchButton').disabled = true;
         
-        loadEventImages().finally(() => {
+        loadEventImages(false).finally(() => {
           searchText.textContent = 'Search';
           searchSpinner.style.display = 'none';
           document.getElementById('searchButton').disabled = false;
@@ -2926,7 +2946,11 @@
 
     
     let previousEventImages = null;
-    async function loadEventImages() {
+    async function loadEventImages(append = false) {
+      if (!append) {
+        eventStart = 0;
+        hasMoreEvents = true;
+      }
       try {
         const payload = {
           folder: currentEventDateFilter || null,
@@ -2936,6 +2960,8 @@
           similar_img: null,
           uploaded_image: null
         };
+        payload.start = eventStart;
+        payload.count = EVENT_PAGE_SIZE;
 
         if (uploadedImageData) {
           payload.uploaded_image = uploadedImageData;
@@ -2955,6 +2981,17 @@
         });
 
         const data = await res.json();
+
+        eventStart += data.images.length;
+        hasMoreEvents = data.images.length === EVENT_PAGE_SIZE;
+        document.getElementById('loadMoreEventsBtn').style.display =
+        hasMoreEvents ? 'inline-block' : 'none';
+
+        if (append && (!data.images || data.images.length === 0)) {
+          hasMoreEvents = false;
+          document.getElementById('loadMoreEventsBtn').style.display = 'none';
+          return;
+        }
 
         if (data.images && data.images.length > 0) {
           if (data.images[0].score !== undefined) {
@@ -3015,7 +3052,11 @@
               </div>
             `;
           });
-          container.innerHTML = html;
+          if (append) {
+            container.insertAdjacentHTML('beforeend', html);
+          } else {
+            container.innerHTML = html;
+          }
         } else {
           container.innerHTML =
             '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
@@ -3040,6 +3081,28 @@
       }
     }
 
+    async function loadMoreEventImages() {
+      if (!hasMoreEvents) return;
+      const btn = document.getElementById('loadMoreEventsBtn');
+      const text = document.getElementById('loadMoreText');
+      const spinner = document.getElementById('loadMoreSpinner');
+      btn.disabled = true;
+      text.textContent = 'Searching';
+      spinner.style.display = 'block';
+
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.gap = '4px';
+
+      try {
+        await loadEventImages(true);
+      } finally {
+        btn.disabled = false;
+        text.textContent = 'More results';
+        spinner.style.display = 'none';
+      }
+    }
 
     let currentSimilarImage = null;
     function searchWithImage(imageUrl) {
@@ -3062,7 +3125,7 @@
       currentSimilarImage = match[1];
       document.getElementById('imageSearchInput').value = '';
       
-      loadEventImages().finally(() => {
+      loadEventImages(false).finally(() => {
         searchText.textContent = 'Search';
         searchSpinner.style.display = 'none';
         searchButton.disabled = false;
