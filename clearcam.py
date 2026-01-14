@@ -214,6 +214,7 @@ class VideoCapture:
 
     self.src = src
     self.is_file = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+    self.max_frame_rate = 10 # for vod only
     self.width = 1920
     self.height = 1080
     self.proc = None
@@ -368,11 +369,15 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
-    if self.is_file: self.cap = cv2.VideoCapture(self.src)
+    if self.is_file:
+      self.cap = cv2.VideoCapture(self.src)
+      self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
+      self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     while self.running:
       try:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.is_file:
+          for _ in range(self.frame_step - 1): self.cap.grab()  # skip for max fps
           ret, frame = self.cap.read()
           self.last_frame = frame #todo
           if not ret:
