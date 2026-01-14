@@ -512,38 +512,7 @@ class VideoCapture:
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
       if frame is not None:
-        frame = Tensor(frame)
-        pre = preprocess(frame)
-        preds = do_inf(pre, yolo_infer)[0].numpy()
-        thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
-        online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
-        preds = []
-        for x in online_targets:
-          if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
-          outside = False
-          if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
-            outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
-            outside = outside ^ self.settings["outside"]
-          non_zone_alert = False
-          if outside: # check if any alerts don't use zone
-            for _, alert in self.alert_counters.items():
-              if not alert.zone:
-                non_zone_alert = True
-                break
-            if not non_zone_alert and outside: continue
-          preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
-          if (classes is None or str(int(x.class_id)) in classes):
-            new = int(x.track_id) not in self.object_set
-            new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
-            if new:
-              self.object_set.add(int(x.track_id))
-              self.counter.add(int(x.class_id))
-            if new_in_zone: self.object_set_zone.add(int(x.track_id))
-            for _, alert in self.alert_counters.items():
-              if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
-                
-        preds = np.array(preds)
-        preds = scale_boxes(pre.shape[:2], preds, frame.shape)
+        preds, frame = self.run_inference(frame)
         with self.lock:
           self.last_preds = preds
           self.last_frame = frame.numpy().copy()
@@ -551,6 +520,40 @@ class VideoCapture:
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
         print(f"\rFPS: {fps:.2f}", end="", flush=True)
+
+  def run_inference(self, frame):
+    frame = Tensor(frame)
+    pre = preprocess(frame)
+    preds = do_inf(pre, yolo_infer)[0].numpy()
+    thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
+    online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
+    preds = []
+    for x in online_targets:
+      if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
+      outside = False
+      if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
+        outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
+        outside = outside ^ self.settings["outside"]
+      non_zone_alert = False
+      if outside: # check if any alerts don't use zone
+        for _, alert in self.alert_counters.items():
+          if not alert.zone:
+            non_zone_alert = True
+            break
+        if not non_zone_alert and outside: continue
+      preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
+      if (classes is None or str(int(x.class_id)) in classes):
+        new = int(x.track_id) not in self.object_set
+        new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
+        if new:
+          self.object_set.add(int(x.track_id))
+          self.counter.add(int(x.class_id))
+        if new_in_zone: self.object_set_zone.add(int(x.track_id))
+        for _, alert in self.alert_counters.items():
+          if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
+            
+    preds = np.array(preds)
+    return scale_boxes(pre.shape[:2], preds, frame.shape), frame
 
   def get_frame(self):
       with self.lock:
