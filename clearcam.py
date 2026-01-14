@@ -213,7 +213,8 @@ class VideoCapture:
     self.object_set_zone = set()
 
     self.src = src
-    self.width = 1920 # todo 1080?
+    self.is_file = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+    self.width = 1920
     self.height = 1080
     self.proc = None
     self.hls_proc = None
@@ -239,7 +240,7 @@ class VideoCapture:
 
     # Start threads
     threading.Thread(target=self.capture_loop, daemon=True).start()
-    threading.Thread(target=self.inference_loop, daemon=True).start()
+    if not self.is_file: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -269,9 +270,7 @@ class VideoCapture:
     ffmpeg_path = find_ffmpeg()
     
     is_rtsp = self.src.startswith("rtsp")
-    is_file = self.src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
-    
-    if is_file:
+    if self.is_file:
       command = [
           ffmpeg_path,
           "-i", self.src,  # No -re for files
@@ -369,17 +368,19 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
-    if self.proc is None: self.cap = cv2.VideoCapture(self.src)
+    if self.is_file: self.cap = cv2.VideoCapture(self.src)
     while self.running:
       try:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        if self.proc is None:
+        if self.is_file:
           ret, frame = self.cap.read()
+          self.last_frame = frame #todo
           if not ret:
           # No more frames
             print(f"FINISHED {self.src}")
             self.running = False
             break
+          self.last_preds, _ = self.run_inference(frame)
           print(f"Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
@@ -485,11 +486,11 @@ class VideoCapture:
         with self.lock:
             self.raw_frame = frame.copy()
             if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
-        time.sleep(1 / 30)
+        if not self.is_file: time.sleep(1 / 30)
       except Exception as e:
-            print("Error in capture_loop:", e)
-            self._open_ffmpeg()
-            time.sleep(1)
+        print("Error in capture_loop:", e)
+        self._open_ffmpeg()
+        time.sleep(1)
   
   def inference_loop(self):
     prev_time = time.time()
