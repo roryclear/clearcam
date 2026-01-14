@@ -268,46 +268,69 @@ class VideoCapture:
 
     ffmpeg_path = find_ffmpeg()
     
-    command = [
-        ffmpeg_path,
-        "-re",
-        *(["-rtsp_transport", "tcp"] if self.src.startswith("rtsp") else []),
-        "-i", self.src,
-        "-c", "copy",
-        "-f", "hls",
-        "-hls_list_size", "0",
-        "-hls_flags", "append_list+temp_file",
-        "-hls_playlist_type", "event",
-        "-an",  # No audio
-        "-hls_segment_filename", str(path/ "stream_%06d.ts"),
-        str(path / "stream.m3u8")
-    ]
-    self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    is_rtsp = self.src.startswith("rtsp")
+    is_file = self.src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+    
+    if is_file:
+      command = [
+          ffmpeg_path,
+          "-i", self.src,  # No -re for files
+          "-c", "copy",  # Stream copy for efficiency
+          "-f", "hls",
+          "-hls_time", "2",  # Segment duration
+          "-hls_list_size", "0",
+          "-hls_flags", "append_list+temp_file",
+          "-hls_playlist_type", "event",
+          "-an",  # No audio
+          "-hls_segment_filename", str(path / "stream_%06d.ts"),
+          str(path / "stream.m3u8")
+      ]
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.proc = None
+        
+    else:  # Live streams
+      # Original live stream pipeline
+      command = [
+          ffmpeg_path,
+          "-re",
+          *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+          "-i", self.src,
+          "-c", "copy",
+          "-f", "hls",
+          "-hls_list_size", "0",
+          "-hls_flags", "append_list+temp_file",
+          "-hls_playlist_type", "event",
+          "-an",
+          "-hls_segment_filename", str(path / "stream_%06d.ts"),
+          str(path / "stream.m3u8")
+      ]
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    time.sleep(15)
-    command = [
-        ffmpeg_path,
-        "-live_start_index", "-1",
-        "-i", str(path / "stream.m3u8"),
-        "-loglevel", "quiet",
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "2",
-        "-an",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-vf", f"scale={self.width}:{self.height}",
-        "-timeout", "5000000",
-        "-rw_timeout", "15000000",
-        "-vsync", "2",
-        "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
-        "-avioflags", "direct",
-        "-flags", "low_delay",
-        "-max_delay", "100000",
-        "-threads", "1",
-        "-"
-    ]
-    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      time.sleep(15)
+      
+      command = [
+          ffmpeg_path,
+          "-live_start_index", "-1",
+          "-i", str(path / "stream.m3u8"),
+          "-loglevel", "quiet",
+          "-reconnect", "1",
+          "-reconnect_streamed", "1",
+          "-reconnect_delay_max", "2",
+          "-an",
+          "-f", "rawvideo",
+          "-pix_fmt", "bgr24",
+          "-vf", f"scale={self.width}:{self.height}",
+          "-timeout", "5000000",
+          "-rw_timeout", "15000000",
+          "-vsync", "2",
+          "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
+          "-avioflags", "direct",
+          "-flags", "low_delay",
+          "-max_delay", "100000",
+          "-threads", "1",
+          "-"
+      ]
+      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p):
     timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -346,21 +369,31 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
+    if self.proc is None: self.cap = cv2.VideoCapture(self.src)
     while self.running:
       try:
         if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        raw_bytes = self.proc.stdout.read(frame_size)
-        if len(raw_bytes) != frame_size:
-          fail_count += 1
-          if fail_count > 5:
-            print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-            self._open_ffmpeg()
-            fail_count = 0
-          time.sleep(0.5)
-          continue
+        if self.proc is None:
+          ret, frame = self.cap.read()
+          if not ret:
+          # No more frames
+            print(f"FINISHED {self.src}")
+            self.running = False
+            break
+          print(f"Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
         else:
-          fail_count = 0
-        frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          raw_bytes = self.proc.stdout.read(frame_size)
+          if len(raw_bytes) != frame_size:
+            fail_count += 1
+            if fail_count > 5:
+              print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
+              self._open_ffmpeg()
+              fail_count = 0
+            time.sleep(0.5)
+            continue
+          else:
+            fail_count = 0
+          frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
         filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
         for p in filtered_preds:
           if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
