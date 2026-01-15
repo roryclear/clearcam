@@ -200,6 +200,10 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     return img
 
 
+def is_vod(database, cam_name):
+  url = database.run_get("links", None)[cam_name]
+  return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
+
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
     self.vod = vod
@@ -242,7 +246,7 @@ class VideoCapture:
     if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
-      timestamp = datetime.now().strftime("%Y-%m-%d")
+      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw / timestamp
       stream_dir = self.output_dir_det / timestamp
       stream_dir.mkdir(parents=True, exist_ok=True)
@@ -330,7 +334,7 @@ class VideoCapture:
       self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p):
-    timestamp = datetime.now().strftime("%Y-%m-%d")
+    timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
     ts = int(time.time() - self.streamer.start_time - 10)
@@ -366,6 +370,7 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
+    preview = None
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -421,7 +426,7 @@ class VideoCapture:
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
                       if alert.is_notif: send_det = True
-                      timestamp = datetime.now().strftime("%Y-%m-%d")
+                      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                       filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                       filepath.mkdir(parents=True, exist_ok=True)
                       self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
@@ -589,7 +594,7 @@ def draw_predictions(frame, preds, class_labels, color_dict):
   return frame
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
+    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy", vod=False):
         self.cam_name = cam_name
         self.cam = video_capture
         self.output_dir_det = BASE_DIR / "cameras" / (f"{self.cam_name}_det") / output_dir
@@ -603,9 +608,10 @@ class HLSStreamer:
         self._stop_event = threading.Event()
         self.output_dir_det.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
+        self.vod = vod
     
     def _get_new_stream_dir(self):
-        timestamp = datetime.now().strftime("%Y-%m-%d")
+        timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
         stream_dir_det = self.output_dir_det / timestamp
         stream_dir_raw = self.output_dir_raw / timestamp
         stream_dir_det.mkdir(exist_ok=True)
@@ -1135,6 +1141,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         requested_path = parsed_path.path.lstrip('/')
         if requested_path.startswith("cameras/"):
             requested_path = requested_path[len("cameras/"):]
+
+        cam_name = requested_path[:requested_path.index("/")]
+        vod = is_vod(database, cam_name)
+        # todo hack
+        if vod and "preview.png" not in requested_path: requested_path = requested_path.rsplit("/", 2)[0] + "/video/" + requested_path.rsplit("/", 1)[1]
+
         file_path = BASE_DIR / "cameras" / requested_path
 
         if not file_path.exists():
@@ -1184,7 +1196,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               camera_dirs = [BASE_DIR / "cameras" / cam_name]
             else:
               camera_dirs = [d for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
-            
+
             if selected_dir:
               selected_dirs = [selected_dir]
             else:
@@ -1194,7 +1206,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if (camera_dir / "streams").is_dir()
                 for subdir in (camera_dir / "streams").iterdir() 
                 if subdir.is_dir()
-              })          
+              })
+            selected_dirs.append("video")
 
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
@@ -1661,7 +1674,8 @@ if __name__ == "__main__":
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
     load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
-    hls_streamer = HLSStreamer(cam,cam_name=cam_name)
+    vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+    hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
     cam.streamer = hls_streamer
   
   try:
