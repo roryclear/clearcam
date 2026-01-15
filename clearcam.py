@@ -201,7 +201,8 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 
 class VideoCapture:
-  def __init__(self, src,cam_name="clearcamPy"):
+  def __init__(self, src,cam_name="clearcamPy", vod=False):
+    self.vod = vod
     self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     self.current_stream_dir = self._get_new_stream_dir()
@@ -212,7 +213,6 @@ class VideoCapture:
     self.object_set_zone = set()
 
     self.src = src
-    self.is_file = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     self.max_frame_rate = 10 # for vod only
     self.width = 1920
     self.height = 1080
@@ -239,7 +239,7 @@ class VideoCapture:
 
     # Start threads
     threading.Thread(target=self.capture_loop, daemon=True).start()
-    if not self.is_file: threading.Thread(target=self.inference_loop, daemon=True).start()
+    if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -268,7 +268,7 @@ class VideoCapture:
     ffmpeg_path = find_ffmpeg()
     
     is_rtsp = self.src.startswith("rtsp")
-    if self.is_file:
+    if self.vod:
       command = [
           ffmpeg_path,
           "-i", self.src,  # No -re for files
@@ -366,14 +366,14 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
-    if self.is_file:
+    if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     while self.running:
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        if self.is_file:
+        if self.vod:
           for _ in range(self.frame_step - 1): self.cap.grab()  # skip for max fps
           ret, frame = self.cap.read()
           self.last_frame = frame #todo
@@ -488,7 +488,7 @@ class VideoCapture:
         with self.lock:
             self.raw_frame = frame.copy()
             if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
-        if not self.is_file: time.sleep(1 / 30)
+        if not self.vod: time.sleep(1 / 30)
       except Exception as e:
         print("Error in capture_loop:", e)
         self._open_ffmpeg()
@@ -1612,7 +1612,8 @@ if __name__ == "__main__":
   database = db()
   cams = database.run_get("links", None)
          
-  rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
+  url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
+  is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
@@ -1625,7 +1626,7 @@ if __name__ == "__main__":
     use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
-  if rtsp_url is None and userID is None:
+  if url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
@@ -1648,18 +1649,18 @@ if __name__ == "__main__":
   tracker = ocsort.OCSort(max_age=100)
   live_link = dict()
   
-  if rtsp_url is None:
+  if url is None:
     for cam_name in cams.keys():
       start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
-  if rtsp_url:
+  if url:
     yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
     load_state_dict(yolo_infer, state_dict)
-    cam = VideoCapture(rtsp_url,cam_name=cam_name)
+    cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     hls_streamer = HLSStreamer(cam,cam_name=cam_name)
     cam.streamer = hls_streamer
   
@@ -1674,7 +1675,7 @@ if __name__ == "__main__":
       else:
           raise
     
-    if rtsp_url:
+    if url:
       hls_streamer.start()
       restart_time = (0, 0)
       threading.Thread(
@@ -1689,7 +1690,7 @@ if __name__ == "__main__":
       while True: time.sleep(3600)
 
   except KeyboardInterrupt:
-    if rtsp_url:
+    if url:
       hls_streamer.stop()
       cam.release()
       server.shutdown()
