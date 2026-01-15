@@ -90,9 +90,8 @@ from datetime import datetime
 import os
 import threading
 
-BASE = Path(__file__).parent / "data"
-CAMERA_BASE_DIR = BASE / "cameras"
-CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
+BASE_DIR = Path(__file__).parent / "data"
+(BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
@@ -203,8 +202,8 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy"):
-    self.output_dir_det = CAMERA_BASE_DIR / f'{cam_name}_det' / "streams"
-    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
+    self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
+    self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
@@ -334,7 +333,7 @@ class VideoCapture:
 
   def save_object(self, p):
     timestamp = datetime.now().strftime("%Y-%m-%d")
-    filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
+    filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
     ts = int(time.time() - self.streamer.start_time - 10)
     object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
@@ -375,7 +374,7 @@ class VideoCapture:
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     while self.running:
       try:
-        if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
+        if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.is_file:
           for _ in range(self.frame_step - 1): self.cap.grab()  # skip for max fps
           ret, frame = self.cap.read()
@@ -413,7 +412,7 @@ class VideoCapture:
         if count > 10:
           if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
             last_preview_time = time.time()
-            filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+            filename = BASE_DIR / "cameras" / f"{self.cam_name}/preview.png"
             write_png(filename, self.raw_frame)
           for _,alert in self.alert_counters.items():
               if not alert.is_active():
@@ -425,7 +424,7 @@ class VideoCapture:
                   if time.time() - alert.last_det >= window:
                       if alert.is_notif: send_det = True
                       timestamp = datetime.now().strftime("%Y-%m-%d")
-                      filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
+                      filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                       filepath.mkdir(parents=True, exist_ok=True)
                       self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
                       # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
@@ -440,9 +439,9 @@ class VideoCapture:
                       last_det = time.time()
                       alert.last_det = time.time()
           if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
-              os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
-              mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-              temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+              os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
+              mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+              temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
               self.streamer.export_clip(Path(mp4_filename))
 
               # img preview?
@@ -595,8 +594,8 @@ class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir_det = CAMERA_BASE_DIR / (f"{self.cam_name}_det") / output_dir
-        self.output_dir_raw = CAMERA_BASE_DIR / self.cam_name / output_dir
+        self.output_dir_det = BASE_DIR / "cameras" / (f"{self.cam_name}_det") / output_dir
+        self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -809,7 +808,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.clip = kwargs.pop('clip_instance', None)
         self.searcher = kwargs.pop('searcher_instance', None)
-        self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         super().__init__(*args, **kwargs)
 
@@ -832,12 +830,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
       image_data = []
       for path_str, score in results:
         if score < 0.21: break
-        img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
+        img_path = Path(path_str).resolve()
         ts = int(img_path.stem.split('_')[0])
         parts = img_path.parts
         cam_index = parts.index("cameras") + 1
         cam = parts[cam_index]
-        rel = img_path.relative_to(self.base_dir)
+        rel = img_path.relative_to(BASE_DIR / "cameras")
         image_url = f"/{rel}"
         image_data.append({
           "url": image_url,
@@ -862,8 +860,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def get_camera_path(self, cam_name=None):
         if cam_name:
-            return self.base_dir / cam_name / "streams"
-        return self.base_dir
+            return BASE_DIR / "cameras" / cam_name / "streams"
+        return BASE_DIR / "cameras"
     
     def do_GET(self):
         parsed_path = urlparse(unquote(self.path))
@@ -1035,8 +1033,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             try:
-              shutil.rmtree(CAMERA_BASE_DIR / (cam_name + "_det"), ignore_errors=True)
-              shutil.rmtree(CAMERA_BASE_DIR / cam_name, ignore_errors=True)
+              shutil.rmtree(BASE_DIR / "cameras" / (cam_name + "_det"), ignore_errors=True)
+              shutil.rmtree(BASE_DIR / "cameras" / cam_name, ignore_errors=True)
               # todo clean
               alerts = database.run_get("alerts", cam_name)
               for id, _ in alerts.items():
@@ -1100,7 +1098,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
 
         if parsed_path.path == '/' and "cam" not in query:
-          available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+          available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
           with open("mainview.html", "r", encoding="utf-8") as f: html = f.read()
           self.send_response(200)
           self.send_header('Content-type', 'text/html')
@@ -1119,7 +1117,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 start_time = None
 
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -1139,7 +1137,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         requested_path = parsed_path.path.lstrip('/')
         if requested_path.startswith("cameras/"):
             requested_path = requested_path[len("cameras/"):]
-        file_path = self.base_dir / requested_path
+        file_path = BASE_DIR / "cameras" / requested_path
 
         if not file_path.exists():
             self.send_error(404)
@@ -1185,9 +1183,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               uploaded_image = base64.b64decode(uploaded_image)
 
             if cam_name:
-              camera_dirs = [self.base_dir / cam_name]
+              camera_dirs = [BASE_DIR / "cameras" / cam_name]
             else:
-              camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
+              camera_dirs = [d for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
             
             if selected_dir:
               selected_dirs = [selected_dir]
@@ -1230,7 +1228,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 for img in event_images:
                   if name_contains and name_contains not in img.name: continue
                   ts = int(img.stem.split('_')[0])
-                  image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                  image_url = f"/{img.relative_to(BASE_DIR)}"
                   image_data.append({
                     "url": image_url,
                     "timestamp": ts,
@@ -1562,14 +1560,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
-      total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
+      total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
       size_gb = total_size / (1000 ** 3)
-      free_gb = shutil.disk_usage(CAMERA_BASE_DIR).free / (1000 ** 3)
+      free_gb = shutil.disk_usage(BASE_DIR / "cameras").free / (1000 ** 3)
       if size_gb > self.max_gb or free_gb < 5: self._cleanup_oldest_files() # todo unhardcode
 
     def _cleanup_oldest_files(self):
       camera_dirs = []
-      for cam_dir in CAMERA_BASE_DIR.iterdir():
+      for cam_dir in (BASE_DIR / "cameras").iterdir():
         if cam_dir.is_dir():
           dir_size = sum(f.stat().st_size for f in cam_dir.glob('**/*') if f.is_file())
           camera_dirs.append((cam_dir, dir_size))
