@@ -224,7 +224,6 @@ class VideoCapture:
     self.annotated_frame = None
     self.last_preds = []
     self.last_frame = None
-    self.dir = None
 
     self.settings = None
     
@@ -246,7 +245,6 @@ class VideoCapture:
       timestamp = datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw / timestamp
       stream_dir = self.output_dir_det / timestamp
-      self.dir = stream_dir_raw
       stream_dir.mkdir(parents=True, exist_ok=True)
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
