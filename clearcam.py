@@ -209,7 +209,6 @@ class VideoCapture:
     self.vod = vod
     self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
-    self.current_stream_dir = self._get_new_stream_dir()
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.cam_name = cam_name
@@ -239,10 +238,10 @@ class VideoCapture:
       database.run_put("alerts", self.cam_name, alert_counter, id=id)
 
     self.lock = threading.Lock()
-    self._open_ffmpeg()
 
-    # Start threads
-    threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod or not self.output_dir_raw.exists():
+      self._open_ffmpeg()
+      threading.Thread(target=self.capture_loop, daemon=True).start()
     if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
