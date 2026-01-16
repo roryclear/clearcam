@@ -90,9 +90,8 @@ from datetime import datetime
 import os
 import threading
 
-BASE = Path(__file__).parent / "data"
-CAMERA_BASE_DIR = BASE / "cameras"
-CAMERA_BASE_DIR.mkdir(parents=True, exist_ok=True)
+BASE_DIR = Path(__file__).parent / "data"
+(BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
@@ -201,11 +200,15 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     return img
 
 
+def is_vod(database, cam_name):
+  url = database.run_get("links", None)[cam_name]
+  return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
+
 class VideoCapture:
-  def __init__(self, src,cam_name="clearcamPy"):
-    self.output_dir_det = CAMERA_BASE_DIR / f'{cam_name}_det' / "streams"
-    self.output_dir_raw = CAMERA_BASE_DIR / f'{cam_name}' / "streams"
-    self.current_stream_dir = self._get_new_stream_dir()
+  def __init__(self, src,cam_name="clearcamPy", vod=False):
+    self.vod = vod
+    self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
+    self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.cam_name = cam_name
@@ -213,7 +216,8 @@ class VideoCapture:
     self.object_set_zone = set()
 
     self.src = src
-    self.width = 1920 # todo 1080?
+    self.max_frame_rate = 10 # for vod only
+    self.width = 1920
     self.height = 1080
     self.proc = None
     self.hls_proc = None
@@ -223,7 +227,6 @@ class VideoCapture:
     self.annotated_frame = None
     self.last_preds = []
     self.last_frame = None
-    self.dir = None
 
     self.settings = None
     
@@ -235,17 +238,16 @@ class VideoCapture:
       database.run_put("alerts", self.cam_name, alert_counter, id=id)
 
     self.lock = threading.Lock()
-    self._open_ffmpeg()
 
-    # Start threads
-    threading.Thread(target=self.capture_loop, daemon=True).start()
-    threading.Thread(target=self.inference_loop, daemon=True).start()
+    if not self.vod or not self.output_dir_raw.exists():
+      self._open_ffmpeg()
+      threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
-      timestamp = datetime.now().strftime("%Y-%m-%d")
+      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw / timestamp
       stream_dir = self.output_dir_det / timestamp
-      self.dir = stream_dir_raw
       stream_dir.mkdir(parents=True, exist_ok=True)
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
@@ -268,50 +270,71 @@ class VideoCapture:
 
     ffmpeg_path = find_ffmpeg()
     
-    command = [
-        ffmpeg_path,
-        "-re",
-        *(["-rtsp_transport", "tcp"] if self.src.startswith("rtsp") else []),
-        "-i", self.src,
-        "-c", "copy",
-        "-f", "hls",
-        "-hls_list_size", "0",
-        "-hls_flags", "append_list+temp_file",
-        "-hls_playlist_type", "event",
-        "-an",  # No audio
-        "-hls_segment_filename", str(path/ "stream_%06d.ts"),
-        str(path / "stream.m3u8")
-    ]
-    self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    is_rtsp = self.src.startswith("rtsp")
+    if self.vod:
+      command = [
+          ffmpeg_path,
+          "-i", self.src,  # No -re for files
+          "-c", "copy",  # Stream copy for efficiency
+          "-f", "hls",
+          "-hls_time", "2",  # Segment duration
+          "-hls_list_size", "0",
+          "-hls_flags", "append_list+temp_file",
+          "-hls_playlist_type", "event",
+          "-an",  # No audio
+          "-hls_segment_filename", str(path / "stream_%06d.ts"),
+          str(path / "stream.m3u8")
+      ]
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.proc = None
+        
+    else:  # Live streams
+      # Original live stream pipeline
+      command = [
+          ffmpeg_path,
+          "-re",
+          *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+          "-i", self.src,
+          "-c", "copy",
+          "-f", "hls",
+          "-hls_list_size", "0",
+          "-hls_flags", "append_list+temp_file",
+          "-hls_playlist_type", "event",
+          "-an",
+          "-hls_segment_filename", str(path / "stream_%06d.ts"),
+          str(path / "stream.m3u8")
+      ]
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    time.sleep(15)
-    command = [
-        ffmpeg_path,
-        "-live_start_index", "-1",
-        "-i", str(path / "stream.m3u8"),
-        "-loglevel", "quiet",
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "2",
-        "-an",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-vf", f"scale={self.width}:{self.height}",
-        "-timeout", "5000000",
-        "-rw_timeout", "15000000",
-        "-vsync", "2",
-        "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
-        "-avioflags", "direct",
-        "-flags", "low_delay",
-        "-max_delay", "100000",
-        "-threads", "1",
-        "-"
-    ]
-    self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      time.sleep(15)
+      
+      command = [
+          ffmpeg_path,
+          "-live_start_index", "-1",
+          "-i", str(path / "stream.m3u8"),
+          "-loglevel", "quiet",
+          "-reconnect", "1",
+          "-reconnect_streamed", "1",
+          "-reconnect_delay_max", "2",
+          "-an",
+          "-f", "rawvideo",
+          "-pix_fmt", "bgr24",
+          "-vf", f"scale={self.width}:{self.height}",
+          "-timeout", "5000000",
+          "-rw_timeout", "15000000",
+          "-vsync", "2",
+          "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
+          "-avioflags", "direct",
+          "-flags", "low_delay",
+          "-max_delay", "100000",
+          "-threads", "1",
+          "-"
+      ]
+      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p):
-    timestamp = datetime.now().strftime("%Y-%m-%d")
-    filepath = CAMERA_BASE_DIR / f"{self.cam_name}/objects/{timestamp}"
+    timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
+    filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
     ts = int(time.time() - self.streamer.start_time - 10)
     object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
@@ -346,21 +369,38 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
+    preview = None
+    if self.vod:
+      self.cap = cv2.VideoCapture(self.src)
+      self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
+      self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     while self.running:
       try:
-        if not (CAMERA_BASE_DIR / self.cam_name).is_dir(): os._exit(1) # deleted cam
-        raw_bytes = self.proc.stdout.read(frame_size)
-        if len(raw_bytes) != frame_size:
-          fail_count += 1
-          if fail_count > 5:
-            print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-            self._open_ffmpeg()
-            fail_count = 0
-          time.sleep(0.5)
-          continue
+        if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
+        if self.vod:
+          for _ in range(self.frame_step - 1): self.cap.grab()  # skip for max fps
+          ret, frame = self.cap.read()
+          self.last_frame = frame #todo
+          if not ret:
+          # No more frames
+            print(f"FINISHED {self.src}")
+            self.running = False
+            break
+          self.last_preds, _ = self.run_inference(frame)
+          print(f"Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
         else:
-          fail_count = 0
-        frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          raw_bytes = self.proc.stdout.read(frame_size)
+          if len(raw_bytes) != frame_size:
+            fail_count += 1
+            if fail_count > 5:
+              print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
+              self._open_ffmpeg()
+              fail_count = 0
+            time.sleep(0.5)
+            continue
+          else:
+            fail_count = 0
+          frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
         filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
         for p in filtered_preds:
           if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
@@ -374,7 +414,7 @@ class VideoCapture:
         if count > 10:
           if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
             last_preview_time = time.time()
-            filename = CAMERA_BASE_DIR / f"{self.cam_name}/preview.png"
+            filename = BASE_DIR / "cameras" / f"{self.cam_name}/preview.png"
             write_png(filename, self.raw_frame)
           for _,alert in self.alert_counters.items():
               if not alert.is_active():
@@ -385,8 +425,8 @@ class VideoCapture:
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
                       if alert.is_notif: send_det = True
-                      timestamp = datetime.now().strftime("%Y-%m-%d")
-                      filepath = CAMERA_BASE_DIR / f"{self.cam_name}/event_images/{timestamp}"
+                      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
+                      filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                       filepath.mkdir(parents=True, exist_ok=True)
                       self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
                       # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
@@ -401,9 +441,9 @@ class VideoCapture:
                       last_det = time.time()
                       alert.last_det = time.time()
           if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
-              os.makedirs(CAMERA_BASE_DIR / self.cam_name / "event_clips", exist_ok=True)
-              mp4_filename = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-              temp_output = CAMERA_BASE_DIR / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+              os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
+              mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+              temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
               self.streamer.export_clip(Path(mp4_filename))
 
               # img preview?
@@ -452,11 +492,11 @@ class VideoCapture:
         with self.lock:
             self.raw_frame = frame.copy()
             if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
-        time.sleep(1 / 30)
+        if not self.vod: time.sleep(1 / 30)
       except Exception as e:
-            print("Error in capture_loop:", e)
-            self._open_ffmpeg()
-            time.sleep(1)
+        print("Error in capture_loop:", e)
+        self._open_ffmpeg()
+        time.sleep(1)
   
   def inference_loop(self):
     prev_time = time.time()
@@ -479,38 +519,7 @@ class VideoCapture:
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
       if frame is not None:
-        frame = Tensor(frame)
-        pre = preprocess(frame)
-        preds = do_inf(pre, yolo_infer)[0].numpy()
-        thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
-        online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
-        preds = []
-        for x in online_targets:
-          if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
-          outside = False
-          if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
-            outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
-            outside = outside ^ self.settings["outside"]
-          non_zone_alert = False
-          if outside: # check if any alerts don't use zone
-            for _, alert in self.alert_counters.items():
-              if not alert.zone:
-                non_zone_alert = True
-                break
-            if not non_zone_alert and outside: continue
-          preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
-          if (classes is None or str(int(x.class_id)) in classes):
-            new = int(x.track_id) not in self.object_set
-            new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
-            if new:
-              self.object_set.add(int(x.track_id))
-              self.counter.add(int(x.class_id))
-            if new_in_zone: self.object_set_zone.add(int(x.track_id))
-            for _, alert in self.alert_counters.items():
-              if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
-                
-        preds = np.array(preds)
-        preds = scale_boxes(pre.shape[:2], preds, frame.shape)
+        preds, frame = self.run_inference(frame)
         with self.lock:
           self.last_preds = preds
           self.last_frame = frame.numpy().copy()
@@ -518,6 +527,40 @@ class VideoCapture:
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
         print(f"\rFPS: {fps:.2f}", end="", flush=True)
+
+  def run_inference(self, frame):
+    frame = Tensor(frame)
+    pre = preprocess(frame)
+    preds = do_inf(pre, yolo_infer)[0].numpy()
+    thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
+    online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
+    preds = []
+    for x in online_targets:
+      if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
+      outside = False
+      if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
+        outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
+        outside = outside ^ self.settings["outside"]
+      non_zone_alert = False
+      if outside: # check if any alerts don't use zone
+        for _, alert in self.alert_counters.items():
+          if not alert.zone:
+            non_zone_alert = True
+            break
+        if not non_zone_alert and outside: continue
+      preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
+      if (classes is None or str(int(x.class_id)) in classes):
+        new = int(x.track_id) not in self.object_set
+        new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
+        if new:
+          self.object_set.add(int(x.track_id))
+          self.counter.add(int(x.class_id))
+        if new_in_zone: self.object_set_zone.add(int(x.track_id))
+        for _, alert in self.alert_counters.items():
+          if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
+            
+    preds = np.array(preds)
+    return scale_boxes(pre.shape[:2], preds, frame.shape), frame
 
   def get_frame(self):
       with self.lock:
@@ -550,11 +593,11 @@ def draw_predictions(frame, preds, class_labels, color_dict):
   return frame
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy"):
+    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy", vod=False):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir_det = CAMERA_BASE_DIR / (f"{self.cam_name}_det") / output_dir
-        self.output_dir_raw = CAMERA_BASE_DIR / self.cam_name / output_dir
+        self.output_dir_det = BASE_DIR / "cameras" / (f"{self.cam_name}_det") / output_dir
+        self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.ffmpeg_proc = None
@@ -564,9 +607,10 @@ class HLSStreamer:
         self._stop_event = threading.Event()
         self.output_dir_det.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
+        self.vod = vod
     
     def _get_new_stream_dir(self):
-        timestamp = datetime.now().strftime("%Y-%m-%d")
+        timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
         stream_dir_det = self.output_dir_det / timestamp
         stream_dir_raw = self.output_dir_raw / timestamp
         stream_dir_det.mkdir(exist_ok=True)
@@ -767,7 +811,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.clip = kwargs.pop('clip_instance', None)
         self.searcher = kwargs.pop('searcher_instance', None)
-        self.base_dir = CAMERA_BASE_DIR
         self.show_dets = None
         super().__init__(*args, **kwargs)
 
@@ -790,12 +833,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
       image_data = []
       for path_str, score in results:
         if score < 0.21: break
-        img_path = (self.base_dir.parent.parent / Path(path_str)).resolve()
+        img_path = Path(path_str).resolve()
         ts = int(img_path.stem.split('_')[0])
         parts = img_path.parts
         cam_index = parts.index("cameras") + 1
         cam = parts[cam_index]
-        rel = img_path.relative_to(self.base_dir)
+        rel = img_path.relative_to(BASE_DIR / "cameras")
         image_url = f"/{rel}"
         image_data.append({
           "url": image_url,
@@ -820,8 +863,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def get_camera_path(self, cam_name=None):
         if cam_name:
-            return self.base_dir / cam_name / "streams"
-        return self.base_dir
+            return BASE_DIR / "cameras" / cam_name / "streams"
+        return BASE_DIR / "cameras"
     
     def do_GET(self):
         parsed_path = urlparse(unquote(self.path))
@@ -993,8 +1036,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             try:
-              shutil.rmtree(CAMERA_BASE_DIR / (cam_name + "_det"), ignore_errors=True)
-              shutil.rmtree(CAMERA_BASE_DIR / cam_name, ignore_errors=True)
+              shutil.rmtree(BASE_DIR / "cameras" / (cam_name + "_det"), ignore_errors=True)
+              shutil.rmtree(BASE_DIR / "cameras" / cam_name, ignore_errors=True)
               # todo clean
               alerts = database.run_get("alerts", cam_name)
               for id, _ in alerts.items():
@@ -1058,7 +1101,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
 
         if parsed_path.path == '/' and "cam" not in query:
-          available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+          available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
           with open("mainview.html", "r", encoding="utf-8") as f: html = f.read()
           self.send_response(200)
           self.send_header('Content-type', 'text/html')
@@ -1077,7 +1120,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 start_time = None
 
-            available_cams = [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+            available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -1097,7 +1140,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         requested_path = parsed_path.path.lstrip('/')
         if requested_path.startswith("cameras/"):
             requested_path = requested_path[len("cameras/"):]
-        file_path = self.base_dir / requested_path
+
+        cam_name = requested_path[:requested_path.index("/")]
+        vod = is_vod(database, cam_name)
+        # todo hack
+        if vod and "preview.png" not in requested_path: requested_path = requested_path.rsplit("/", 2)[0] + "/video/" + requested_path.rsplit("/", 1)[1]
+
+        file_path = BASE_DIR / "cameras" / requested_path
 
         if not file_path.exists():
             self.send_error(404)
@@ -1143,10 +1192,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               uploaded_image = base64.b64decode(uploaded_image)
 
             if cam_name:
-              camera_dirs = [self.base_dir / cam_name]
+              camera_dirs = [BASE_DIR / "cameras" / cam_name]
             else:
-              camera_dirs = [d for d in self.base_dir.iterdir() if d.is_dir()]
-            
+              camera_dirs = [d for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
+
             if selected_dir:
               selected_dirs = [selected_dir]
             else:
@@ -1156,7 +1205,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if (camera_dir / "streams").is_dir()
                 for subdir in (camera_dir / "streams").iterdir() 
                 if subdir.is_dir()
-              })          
+              })
+            selected_dirs.append("video")
 
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
@@ -1188,7 +1238,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 for img in event_images:
                   if name_contains and name_contains not in img.name: continue
                   ts = int(img.stem.split('_')[0])
-                  image_url = f"/{img.relative_to(self.base_dir.parent)}"
+                  image_url = f"/{img.relative_to(BASE_DIR)}"
                   image_data.append({
                     "url": image_url,
                     "timestamp": ts,
@@ -1520,14 +1570,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
-      total_size = sum(f.stat().st_size for f in CAMERA_BASE_DIR.glob('**/*') if f.is_file())
+      total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
       size_gb = total_size / (1000 ** 3)
-      free_gb = shutil.disk_usage(CAMERA_BASE_DIR).free / (1000 ** 3)
+      free_gb = shutil.disk_usage(BASE_DIR / "cameras").free / (1000 ** 3)
       if size_gb > self.max_gb or free_gb < 5: self._cleanup_oldest_files() # todo unhardcode
 
     def _cleanup_oldest_files(self):
       camera_dirs = []
-      for cam_dir in CAMERA_BASE_DIR.iterdir():
+      for cam_dir in (BASE_DIR / "cameras").iterdir():
         if cam_dir.is_dir():
           dir_size = sum(f.stat().st_size for f in cam_dir.glob('**/*') if f.is_file())
           camera_dirs.append((cam_dir, dir_size))
@@ -1574,7 +1624,8 @@ if __name__ == "__main__":
   database = db()
   cams = database.run_get("links", None)
          
-  rtsp_url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
+  url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
+  is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
@@ -1587,7 +1638,7 @@ if __name__ == "__main__":
     use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
-  if rtsp_url is None and userID is None:
+  if url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
@@ -1610,19 +1661,20 @@ if __name__ == "__main__":
   tracker = ocsort.OCSort(max_age=100)
   live_link = dict()
   
-  if rtsp_url is None:
+  if url is None:
     for cam_name in cams.keys():
       start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
-  if rtsp_url:
+  if url:
     yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
     load_state_dict(yolo_infer, state_dict)
-    cam = VideoCapture(rtsp_url,cam_name=cam_name)
-    hls_streamer = HLSStreamer(cam,cam_name=cam_name)
+    cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
+    vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+    hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
     cam.streamer = hls_streamer
   
   try:
@@ -1636,7 +1688,7 @@ if __name__ == "__main__":
       else:
           raise
     
-    if rtsp_url:
+    if url:
       hls_streamer.start()
       restart_time = (0, 0)
       threading.Thread(
@@ -1651,7 +1703,7 @@ if __name__ == "__main__":
       while True: time.sleep(3600)
 
   except KeyboardInterrupt:
-    if rtsp_url:
+    if url:
       hls_streamer.stop()
       cam.release()
       server.shutdown()
