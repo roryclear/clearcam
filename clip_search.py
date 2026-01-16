@@ -145,7 +145,7 @@ class CLIPSearch:
             normalized_path = path.replace("\\", "/")
             if cam_name and f"/cameras/{cam_name}/" not in normalized_path:
                 continue
-            if timestamp and f"/objects/{timestamp}/" not in normalized_path:
+            if timestamp and f"/objects/{timestamp}/" not in normalized_path and "/objects/video/" not in normalized_path:
                 continue
             similarity = (img_embedding @ text_embedding.T).item()
             filename = os.path.basename(path)
