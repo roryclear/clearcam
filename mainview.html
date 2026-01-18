@@ -1307,6 +1307,13 @@
       <input type="text" name="rtsp" placeholder="RTSP Link" required>
       <button type="submit">Add Camera</button>
     </form>
+    <div class="analyse-section" style="margin-top: 15px;">
+      <form id="analyseFootageForm">
+        <label style="margin-bottom: 4px; display: block;">Analyse Footage:</label>
+        <input type="file" id="videoFileInput" accept="video/*" required>
+        <button type="submit">Analyse Footage</button>
+      </form>
+    </div>
     <div class="max-storage-control" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
       <label for="maxStorageInput" style="margin-bottom: 4px;">Set Max Storage (GB):</label>
       <div style="display: flex; align-items: center; gap: 6px;">
@@ -3103,6 +3110,36 @@
         spinner.style.display = 'none';
       }
     }
+
+    document.getElementById("analyseFootageForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const fileInput = document.getElementById("videoFileInput");
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert("Please select a video file.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("video", file);
+
+      try {
+        const response = await fetch("/analyse-footage", {
+          method: "POST",
+          body: formData
+        });
+
+        const result = await response.json();
+        alert("Analysis complete!");
+        console.log(result);
+
+      } catch (err) {
+        console.error("Upload failed:", err);
+        alert("Failed to analyse footage.");
+      }
+    });
 
     let currentSimilarImage = null;
     function searchWithImage(imageUrl) {

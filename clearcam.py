@@ -1168,6 +1168,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed_path = urlparse(self.path)
 
+        if parsed_path.path == "/analyse-footage":
+          for _ in range(100): print("FOOTAGE?")
+
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_length)
