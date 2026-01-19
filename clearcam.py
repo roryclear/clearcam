@@ -380,9 +380,7 @@ class VideoCapture:
             self.cap.grab()  # skip for max fps
           ret, frame = self.cap.read()
           self.last_frame = frame #todo
-          if not ret:
-          # No more frames
-            print(f"FINISHED {self.src}")
+          if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
