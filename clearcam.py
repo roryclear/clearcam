@@ -384,7 +384,7 @@ class VideoCapture:
             self.running = False
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
-          print(f"Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
+          print(f"{self.cam_name} Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
