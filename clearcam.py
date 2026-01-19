@@ -477,7 +477,13 @@ class VideoCapture:
               self.alert_counters[id] = a
               for c in a.classes: classes.add(str(c))
             
-            self.settings = database.run_get("settings", self.cam_name)
+            new_settings = database.run_get("settings", self.cam_name)
+            if self.settings is not None and new_settings != self.settings and is_vod(database, self.cam_name):
+              self.cap = cv2.VideoCapture(self.src) # reset video on settings change
+              shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
+              shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
+            self.settings = new_settings
+               
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
           if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
