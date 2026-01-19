@@ -1310,8 +1310,15 @@
     <div class="analyse-section" style="margin-top: 15px;">
       <form id="analyseFootageForm">
         <input type="file" id="videoFileInput" accept="video/*" required>
-        <button type="submit">Analyse Footage</button>
+        <button type="submit" id="analyseBtn">
+          <span class="btn-spinner" style="display:none;"></span>
+          <span class="btn-text">Analyse Footage</span>
+        </button>
       </form>
+    </div>
+    <div id="analyseProgressWrapper" style="display:none; margin-top:10px; width:100%;">
+      <div class="spinner" style="margin-bottom:6px;"></div>
+      <small id="analyseProgressText">Uploading 0%</small>
     </div>
     <div class="max-storage-control" style="display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px;">
       <label for="maxStorageInput" style="margin-bottom: 4px;">Set Max Storage (GB):</label>
@@ -3110,35 +3117,66 @@
       }
     }
 
-    document.getElementById("analyseFootageForm").addEventListener("submit", async (e) => {
+    document.getElementById("analyseFootageForm").addEventListener("submit", (e) => {
       e.preventDefault();
+
       const fileInput = document.getElementById("videoFileInput");
       const file = fileInput.files[0];
       if (!file) {
         alert("Please select a video file.");
         return;
       }
+
+      const submitBtn = document.getElementById("analyseBtn");
+      const btnText = submitBtn.querySelector(".btn-text");
+      const btnSpinner = submitBtn.querySelector(".btn-spinner");
+      submitBtn.disabled = true;
+      btnSpinner.style.display = "inline-block";
+      btnText.textContent = "Uploading 0%";
       const formData = new FormData();
       formData.append("video", file);
-      try {
-        const response = await fetch("/analyse-footage", {
-          method: "POST",
-          body: formData
-        });
-        if (!response.ok) {
-          throw new Error("Analyse footage failed");
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/analyse-footage", true);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          btnText.textContent = `Uploading ${percent}%`;
         }
-        const fullFileName = file.name;
-        const camName = fullFileName.replace(/\.[^/.]+$/, "");
-        const srcPath = `data/cameras/${fullFileName}`;
-        const addCameraUrl =
-          `/add_camera?cam_name=${encodeURIComponent(camName)}&src=${encodeURIComponent(srcPath)}`;
-        await fetch(addCameraUrl, { method: "GET" });
-        fileInput.value = "";
-      } catch (err) {
-        console.error("Upload failed:", err);
-        alert("Failed to analyse footage.");
+      };
+      xhr.onload = async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          btnText.textContent = "Processing";
+          try {
+            const fullFileName = file.name;
+            const camName = fullFileName.replace(/\.[^/.]+$/, "");
+            const srcPath = `data/cameras/${fullFileName}`;
+            const addCameraUrl = `/add_camera?cam_name=${encodeURIComponent(camName)}&src=${encodeURIComponent(srcPath)}`;
+            await fetch(addCameraUrl);
+            setTimeout(resetButton, 800);
+
+            fileInput.value = "";
+          } catch (err) {
+            alert("Failed to add camera.");
+            resetButton();
+          }
+        } else {
+          alert("Analyse footage failed.");
+          resetButton();
+        }
+      };
+
+      xhr.onerror = () => {
+        alert("Upload failed.");
+        resetButton();
+      };
+
+      function resetButton() {
+        submitBtn.disabled = false;
+        btnSpinner.style.display = "none";
+        btnText.textContent = "Analyse Footage";
       }
+
+      xhr.send(formData);
     });
 
 
