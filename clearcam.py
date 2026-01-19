@@ -479,9 +479,8 @@ class VideoCapture:
             
             new_settings = database.run_get("settings", self.cam_name)
             if self.settings is not None and new_settings != self.settings and is_vod(database, self.cam_name):
-              self.cap = cv2.VideoCapture(self.src) # reset video on settings change
-              shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
-              shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
+              self.reset_vod()
+              if "reset" in new_settings: del new_settings["reset"]
             self.settings = new_settings
                
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
@@ -504,6 +503,11 @@ class VideoCapture:
         self._open_ffmpeg()
         time.sleep(1)
   
+  def reset_vod(self):
+    self.cap = cv2.VideoCapture(self.src) # reset video on settings change
+    shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
+    shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
+
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
@@ -991,8 +995,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               database.run_put("alerts", cam_name, alert, alert_id)
             else:
               database.run_delete("alerts", cam_name, alert_id)
-               
+            
+            # make vod reset
+            settings = database.run_get("settings", cam_name)
+            if settings is None: settings = {}
+            settings["reset"] = True
+            database.run_put("settings", cam_name, settings)
 
+ 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
