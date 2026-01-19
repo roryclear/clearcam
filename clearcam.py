@@ -437,10 +437,10 @@ class VideoCapture:
                       plain.unlink() # only one image per event
                       filename = filepath / f"{ts}_notif.jpg"
                     text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
-                    if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                    if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                     last_det = time.time()
                     alert.last_det = time.time()
-          if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
+          if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
               temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
@@ -453,7 +453,7 @@ class VideoCapture:
               threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
               os.unlink(mp4_filename)
               send_det = False
-          if userID and (time.time() - last_live_check) >= 5:
+          if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
               threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
           if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
@@ -485,7 +485,7 @@ class VideoCapture:
                
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
-          if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+          if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
               self.streamer.export_clip(Path(mp4_filename), live=True)
