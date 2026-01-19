@@ -3135,6 +3135,7 @@
         const addCameraUrl =
           `/add_camera?cam_name=${encodeURIComponent(camName)}&src=${encodeURIComponent(srcPath)}`;
         await fetch(addCameraUrl, { method: "GET" });
+        fileInput.value = "";
       } catch (err) {
         console.error("Upload failed:", err);
         alert("Failed to analyse footage.");
