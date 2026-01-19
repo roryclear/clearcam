@@ -906,16 +906,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == '/add_camera':
             cam_name = query.get("cam_name", [None])[0]
-            rtsp = query.get("rtsp", [None])[0]
+            src = query.get("src", [None])[0]
             
-            if not cam_name or not rtsp:
-                self.send_error(400, "Missing cam_name or rtsp")
+            if not cam_name or not src:
+                self.send_error(400, "Missing cam_name or src")
                 return
             
-            start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
-            database.run_put("links", cam_name, rtsp)
-
-            # Redirect back to home
+            start_cam(rtsp=src,cam_name=cam_name,yolo_variant=yolo_variant)
+            database.run_put("links", cam_name, src)
             self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()

@@ -1304,7 +1304,7 @@
   <div class="form-section">
     <form id="addCameraForm">
       <input type="text" name="cam_name" placeholder="Camera Name" required>
-      <input type="text" name="rtsp" placeholder="RTSP Link" required>
+      <input type="text" name="src" placeholder="RTSP Link" required>
       <button type="submit">Add Camera</button>
     </form>
     <div class="analyse-section" style="margin-top: 15px;">
@@ -3131,9 +3131,9 @@
         }
         const fullFileName = file.name;
         const camName = fullFileName.replace(/\.[^/.]+$/, "");
-        const rtspPath = `data/cameras/${fullFileName}`;
+        const srcPath = `data/cameras/${fullFileName}`;
         const addCameraUrl =
-          `/add_camera?cam_name=${encodeURIComponent(camName)}&rtsp=${encodeURIComponent(rtspPath)}`;
+          `/add_camera?cam_name=${encodeURIComponent(camName)}&src=${encodeURIComponent(srcPath)}`;
         await fetch(addCameraUrl, { method: "GET" });
       } catch (err) {
         console.error("Upload failed:", err);
