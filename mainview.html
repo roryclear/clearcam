@@ -3113,32 +3113,34 @@
 
     document.getElementById("analyseFootageForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-
       const fileInput = document.getElementById("videoFileInput");
       const file = fileInput.files[0];
-
       if (!file) {
         alert("Please select a video file.");
         return;
       }
-
       const formData = new FormData();
       formData.append("video", file);
-
       try {
         const response = await fetch("/analyse-footage", {
           method: "POST",
           body: formData
         });
-
-        const result = await response.json();
-        console.log(result);
-
+        if (!response.ok) {
+          throw new Error("Analyse footage failed");
+        }
+        const fullFileName = file.name;
+        const camName = fullFileName.replace(/\.[^/.]+$/, "");
+        const rtspPath = `data/cameras/${fullFileName}`;
+        const addCameraUrl =
+          `/add_camera?cam_name=${encodeURIComponent(camName)}&rtsp=${encodeURIComponent(rtspPath)}`;
+        await fetch(addCameraUrl, { method: "GET" });
       } catch (err) {
         console.error("Upload failed:", err);
         alert("Failed to analyse footage.");
       }
     });
+
 
     let currentSimilarImage = null;
     function searchWithImage(imageUrl) {
