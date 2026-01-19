@@ -332,11 +332,10 @@ class VideoCapture:
       ]
       self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-  def save_object(self, p):
+  def save_object(self, p, ts=0):
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
-    ts = int(time.time() - self.streamer.start_time - 10)
     object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
     x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
     cx = (x1 + x2) // 2
@@ -369,7 +368,6 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
-    preview = None
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -378,7 +376,8 @@ class VideoCapture:
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
-          for _ in range(self.frame_step - 1): self.cap.grab()  # skip for max fps
+          for _ in range(self.frame_step - 1):
+            self.cap.grab()  # skip for max fps
           ret, frame = self.cap.read()
           self.last_frame = frame #todo
           if not ret:
@@ -409,7 +408,8 @@ class VideoCapture:
             pred_occs[p[6]].append(time.time())
           else:
             continue
-          self.save_object(p)
+          ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+          self.save_object(p, ts)
 
         if count > 10:
           if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
@@ -424,22 +424,22 @@ class VideoCapture:
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
-                      if alert.is_notif: send_det = True
-                      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-                      filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
-                      filepath.mkdir(parents=True, exist_ok=True)
-                      self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
-                      # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                      ts = int(time.time() - self.streamer.start_time - 10)
-                      filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                      cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
-                      if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
-                        plain.unlink() # only one image per event
-                        filename = filepath / f"{ts}_notif.jpg"
-                      text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
-                      if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                      last_det = time.time()
-                      alert.last_det = time.time()
+                    if alert.is_notif: send_det = True
+                    timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
+                    filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
+                    filepath.mkdir(parents=True, exist_ok=True)
+                    self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
+                    # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                    ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+                    filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
+                    cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                    if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                      plain.unlink() # only one image per event
+                      filename = filepath / f"{ts}_notif.jpg"
+                    text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
+                    if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                    last_det = time.time()
+                    alert.last_det = time.time()
           if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
