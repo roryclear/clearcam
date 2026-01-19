@@ -26,7 +26,6 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
-import cgi
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1170,27 +1169,25 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         if self.path == "/analyse-footage":
           UPLOAD_DIR = BASE_DIR / "cameras"
-          os.makedirs(UPLOAD_DIR, exist_ok=True)
-          form = cgi.FieldStorage(
-              fp=self.rfile,
-              headers=self.headers,
-              environ={
-                  "REQUEST_METHOD": "POST",
-                  "CONTENT_TYPE": self.headers["Content-Type"],
-              },
-          )
-          file_item = form["video"]
-          if not file_item.filename:
-              self.send_response(400)
-              self.end_headers()
-              self.wfile.write(b"No file uploaded")
+          content_length = int(self.headers["Content-Length"])
+          content_type = self.headers["Content-Type"]
+          if "multipart/form-data" not in content_type:
+              self.send_error(400, "Expected multipart/form-data")
               return
-          filename = os.path.basename(file_item.filename)
-          filepath = os.path.join(UPLOAD_DIR, filename)
-          with open(filepath, "wb") as f:
-              f.write(file_item.file.read())
+          boundary = content_type.split("boundary=")[1].encode()
+          body = self.rfile.read(content_length)
+          parts = body.split(b"--" + boundary)
+          for part in parts:
+            if b'Content-Disposition' not in part:  continue
+            headers, data = part.split(b"\r\n\r\n", 1)
+            headers = headers.decode(errors="ignore")
+            if 'filename="' not in headers: continue
+            filename = headers.split('filename="')[1].split('"')[0]
+            filename = os.path.basename(filename)
+            file_data = data.rsplit(b"\r\n", 1)[0]
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            with open(filepath, "wb") as f: f.write(file_data)
           self.send_200([])
-
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_length)
