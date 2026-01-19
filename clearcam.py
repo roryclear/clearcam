@@ -385,7 +385,7 @@ class VideoCapture:
           # No more frames
             print(f"FINISHED {self.src}")
             self.running = False
-            break
+            os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
           print(f"Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
         else:
@@ -937,9 +937,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
-            
             database.run_put("settings", cam_name, zone) # todo, key for each
-
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
