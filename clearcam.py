@@ -26,6 +26,7 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
+import cgi
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1167,9 +1168,28 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
-
-        if parsed_path.path == "/analyse-footage":
-          for _ in range(100): print("FOOTAGE?")
+        if self.path == "/analyse-footage":
+          UPLOAD_DIR = BASE_DIR / "cameras"
+          os.makedirs(UPLOAD_DIR, exist_ok=True)
+          form = cgi.FieldStorage(
+              fp=self.rfile,
+              headers=self.headers,
+              environ={
+                  "REQUEST_METHOD": "POST",
+                  "CONTENT_TYPE": self.headers["Content-Type"],
+              },
+          )
+          file_item = form["video"]
+          if not file_item.filename:
+              self.send_response(400)
+              self.end_headers()
+              self.wfile.write(b"No file uploaded")
+              return
+          filename = os.path.basename(file_item.filename)
+          filepath = os.path.join(UPLOAD_DIR, filename)
+          with open(filepath, "wb") as f:
+              f.write(file_item.file.read())
+          self.send_200([])
 
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
