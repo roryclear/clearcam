@@ -382,6 +382,7 @@ class VideoCapture:
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
+            database.run_put("analysis_prog", cam_name, 100)
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
           database.run_put("analysis_prog", cam_name, self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100)
@@ -1112,7 +1113,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
 
         if parsed_path.path == '/' and "cam" not in query:
-          available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
           with open("mainview.html", "r", encoding="utf-8") as f: html = f.read()
           self.send_response(200)
           self.send_header('Content-type', 'text/html')
@@ -1130,8 +1130,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 start_time = max(float(start_param),0) if start_param is not None else None
             except ValueError:
                 start_time = None
-
-            available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
