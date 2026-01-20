@@ -382,10 +382,8 @@ class VideoCapture:
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
-            database.run_delete("analysis_prog", cam_name)
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
-          print(f"{self.cam_name} Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
           database.run_put("analysis_prog", cam_name, self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100)
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
@@ -1594,13 +1592,16 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
     def _clip_task(self):
         while not self.clip_stop_event.is_set():
-            try:
-                object_folders = self.clip.find_object_folders("data/cameras")
-                for folder in object_folders:
-                    self.clip.precompute_embeddings(folder)
-            except Exception as e:
-                print(f"CLIP error: {e}")
-            self.clip_stop_event.wait(timeout=60)
+          try:
+            object_folders = self.clip.find_object_folders("data/cameras")
+            for folder in object_folders:
+              vod = is_vod(database, folder.split("/")[2])
+              if vod and database.run_get("analysis_prog", None)[folder.split("/")[2]] < 100: continue
+              self.clip.precompute_embeddings(folder)
+              if vod: database.run_delete("analysis_prog", folder.split("/")[2])
+          except Exception as e:
+            print(f"CLIP error: {e}")
+          self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
