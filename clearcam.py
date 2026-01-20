@@ -1591,17 +1591,18 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        while not self.clip_stop_event.is_set():
-          try:
-            object_folders = self.clip.find_object_folders("data/cameras")
-            for folder in object_folders:
-              vod = is_vod(database, folder.split("/")[2])
-              if vod and database.run_get("analysis_prog", None)[folder.split("/")[2]] < 100: continue
-              self.clip.precompute_embeddings(folder)
-              if vod: database.run_delete("analysis_prog", folder.split("/")[2])
-          except Exception as e:
-            print(f"CLIP error: {e}")
-          self.clip_stop_event.wait(timeout=60)
+      while not self.clip_stop_event.is_set():
+        try:
+          object_folders = self.clip.find_object_folders("data/cameras")
+          for folder in object_folders:
+            name = folder.split("/")[2]
+            vod = is_vod(database, name)
+            if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name] < 100: continue
+            self.clip.precompute_embeddings(folder)
+            if vod: database.run_delete("analysis_prog", folder.split("/")[2])
+        except Exception as e:
+          print(f"CLIP error: {e}")
+        self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
