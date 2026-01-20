@@ -1176,27 +1176,35 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
-        if self.path == "/analyse-footage":
-          UPLOAD_DIR = BASE_DIR / "cameras"
-          content_length = int(self.headers["Content-Length"])
-          content_type = self.headers["Content-Type"]
-          if "multipart/form-data" not in content_type:
-              self.send_error(400, "Expected multipart/form-data")
+        if self.path.startswith("/analyse-footage"):
+          params = parse_qs(parsed_path.query)
+          filename = params.get("filename", [None])[0]
+          if not filename:
+              self.send_error(400, "Missing filename")
               return
-          boundary = content_type.split("boundary=")[1].encode()
-          body = self.rfile.read(content_length)
-          parts = body.split(b"--" + boundary)
-          for part in parts:
-            if b'Content-Disposition' not in part:  continue
-            headers, data = part.split(b"\r\n\r\n", 1)
-            headers = headers.decode(errors="ignore")
-            if 'filename="' not in headers: continue
-            filename = headers.split('filename="')[1].split('"')[0]
-            filename = os.path.basename(filename)
-            file_data = data.rsplit(b"\r\n", 1)[0]
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            with open(filepath, "wb") as f: f.write(file_data)
+
+          filename = os.path.basename(filename)
+          upload_dir = BASE_DIR / "cameras"
+          upload_dir.mkdir(exist_ok=True)
+
+          length = int(self.headers.get("Content-Length", 0))
+          if length <= 0:
+              self.send_error(411, "Content-Length required")
+              return
+
+          filepath = upload_dir / filename
+
+          with open(filepath, "wb") as f:
+              remaining = length
+              while remaining > 0:
+                  chunk = self.rfile.read(min(1024 * 1024, remaining))
+                  if not chunk:
+                      break
+                  f.write(chunk)
+                  remaining -= len(chunk)
           self.send_200([])
+
+
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_length)

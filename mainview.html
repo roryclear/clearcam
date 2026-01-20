@@ -3126,24 +3126,24 @@
 
     document.getElementById("analyseFootageForm").addEventListener("submit", (e) => {
       e.preventDefault();
-
       const fileInput = document.getElementById("videoFileInput");
       const file = fileInput.files[0];
       if (!file) {
         alert("Please select a video file.");
         return;
       }
-
       const submitBtn = document.getElementById("analyseBtn");
       const btnText = submitBtn.querySelector(".btn-text");
       const btnSpinner = submitBtn.querySelector(".btn-spinner");
       submitBtn.disabled = true;
       btnSpinner.style.display = "inline-block";
       btnText.textContent = "Uploading 0%";
-      const formData = new FormData();
-      formData.append("video", file);
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/analyse-footage", true);
+      xhr.open(
+        "POST",
+        `/analyse-footage?filename=${encodeURIComponent(file.name)}`,
+        true
+      );
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
           const percent = Math.round((event.loaded / event.total) * 100);
@@ -3157,23 +3157,21 @@
             const fullFileName = file.name;
             const camName = fullFileName.replace(/\.[^/.]+$/, "");
             const srcPath = `data/cameras/${fullFileName}`;
-            const addCameraUrl = `/add_camera?cam_name=${encodeURIComponent(camName)}&src=${encodeURIComponent(srcPath)}`;
+            const addCameraUrl =
+              `/add_camera?cam_name=${encodeURIComponent(camName)}` +
+              `&src=${encodeURIComponent(srcPath)}`;
             await fetch(addCameraUrl);
             setTimeout(resetButton, 800);
-
             fileInput.value = "";
           } catch (err) {
             alert("Failed to add camera.");
             resetButton();
           }
         } else {
-          alert("Analyse footage failed.");
           resetButton();
         }
       };
-
       xhr.onerror = () => {
-        alert("Upload failed.");
         resetButton();
       };
 
@@ -3182,8 +3180,7 @@
         btnSpinner.style.display = "none";
         btnText.textContent = "Analyse Footage";
       }
-
-      xhr.send(formData);
+      xhr.send(file);
     });
 
 
