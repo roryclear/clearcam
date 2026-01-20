@@ -332,11 +332,10 @@ class VideoCapture:
       ]
       self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-  def save_object(self, p):
+  def save_object(self, p, ts=0):
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
-    ts = int(time.time() - self.streamer.start_time - 10)
     object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
     x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
     cx = (x1 + x2) // 2
@@ -369,7 +368,6 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
-    preview = None
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -378,16 +376,15 @@ class VideoCapture:
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
-          for _ in range(self.frame_step - 1): self.cap.grab()  # skip for max fps
+          for _ in range(self.frame_step - 1):
+            self.cap.grab()  # skip for max fps
           ret, frame = self.cap.read()
           self.last_frame = frame #todo
-          if not ret:
-          # No more frames
-            print(f"FINISHED {self.src}")
+          if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
-            break
+            os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
-          print(f"Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
+          print(f"{self.cam_name} Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
@@ -409,7 +406,8 @@ class VideoCapture:
             pred_occs[p[6]].append(time.time())
           else:
             continue
-          self.save_object(p)
+          ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+          self.save_object(p, ts)
 
         if count > 10:
           if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
@@ -424,23 +422,23 @@ class VideoCapture:
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
-                      if alert.is_notif: send_det = True
-                      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-                      filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
-                      filepath.mkdir(parents=True, exist_ok=True)
-                      self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
-                      # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                      ts = int(time.time() - self.streamer.start_time - 10)
-                      filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                      cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
-                      if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
-                        plain.unlink() # only one image per event
-                        filename = filepath / f"{ts}_notif.jpg"
-                      text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
-                      if userID is not None and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                      last_det = time.time()
-                      alert.last_det = time.time()
-          if (send_det and userID is not None) and time.time() - last_det >= 6: #send 15ish second clip after
+                    if alert.is_notif: send_det = True
+                    timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
+                    filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
+                    filepath.mkdir(parents=True, exist_ok=True)
+                    self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
+                    # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                    ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+                    filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
+                    cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                    if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                      plain.unlink() # only one image per event
+                      filename = filepath / f"{ts}_notif.jpg"
+                    text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
+                    if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                    last_det = time.time()
+                    alert.last_det = time.time()
+          if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
               temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
@@ -453,7 +451,7 @@ class VideoCapture:
               threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
               os.unlink(mp4_filename)
               send_det = False
-          if userID and (time.time() - last_live_check) >= 5:
+          if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
               threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
           if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
@@ -477,10 +475,15 @@ class VideoCapture:
               self.alert_counters[id] = a
               for c in a.classes: classes.add(str(c))
             
-            self.settings = database.run_get("settings", self.cam_name)
+            new_settings = database.run_get("settings", self.cam_name)
+            if self.settings is not None and new_settings != self.settings and is_vod(database, self.cam_name):
+              self.reset_vod()
+              if "reset" in new_settings: del new_settings["reset"]
+            self.settings = new_settings
+               
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
 
-          if userID and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+          if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
               self.streamer.export_clip(Path(mp4_filename), live=True)
@@ -498,6 +501,11 @@ class VideoCapture:
         self._open_ffmpeg()
         time.sleep(1)
   
+  def reset_vod(self):
+    self.cap = cv2.VideoCapture(self.src) # reset video on settings change
+    shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
+    shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
+
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
@@ -906,16 +914,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == '/add_camera':
             cam_name = query.get("cam_name", [None])[0]
-            rtsp = query.get("rtsp", [None])[0]
+            src = query.get("src", [None])[0]
             
-            if not cam_name or not rtsp:
-                self.send_error(400, "Missing cam_name or rtsp")
+            if not cam_name or not src:
+                self.send_error(400, "Missing cam_name or src")
                 return
             
-            start_cam(rtsp=rtsp,cam_name=cam_name,yolo_variant=yolo_variant)
-            database.run_put("links", cam_name, rtsp)
-
-            # Redirect back to home
+            start_cam(rtsp=src,cam_name=cam_name,yolo_variant=yolo_variant)
+            database.run_put("links", cam_name, src)
             self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()
@@ -939,9 +945,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
-            
             database.run_put("settings", cam_name, zone) # todo, key for each
-
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -989,8 +993,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               database.run_put("alerts", cam_name, alert, alert_id)
             else:
               database.run_delete("alerts", cam_name, alert_id)
-               
+            
+            # make vod reset
+            settings = database.run_get("settings", cam_name)
+            if settings is None: settings = {}
+            settings["reset"] = True
+            database.run_put("settings", cam_name, settings)
 
+ 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1167,7 +1177,27 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
-
+        if self.path == "/analyse-footage":
+          UPLOAD_DIR = BASE_DIR / "cameras"
+          content_length = int(self.headers["Content-Length"])
+          content_type = self.headers["Content-Type"]
+          if "multipart/form-data" not in content_type:
+              self.send_error(400, "Expected multipart/form-data")
+              return
+          boundary = content_type.split("boundary=")[1].encode()
+          body = self.rfile.read(content_length)
+          parts = body.split(b"--" + boundary)
+          for part in parts:
+            if b'Content-Disposition' not in part:  continue
+            headers, data = part.split(b"\r\n\r\n", 1)
+            headers = headers.decode(errors="ignore")
+            if 'filename="' not in headers: continue
+            filename = headers.split('filename="')[1].split('"')[0]
+            filename = os.path.basename(filename)
+            file_data = data.rsplit(b"\r\n", 1)[0]
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            with open(filepath, "wb") as f: f.write(file_data)
+          self.send_200([])
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_length)
