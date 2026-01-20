@@ -382,6 +382,7 @@ class VideoCapture:
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
+            database.run_delete("analysis_prog", cam_name)
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
           print(f"{self.cam_name} Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")

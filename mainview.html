@@ -2048,13 +2048,21 @@
       cams.forEach(cam => {
         let card = existingCards.get(cam);
         
-        if (card) {
-          const nameSpan = card.querySelector('.camera-name');
-          if (nameSpan && nameSpan.textContent !== cam) {
+      if (card) {
+        const nameSpan = card.querySelector('.camera-name');
+        const progress = camsObj[cam];
+
+        if (nameSpan) {
+          if (typeof progress === "number") {
+            const pct = Math.floor(progress);
+            nameSpan.textContent = `Tracking ${pct}%`;
+          } else if (nameSpan.textContent !== cam) {
             nameSpan.textContent = cam;
           }
-          newCards.push(card);
-        } else {
+        }
+
+        newCards.push(card);
+      } else {
           card = createCameraCard(cam);
           newCards.push(card);
         }
