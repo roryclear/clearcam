@@ -2025,11 +2025,10 @@
       }
     }
     
-    
-
     async function fetchCameras() {
       const res = await fetch('/list_cameras');
-      const cams = await res.json();
+      const camsObj = await res.json();
+      const cams = Object.keys(camsObj);
       const container = document.getElementById("cameraList");
       populateCameraFilter(cams);
       
