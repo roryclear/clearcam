@@ -3134,65 +3134,58 @@
       }
     }
 
-    document.getElementById("analyseFootageForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const fileInput = document.getElementById("videoFileInput");
-      const file = fileInput.files[0];
-      if (!file) {
-        alert("Please select a video file.");
-        return;
-      }
-      const submitBtn = document.getElementById("analyseBtn");
-      const btnText = submitBtn.querySelector(".btn-text");
-      const btnSpinner = submitBtn.querySelector(".btn-spinner");
-      submitBtn.disabled = true;
-      btnSpinner.style.display = "inline-block";
-      btnText.textContent = "Uploading 0%";
-      const xhr = new XMLHttpRequest();
-      xhr.open(
-        "POST",
-        `/analyse-footage?filename=${encodeURIComponent(file.name)}`,
-        true
-      );
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
+    document.getElementById("analyseFootageForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById("videoFileInput");
+        const file = fileInput.files[0];
+        if (!file) {
+          alert("Please select a video file.");
+          return;
+        }
+
+        const submitBtn = document.getElementById("analyseBtn");
+        const btnText = submitBtn.querySelector(".btn-text");
+        const btnSpinner = submitBtn.querySelector(".btn-spinner");
+
+        submitBtn.disabled = true;
+        btnSpinner.style.display = "inline-block";
+
+        const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
+          const percent = Math.round(((i + 1) / totalChunks) * 100);
           btnText.textContent = `Uploading ${percent}%`;
-        }
-      };
-      xhr.onload = async () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          btnText.textContent = "Processing";
-          try {
-            const fullFileName = file.name;
-            const camName = fullFileName.replace(/\.[^/.]+$/, "");
-            const srcPath = `data/cameras/${fullFileName}`;
-            const addCameraUrl =
-              `/add_camera?cam_name=${encodeURIComponent(camName)}` +
-              `&src=${encodeURIComponent(srcPath)}`;
-            await fetch(addCameraUrl);
-            setTimeout(resetButton, 800);
-            fileInput.value = "";
-          } catch (err) {
-            alert("Failed to add camera.");
+          const res = await fetch(
+            `/analyse-footage?filename=${encodeURIComponent(file.name)}&chunk=${i}&total=${totalChunks}`,
+            {
+              method: "POST",
+              body: chunk,
+            }
+          );
+          if (!res.ok) {
+            alert("Upload failed");
             resetButton();
+            return;
           }
-        } else {
-          resetButton();
         }
-      };
-      xhr.onerror = () => {
-        resetButton();
-      };
-
-      function resetButton() {
-        submitBtn.disabled = false;
-        btnSpinner.style.display = "none";
-        btnText.textContent = "Analyse Footage";
-      }
-      xhr.send(file);
-    });
-
+        btnText.textContent = "Processing";
+        const camName = file.name.replace(/\.[^/.]+$/, "");
+        const srcPath = `data/cameras/${file.name}`;
+        await fetch(
+          `/add_camera?cam_name=${encodeURIComponent(camName)}&src=${encodeURIComponent(srcPath)}`
+        );
+        setTimeout(resetButton, 800);
+        fileInput.value = "";     
+        function resetButton() {
+          submitBtn.disabled = false;
+          btnSpinner.style.display = "none";
+          btnText.textContent = "Analyse Footage";
+        }
+      });
 
     let currentSimilarImage = null;
     function searchWithImage(imageUrl) {

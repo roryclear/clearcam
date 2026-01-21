@@ -1179,31 +1179,29 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/analyse-footage"):
           params = parse_qs(parsed_path.query)
           filename = params.get("filename", [None])[0]
+          chunk = int(params.get("chunk", [0])[0])
+          total = int(params.get("total", [1])[0])
           if not filename:
-              self.send_error(400, "Missing filename")
-              return
-
+            self.send_error(400, "Missing filename")
+            return
           filename = os.path.basename(filename)
           upload_dir = BASE_DIR / "cameras"
           upload_dir.mkdir(exist_ok=True)
-
           length = int(self.headers.get("Content-Length", 0))
           if length <= 0:
-              self.send_error(411, "Content-Length required")
-              return
-
-          filepath = upload_dir / filename
-
-          with open(filepath, "wb") as f:
-              remaining = length
-              while remaining > 0:
-                  chunk = self.rfile.read(min(1024 * 1024, remaining))
-                  if not chunk:
-                      break
-                  f.write(chunk)
-                  remaining -= len(chunk)
+            self.send_error(411, "Content-Length required")
+            return
+          final_path = upload_dir / filename
+          temp_path = upload_dir / f"{filename}.part"
+          with open(temp_path, "ab") as f:
+            remaining = length
+            while remaining > 0:
+              data = self.rfile.read(min(1024 * 1024, remaining))
+              if not data: break
+              f.write(data)
+              remaining -= len(data)
+          if chunk == total - 1: temp_path.rename(final_path)
           self.send_200([])
-
 
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
