@@ -1049,6 +1049,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             try:
               shutil.rmtree(BASE_DIR / "cameras" / (cam_name + "_det"), ignore_errors=True)
               shutil.rmtree(BASE_DIR / "cameras" / cam_name, ignore_errors=True)
+              if os.path.isfile(database.run_get("links", None)[cam_name]): os.remove(database.run_get("links", None)[cam_name])
               # todo clean
               alerts = database.run_get("alerts", cam_name)
               for id, _ in alerts.items():
