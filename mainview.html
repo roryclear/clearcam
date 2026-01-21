@@ -372,17 +372,18 @@
     }
 
     #alertModal .checkbox-container {
-      display: grid;
-      grid-template-columns: auto auto;
-      gap: 8px 16px;
-      max-height: 150px;
-      overflow-y: auto;
-      margin: 8px auto;
-      padding: 8px;
-      border: 1px solid var(--border-light);
-      border-radius: 4px;
-      background: var(--bg-secondary);
-    }
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 12px;
+          max-height: 150px;
+          overflow-y: auto;
+          margin: 8px auto;
+          padding: 8px;
+          border: 1px solid var(--border-light);
+          border-radius: 4px;
+          background: var(--bg-secondary);
+        }
 
     #alertModal .checkbox-container label {
       display: flex;
@@ -1168,10 +1169,6 @@
       #zonePreview {
         max-height: 300px !important;
       }
-      
-      #alertModal .checkbox-container {
-        grid-template-columns: 1fr !important;
-      }
 
       .shutdown-wrapper button {
         width: 100% !important;
@@ -1646,8 +1643,7 @@
             const label = document.createElement('label');
             label.htmlFor = 'class_' + i;
             label.textContent = classLabels[i];
-            
-            container.appendChild(checkbox);
+            label.prepend(checkbox);
             container.appendChild(label);
         }
     }
