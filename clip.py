@@ -94,8 +94,8 @@ class CachedCLIPSearch:
                             print(f"Found object folder: {date_path}")
 
         return object_folders
-
-    def precompute_embeddings(self, folder_path, batch_size=16):
+    # db for progress
+    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None):
         cache_file = os.path.join(folder_path, "embeddings.pkl")
         folder_embeddings = {}
         folder_paths = {}
@@ -160,6 +160,7 @@ class CachedCLIPSearch:
                 folder_paths[path] = path
 
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
+            if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
 
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
