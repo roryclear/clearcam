@@ -382,9 +382,10 @@ class VideoCapture:
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
+            database.run_put("analysis_prog", cam_name, {"Tracking":100})
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
-          print(f"{self.cam_name} Progress: {self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100:.1f}%")
+          database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
@@ -430,7 +431,7 @@ class VideoCapture:
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                     ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                    cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                    if not self.vod: cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                       plain.unlink() # only one image per event
                       filename = filepath / f"{ts}_notif.jpg"
@@ -891,11 +892,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-            cams = database.run_get("links", None)
-            available_cams = list(cams.keys())
-            self.send_200(available_cams)
-            return
-      
+          cams = database.run_get("links", None)
+          progs = database.run_get("analysis_prog", None)
+          cam_progress = {cam_name: progs.get(cam_name, None) for cam_name in cams}
+          self.send_200(cam_progress)
+          return
 
         if parsed_path.path == "/list_days":          
           base_path = "data/cameras"
@@ -1053,6 +1054,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               for id, _ in alerts.items():
                 database.run_delete("alerts", cam_name, id=id)
               database.run_delete("links", cam_name)
+              database.run_delete("analysis_prog", cam_name)
               database.run_delete("settings", cam_name)
               database.run_delete("counters", cam_name)
             except Exception as e:
@@ -1111,7 +1113,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
 
         if parsed_path.path == '/' and "cam" not in query:
-          available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
           with open("mainview.html", "r", encoding="utf-8") as f: html = f.read()
           self.send_response(200)
           self.send_header('Content-type', 'text/html')
@@ -1129,8 +1130,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 start_time = max(float(start_param),0) if start_param is not None else None
             except ValueError:
                 start_time = None
-
-            available_cams = [d.name for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -1177,27 +1176,33 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
-        if self.path == "/analyse-footage":
-          UPLOAD_DIR = BASE_DIR / "cameras"
-          content_length = int(self.headers["Content-Length"])
-          content_type = self.headers["Content-Type"]
-          if "multipart/form-data" not in content_type:
-              self.send_error(400, "Expected multipart/form-data")
-              return
-          boundary = content_type.split("boundary=")[1].encode()
-          body = self.rfile.read(content_length)
-          parts = body.split(b"--" + boundary)
-          for part in parts:
-            if b'Content-Disposition' not in part:  continue
-            headers, data = part.split(b"\r\n\r\n", 1)
-            headers = headers.decode(errors="ignore")
-            if 'filename="' not in headers: continue
-            filename = headers.split('filename="')[1].split('"')[0]
-            filename = os.path.basename(filename)
-            file_data = data.rsplit(b"\r\n", 1)[0]
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            with open(filepath, "wb") as f: f.write(file_data)
+        if self.path.startswith("/analyse-footage"):
+          params = parse_qs(parsed_path.query)
+          filename = params.get("filename", [None])[0]
+          chunk = int(params.get("chunk", [0])[0])
+          total = int(params.get("total", [1])[0])
+          if not filename:
+            self.send_error(400, "Missing filename")
+            return
+          filename = os.path.basename(filename)
+          upload_dir = BASE_DIR / "cameras"
+          upload_dir.mkdir(exist_ok=True)
+          length = int(self.headers.get("Content-Length", 0))
+          if length <= 0:
+            self.send_error(411, "Content-Length required")
+            return
+          final_path = upload_dir / filename
+          temp_path = upload_dir / f"{filename}.part"
+          with open(temp_path, "ab") as f:
+            remaining = length
+            while remaining > 0:
+              data = self.rfile.read(min(1024 * 1024, remaining))
+              if not data: break
+              f.write(data)
+              remaining -= len(data)
+          if chunk == total - 1: temp_path.rename(final_path)
           self.send_200([])
+
         if parsed_path.path == "/event_thumbs":
             content_length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_length)
@@ -1590,14 +1595,18 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
-        while not self.clip_stop_event.is_set():
-            try:
-                object_folders = self.clip.find_object_folders("data/cameras")
-                for folder in object_folders:
-                    self.clip.precompute_embeddings(folder)
-            except Exception as e:
-                print(f"CLIP error: {e}")
-            self.clip_stop_event.wait(timeout=60)
+      while not self.clip_stop_event.is_set():
+        try:
+          object_folders = self.clip.find_object_folders("data/cameras")
+          for folder in object_folders:
+            name = folder.split("/")[2]
+            vod = is_vod(database, name)
+            if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
+            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
+            if vod: database.run_delete("analysis_prog", folder.split("/")[2])
+        except Exception as e:
+          print(f"CLIP error: {e}")
+        self.clip_stop_event.wait(timeout=60)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
