@@ -431,7 +431,7 @@ class VideoCapture:
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                     ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                    cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                    if not self.vod: cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                       plain.unlink() # only one image per event
                       filename = filepath / f"{ts}_notif.jpg"
