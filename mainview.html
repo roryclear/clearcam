@@ -2024,14 +2024,15 @@
         });
       }
     }
-    
+
     async function fetchCameras() {
       const res = await fetch('/list_cameras');
       const camsObj = await res.json();
       const cams = Object.keys(camsObj);
       const container = document.getElementById("cameraList");
+
       populateCameraFilter(cams);
-      
+
       const previousCameras = window.currentCameras || [];
       window.currentCameras = cams;
 
@@ -2044,34 +2045,43 @@
       });
 
       const newCards = [];
-      
+
       cams.forEach(cam => {
         let card = existingCards.get(cam);
-        
-      if (card) {
-        const nameSpan = card.querySelector('.camera-name');
-        const progress = camsObj[cam];
+        const camData = camsObj[cam];
 
-        if (nameSpan) {
-          if (typeof progress === "number") {
-            const pct = Math.floor(progress);
-            nameSpan.textContent = `Tracking ${pct}%`;
-          } else if (nameSpan.textContent !== cam) {
-            nameSpan.textContent = cam;
+        if (card) {
+          const nameSpan = card.querySelector('.camera-name');
+
+          if (nameSpan) {
+            // If value is an object, print its keys and % values
+            if (camData && typeof camData === "object") {
+              const parts = Object.entries(camData).map(([key, value]) => {
+                if (typeof value === "number") {
+                  return `${key} ${Math.floor(value)}%`;
+                }
+                return key;
+              });
+
+              nameSpan.textContent = parts.join(" · ");
+            } else {
+              // null or non-object → just show camera name
+              nameSpan.textContent = cam;
+            }
           }
-        }
 
-        newCards.push(card);
-      } else {
+          newCards.push(card);
+        } else {
           card = createCameraCard(cam);
           newCards.push(card);
         }
       });
-      
+
       const currentCards = Array.from(container.children);
-      const needsUpdate = newCards.length !== currentCards.length || 
-                         !newCards.every((card, index) => currentCards[index] === card);
-      
+      const needsUpdate =
+        newCards.length !== currentCards.length ||
+        !newCards.every((card, index) => currentCards[index] === card);
+
       if (needsUpdate) {
         container.innerHTML = '';
         newCards.forEach(card => container.appendChild(card));

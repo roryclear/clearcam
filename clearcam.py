@@ -382,10 +382,10 @@ class VideoCapture:
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
-            database.run_put("analysis_prog", cam_name, 100)
+            database.run_put("analysis_prog", cam_name, {"Tracking":100})
             os._exit(0)
           self.last_preds, _ = self.run_inference(frame)
-          database.run_put("analysis_prog", cam_name, self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100)
+          database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
@@ -1603,7 +1603,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           for folder in object_folders:
             name = folder.split("/")[2]
             vod = is_vod(database, name)
-            if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name] < 100: continue
+            if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
             self.clip.precompute_embeddings(folder)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
         except Exception as e:
