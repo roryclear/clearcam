@@ -1604,7 +1604,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             name = folder.split("/")[2]
             vod = is_vod(database, name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            self.clip.precompute_embeddings(folder)
+            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
         except Exception as e:
           print(f"CLIP error: {e}")
