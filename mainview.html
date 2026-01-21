@@ -1580,7 +1580,7 @@
     </symbol>
     </svg>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
     let uploadedImageData = null;
     const classLabels = {
@@ -3244,13 +3244,7 @@
 
     function playVideoAtTime(camName, timestamp, folder) {
       const videoId = `video-${camName}`;
-      const video = document.getElementById(videoId);
-      if(folder != document.getElementById('streamDateSelect').value){
-        document.getElementById('streamDateSelect').value = folder;
-        currentStreamDate = folder;
-        restartAllStreams();
-      }
-      
+      const video = document.getElementById(videoId);      
       if (video) {
         video.currentTime = timestamp;
         video.play().catch(e => console.log('Auto-play prevented:', e));
@@ -3277,7 +3271,6 @@
         window.currentCameras.forEach(camName => {
           const videoId = `video-${camName}`;
           const video = document.getElementById(videoId);
-          
           if (video) {
             video.currentTime = timestamp;
             video.play().catch(e => console.log(`Auto-play prevented for ${camName}:`, e));
