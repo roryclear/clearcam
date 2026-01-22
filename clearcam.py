@@ -629,8 +629,6 @@ class HLSStreamer:
     def start(self):
         self.running = True
         self.current_stream_dir_det, self.current_stream_dir_raw = self._get_new_stream_dir()
-        self.recent_segments_raw = deque()
-        self.recent_segments_raw_live = deque()
         self.start_time = time.time()
         ffmpeg_path = find_ffmpeg()
         ffmpeg_cmd = [
@@ -656,15 +654,16 @@ class HLSStreamer:
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
     def export_clip(self,output_path: Path,live=False):
-        self._track_segments()
+        segments = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
+        recent_segments = deque()
+        cutoff = time.time() - 5 if live else time.time() - 20
+        recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff]
+        recent_segments.extend(recent_raw)
 
         concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
-        segments_to_use = self.recent_segments_raw_live if live else self.recent_segments_raw # last 5 seconds
-        with open(concat_list_path, "w") as f:
-            f.writelines(f"file '{segment.resolve()}'\n" for segment in segments_to_use)
+        with open(concat_list_path, "w") as f: f.writelines(f"file '{segment.resolve()}'\n" for segment in recent_segments)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         ffmpeg_path = find_ffmpeg()
-        
         if live:
           command = [
               ffmpeg_path,
@@ -674,7 +673,7 @@ class HLSStreamer:
               "-i", str(concat_list_path),
               "-loglevel", "quiet",
               "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
-              "-c:v", "libx264",
+              "-c:v", "libx264",  
               "-pix_fmt", "yuv420p", # needed for android playback
               "-preset", "veryslow",
               "-crf", "32",
@@ -722,17 +721,6 @@ class HLSStreamer:
               file_data = f.read()
             file_size = len(file_data)
             comp += 5
-
-    def _track_segments(self): # todo shouldn't need a loop here?
-      cutoff = time.time() - 20
-      live_cutoff = time.time() - 5
-      segment_files_raw = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
-      recent_raw = [f for f in segment_files_raw if os.path.getmtime(f) >= cutoff]
-      recent_raw_live = [f for f in segment_files_raw if os.path.getmtime(f) >= (live_cutoff)]
-      self.recent_segments_raw.clear()
-      self.recent_segments_raw.extend(recent_raw)
-      self.recent_segments_raw_live.clear()
-      self.recent_segments_raw_live.extend(recent_raw_live)
 
     def _feed_frames(self):
         last_frame_time = time.time()
