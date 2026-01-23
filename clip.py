@@ -77,11 +77,7 @@ class CachedCLIPSearch:
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
-
-        if not os.path.exists(base_path):
-            print(f"Base path {base_path} does not exist!")
-            return object_folders
-
+        if not os.path.exists(base_path): return object_folders
         for camera_folder in os.listdir(base_path):
             camera_path = os.path.join(base_path, camera_folder)
             if os.path.isdir(camera_path):
@@ -91,8 +87,6 @@ class CachedCLIPSearch:
                         date_path = os.path.join(objects_path, date_folder)
                         if os.path.isdir(date_path):
                             object_folders.append(date_path)
-                            print(f"Found object folder: {date_path}")
-
         return object_folders
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None):
@@ -121,18 +115,11 @@ class CachedCLIPSearch:
             folder_paths.pop(img, None)
 
         if not new_images:
-            print(f"{datetime.now()}: No new images in {folder_path}. Saving cache...")
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             with open(cache_file, "wb") as f:
                 pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
             return
-        
-
-        print(f"{datetime.now()}: Found {len(new_images)} new images in {folder_path}, processing...")
-
         new_image_list = list(new_images)
-
-
         for i in range(0, len(new_image_list), batch_size):
             batch_paths = new_image_list[i:i + batch_size]
             batch_np = []
@@ -158,15 +145,10 @@ class CachedCLIPSearch:
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
-
-            print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
-
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
-
-        print(f"{datetime.now()}: Updated cache for {folder_path}. Total images stored: {len(folder_embeddings)}")
 
     def precompute_embedding_bs1_np(self, img):
       if type(img) == bytes: # todo, another level up?

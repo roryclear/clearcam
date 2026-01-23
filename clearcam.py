@@ -1595,7 +1595,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
         except Exception as e:
           print(f"CLIP error: {e}")
-        self.clip_stop_event.wait(timeout=60)
+        self.clip_stop_event.wait(timeout=1)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
