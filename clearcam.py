@@ -424,7 +424,8 @@ class VideoCapture:
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                 if time.time() - alert.last_det >= window:
-                  last_det, send_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
+                  send_det = alert.is_notif
+                  last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
@@ -570,7 +571,6 @@ class VideoCapture:
          self.hls_proc.kill()    
 
 def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None, cam_name=None, src_fps=None, start_time=None, userID=None):
-  send_det = alert.is_notif
   timestamp = "video" if vod else datetime.now().strftime("%Y-%m-%d")
   filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
   filepath.mkdir(parents=True, exist_ok=True)
@@ -585,7 +585,7 @@ def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None
   text = f"Event Detected ({getattr(alert, 'cam_name')})"
   if userID is not None and not vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
   alert.last_det = time.time()
-  return time.time(), send_det, filename
+  return time.time(), filename
 
 def is_bright_color(color):
   r, g, b = color

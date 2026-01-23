@@ -141,6 +141,7 @@ class CachedCLIPSearch:
                 for j in range(len(batch_np)):
                     emb = precompute_embedding_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
                     embeddings.append(emb)
+                embeddings = np.array(embeddings)
 
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding
