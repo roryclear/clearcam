@@ -149,20 +149,20 @@ class CachedCLIPSearch:
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
-            print("RORY SIMILARITY =",self.search(top_k=1, cam_name=cam_name, timestamp=None, text_embedding=self.alert_emb, image_embeddings=embeddings))
             alerts = database.run_get("alerts", cam_name)
-            for i,x in alerts.items(): print("rory alert desc =",x.desc, x.desc is None)
+            for i,x in alerts.items():
+                if x.desc_emb is not None: self.search(top_k=1, cam_name=cam_name, timestamp=None, text_embedding=x.desc_emb, image_embeddings=embeddings, desc=x.desc)
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
 
-    def search(self, top_k=10, cam_name=None, timestamp=None, text_embedding=None, image_embeddings=None):
+    def search(self, top_k=10, cam_name=None, timestamp=None, text_embedding=None, image_embeddings=None, desc=None):
         print("rory inputs =",type(text_embedding), type(image_embeddings), text_embedding.shape, image_embeddings.shape)
         for i in range(image_embeddings.shape[0]):
             similarity = (image_embeddings[i] @ text_embedding.T).item()
-            print("rory similarity =",similarity)
+            print("rory similarity =",desc,similarity)
         return None
 
     def precompute_embedding_bs1_np(self, img):
