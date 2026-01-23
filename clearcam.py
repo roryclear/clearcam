@@ -368,6 +368,7 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
+    self.cap, self.src_fps = None, None
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -422,23 +423,8 @@ class VideoCapture:
               window = alert.window if alert.window else (60 if alert.is_notif else 1)
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
-                  if time.time() - alert.last_det >= window:
-                    if alert.is_notif: send_det = True
-                    timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-                    filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
-                    filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
-                    # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
-                    filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                    if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
-                    if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
-                      plain.unlink() # only one image per event
-                      filename = filepath / f"{ts}_notif.jpg"
-                    text = f"Event Detected ({getattr(alert, 'cam_name')})"
-                    if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                    last_det = time.time()
-                    alert.last_det = time.time()
+                if time.time() - alert.last_det >= window:
+                  last_det, send_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
@@ -582,6 +568,24 @@ class VideoCapture:
           self.proc.kill()
       if self.hls_proc:
          self.hls_proc.kill()    
+
+def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None, cam_name=None, src_fps=None, start_time=None, userID=None):
+  send_det = alert.is_notif
+  timestamp = "video" if vod else datetime.now().strftime("%Y-%m-%d")
+  filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
+  filepath.mkdir(parents=True, exist_ok=True)
+  annotated_frame = draw_predictions(last_frame.copy(), filtered_preds, class_labels, color_dict)
+  # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+  ts = int(cap.get(cv2.CAP_PROP_POS_FRAMES) / src_fps) - 5 if vod else int(time.time() - start_time - 5)
+  filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
+  if not vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+  if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+    plain.unlink() # only one image per event
+    filename = filepath / f"{ts}_notif.jpg"
+  text = f"Event Detected ({getattr(alert, 'cam_name')})"
+  if userID is not None and not vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+  alert.last_det = time.time()
+  return time.time(), send_det, filename
 
 def is_bright_color(color):
   r, g, b = color
