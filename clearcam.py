@@ -1550,8 +1550,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.clip = CachedCLIPSearch() if use_clip else None
         self.searcher = CLIPSearch() if use_clip else None
+        self.clip = CachedCLIPSearch(alert_emb=self.searcher._encode_text("Fiat Panda").numpy()) if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
