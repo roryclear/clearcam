@@ -427,15 +427,15 @@ class VideoCapture:
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
-                    self.annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
+                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                     ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                    if not self.vod: cv2.imwrite(str(filename), self.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                    if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                       plain.unlink() # only one image per event
                       filename = filepath / f"{ts}_notif.jpg"
-                    text = f"Event Detected ({getattr(alert, 'cam_name')})" if getattr(alert, 'cam_name', None) else None
+                    text = f"Event Detected ({getattr(alert, 'cam_name')})"
                     if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                     last_det = time.time()
                     alert.last_det = time.time()
@@ -573,8 +573,7 @@ class VideoCapture:
 
   def get_frame(self):
       with self.lock:
-          if self.annotated_frame is not None:
-              return self.annotated_frame.copy(), self.raw_frame.copy()
+          if self.annotated_frame is not None: return self.annotated_frame.copy()
       return None, None
 
   def release(self):

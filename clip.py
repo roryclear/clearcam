@@ -145,6 +145,7 @@ class CachedCLIPSearch:
             for path, embedding in zip(batch_paths, embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
+            print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
