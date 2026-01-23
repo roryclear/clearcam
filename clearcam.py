@@ -443,7 +443,7 @@ class VideoCapture:
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
               temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-              self.streamer.export_clip(Path(mp4_filename))
+              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), length=20)
 
               # img preview?
               subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
@@ -487,7 +487,7 @@ class VideoCapture:
           if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
-              self.streamer.export_clip(Path(mp4_filename), live=True)
+              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), live=True)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
               Path(mp4_filename).unlink()
               threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
@@ -653,75 +653,6 @@ class HLSStreamer:
         ]
         self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
-    def export_clip(self,output_path: Path,live=False):
-        segments = sorted(self.current_stream_dir_raw.glob("*.ts"), key=os.path.getmtime)
-        recent_segments = deque()
-        cutoff = time.time() - 5 if live else time.time() - 20
-        recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff]
-        recent_segments.extend(recent_raw)
-
-        concat_list_path = self.current_stream_dir_raw / "concat_list.txt"
-        with open(concat_list_path, "w") as f: f.writelines(f"file '{segment.resolve()}'\n" for segment in recent_segments)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        ffmpeg_path = find_ffmpeg()
-        if live:
-          command = [
-              ffmpeg_path,
-              "-y",
-              "-f", "concat",
-              "-safe", "0",
-              "-i", str(concat_list_path),
-              "-loglevel", "quiet",
-              "-vf", "scale=-2:240,fps=24,format=yuv420p", # needed for android playback
-              "-c:v", "libx264",  
-              "-pix_fmt", "yuv420p", # needed for android playback
-              "-preset", "veryslow",
-              "-crf", "32",
-              "-an",
-              str(output_path)
-          ]
-          subprocess.run(command, check=True)
-        else:
-          with open(self.current_stream_dir_raw / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
-          command = [
-            ffmpeg_path,
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list_path),
-            "-c:v", "libx264",
-            "-crf", "18",
-            "-pix_fmt", "yuv420p",  # needed for android
-            "-an",  # No audio
-            str(output_path)
-          ]
-          subprocess.run(command, check=True)
-          comp = 5
-          file_size = 10*1024*1024
-          with open(output_path, "rb") as f:
-            file_data = f.read()
-            file_size = len(file_data)
-          while file_size >= 9*1024*1024: # max size 10MB, # todo, calculate time from ts files
-            temp_output = output_path.with_stem(output_path.stem + "_compressed")
-            command = [
-              ffmpeg_path,
-              "-y",
-              "-f", "concat",
-              "-safe", "0",
-              "-i", str(concat_list_path),
-              "-c:v", "libx264",
-              "-crf", str(18 + comp),
-              "-pix_fmt", "yuv420p",  # needed for android
-              "-an",  # No audio
-              str(temp_output)
-            ]
-            subprocess.run(command, check=True)
-            os.replace(temp_output, output_path)
-            with open(output_path, "rb") as f:
-              file_data = f.read()
-            file_size = len(file_data)
-            comp += 5
-
     def _feed_frames(self):
         last_frame_time = time.time()
         stall_timeout = 10
@@ -774,6 +705,76 @@ class HLSStreamer:
                 self.ffmpeg_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
+
+
+def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0):
+  segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
+  recent_segments = deque()
+  cutoff = time.time() - length if live else time.time() - length
+  end = time.time() - end
+  recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
+  recent_segments.extend(recent_raw)
+  concat_list_path = stream_dir / "concat_list.txt"
+  with open(concat_list_path, "w") as f: f.writelines(f"file '{segment.resolve()}'\n" for segment in recent_segments)
+  output_path.parent.mkdir(parents=True, exist_ok=True)
+  ffmpeg_path = find_ffmpeg()
+  if live:
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", str(concat_list_path),
+        "-loglevel", "quiet",
+        "-vf", "scale=-2:240,fps=24,format=yuv420p",
+        "-c:v", "libx264",  
+        "-pix_fmt", "yuv420p",
+        "-preset", "veryslow",
+        "-crf", "32",
+        "-an",
+        str(output_path)
+    ]
+    subprocess.run(command, check=True)
+  else:
+    with open(stream_dir / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
+    command = [
+      ffmpeg_path,
+      "-y",
+      "-f", "concat",
+      "-safe", "0",
+      "-i", str(concat_list_path),
+      "-c:v", "libx264",
+      "-crf", "18",
+      "-pix_fmt", "yuv420p",
+      "-an",  # No audio
+      str(output_path)
+    ]
+    subprocess.run(command, check=True)
+    comp = 5
+    file_size = 10*1024*1024
+    with open(output_path, "rb") as f:
+      file_data = f.read()
+      file_size = len(file_data)
+    while file_size >= 9*1024*1024: # max size 10MB, # todo, calculate time from ts files
+      temp_output = output_path.with_stem(output_path.stem + "_compressed")
+      command = [
+        ffmpeg_path,
+        "-y",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", str(concat_list_path),
+        "-c:v", "libx264",
+        "-crf", str(18 + comp),
+        "-pix_fmt", "yuv420p",  # needed for android
+        "-an",  # No audio
+        str(temp_output)
+      ]
+      subprocess.run(command, check=True)
+      os.replace(temp_output, output_path)
+      with open(output_path, "rb") as f:
+        file_data = f.read()
+      file_size = len(file_data)
+      comp += 5
 
 def point_not_in_polygon(coords, poly):
     n = len(poly)
@@ -1595,7 +1596,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
         except Exception as e:
           print(f"CLIP error: {e}")
-        self.clip_stop_event.wait(timeout=60)
+        self.clip_stop_event.wait(timeout=1)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
