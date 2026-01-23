@@ -1460,6 +1460,18 @@
           <span class="close" onclick="closeAlertModal()">&times;</span>
         </div>
         <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
+          <div class="form-group" style="width: 90%; text-align: center; margin-bottom: 12px;">
+            <label for="desc" style="font-weight: 600; margin-bottom: 6px; display: block;">
+              Description
+            </label>
+            <textarea
+              id="desc"
+              name="desc"
+              rows="3"
+              placeholder="Describe this alert..."
+              style="width: 100%; resize: vertical; padding: 6px; box-sizing: border-box;"
+            ></textarea>
+          </div>
           <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
             <div id="checkboxContainer" class="checkbox-container" style="display: grid; grid-template-columns: auto auto; gap: 8px 16px; max-height: 200px; overflow-y: auto; margin: 0 auto; padding: 8px; justify-content: center;"></div>
           </div>
@@ -1478,8 +1490,7 @@
                   style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
               <span>minutes</span>
             </div>
-          </div>
-
+          </div>          
           <div class="form-group" style="width: 90%; text-align: center;">
             <label style="font-weight: 600; margin-bottom: 10px; display: block;">Schedule (Optional)</label>
             <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
@@ -1805,6 +1816,7 @@
       const classIds = Array.from(checked).map(cb => cb.value).join(',');
       const scheduleFrom = formData.get("schedule_from") || "00:00";
       const scheduleTo = formData.get("schedule_to") || "23:59";
+      const desc = formData.get('desc') || '';
       const toSeconds = (hhmm) => {
         const parts = hhmm.split(":").map(Number);
         const [h = 0, m = 0] = parts;
@@ -1822,7 +1834,8 @@
         class_ids: classIds,
         sched: JSON.stringify(schedArray),
         is_notif: 'true',
-        zone: 'true'
+        zone: 'true',
+        desc: desc
       });
       if (windowSeconds !== null) {
         params.set('window', windowSeconds);

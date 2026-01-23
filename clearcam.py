@@ -94,7 +94,7 @@ BASE_DIR = Path(__file__).parent / "data"
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None, desc=None):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
@@ -107,6 +107,7 @@ class RollingClassCounter:
     self.zone = True
     self.reset = False
     self.new = True
+    self.desc = desc
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -955,6 +956,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
             zone = query.get("zone", [None])[0]
+            desc = query.get("desc", [None])[0]
             is_notif = query.get("is_notif", [None])[0]
             if alert_id is None: # no id, add alert
                 window = query.get("window", [None])[0]
@@ -971,6 +973,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         classes=classes,
                         sched=sched,
                         cam_name=cam_name,
+                        desc=desc
                     )
                 raw_alerts[alert_id] = alert
             else:
@@ -978,6 +981,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if is_on is not None: raw_alerts[alert_id].is_on = str(is_on).lower() == "true"
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
                 if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
+                if desc is not None: raw_alerts[alert_id].desc = desc
                 alert = raw_alerts[alert_id]
                 alert.new = True
               else:
