@@ -150,6 +150,8 @@ class CachedCLIPSearch:
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             print("RORY SIMILARITY =",self.search(top_k=1, cam_name=cam_name, timestamp=None, text_embedding=self.alert_emb, image_embeddings=embeddings))
+            alerts = database.run_get("alerts", cam_name)
+            for i,x in alerts.items(): print("rory alert desc =",x.desc, x.desc is None)
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:

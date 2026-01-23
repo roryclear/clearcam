@@ -108,6 +108,7 @@ class RollingClassCounter:
     self.reset = False
     self.new = True
     self.desc = desc
+    self.desc_emb = None
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -1599,6 +1600,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             name = folder.split("/")[2]
             vod = is_vod(database, name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
+            alerts = database.run_get("alerts", name)
+            for i in alerts.keys():
+              if alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.searcher._encode_text(alerts[i].desc).numpy()
+              database.run_put("alerts", name, alerts[i], i)
+            
             self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
         except Exception as e:
