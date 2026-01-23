@@ -6,12 +6,14 @@ from tinygrad.helpers import fetch
 from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
+from helpers import send_notif
 
 class Model: pass
 
 
 class CachedCLIPSearch:
-    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True, alert_emb=None):
+    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True, alert_emb=None, userID=None):
+        self.userID = userID
         self.image_embeddings = {}
         self.image_paths = {}
         
@@ -165,6 +167,9 @@ class CachedCLIPSearch:
         for i in range(image_embeddings.shape[0]):
             similarity = (image_embeddings[i] @ text_embedding.T).item()
             print("rory similarity =",desc,similarity, paths[i],"timestamp =",paths[i].split("/")[-1].split("_")[0])
+            if similarity > 0.27:
+                if self.userID is not None: send_notif(self.userID, f"Event Detected ({desc}) ({cam_name})")
+                break
 
     def precompute_embedding_bs1_np(self, img):
       if type(img) == bytes: # todo, another level up?

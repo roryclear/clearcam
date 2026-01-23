@@ -26,6 +26,7 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
+from helpers import send_notif
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -1310,39 +1311,6 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
         python = sys.executable
         os.execv(python, [python] + sys.argv)
 
-def send_notif(session_token: str, text=None):
-    host = "www.clearcam.org"
-    endpoint = "/send" #/test
-    boundary = f"Boundary-{uuid.uuid4()}"
-    content_type = f"multipart/form-data; boundary={boundary}"
-    lines = [
-        f"--{boundary}",
-        'Content-Disposition: form-data; name="session_token"',
-        "",
-        session_token,
-        f"--{boundary}--",
-        ""
-    ]
-    if text is not None:
-      lines.extend([
-      f"--{boundary}",
-      'Content-Disposition: form-data; name="text"',
-      "",
-      text,
-    ])
-    body = "\r\n".join(lines).encode("utf-8")
-    conn = http.client.HTTPSConnection(host)
-    headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
-    try:
-        conn.request("POST", endpoint, body, headers)
-        response = conn.getresponse()
-        print(f"Status: {response.status} {response.reason}")
-        print(response.read().decode())
-    except Exception as e:
-        print(f"Error sending session token: {e}")
-    finally:
-        conn.close()
-
 import aes
 MAGIC_NUMBER = 0x4D41474943
 HEADER_SIZE = 8
@@ -1556,7 +1524,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
         self.searcher = CLIPSearch() if use_clip else None
-        self.clip = CachedCLIPSearch(alert_emb=self.searcher._encode_text("Fiat Panda").numpy()) if use_clip else None
+        self.clip = CachedCLIPSearch(alert_emb=self.searcher._encode_text("Fiat Panda").numpy(), userID=userID) if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
