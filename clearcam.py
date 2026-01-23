@@ -1570,7 +1570,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
             alerts = database.run_get("alerts", name)
             for i in alerts.keys():
-              if alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.searcher._encode_text(alerts[i].desc).numpy()
+              if hasattr(alerts[i], 'desc') and  alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.searcher._encode_text(alerts[i].desc).numpy()
               database.run_put("alerts", name, alerts[i], i)
             
             self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
