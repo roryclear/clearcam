@@ -97,4 +97,4 @@ https://x.com/RoryClear/status/1959249250811785405
 
 ## How to Sign Up
 
-Visit [rors.ai](https://www.rors.ai) to sign up, or upgrade to premium in the iOS app.
+Visit [clearcam.org](https://www.clearcam.org) to sign up, or upgrade to premium in the iOS app.
