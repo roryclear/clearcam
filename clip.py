@@ -155,20 +155,26 @@ class CachedCLIPSearch:
             print("rory batch_paths =",batch_paths, type(batch_paths))
             if not vod: # todo shouldn't be needed
                 for i,x in alerts.items():
-                    if x.desc_emb is not None: self.search(cam_name=cam_name, timestamp=None, text_embedding=x.desc_emb, image_embeddings=embeddings, paths=batch_paths, desc=x.desc)
+                    #if x.desc_emb is not None: self.search(cam_name=cam_name, timestamp=None, text_embedding=x.desc_emb, image_embeddings=embeddings, paths=batch_paths, desc=x.desc, id=i)
+                    if x.desc_emb is not None: self.search(cam_name=cam_name, timestamp=None, image_embeddings=embeddings, paths=batch_paths, alert=x, database=database, id=i)
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
 
-    def search(self, cam_name=None, timestamp=None, text_embedding=None, image_embeddings=None, paths=None, desc=None):
-        print("rory inputs =",type(text_embedding), type(image_embeddings), text_embedding.shape, image_embeddings.shape)
+    def search(self, cam_name=None, timestamp=None, image_embeddings=None, paths=None, alert=None, database=None, id=None):
         for i in range(image_embeddings.shape[0]):
+            text_embedding = alert.desc_emb
+            desc = alert.desc
             similarity = (image_embeddings[i] @ text_embedding.T).item()
+            print("rory path =",paths[i])
             print("rory similarity =",desc,similarity, paths[i],"timestamp =",paths[i].split("/")[-1].split("_")[0])
-            if similarity > 0.27:
+            object_id = int(paths[i].rsplit("_", 1)[-1].split(".")[0])
+            if similarity > 0.27 and object_id not in alert.alerted:
                 if self.userID is not None: send_notif(self.userID, f"Event Detected ({desc}) ({cam_name})")
+                alert.alerted.add(object_id)
+                database.run_put("alerts", cam_name, alert, id=id)
                 break
 
     def precompute_embedding_bs1_np(self, img):

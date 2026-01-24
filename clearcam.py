@@ -110,6 +110,7 @@ class RollingClassCounter:
     self.new = True
     self.desc = desc
     self.desc_emb = None
+    self.alerted = set()
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
