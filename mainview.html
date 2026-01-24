@@ -1666,7 +1666,6 @@
         .then(res => res.json())
         .then(alerts => { 
           const container = document.getElementById("alertsContainer");
-
           if (!alerts || !alerts.length) {
             container.innerHTML = `
               <p>No alerts configured.</p>
@@ -1675,10 +1674,8 @@
               </div>`;
             return;
           }
-
           const descAlerts = alerts.filter(a => a.desc && a.desc.trim() !== "");
           const standardAlerts = alerts.filter(a => !a.desc || a.desc.trim() === "");
-
           let html = "";
           if (descAlerts.length) {
             html += `
@@ -1686,12 +1683,12 @@
             <table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
               <thead>
                 <tr>
-                  <th style="padding:6px; border-bottom:1px solid #ccc;">Classes</th>
-                  <th style="padding:6px; border-bottom:1px solid #ccc;">Description</th>
-                  <th style="padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
-                  <th style="padding:6px; border-bottom:1px solid #ccc; text-align:center;">Enabled</th>
-                  <th style="padding:6px; border-bottom:1px solid #ccc; text-align:center;">Zone</th>
-                  <th style="padding:6px; border-bottom:1px solid #ccc; text-align:center;">Actions</th>
+                  <th>Classes</th>
+                  <th>Description</th>
+                  <th>Schedule</th>
+                  <th style="text-align:center;">Enabled</th>
+                  <th style="text-align:center;">Zone</th>
+                  <th style="text-align:center;">Actions</th>
                 </tr>
               </thead>
               <tbody>`;
@@ -1700,37 +1697,32 @@
               const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
               const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
               const isZone = alert.hasOwnProperty("zone") ? alert.zone : true;
+
               let scheduleStr = "Always";
               if (alert.sched && alert.sched.length > 0) {
                 const [fromSec, toSec] = alert.sched[0];
-                const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-                const activeDays = alert.sched.slice(1)
-                  .map((on, i) => on ? daysOfWeek[i] : null)
-                  .filter(Boolean);
-
-                const timeRange =
-                  `${String(Math.floor(fromSec/3600)).padStart(2,'0')}:${String((fromSec%3600)/60|0).padStart(2,'0')} to
-                  ${String(Math.floor(toSec/3600)).padStart(2,'0')}:${String((toSec%3600)/60|0).padStart(2,'0')}`;
-
-                scheduleStr = activeDays.length === 7
-                  ? `${timeRange} (Daily)`
-                  : `${timeRange} (${activeDays.join(", ")})`;
+                const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                const active = alert.sched.slice(1).map((on,i)=>on?days[i]:null).filter(Boolean);
+                const range =
+                  `${String(fromSec/3600|0).padStart(2,'0')}:${String((fromSec%3600)/60|0).padStart(2,'0')} to
+                  ${String(toSec/3600|0).padStart(2,'0')}:${String((toSec%3600)/60|0).padStart(2,'0')}`;
+                scheduleStr = active.length === 7 ? `${range} (Daily)` : `${range} (${active.join(", ")})`;
               }
 
               html += `
               <tr>
-                <td style="padding:6px; border-bottom:1px solid #eee;">${classNames}</td>
-                <td style="padding:6px; border-bottom:1px solid #eee;">${alert.desc}</td>
-                <td style="padding:6px; border-bottom:1px solid #eee;">${scheduleStr}</td>
-                <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                  <input type="checkbox" ${isOn ? "checked" : ""}
+                <td style="max-width:180px; word-break:break-word;">${classNames}</td>
+                <td>${alert.desc}</td>
+                <td>${scheduleStr}</td>
+                <td style="text-align:center;">
+                  <input type="checkbox" ${isOn?"checked":""}
                     onchange="toggleAlert('${alert.id}', this.checked, 'is_on')">
                 </td>
-                <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                  <input type="checkbox" ${isZone ? "checked" : ""}
+                <td style="text-align:center;">
+                  <input type="checkbox" ${isZone?"checked":""}
                     onchange="toggleAlert('${alert.id}', this.checked, 'zone')">
                 </td>
-                <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                <td style="text-align:center;">
                   <button onclick="deleteAlert('${alert.id}')">Delete</button>
                 </td>
               </tr>`;
@@ -1741,18 +1733,18 @@
           if (standardAlerts.length) {
             html += `
             <h4 style="margin:20px 0 10px;">Standard Alerts</h4>
-            <div style="max-width:900px; margin:0 auto;">
+            <div style="max-width:820px; margin:0 auto;">
             <table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
               <thead>
                 <tr>
-                  <th style="width:60px; text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
-                  <th style="width:160px; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
-                  <th style="width:90px; padding:6px; border-bottom:1px solid #ccc;">Window</th>
-                  <th style="width:180px; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
-                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
-                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Send Alerts</th>
-                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Zone</th>
-                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
+                  <th style="text-align:center;">Max</th>
+                  <th>Classes</th>
+                  <th>Window</th>
+                  <th>Schedule</th>
+                  <th style="text-align:center;">Enabled</th>
+                  <th style="text-align:center;">Send Alerts</th>
+                  <th style="text-align:center;">Zone</th>
+                  <th style="text-align:center;">Actions</th>
                 </tr>
               </thead>
               <tbody>`;
@@ -1768,36 +1760,32 @@
               let scheduleStr = "Always";
               if (alert.sched && alert.sched.length > 0) {
                 const [fromSec, toSec] = alert.sched[0];
-                const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-                const activeDays = alert.sched.slice(1)
-                  .map((on, i) => on ? daysOfWeek[i] : null)
-                  .filter(Boolean);
-
-                const timeRange =
-                  `${String(Math.floor(fromSec/3600)).padStart(2,'0')}:${String((fromSec%3600)/60|0).padStart(2,'0')} to
-                  ${String(Math.floor(toSec/3600)).padStart(2,'0')}:${String((toSec%3600)/60|0).padStart(2,'0')}`;
-
-                scheduleStr = activeDays.length === 7
-                  ? `${timeRange} (Daily)`
-                  : `${timeRange} (${activeDays.join(", ")})`;
+                const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                const active = alert.sched.slice(1).map((on,i)=>on?days[i]:null).filter(Boolean);
+                const range =
+                  `${String(fromSec/3600|0).padStart(2,'0')}:${String((fromSec%3600)/60|0).padStart(2,'0')} to
+                  ${String(toSec/3600|0).padStart(2,'0')}:${String((toSec%3600)/60|0).padStart(2,'0')}`;
+                scheduleStr = active.length === 7 ? `${range} (Daily)` : `${range} (${active.join(", ")})`;
               }
 
               html += `
               <tr>
-                <td style="text-align:center; padding:6px;">${alert.max}</td>
-                <td style="padding:6px; max-width:160px; word-wrap:break-word;">${classNames}</td>
-                <td style="padding:6px;">${windowStr}</td>
-                <td style="padding:6px;">${scheduleStr}</td>
+                <td style="text-align:center;">${alert.max}</td>
+                <td style="max-width:160px; word-break:break-word; white-space:normal;">
+                  ${classNames}
+                </td>
+                <td>${windowStr}</td>
+                <td>${scheduleStr}</td>
                 <td style="text-align:center;">
-                  <input type="checkbox" ${alert.is_on ? "checked" : ""}
+                  <input type="checkbox" ${alert.is_on?"checked":""}
                     onchange="toggleAlert('${alert.id}', this.checked, 'is_on')">
                 </td>
                 <td style="text-align:center;">
-                  <input type="checkbox" ${alert.is_notif ? "checked" : ""}
+                  <input type="checkbox" ${alert.is_notif?"checked":""}
                     onchange="toggleAlert('${alert.id}', this.checked, 'is_notif')">
                 </td>
                 <td style="text-align:center;">
-                  <input type="checkbox" ${alert.zone ? "checked" : ""}
+                  <input type="checkbox" ${alert.zone?"checked":""}
                     onchange="toggleAlert('${alert.id}', this.checked, 'zone')">
                 </td>
                 <td style="text-align:center;">
@@ -1821,6 +1809,8 @@
           document.getElementById("alertsContainer").innerHTML = "<p>Error loading alerts.</p>";
         });
     }
+
+
 
 
     function fetchCounts() {
