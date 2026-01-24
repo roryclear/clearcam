@@ -205,8 +205,11 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 
 def is_vod(database, cam_name):
-  url = database.run_get("links", None)[cam_name]
-  return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
+    try: # todo fix the cause!
+        url = database.run_get("links", None)[cam_name]
+        return url is not None and url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+    except Exception:
+        return False
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
