@@ -431,7 +431,7 @@ class VideoCapture:
                   send_det = alert.is_notif
                   last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              send_video(cam_name=self.cam_name, current_stream_dir_raw=self.streamer.current_stream_dir_raw, filename=filename)
+              send_video(cam_name=self.cam_name, filename=filename)
               send_det = False
           if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
@@ -564,7 +564,9 @@ class VideoCapture:
       if self.hls_proc:
          self.hls_proc.kill()    
 
-def send_video(cam_name=None, current_stream_dir_raw=None, filename=None):
+def send_video(cam_name=None, filename=None):
+  current_stream_dir_raw = BASE_DIR / "cameras" / cam_name / "streams" / datetime.now().strftime("%Y-%m-%d")
+  for _ in range(100): print(filename)
   os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
   mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
   temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
