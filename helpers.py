@@ -12,6 +12,8 @@ import struct
 import urllib
 import json
 
+BASE_DIR = Path(__file__).parent / "data"
+
 def send_notif(session_token: str, text=None):
     host = "www.clearcam.org"
     endpoint = "/send" #/test
@@ -45,15 +47,16 @@ def send_notif(session_token: str, text=None):
     finally:
         conn.close()
 
-def send_video(cam_name=None, filename=None, userID=None, key=None, BASE_DIR=None):
+def send_video(cam_name=None, filename=None, userID=None, key=None):
   current_stream_dir_raw = BASE_DIR / "cameras" / cam_name / "streams" / datetime.now().strftime("%Y-%m-%d")
-  for _ in range(100): print(filename)
   os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
-  mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-  temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+  ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+  mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{ts}.mp4"
   export_clip(current_stream_dir_raw, Path(mp4_filename), length=20)
-  if filename is not None: subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
-  os.replace(temp_output, mp4_filename)
+  if filename is not None:
+      temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{ts}_temp.mp4"
+      subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+      os.replace(temp_output, mp4_filename)
   encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
   os.unlink(mp4_filename)

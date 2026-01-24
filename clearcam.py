@@ -90,8 +90,8 @@ import cv2
 from datetime import datetime
 import os
 import threading
+from helpers import BASE_DIR
 
-BASE_DIR = Path(__file__).parent / "data"
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
@@ -431,7 +431,7 @@ class VideoCapture:
                   send_det = alert.is_notif
                   last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              send_video(cam_name=self.cam_name, filename=filename, userID=userID, key=key, BASE_DIR=BASE_DIR)
+              send_video(cam_name=self.cam_name, filename=filename, userID=userID, key=key)
               send_det = False
           if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
@@ -1375,7 +1375,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
               if hasattr(alerts[i], 'desc') and  alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.searcher._encode_text(alerts[i].desc).numpy()
               database.run_put("alerts", name, alerts[i], i)
             
-            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
+            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
         except Exception as e:
           print(f"CLIP error: {e}")

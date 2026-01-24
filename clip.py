@@ -6,7 +6,8 @@ from tinygrad.helpers import fetch
 from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
-from helpers import send_notif
+import time
+from helpers import send_notif, send_video
 
 class Model: pass
 
@@ -93,7 +94,7 @@ class CachedCLIPSearch:
                             object_folders.append(date_path)
         return object_folders
     # db for progress
-    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None):
+    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
         cache_file = os.path.join(folder_path, "embeddings.pkl")
         folder_embeddings = {}
         folder_paths = {}
@@ -155,14 +156,14 @@ class CachedCLIPSearch:
             print("rory batch_paths =",batch_paths, type(batch_paths))
             if not vod: # todo shouldn't be needed
                 for i,x in alerts.items():
-                    if x.desc_emb is not None: self.search(cam_name=cam_name, timestamp=None, image_embeddings=embeddings, paths=batch_paths, alert=x, database=database, id=i)
+                    if x.desc_emb is not None: self.search(cam_name=cam_name, timestamp=None, image_embeddings=embeddings, paths=batch_paths, alert=x, database=database, id=i, userID=userID, key=key)
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:
             pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
 
-    def search(self, cam_name=None, timestamp=None, image_embeddings=None, paths=None, alert=None, database=None, id=None):
+    def search(self, cam_name=None, timestamp=None, image_embeddings=None, paths=None, alert=None, database=None, id=None, userID=None, key=None):
         for i in range(image_embeddings.shape[0]):
             text_embedding = alert.desc_emb
             desc = alert.desc
@@ -172,7 +173,9 @@ class CachedCLIPSearch:
             if similarity > 0.27 and object_id not in alert.alerted:
                 if self.userID is not None: send_notif(self.userID, f"Event Detected ({desc}) ({cam_name})")
                 alert.alerted.add(object_id)
-                database.run_put("alerts", cam_name, alert, id=id)
+                database.run_put("alerts", cam_name, alert, id)
+                time.sleep(6) # todo, better way
+                send_video(cam_name=cam_name, filename=None, userID=userID, key=key)
                 break
 
     def precompute_embedding_bs1_np(self, img):
