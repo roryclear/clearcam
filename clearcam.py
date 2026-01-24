@@ -297,6 +297,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           "-re",
+                  "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
           "-i", self.src,
           "-c", "copy",
@@ -957,7 +959,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     "is_on": alert.is_on,
                     "is_notif": alert.is_notif,
                     "zone": alert.zone,
-                    "desc": alert.desc
+                    "desc": alert.desc if hasattr(alert, "desc") else None
                 })
             self.send_200(alert_info)
             return
