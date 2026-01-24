@@ -431,17 +431,7 @@ class VideoCapture:
                   send_det = alert.is_notif
                   last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
-              mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-              temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), length=20)
-
-              # img preview?
-              subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
-              os.replace(temp_output, mp4_filename)
-              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-              threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
-              os.unlink(mp4_filename)
+              send_video(cam_name=self.cam_name, current_stream_dir_raw=self.streamer.current_stream_dir_raw, filename=filename)
               send_det = False
           if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
@@ -573,6 +563,17 @@ class VideoCapture:
           self.proc.kill()
       if self.hls_proc:
          self.hls_proc.kill()    
+
+def send_video(cam_name=None, current_stream_dir_raw=None, filename=None):
+  os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
+  mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+  temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+  export_clip(current_stream_dir_raw, Path(mp4_filename), length=20)
+  if filename is not None: subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+  os.replace(temp_output, mp4_filename)
+  encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+  threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+  os.unlink(mp4_filename)
 
 def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None, cam_name=None, src_fps=None, start_time=None, userID=None):
   timestamp = "video" if vod else datetime.now().strftime("%Y-%m-%d")
