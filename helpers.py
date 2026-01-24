@@ -47,12 +47,12 @@ def send_notif(session_token: str, text=None):
     finally:
         conn.close()
 
-def send_video(cam_name=None, filename=None, userID=None, key=None):
+def send_video(cam_name=None, filename=None, userID=None, key=None, start=None):
   current_stream_dir_raw = BASE_DIR / "cameras" / cam_name / "streams" / datetime.now().strftime("%Y-%m-%d")
   os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
   ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
   mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{ts}.mp4"
-  export_clip(current_stream_dir_raw, Path(mp4_filename), length=20)
+  export_clip(current_stream_dir_raw, Path(mp4_filename), length=20, start=start)
   if filename is not None:
       temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{ts}_temp.mp4"
       subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
@@ -61,10 +61,10 @@ def send_video(cam_name=None, filename=None, userID=None, key=None):
   threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
   os.unlink(mp4_filename)
 
-def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0):
+def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
   segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
   recent_segments = deque()
-  cutoff = time.time() - length if live else time.time() - length
+  cutoff = (start if start is not None else time.time() - length) if live else time.time() - length
   end = time.time() - end
   recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
   recent_segments.extend(recent_raw)

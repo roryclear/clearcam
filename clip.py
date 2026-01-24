@@ -175,7 +175,7 @@ class CachedCLIPSearch:
                 alert.alerted.add(object_id)
                 database.run_put("alerts", cam_name, alert, id)
                 time.sleep(6) # todo, better way
-                send_video(cam_name=cam_name, filename=paths[i], userID=userID, key=key)
+                send_video(cam_name=cam_name, filename=paths[i], userID=userID, key=key, start=paths[i].split("/")[-1].split("_")[0])
                 break
 
     def precompute_embedding_bs1_np(self, img):
