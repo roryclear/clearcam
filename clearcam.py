@@ -239,7 +239,7 @@ class VideoCapture:
       self.alert_counters = dict()
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
       self.alert_counters[id] = alert_counter
-      database.run_put("alerts", self.cam_name, alert_counter, id=id)
+      if type(alert_counter) == RollingClassCounter: database.run_put("alerts", self.cam_name, alert_counter, id=id)
 
     self.lock = threading.Lock()
 
@@ -450,6 +450,7 @@ class VideoCapture:
             for id,a in alerts.items():
               if not a.new: continue
               a.new = False
+              if type(a) != RollingClassCounter: continue
               database.run_put("alerts", self.cam_name, a, id=id)
               if a is None:
                 del self.alert_counters[id]
@@ -910,7 +911,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 alert.new = True
               else:
                 del raw_alerts[alert_id]
-            if alert is not None:
+            if alert is not None and type(alert) == RollingClassCounter:
               database.run_put("alerts", cam_name, alert, alert_id)
             else:
               database.run_delete("alerts", cam_name, alert_id)
@@ -1373,6 +1374,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             alerts = database.run_get("alerts", name)
             for i in alerts.keys():
               if hasattr(alerts[i], 'desc') and  alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.searcher._encode_text(alerts[i].desc).numpy()
+              if type(alerts[i]) != RollingClassCounter: continue # todo, hacks, find real cause
               database.run_put("alerts", name, alerts[i], i)
             
             self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
