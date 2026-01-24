@@ -1666,106 +1666,136 @@
         .then(res => res.json())
         .then(alerts => { 
           const container = document.getElementById("alertsContainer");
+
           if (!alerts || !alerts.length) {
             container.innerHTML = `
               <p>No alerts configured.</p>
-              <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+              <div style="display:flex; gap:10px; justify-content:center; margin-top:10px;">
                 <button onclick="openAlertModal()">Add Alert</button>
               </div>`;
             return;
           }
 
-        let html = `<table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
-          <thead>
-            <tr>
-              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
-              <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Classes</th>
-              <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Window</th>
-              <th style="text-align:left; padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
-              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
-              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">
-                <span class="tooltip">
-                  Send Alerts
-                  <span class="tooltip-icon">?</span>
-                  <span class="tooltiptext">Enable to send notifications and clips to your clearcam app for this alert (requires premium).</span>
-                </span>
-              </th>
-              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">
-                <span class="tooltip">
-                  Zone
-                  <span class="tooltip-icon">?</span>
-                  <span class="tooltiptext">Enable to only trigger this alert when objects are detected within the defined zone.</span>
-                </span>
-              </th>
-              <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
-            </tr>
-          </thead><tbody>`;
+          const descAlerts = alerts.filter(a => a.desc && a.desc.trim() !== "");
+          const standardAlerts = alerts.filter(a => !a.desc || a.desc.trim() === "");
 
-          for (const alert of alerts) {
-            const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
-            const h = Math.floor(alert.window / 3600);
-            const m = Math.floor((alert.window % 3600) / 60);
-            const s = alert.window % 60;
-            const windowStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-            
-            // Format schedule
-            let scheduleStr = "Always";
-            if (alert.sched && alert.sched.length > 0) {
-              const fromSec = alert.sched[0][0];
-              const toSec = alert.sched[0][1];
-              const fromH = Math.floor(fromSec / 3600);
-              const fromM = Math.floor((fromSec % 3600) / 60);
-              const toH = Math.floor(toSec / 3600);
-              const toM = Math.floor((toSec % 3600) / 60);
-              const timeRange = `${String(fromH).padStart(2,'0')}:${String(fromM).padStart(2,'0')} to ${String(toH).padStart(2,'0')}:${String(toM).padStart(2,'0')}`;
+          let html = "";
 
-              const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-              const activeDays = alert.sched.slice(1).map((on, idx) => on ? daysOfWeek[idx] : null).filter(Boolean);
-              
-              if (activeDays.length === 7) {
-                scheduleStr = `${timeRange} (Daily)`;
-              } else {
-                scheduleStr = `${timeRange} (${activeDays.join(', ')})`;
+          /* ===============================
+            DESCRIPTIVE ALERTS TABLE
+            =============================== */
+          if (descAlerts.length) {
+            html += `
+            <h4 style="margin:10px 0;">Descriptive Alerts</h4>
+            <table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
+              <thead>
+                <tr>
+                  <th style="padding:6px; border-bottom:1px solid #ccc;">Classes</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc;">Description</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc; text-align:center;">Enabled</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc; text-align:center;">Zone</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc; text-align:center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+            for (const alert of descAlerts) {
+              const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
+              const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
+              const isZone = alert.hasOwnProperty("zone") ? alert.zone : true;
+
+              html += `
+                <tr>
+                  <td style="padding:6px; border-bottom:1px solid #eee;">${classNames}</td>
+                  <td style="padding:6px; border-bottom:1px solid #eee;">${alert.desc}</td>
+                  <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                    <input type="checkbox" ${isOn ? "checked" : ""}
+                      onchange="toggleAlert('${alert.id}', this.checked, 'is_on')">
+                  </td>
+                  <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                    <input type="checkbox" ${isZone ? "checked" : ""}
+                      onchange="toggleAlert('${alert.id}', this.checked, 'zone')">
+                  </td>
+                  <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
+                    <button onclick="deleteAlert('${alert.id}')">Delete</button>
+                  </td>
+                </tr>`;
+            }
+
+            html += `</tbody></table>`;
+          }
+          if (standardAlerts.length) {
+            html += `
+            <h4 style="margin:20px 0 10px;">Standard Alerts</h4>
+            <table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
+              <thead>
+                <tr>
+                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc;">Classes</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc;">Window</th>
+                  <th style="padding:6px; border-bottom:1px solid #ccc;">Schedule</th>
+                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Enabled</th>
+                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Send Alerts</th>
+                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Zone</th>
+                  <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+            for (const alert of standardAlerts) {
+              const classNames = alert.classes.map(id => classLabels[id] ?? id).join(", ");
+
+              const h = Math.floor(alert.window / 3600);
+              const m = Math.floor((alert.window % 3600) / 60);
+              const s = alert.window % 60;
+              const windowStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+              let scheduleStr = "Always";
+              if (alert.sched && alert.sched.length > 0) {
+                const [fromSec, toSec] = alert.sched[0];
+                const daysOfWeek = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                const activeDays = alert.sched.slice(1).map((on, i) => on ? daysOfWeek[i] : null).filter(Boolean);
+                const timeRange =
+                  `${String(Math.floor(fromSec/3600)).padStart(2,'0')}:${String((fromSec%3600)/60|0).padStart(2,'0')} to
+                  ${String(Math.floor(toSec/3600)).padStart(2,'0')}:${String((toSec%3600)/60|0).padStart(2,'0')}`;
+
+                scheduleStr = activeDays.length === 7
+                  ? `${timeRange} (Daily)`
+                  : `${timeRange} (${activeDays.join(", ")})`;
               }
+
+              html += `
+              <tr>
+                <td style="text-align:center; padding:6px;">${alert.max}</td>
+                <td style="padding:6px;">${classNames}</td>
+                <td style="padding:6px;">${windowStr}</td>
+                <td style="padding:6px;">${scheduleStr}</td>
+                <td style="text-align:center;">
+                  <input type="checkbox" ${alert.is_on ? "checked" : ""}
+                    onchange="toggleAlert('${alert.id}', this.checked, 'is_on')">
+                </td>
+                <td style="text-align:center;">
+                  <input type="checkbox" ${alert.is_notif ? "checked" : ""}
+                    onchange="toggleAlert('${alert.id}', this.checked, 'is_notif')">
+                </td>
+                <td style="text-align:center;">
+                  <input type="checkbox" ${alert.zone ? "checked" : ""}
+                    onchange="toggleAlert('${alert.id}', this.checked, 'zone')">
+                </td>
+                <td style="text-align:center;">
+                  <button onclick="deleteAlert('${alert.id}')">Delete</button>
+                </td>
+              </tr>`;
             }
 
-            const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
-            const isNotif = alert.hasOwnProperty("is_notif") ? alert.is_notif : true;
-            const isZone = alert.hasOwnProperty("zone") ? alert.zone : true;
-            const checkedAttr = isOn ? "checked" : "";
-            const notifCheckedAttr = isNotif ? "checked" : "";
-            const zoneCheckedAttr = isZone ? "checked" : "";
-            
-            html += `<tr>
-              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">${alert.max}</td>
-              <td style="padding:6px; border-bottom:1px solid #eee; max-width:150px; white-space:normal; word-wrap:break-word; line-height:1.3;">${classNames}</td>
-              <td style="padding:6px; border-bottom:1px solid #eee;">${windowStr}</td>
-              <td style="padding:6px; border-bottom:1px solid #eee;">${scheduleStr}</td>
-              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                <input type="checkbox" data-alert-id="${alert.id}" ${checkedAttr} 
-                    onchange="toggleAlert('${alert.id}', this.checked, 'is_on')" 
-                    style="transform:scale(1.2); cursor:pointer;">
-              </td>
-              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                <input type="checkbox" data-alert-id="${alert.id}" ${notifCheckedAttr} 
-                    onchange="toggleAlert('${alert.id}', this.checked, 'is_notif')" 
-                    style="transform:scale(1.2); cursor:pointer;">
-              </td>
-              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                <input type="checkbox" data-alert-id="${alert.id}" ${zoneCheckedAttr} 
-                    onchange="toggleAlert('${alert.id}', this.checked, 'zone')" 
-                    style="transform:scale(1.2); cursor:pointer;">
-              </td>
-              <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">
-                <button onclick="deleteAlert('${alert.id}')" style="padding:4px 8px;">Delete</button>
-              </td>
-            </tr>`;
-            }
+            html += `</tbody></table>`;
+          }
 
-          html += `</tbody></table>
+          html += `
             <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
               <button onclick="openAlertModal()">Add Alert</button>
             </div>`;
+
           container.innerHTML = html;
         })
         .catch(err => {

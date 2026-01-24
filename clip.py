@@ -156,7 +156,7 @@ class CachedCLIPSearch:
             print("rory batch_paths =",batch_paths, type(batch_paths))
             if not vod: # todo shouldn't be needed
                 for i,x in alerts.items():
-                    if x.desc_emb is not None: self.search(cam_name=cam_name, timestamp=None, image_embeddings=embeddings, paths=batch_paths, alert=x, database=database, id=i, userID=userID, key=key)
+                    if x.desc_emb is not None and x.is_on: self.search(cam_name=cam_name, timestamp=None, image_embeddings=embeddings, paths=batch_paths, alert=x, database=database, id=i, userID=userID, key=key)
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f:

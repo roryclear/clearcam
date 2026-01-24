@@ -428,7 +428,7 @@ class VideoCapture:
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                 if time.time() - alert.last_det >= window:
-                  send_det = alert.is_notif
+                  send_det = alert.is_notif and alert.desc is None # dont alert if descriptive
                   last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               send_video(cam_name=self.cam_name, filename=filename, userID=userID, key=key)
@@ -578,7 +578,7 @@ def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None
     plain.unlink() # only one image per event
     filename = filepath / f"{ts}_notif.jpg"
   text = f"Event Detected ({getattr(alert, 'cam_name')})"
-  if userID is not None and not vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+  if userID is not None and not vod and alert.is_notif and alert.desc is None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
   alert.last_det = time.time()
   return time.time(), filename
 
@@ -957,6 +957,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     "is_on": alert.is_on,
                     "is_notif": alert.is_notif,
                     "zone": alert.zone,
+                    "desc": alert.desc
                 })
             self.send_200(alert_info)
             return
