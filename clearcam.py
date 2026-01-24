@@ -517,7 +517,8 @@ class VideoCapture:
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
-        print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        #print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        print(f"{self.cam_name} FPS: {fps:.2f}")
 
   def run_inference(self, frame):
     frame = Tensor(frame)
@@ -741,6 +742,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.show_dets = None
         super().__init__(*args, **kwargs)
 
+    def log_message(self, format, *args): pass # dont print reqs for now
 
     def process_with_clip_lock(self, func, *args):
         if not self.server.clip_lock.acquire(timeout=30):
