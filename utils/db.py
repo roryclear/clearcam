@@ -99,6 +99,7 @@ def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
           return {}
       if not rows: 
         return {}
+      if len(rows) == 1 and rows[0][0] == "1": return pickle.loads(rows[0][1])
       return {row_id: pickle.loads(val) for row_id, val in rows}
   finally: cur.close()
 
