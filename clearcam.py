@@ -1447,6 +1447,7 @@ if __name__ == "__main__":
     for k, v in alerts.items():
       if not hasattr(v, 'desc'): v.desc = None
       if not hasattr(v, 'desc_emb'): v.desc_emb = None
+      v.alerted = set() # reset
       database.run_put("alerts", cam, v, k)
          
   url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
