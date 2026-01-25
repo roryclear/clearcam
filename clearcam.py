@@ -427,8 +427,8 @@ class VideoCapture:
               window = alert.window if alert.window else (60 if alert.is_notif else 1)
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
-                if time.time() - alert.last_det >= window:
-                  send_det = alert.is_notif and alert.desc is None # dont alert if descriptive
+                if time.time() - alert.last_det >= window and alert.desc is None: # dont alert if descriptive
+                  send_det = send_det or alert.is_notif
                   last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               send_video(cam_name=self.cam_name, filename=filename, userID=userID, key=key)
@@ -517,8 +517,8 @@ class VideoCapture:
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
-        #print(f"\rFPS: {fps:.2f}", end="", flush=True)
-        print(f"{self.cam_name} FPS: {fps:.2f}")
+        print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        #print(f"{self.cam_name} FPS: {fps:.2f}")
 
   def run_inference(self, frame):
     frame = Tensor(frame)
