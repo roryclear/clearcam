@@ -517,7 +517,7 @@ class VideoCapture:
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
-        #print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        print(f"\rFPS: {fps:.2f}", end="", flush=True)
         #print(f"{self.cam_name} FPS: {fps:.2f}")
 
   def run_inference(self, frame):
@@ -1442,13 +1442,14 @@ if __name__ == "__main__":
   cams = database.run_get("links", None)
 
   # update database for desc, todo remove in time
-  for cam in cams:
+  '''  for cam in cams:
     alerts = database.run_get("alerts", cam)
     for k, v in alerts.items():
       if not hasattr(v, 'desc'): v.desc = None
       if not hasattr(v, 'desc_emb'): v.desc_emb = None
       v.alerted = set() # reset
       database.run_put("alerts", cam, v, k)
+  '''
          
   url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
