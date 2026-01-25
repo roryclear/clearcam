@@ -205,9 +205,9 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 
 def is_vod(database, cam_name):
-  url = database.run_get("links", None)[cam_name]
-  if type(url) != str:
-    for _ in range(100): print(cam_name, "url type ",type(url),url)
+  urls = database.run_get("links", None)
+  if type(urls) != dict: print("rory urls not dict",urls)
+  url = urls[cam_name]
   return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
 
 class VideoCapture:
@@ -461,7 +461,7 @@ class VideoCapture:
               for c in a.classes: classes.add(str(c))
             
             new_settings = database.run_get("settings", self.cam_name)
-            if self.settings is not None and new_settings != self.settings and is_vod(database, self.cam_name):
+            if self.settings is not None and new_settings != self.settings and self.vod:
               self.reset_vod()
               if "reset" in new_settings: del new_settings["reset"]
             self.settings = new_settings
