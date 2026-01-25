@@ -1440,6 +1440,14 @@ if __name__ == "__main__":
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
+
+  # update database for desc, todo remove in time
+  for cam in cams:
+    alerts = database.run_get("alerts", cam)
+    for k, v in alerts.items():
+      if not hasattr(v, 'desc'): v.desc = None
+      if not hasattr(v, 'desc_emb'): v.desc_emb = None
+      database.run_put("alerts", cam, v, k)
          
   url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
