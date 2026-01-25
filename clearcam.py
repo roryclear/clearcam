@@ -429,7 +429,7 @@ class VideoCapture:
               if alert.get_counts()[1]:
                 if time.time() - alert.last_det >= window and alert.desc is None: # dont alert if descriptive
                   send_det = send_det or alert.is_notif
-                  last_det, filename = process_alert(alert=alert, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
+                  last_det, filename = process_alert(alert=alert, name=self.cam_name, vod=self.vod, cap=self.cap, filtered_preds=filtered_preds, last_frame=self.last_frame, cam_name=self.cam_name, src_fps=self.src_fps, start_time=self.streamer.start_time, userID=userID)
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
               send_video(cam_name=self.cam_name, filename=filename, userID=userID, key=key)
               send_det = False
@@ -517,7 +517,7 @@ class VideoCapture:
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
-        print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        #print(f"\rFPS: {fps:.2f}", end="", flush=True)
         #print(f"{self.cam_name} FPS: {fps:.2f}")
 
   def run_inference(self, frame):
@@ -566,7 +566,7 @@ class VideoCapture:
       if self.hls_proc:
          self.hls_proc.kill()    
 
-def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None, cam_name=None, src_fps=None, start_time=None, userID=None):
+def process_alert(alert, vod=False, cap=None, name=None, filtered_preds=[], last_frame=None, cam_name=None, src_fps=None, start_time=None, userID=None):
   timestamp = "video" if vod else datetime.now().strftime("%Y-%m-%d")
   filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
   filepath.mkdir(parents=True, exist_ok=True)
@@ -578,7 +578,7 @@ def process_alert(alert, vod=False, cap=None, filtered_preds=[], last_frame=None
   if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
     plain.unlink() # only one image per event
     filename = filepath / f"{ts}_notif.jpg"
-  text = f"Event Detected ({getattr(alert, 'cam_name')})"
+  text = f"Event Detected ({name})"
   if userID is not None and not vod and alert.is_notif and alert.desc is None: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
   alert.last_det = time.time()
   return time.time(), filename
@@ -1330,7 +1330,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
         self.searcher = CLIPSearch() if use_clip else None
-        self.clip = CachedCLIPSearch(alert_emb=self.searcher._encode_text("Fiat Panda").numpy(), userID=userID) if use_clip else None
+        self.clip = CachedCLIPSearch(userID=userID) if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()

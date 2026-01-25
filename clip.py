@@ -8,12 +8,13 @@ import numpy as np
 import cv2
 import time
 from helpers import send_notif, send_video
+import threading
 
 class Model: pass
 
 
 class CachedCLIPSearch:
-    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True, alert_emb=None, userID=None):
+    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True, userID=None):
         self.userID = userID
         self.image_embeddings = {}
         self.image_paths = {}
@@ -42,8 +43,6 @@ class CachedCLIPSearch:
         self.model.proj = weights["visual.proj"].to(device)
 
         self.model.resblocks = []
-        
-        self.alert_emb = alert_emb
 
         for i in range(24):
             resblock = Model()
@@ -153,7 +152,6 @@ class CachedCLIPSearch:
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             alerts = database.run_get("alerts", cam_name)
-            print("rory batch_paths =",batch_paths, type(batch_paths))
             if not vod: # todo shouldn't be needed
                 for i,x in alerts.items():
                     if not x.is_active(): continue
@@ -169,10 +167,10 @@ class CachedCLIPSearch:
             text_embedding = alert.desc_emb
             desc = alert.desc
             similarity = (image_embeddings[i] @ text_embedding.T).item()
-            print("rory similarity =",desc,similarity, paths[i],"timestamp =",paths[i].split("/")[-1].split("_")[0])
+            print("similarity =",desc,similarity, paths[i],"timestamp =",paths[i].split("/")[-1].split("_")[0])
             object_id = int(paths[i].rsplit("_", 1)[-1].split(".")[0])
             if similarity > 0.27 and object_id not in alert.alerted:
-                if self.userID is not None: send_notif(self.userID, f"Event Detected ({desc}) ({cam_name})")
+                if userID is not None: threading.Thread(target=send_notif, args=(userID, f"Event Detected ({desc}) ({cam_name})",), daemon=True).start()
                 alert.alerted.add(object_id)
                 database.run_put("alerts", cam_name, alert, id)
                 time.sleep(6) # todo, better way
