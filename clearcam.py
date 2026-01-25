@@ -206,6 +206,8 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 def is_vod(database, cam_name):
   url = database.run_get("links", None)[cam_name]
+  if type(url) != str:
+    for _ in range(100): print(cam_name, "is_vod returned",type(url),url)
   return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
 
 class VideoCapture:
