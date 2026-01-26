@@ -104,7 +104,7 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
       str(output_path)
     ]
     subprocess.run(command, check=True)
-    comp = 5
+    comp = 10
     file_size = 10*1024*1024
     with open(output_path, "rb") as f:
       file_data = f.read()

@@ -204,7 +204,9 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     return img
 
 
-def is_vod(cam_name): return cam_name.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
+def is_vod(cam_name):
+  video_folder_path = os.path.join("data", "cameras", cam_name, "streams", "video")
+  return os.path.exists(video_folder_path) and os.path.isdir(video_folder_path)
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
