@@ -1,6 +1,5 @@
 import os, sqlite3, contextlib, pickle
 from typing import Any
-from tinygrad.helpers import diskcache_get
 
 _db_tables = set()
 cache_dir: str = "data/"

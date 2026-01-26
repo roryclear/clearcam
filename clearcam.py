@@ -728,6 +728,10 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
+def run_encode_text(return_q, searcher, text):
+  res = searcher._encode_text(text, True)
+  return_q.put(res)
+
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
   embedding = clip.precompute_embedding_bs1_np(im)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
@@ -741,20 +745,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args): pass # dont print reqs for now
-
-    def process_with_clip_lock(self, func, *args):
-        if not self.server.clip_lock.acquire(timeout=30):
-            self.send_error(429, "CLIP processor busy, try again later")
-            return None
-        try:
-            return_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=func, args=(return_q, *args))
-            p.start()
-            results = return_q.get(timeout=3600)
-            p.join()
-            return results
-        finally:
-            self.server.clip_lock.release()
 
     def send_results(self, results, start=0, count=100):
       image_data = []
@@ -1169,17 +1159,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
             if uploaded_image and use_clip:
-              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
             if similar_img and use_clip:
-              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = self.process_with_clip_lock(run_search, self.searcher, image_text, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_search, self.searcher, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1364,9 +1354,24 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 print(f"Cleanup error: {e}")
             self.cleanup_stop_event.wait(timeout=600)
 
+    def process_with_clip_lock(self, func, *args):
+        if not self.clip_lock.acquire(timeout=30):
+            self.send_error(429, "CLIP processor busy, try again later")
+            return None
+        try:
+            return_q = multiprocessing.Queue()
+            p = multiprocessing.Process(target=func, args=(return_q, *args))
+            p.start()
+            results = return_q.get(timeout=3600)
+            p.join()
+            return results
+        finally:
+            self.clip_lock.release()
+
     def _clip_task(self):
       while not self.clip_stop_event.is_set():
         try:
+        #if 1==1:
           object_folders = self.clip.find_object_folders("data/cameras")
           for folder in object_folders:
             name = folder.split("/")[2]
@@ -1374,7 +1379,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
             alerts = database.run_get("alerts", name)
             for i in alerts.keys():
-              if hasattr(alerts[i], 'desc') and  alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.searcher._encode_text(alerts[i].desc).numpy()
+              if hasattr(alerts[i], 'desc') and  alerts[i].desc is not None and alerts[i].desc_emb is None: alerts[i].desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alerts[i].desc)
               if type(alerts[i]) != RollingClassCounter: continue # todo, hacks, find real cause
               database.run_put("alerts", name, alerts[i], i)
             
