@@ -204,11 +204,7 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     return img
 
 
-def is_vod(database, cam_name):
-  urls = database.run_get("links", None)
-  if type(urls) != dict: print("rory urls not dict",urls)
-  url = urls[cam_name]
-  return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
+def is_vod(cam_name): return cam_name.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
@@ -1078,7 +1074,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             requested_path = requested_path[len("cameras/"):]
 
         cam_name = requested_path[:requested_path.index("/")]
-        vod = is_vod(database, cam_name)
+        vod = is_vod(cam_name)
         # todo hack
         if vod and "preview.png" not in requested_path: requested_path = requested_path.rsplit("/", 2)[0] + "/video/" + requested_path.rsplit("/", 1)[1]
 
@@ -1374,7 +1370,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           object_folders = self.clip.find_object_folders("data/cameras")
           for folder in object_folders:
             name = folder.split("/")[2]
-            vod = is_vod(database, name)
+            vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
             alerts = database.run_get("alerts", name)
             for i in alerts.keys():
