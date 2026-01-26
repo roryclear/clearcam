@@ -4,6 +4,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
 
+    .tooltip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+
+      background: #ccc;
+      color: #000;
+      font-size: 12px;
+      font-weight: 600;
+
+      cursor: default;
+      position: relative;
+    }
+
+    .tooltip-text {
+      visibility: hidden;
+      background: #333;
+      color: #fff;
+      text-align: center;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+
+      position: absolute;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+
+    .tooltip:hover .tooltip-text {
+      visibility: visible;
+    }
+
     .spinner {
       width: 16px;
       height: 16px;
@@ -1460,36 +1499,39 @@
         </div>
         <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
           <div class="form-group" style="width: 90%; text-align: center; margin-bottom: 12px;">
-            <label for="desc" style="font-weight: 600; margin-bottom: 6px; display: block;">
+            <label for="desc" style="font-weight: 600; margin-bottom: 6px; display: inline-flex; align-items: center; gap: 6px;">
               Description
+              <span class="tooltip">
+                ?
+                <span class="tooltip-text">Describe the object you want to be alerted for.</span>
+              </span>
             </label>
             <textarea
               id="desc"
               name="desc"
-              rows="3"
-              placeholder="Describe this alert..."
+              rows="1"
+              placeholder="e.g White Toyota Van"
               style="width: 100%; resize: vertical; padding: 6px; box-sizing: border-box;"
             ></textarea>
           </div>
           <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
             <div id="checkboxContainer" class="checkbox-container" style="display: grid; grid-template-columns: auto auto; gap: 8px 16px; max-height: 200px; overflow-y: auto; margin: 0 auto; padding: 8px; justify-content: center;"></div>
           </div>
-          <div class="form-group" style="width: 90%; text-align: center; margin-top: 15px;">
+          <div id="timeWindowSection" class="form-group" style="width: 90%; text-align: center; margin-top: 15px;">
             <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Window (Optional)</label>
             <div style="margin-bottom: 10px;">
               <label for="maxCount">Trigger if there are</label>
               <input type="number" id="maxCount" name="max" min="1" placeholder="1"
-                  style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+                style="width: 80px; margin: 0 6px; text-align: center;">
               <span>objects detected</span>
             </div>
-            
             <div>
               <label for="windowMinutes">within this time window</label>
-              <input type="number" id="windowMinutes" name="window" min="1" placeholder="1" 
-                  style="width: 80px; margin: 0 6px; text-align: center; display: inline-block;">
+              <input type="number" id="windowMinutes" name="window" min="1" placeholder="1"
+                style="width: 80px; margin: 0 6px; text-align: center;">
               <span>minutes</span>
             </div>
-          </div>          
+          </div>        
           <div class="form-group" style="width: 90%; text-align: center;">
             <label style="font-weight: 600; margin-bottom: 10px; display: block;">Schedule (Optional)</label>
             <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
@@ -1626,6 +1668,21 @@
     let eventStart = 0;
     const EVENT_PAGE_SIZE = 50;
     let hasMoreEvents = true;
+
+    const descInput = document.getElementById("desc");
+    const timeWindowSection = document.getElementById("timeWindowSection");
+    const timeWindowInputs = timeWindowSection.querySelectorAll("input");
+
+    descInput.addEventListener("input", () => {
+      const hasText = descInput.value.trim().length > 0;
+
+      timeWindowInputs.forEach(input => {
+        input.disabled = hasText;
+      });
+
+      timeWindowSection.style.opacity = hasText ? "0.5" : "1";
+      timeWindowSection.style.pointerEvents = hasText ? "none" : "auto";
+    });
 
     function openAlertsModal(cameraName) {
       currentAlertsCamera = cameraName;
