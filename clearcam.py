@@ -492,33 +492,37 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
-      show_dets = (self.settings.get("show_dets") if self.settings else None) or None
-      if show_dets:
-        show_dets = int(show_dets)
-        if (time.time() - show_dets) < 120 and not self.streamer.feeding_frames:
-           self.streamer.feeding_frames = True
-           self.streamer._stop_event.clear()
-           self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
-           self.streamer.feeding_frames_thread.start()
-        elif hasattr(self, 'streamer') and self.streamer.feeding_frames:
-           self.streamer.feeding_frames = False
-           self.streamer._stop_event.set()
-      if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
-        time.sleep(1)
-        with self.lock: self.last_preds = [] # to remove annotation when no alerts active
-        continue
-      with self.lock:
-        frame = self.raw_frame.copy() if self.raw_frame is not None else None
-      if frame is not None:
-        preds, frame = self.run_inference(frame)
+      try:
+        show_dets = (self.settings.get("show_dets") if self.settings else None) or None
+        if show_dets:
+          show_dets = int(show_dets)
+          if (time.time() - show_dets) < 120 and not self.streamer.feeding_frames:
+            self.streamer.feeding_frames = True
+            self.streamer._stop_event.clear()
+            self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
+            self.streamer.feeding_frames_thread.start()
+          elif hasattr(self, 'streamer') and self.streamer.feeding_frames:
+            self.streamer.feeding_frames = False
+            self.streamer._stop_event.set()
+        if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+          time.sleep(1)
+          with self.lock: self.last_preds = [] # to remove annotation when no alerts active
+          continue
         with self.lock:
-          self.last_preds = preds
-          self.last_frame = frame.numpy().copy()
-        curr_time = time.time()
-        fps = 1 / (curr_time - prev_time)
-        prev_time = curr_time
-        print(f"\rFPS: {fps:.2f}", end="", flush=True)
-        #print(f"{self.cam_name} FPS: {fps:.2f}")
+          frame = self.raw_frame.copy() if self.raw_frame is not None else None
+        if frame is not None:
+          preds, frame = self.run_inference(frame)
+          with self.lock:
+            self.last_preds = preds
+            self.last_frame = frame.numpy().copy()
+          curr_time = time.time()
+          fps = 1 / (curr_time - prev_time)
+          prev_time = curr_time
+          print(f"\rFPS: {fps:.2f}", end="", flush=True)
+          #print(f"{self.cam_name} FPS: {fps:.2f}")
+      except Exception as e:
+        print(f"Error in inference_loop: ({self.cam_name})", e)
+        time.sleep(1)
 
   def run_inference(self, frame):
     frame = Tensor(frame)
