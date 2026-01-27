@@ -4,25 +4,6 @@
 
 # clearcam: Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
 
-<table border="0" cellspacing="0" cellpadding="0">
-  <tr>
-    <td align="center">
-      <a href="https://apps.apple.com/gb/app/clearcam/id6743237694">
-        <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
-             alt="Download on the App Store"
-             height="50"/>
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://play.google.com/store/apps/details?id=com.rors.clearcam">
-        <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
-             alt="Get it on Google Play"
-             height="50"/>
-      </a>
-    </td>
-  </tr>
-</table>
-
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
 <tr valign="top">
 <td style="padding-right: 10px;">
@@ -76,6 +57,25 @@ https://x.com/RoryClear/status/1959249250811785405
 - iOS 15 or newer
 - iPhone SE (1st gen) or newer (older iPhones *might* work)
 - dependencies: NONE!
+
+<table border="0" cellspacing="0" cellpadding="0">
+  <tr>
+    <td align="center">
+      <a href="https://apps.apple.com/gb/app/clearcam/id6743237694">
+        <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
+             alt="Download on the App Store"
+             height="50"/>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://play.google.com/store/apps/details?id=com.rors.clearcam">
+        <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+             alt="Get it on Google Play"
+             height="50"/>
+      </a>
+    </td>
+  </tr>
+</table>
 
 </br>
 <table>
