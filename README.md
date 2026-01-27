@@ -38,7 +38,7 @@ Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m
 https://x.com/RoryClear/status/1959249250811785405
 
 ## computer requirements
-- Mac, Linux, and maybe Windows
+- Mac, Linux, or maybe Windows
 - ffmpeg
 - python3.11 or later
 
