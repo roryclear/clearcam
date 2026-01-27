@@ -38,9 +38,9 @@ Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m
 https://x.com/RoryClear/status/1959249250811785405
 
 ## computer requirements
-- Mac, Linux, or Windows 
+- Mac, Linux, and maybe Windows
 - ffmpeg
-- >= python3.11
+- python3.11 or later
 
 ## run NVR + inference in python from source
 1. pip install -r requirements.txt
