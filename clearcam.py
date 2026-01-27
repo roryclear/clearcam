@@ -94,7 +94,7 @@ BASE_DIR = Path(__file__).parent / "data"
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None, desc=None, threshold=0.27):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
@@ -107,6 +107,9 @@ class RollingClassCounter:
     self.zone = True
     self.reset = False
     self.new = True
+    self.desc = desc
+    self.desc_emb = None
+    self.threshold = threshold
 
   def add(self, class_id):
     if self.classes is not None and class_id not in self.classes: return
@@ -435,7 +438,7 @@ class VideoCapture:
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                       plain.unlink() # only one image per event
                       filename = filepath / f"{ts}_notif.jpg"
-                    text = f"Event Detected ({getattr(alert, 'cam_name')})"
+                    text = f"Event Detected ({self.cam_name})"
                     if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
                     last_det = time.time()
                     alert.last_det = time.time()
@@ -952,6 +955,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             is_on = query.get("is_on", [None])[0]
             zone = query.get("zone", [None])[0]
             is_notif = query.get("is_notif", [None])[0]
+            desc = query.get("desc", [None])[0]
             if alert_id is None: # no id, add alert
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
@@ -967,6 +971,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         classes=classes,
                         sched=sched,
                         cam_name=cam_name,
+                        desc=desc
                     )
                 raw_alerts[alert_id] = alert
             else:
@@ -978,10 +983,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 alert.new = True
               else:
                 del raw_alerts[alert_id]
+            table = "desc_alerts" if desc is not None else "alerts"
             if alert is not None:
-              database.run_put("alerts", cam_name, alert, alert_id)
+              database.run_put(table, cam_name, alert, alert_id)
             else:
-              database.run_delete("alerts", cam_name, alert_id)
+              database.run_delete(table, cam_name, alert_id)
             
             # make vod reset
             settings = database.run_get("settings", cam_name)
@@ -1651,7 +1657,6 @@ if __name__ == "__main__":
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
-         
   url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
   is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
