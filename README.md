@@ -56,18 +56,17 @@ Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m
 ## video demo:
 https://x.com/RoryClear/status/1959249250811785405
 
+## computer requirements
+- Mac, Linux, or Windows 
+- ffmpeg
+- >= python3.11
+
 ## run NVR + inference in python from source
 1. pip install -r requirements.txt
 2. python3 clearcam.py
 3. (optional) enter your Clearcam premium userID (viewable in iOS app) to receive streams and notifications
 4. open localhost:8080 in your browser
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
-
-## python requirements
-- ffmpeg (installed on your computer)
-- tinygrad
-- numpy
-- cv2
 
 ## install iOS App from source
 1. git clone https://github.com/roryclear/clearcam.git
