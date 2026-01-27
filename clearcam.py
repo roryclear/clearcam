@@ -203,9 +203,7 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     return img
 
 
-def is_vod(database, cam_name):
-  url = database.run_get("links", None)[cam_name]
-  return url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
+def is_vod(cam_name): return Path("data/cameras", cam_name, "streams", "video").is_dir()
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
@@ -480,7 +478,7 @@ class VideoCapture:
               for c in a.classes: classes.add(str(c))
             
             new_settings = database.run_get("settings", self.cam_name)
-            if self.settings is not None and new_settings != self.settings and is_vod(database, self.cam_name):
+            if self.settings is not None and new_settings != self.settings and is_vod(self.cam_name):
               self.reset_vod()
               if "reset" in new_settings: del new_settings["reset"]
             self.settings = new_settings
@@ -1146,7 +1144,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             requested_path = requested_path[len("cameras/"):]
 
         cam_name = requested_path[:requested_path.index("/")]
-        vod = is_vod(database, cam_name)
+        vod = is_vod(cam_name)
         # todo hack
         if vod and "preview.png" not in requested_path: requested_path = requested_path.rsplit("/", 2)[0] + "/video/" + requested_path.rsplit("/", 1)[1]
 
@@ -1595,7 +1593,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           object_folders = self.clip.find_object_folders("data/cameras")
           for folder in object_folders:
             name = folder.split("/")[2]
-            vod = is_vod(database, name)
+            vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
             self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
