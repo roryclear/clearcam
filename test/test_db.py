@@ -1,6 +1,8 @@
 from utils.db import db
+import os
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
+  #os.makedirs("data", exist_ok=True); open("data/cc_cache.db", "a").close()  
   cache_db = db()
   x = cache_db.run_get("links", None)
   assert x == {}
