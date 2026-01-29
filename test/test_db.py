@@ -1,8 +1,10 @@
 from utils.db import db
 import os
+import threading
 
-if __name__ == "__main__":
-  #os.makedirs("data", exist_ok=True); open("data/cc_cache.db", "a").close()  
+if __name__ == "__main__": # todo, use different file
+  os.remove("data/cc_cache.db") if os.path.exists("data/cc_cache.db") else None
+  os.makedirs("data", exist_ok=True); open("data/cc_cache.db", "a").close()  
   cache_db = db()
   x = cache_db.run_get("links", None)
   assert x == {}
@@ -36,3 +38,36 @@ if __name__ == "__main__":
   assert x == {'cam1': {'det': 'y'}}
   x = cache_db.run_get("settings", "cam1", None)
   assert x == {'det': 'y'}
+  
+  # test with threading
+  cache_db.run_put("max_storage", "all", 256)
+  for _ in range(100):
+    responses = []
+    def get_cross_thread(id):
+        try:
+            if id == 0:
+              resp = cache_db.run_get("links", None, timeout=2)
+              responses.append(("links", resp))
+            elif id == 1:
+              resp = cache_db.run_get("max_storage", "all", timeout=2)
+              responses.append(("max_storage", resp))
+            else:
+              resp = cache_db.run_get("settings", None, timeout=2)
+              responses.append(("settings", resp))
+        except Exception as e:
+            responses.append((f"thread{id}", f"ERROR: {e}"))
+    threads = []
+    responses.clear()
+    for i in range(3):
+        t = threading.Thread(target=get_cross_thread, args=(i,))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+    wrong_type_count = 0
+    for table, resp in responses:
+        if table == "max_storage" and isinstance(resp, dict):
+            wrong_type_count += 1
+        elif table != "max_storage" and not isinstance(resp, dict):
+            wrong_type_count += 1
+    assert wrong_type_count == 0
