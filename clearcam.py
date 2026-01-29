@@ -1275,7 +1275,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     "folder": selected_dir,
                   })
 
-            image_data.sort(key=lambda x: x["timestamp"], reverse=True)
+            image_data.sort(key=image_sort_key, reverse=True)
             if start is not None and count is not None: image_data = image_data[start:start+count]
 
             response_data = {
@@ -1288,6 +1288,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(response_data).encode('utf-8'))
             return
+
+def image_sort_key(item):
+    folder = item["folder"]
+    ts = item["timestamp"]
+
+    try:
+        day = datetime.strptime(folder, "%Y-%m-%d")
+        return day.timestamp() + ts
+    except ValueError:
+        return -1
 
 def schedule_daily_restart(hls_streamer, videocapture, restart_time):
     while True:
