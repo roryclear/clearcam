@@ -1290,14 +1290,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
 def image_sort_key(item):
-    folder = item["folder"]
-    ts = item["timestamp"]
-
-    try:
-        day = datetime.strptime(folder, "%Y-%m-%d")
-        return day.timestamp() + ts
-    except ValueError:
-        return -1
+  try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
+  except ValueError: return -1
 
 def schedule_daily_restart(hls_streamer, videocapture, restart_time):
     while True:
