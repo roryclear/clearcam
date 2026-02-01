@@ -1,6 +1,7 @@
 import os, sqlite3, contextlib, pickle
 from typing import Any
 from tinygrad.helpers import diskcache_get
+import threading
 
 _db_tables = set()
 cache_dir: str = "data/"
@@ -114,6 +115,7 @@ class db:
       self._req_q = multiprocessing.Queue()
       self._resp_q = multiprocessing.Queue()
       self._stop = multiprocessing.Event()
+      self._lock = threading.Lock()
 
       self._proc = multiprocessing.Process(
         target=self._worker_loop,
@@ -159,19 +161,22 @@ class db:
                 self._proc.kill()
 
     def run_get(self, table, key=None, id=None, timeout=5):
-        self._req_q.put(("get", table, key, id))
-        status, result = self._resp_q.get(timeout=timeout)
-        if status == "err": raise Exception(result)
-        return result
+        with self._lock:
+          self._req_q.put(("get", table, key, id))
+          status, result = self._resp_q.get(timeout=timeout)
+          if status == "err": raise Exception(result)
+          return result
 
     def run_put(self, table, key, val=None, id=None, replace=True, timeout=5):
-        self._req_q.put(("put", table, key, (val, id, replace)))
-        status, result = self._resp_q.get(timeout=timeout)
-        if status == "err": raise Exception(result)
-        return result
+        with self._lock:
+          self._req_q.put(("put", table, key, (val, id, replace)))
+          status, result = self._resp_q.get(timeout=timeout)
+          if status == "err": raise Exception(result)
+          return result
 
     def run_delete(self, table, key, id=None, timeout=5):
-        self._req_q.put(("delete", table, key, id))
-        status, result = self._resp_q.get(timeout=timeout)
-        if status == "err": raise Exception(result)
-        return result
+        with self._lock:
+          self._req_q.put(("delete", table, key, id))
+          status, result = self._resp_q.get(timeout=timeout)
+          if status == "err": raise Exception(result)
+          return result
