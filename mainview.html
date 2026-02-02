@@ -2006,8 +2006,7 @@
       loadEventImages();
     });
 
-
-    function restartAllStreams() {
+    async function restartAllStreams() {
       console.log('Restarting all streams for date:', currentStreamDate);
 
       activeVideoStreams.forEach((streamInfo, camName) => {
@@ -2015,9 +2014,10 @@
       });
 
       if (window.currentCameras) {
-        window.currentCameras.forEach(camName => {
+        for (const camName of window.currentCameras) {
           startCameraStream(camName);
-        });
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       }
     }
 
@@ -2730,18 +2730,63 @@
           manifestLoadingMaxRetry: Infinity,
           manifestLoadingRetryDelay: 2000,
           enableWorker: true,
-          lowLatencyMode: true,
-          backBufferLength: 0,
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 10
+          lowLatencyMode: false,
+          backBufferLength: 30,
+          liveSyncDurationCount: 1,
+          liveMaxLatencyDurationCount: 3,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          startLevel: -1,
+          fragLoadingTimeOut: 20000,
+          fragLoadingMaxRetry: Infinity,
+          fragLoadingRetryDelay: 2000
         });
 
         hls.loadSource(url);
         hls.attachMedia(video);
 
+        let seekAttempts = 0;
+        const maxSeekAttempts = 3;
+
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
-          if (startTime !== null) video.currentTime = startTime;
-          video.play().catch(()=>{});
+          if (startTime !== null) {
+            function attemptSeek() {
+              if (video.readyState >= 2 && video.buffered.length > 0) {
+                video.currentTime = startTime;
+                video.play().catch(() => {});
+                seekAttempts = 0;
+              } else if (seekAttempts < maxSeekAttempts) {
+                seekAttempts++;
+                setTimeout(attemptSeek, 500);
+              }
+            }
+            attemptSeek();
+          } else {
+            video.play().catch(() => {});
+          }
+        });
+
+        // Add seeking handler to prevent jumps
+        video.addEventListener('seeking', function() {
+          if (hls.media && hls.media.duration) {
+            const targetTime = video.currentTime;
+            const buffered = hls.media.buffered;
+            
+            // Check if we have buffer around the seek point
+            let hasBuffer = false;
+            for (let i = 0; i < buffered.length; i++) {
+              if (targetTime >= buffered.start(i) && targetTime <= buffered.end(i)) {
+                hasBuffer = true;
+                break;
+              }
+            }
+            
+            if (!hasBuffer) {
+              // Load the fragment containing the seek point
+              hls.startLoad(targetTime);
+            }
+          }
         });
 
         hls.on(Hls.Events.ERROR, function (event, data) {
@@ -2765,8 +2810,10 @@
         video.src = url;
         video.addEventListener('loadedmetadata', function onMeta() {
           video.removeEventListener('loadedmetadata', onMeta);
-          if (startTime !== null) video.currentTime = startTime;
-          video.play().catch(()=>{});
+          if (startTime !== null) {
+            video.currentTime = startTime;
+          }
+          video.play().catch(() => {});
         });
       } else {
         console.error("No HLS support in this browser.");
@@ -3243,12 +3290,40 @@
       document.getElementById("imagePreviewModal").style.display = "none";
     }
 
-    function playVideoAtTime(camName, timestamp, folder) {
+    async function playVideoAtTime(camName, timestamp, folder) {
+      if (folder !== currentStreamDate) {
+        document.getElementById('streamDateSelect').value = folder;
+        currentStreamDate = folder;
+        await restartAllStreams();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
       const videoId = `video-${camName}`;
-      const video = document.getElementById(videoId);      
+      const video = document.getElementById(videoId);
+      
       if (video) {
-        video.currentTime = timestamp;
+        const streamInfo = activeVideoStreams.get(camName);
+        
+        if (streamInfo && streamInfo.hls) {
+          if (streamInfo.hls.media && streamInfo.hls.media.readyState >= 1) {
+            video.currentTime = timestamp;
+            streamInfo.hls.startLoad(timestamp);
+          } else {
+            const checkReady = setInterval(() => {
+              if (streamInfo.hls.media && streamInfo.hls.media.readyState >= 1) {
+                clearInterval(checkReady);
+                video.currentTime = timestamp;
+                streamInfo.hls.startLoad(timestamp);
+              }
+            }, 100);
+            setTimeout(() => clearInterval(checkReady), 3000);
+          }
+        } else {
+          video.currentTime = timestamp;
+        }
+        
         video.play().catch(e => console.log('Auto-play prevented:', e));
+        
         const cameraCard = video.closest('.camera-card');
         if (cameraCard) {
           cameraCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3262,18 +3337,35 @@
       }
     }
 
-    function playAllCamerasAtTime(timestamp, folder) {
-      if(folder != document.getElementById('streamDateSelect').value){
+    async function playAllCamerasAtTime(timestamp, folder) {
+      if (folder !== currentStreamDate) {
         document.getElementById('streamDateSelect').value = folder;
         currentStreamDate = folder;
-        restartAllStreams();
+        await restartAllStreams();
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
+
       if (window.currentCameras && window.currentCameras.length > 0) {
+        let successCount = 0;
+        
         window.currentCameras.forEach(camName => {
           const videoId = `video-${camName}`;
           const video = document.getElementById(videoId);
+          
           if (video) {
-            video.currentTime = timestamp;
+            const streamInfo = activeVideoStreams.get(camName);
+            
+            if (streamInfo && streamInfo.hls) {
+              if (streamInfo.hls.media && streamInfo.hls.media.readyState >= 1) {
+                video.currentTime = timestamp;
+                streamInfo.hls.startLoad(timestamp);
+                successCount++;
+              }
+            } else {
+              video.currentTime = timestamp;
+              successCount++;
+            }
+            
             video.play().catch(e => console.log(`Auto-play prevented for ${camName}:`, e));
           }
         });
@@ -3287,10 +3379,14 @@
             card.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
           }, 2000);
         });
+        
+        console.log(`Successfully set time on ${successCount} of ${window.currentCameras.length} cameras`);
       } else {
         alert("No cameras available to play");
       }
     }
+
+
     window.addEventListener("click", function(event) {
       const modal = document.getElementById("imagePreviewModal");
       if (event.target === modal) {
