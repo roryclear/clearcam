@@ -293,7 +293,6 @@ class VideoCapture:
       # Original live stream pipeline
       command = [
           ffmpeg_path,
-          "-re",
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
           "-i", self.src,
           "-c", "copy",
