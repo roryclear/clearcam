@@ -293,7 +293,6 @@ class VideoCapture:
       # Original live stream pipeline
       command = [
           ffmpeg_path,
-          "-re",
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
           "-i", self.src,
           "-c", "copy",
@@ -796,6 +795,11 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
+def run_encode_text(return_q, searcher, text):
+  res = searcher._encode_text(text, realize=True)
+  return_q.put(res)
+  return res
+
 def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
@@ -812,20 +816,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         self.show_dets = None
         super().__init__(*args, **kwargs)
 
-
-    def process_with_clip_lock(self, func, *args):
-        if not self.server.clip_lock.acquire(timeout=30):
-            self.send_error(429, "CLIP processor busy, try again later")
-            return None
-        try:
-            return_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=func, args=(return_q, *args))
-            p.start()
-            results = return_q.get(timeout=3600)
-            p.join()
-            return results
-        finally:
-            self.server.clip_lock.release()
+    def log_message(self, format, *args): pass # don't print stuff
 
     def send_results(self, results, start=0, count=100):
       image_data = []
@@ -969,7 +960,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         classes=classes,
                         sched=sched,
                         cam_name=cam_name,
-                        desc=desc
+                        desc=desc,
                     )
                 raw_alerts[alert_id] = alert
             else:
@@ -977,15 +968,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if is_on is not None: raw_alerts[alert_id].is_on = str(is_on).lower() == "true"
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
                 if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
+                if desc is not None: raw_alerts[alert_id].desc = desc
                 alert = raw_alerts[alert_id]
                 alert.new = True
               else:
                 del raw_alerts[alert_id]
-            table = "desc_alerts" if desc is not None else "alerts"
             if alert is not None:
-              database.run_put(table, cam_name, alert, alert_id)
+              database.run_put("alerts", cam_name, alert, alert_id)
             else:
-              database.run_delete(table, cam_name, alert_id)
+              database.run_delete("alerts", cam_name, alert_id)
             
             # make vod reset
             settings = database.run_get("settings", cam_name)
@@ -1239,17 +1230,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
             if uploaded_image and use_clip:
-              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
             if similar_img and use_clip:
-              results = self.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = self.process_with_clip_lock(run_search, self.searcher, image_text, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_search, self.searcher, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1561,27 +1552,33 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self._setup_cleanup_and_clip_thread()
         self.clip_lock = threading.Lock()
 
+    def process_with_clip_lock(self, func, *args):
+        if not self.clip_lock.acquire(timeout=30):
+            self.send_error(429, "CLIP processor busy, try again later")
+            return None
+        try:
+            return_q = multiprocessing.Queue()
+            p = multiprocessing.Process(target=func, args=(return_q, *args))
+            p.start()
+            results = return_q.get(timeout=3600)
+            p.join()
+            return results
+        finally:
+            self.clip_lock.release()
+
     def finish_request(self, request, client_address):
       self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip, searcher_instance=self.searcher)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
-            self.cleanup_stop_event.clear()
-            self.cleanup_thread = threading.Thread(
-                target=self._cleanup_task,
-                daemon=True,
-                name="StorageCleanup"
-            )
-            self.cleanup_thread.start()
+          self.cleanup_stop_event.clear()
+          self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
+          self.cleanup_thread.start()
 
         if use_clip and (self.clip_thread is None or not self.clip_thread.is_alive()):
-            self.clip_stop_event.clear()
-            self.clip_thread = threading.Thread(
-                target=self._clip_task,
-                daemon=True,
-                name="CLIPMaintenance"
-            )
-            self.clip_thread.start()
+          self.clip_stop_event.clear()
+          self.clip_thread = threading.Thread(target=self._clip_task, daemon=True, name="CLIPMaintenance")
+          self.clip_thread.start()
 
     def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
@@ -1601,6 +1598,13 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
             self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
+            #alerts = database.run_get("alerts", name)
+            # todo, move to own loop
+            #for key, alert in alerts.items():
+            #  if alert.desc is not None and alert.desc_emb is None:
+            #    alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
+            #    database.run_put("alerts", name, alert, id=key)
+
         except Exception as e:
           print(f"CLIP error: {e}")
         self.clip_stop_event.wait(timeout=1)
