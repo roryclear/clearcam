@@ -1586,7 +1586,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=600)
+            self.cleanup_stop_event.wait(timeout=6)
 
     def _clip_task(self):
       while not self.clip_stop_event.is_set():
@@ -1613,6 +1613,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
       size_gb = total_size / (1000 ** 3)
       free_gb = shutil.disk_usage(BASE_DIR / "cameras").free / (1000 ** 3)
+      print("RORY SIZE =",size_gb)
       if size_gb > self.max_gb or free_gb < 5: self._cleanup_oldest_files() # todo unhardcode
 
     def _cleanup_oldest_files(self):
@@ -1624,28 +1625,29 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       
       if not camera_dirs: return
           
-      largest_cam = max(camera_dirs, key=lambda x: x[1])[0]
-      streams_dir = largest_cam / "streams"
-      
-      if not streams_dir.exists():
-        shutil.rmtree(largest_cam)
-        return
-          
-      recordings = []
-      for rec_dir in streams_dir.iterdir():
-        if rec_dir.is_dir(): recordings.append((rec_dir, rec_dir.stat().st_ctime))
-      if not recordings:
-        shutil.rmtree(largest_cam)
-        print(f"Deleted camera folder with empty streams: {largest_cam}")
-        return
-      recordings.sort(key=lambda x: x[1])
-      oldest_recording = recordings[0][0]
-      shutil.rmtree(oldest_recording)
-      event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
-      object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
-      if event_images_dir.exists(): shutil.rmtree(event_images_dir)
-      if object_images_dir.exists(): shutil.rmtree(object_images_dir)
-      print(f"Deleted oldest recording: {oldest_recording}")
+      largest_cam_raw = max(camera_dirs, key=lambda x: x[1])[0]
+      largest_cam_det = largest_cam.with_stem(largest_cam.stem + "_det")
+      for largest_cam in [largest_cam_raw, largest_cam_det]:
+        streams_dir = largest_cam / "streams"
+        if not streams_dir.exists():
+          shutil.rmtree(largest_cam)
+          continue
+            
+        recordings = []
+        for rec_dir in streams_dir.iterdir():
+          if rec_dir.is_dir(): recordings.append((rec_dir, rec_dir.stat().st_ctime))
+        if not recordings:
+          shutil.rmtree(largest_cam)
+          print(f"Deleted camera folder with empty streams: {largest_cam}")
+          continue
+        recordings.sort(key=lambda x: x[1])
+        oldest_recording = recordings[0][0]
+        shutil.rmtree(oldest_recording)
+        event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
+        object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        if event_images_dir.exists(): shutil.rmtree(event_images_dir)
+        if object_images_dir.exists(): shutil.rmtree(object_images_dir)
+        print(f"Deleted oldest recording: {oldest_recording}")
 
     def server_close(self):
         if hasattr(self, 'cleanup_stop_event'):
