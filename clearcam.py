@@ -1586,7 +1586,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 self._check_and_cleanup_storage()
             except Exception as e:
                 print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=6)
+            self.cleanup_stop_event.wait(timeout=600)
 
     def _clip_task(self):
       while not self.clip_stop_event.is_set():
@@ -1613,7 +1613,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
       size_gb = total_size / (1000 ** 3)
       free_gb = shutil.disk_usage(BASE_DIR / "cameras").free / (1000 ** 3)
-      print("RORY SIZE =",size_gb)
       if size_gb > self.max_gb or free_gb < 5: self._cleanup_oldest_files() # todo unhardcode
 
     def _cleanup_oldest_files(self):
