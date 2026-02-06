@@ -294,13 +294,17 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+          "-fflags", "+genpts+igndts",
+          "-copyts",
           "-i", self.src,
           "-c", "copy",
-          "-f", "hls",
-          "-hls_list_size", "0",
-          "-hls_flags", "append_list+temp_file",
-          "-hls_playlist_type", "event",
           "-an",
+          "-f", "hls",
+          "-hls_time", "2",
+          "-hls_list_size", "0",
+          "-hls_flags",
+          "append_list+independent_segments+temp_file",
+          "-hls_playlist_type", "event",
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8")
       ]
