@@ -275,16 +275,21 @@ class VideoCapture:
     if self.vod:
       command = [
           ffmpeg_path,
-          "-i", self.src,  # No -re for files
-          "-c", "copy",  # Stream copy for efficiency
+          "-rtsp_transport", "tcp",
+          "-use_wallclock_as_timestamps", "1",
+          "-fflags", "+genpts+discardcorrupt",
+          "-i", self.src,
+          "-c:v", "copy",
+          "-an",
           "-f", "hls",
-          "-hls_time", "2",  # Segment duration
-          "-hls_list_size", "0",
-          "-hls_flags", "append_list+temp_file",
-          "-hls_playlist_type", "event",
-          "-an",  # No audio
-          "-hls_segment_filename", str(path / "stream_%06d.ts"),
-          str(path / "stream.m3u8")
+          "-hls_time", "2",
+          "-hls_list_size", "1800",
+          "-hls_flags",
+              "delete_segments+append_list+program_date_time+independent_segments",
+          "-hls_segment_type", "fmp4",
+          "-hls_fmp4_init_filename", "init.mp4",
+          "-hls_segment_filename", str(path / "seg_%06d.m4s"),
+          str(path / "stream.m3u8"),
       ]
       self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.proc = None
