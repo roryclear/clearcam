@@ -1633,7 +1633,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       if not camera_dirs: return
           
       largest_cam_raw = max(camera_dirs, key=lambda x: x[1])[0]
-      largest_cam_det = largest_cam.with_stem(largest_cam.stem + "_det")
+      largest_cam_det = largest_cam_raw.with_stem(largest_cam_raw.stem + "_det")
       for largest_cam in [largest_cam_raw, largest_cam_det]:
         streams_dir = largest_cam / "streams"
         if not streams_dir.exists():
