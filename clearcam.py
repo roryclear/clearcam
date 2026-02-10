@@ -26,6 +26,7 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
+from utils.helpers import send_notif
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -431,7 +432,7 @@ class VideoCapture:
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
-                    if alert.is_notif: send_det = True
+                    if alert.is_notif and alert.desc is None: send_det = True
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
@@ -452,8 +453,6 @@ class VideoCapture:
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
               temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
               export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), length=20)
-
-              # img preview?
               subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
               os.replace(temp_output, mp4_filename)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
@@ -1306,39 +1305,6 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
         python = sys.executable
         os.execv(python, [python] + sys.argv)
 
-def send_notif(session_token: str, text=None):
-    host = "www.clearcam.org"
-    endpoint = "/send" #/test
-    boundary = f"Boundary-{uuid.uuid4()}"
-    content_type = f"multipart/form-data; boundary={boundary}"
-    lines = [
-        f"--{boundary}",
-        'Content-Disposition: form-data; name="session_token"',
-        "",
-        session_token,
-        f"--{boundary}--",
-        ""
-    ]
-    if text is not None:
-      lines.extend([
-      f"--{boundary}",
-      'Content-Disposition: form-data; name="text"',
-      "",
-      text,
-    ])
-    body = "\r\n".join(lines).encode("utf-8")
-    conn = http.client.HTTPSConnection(host)
-    headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
-    try:
-        conn.request("POST", endpoint, body, headers)
-        response = conn.getresponse()
-        print(f"Status: {response.status} {response.reason}")
-        print(response.read().decode())
-    except Exception as e:
-        print(f"Error sending session token: {e}")
-    finally:
-        conn.close()
-
 import aes
 MAGIC_NUMBER = 0x4D41474943
 HEADER_SIZE = 8
@@ -1602,14 +1568,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             name = folder.split("/")[2]
             vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
+            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
-            #alerts = database.run_get("alerts", name)
+            alerts = database.run_get("alerts", name)
             # todo, move to own loop
-            #for key, alert in alerts.items():
-            #  if alert.desc is not None and alert.desc_emb is None:
-            #    alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
-            #    database.run_put("alerts", name, alert, id=key)
+            for key, alert in alerts.items():
+              if alert.desc is not None and alert.desc_emb is None:
+                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
+                database.run_put("alerts", name, alert, id=key)
 
         except Exception as e:
           print(f"CLIP error: {e}")

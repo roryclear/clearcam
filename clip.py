@@ -6,6 +6,8 @@ from tinygrad.helpers import fetch
 from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
+import time
+from utils.helpers import send_notif
 
 class Model: pass
 
@@ -89,10 +91,14 @@ class CachedCLIPSearch:
                             object_folders.append(date_path)
         return object_folders
     # db for progress
-    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None):
+    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None):
         cache_file = os.path.join(folder_path, "embeddings.pkl")
         folder_embeddings = {}
         folder_paths = {}
+        
+        # if userID
+        alerts = database.run_get("alerts", cam_name)
+
 
         if os.path.exists(cache_file):
             with open(cache_file, "rb") as f:
@@ -143,6 +149,17 @@ class CachedCLIPSearch:
                     embeddings.append(emb)
 
             for path, embedding in zip(batch_paths, embeddings):
+                #if userID is not None:
+                for k, v in alerts.items():
+                    if time.time() - v.last_det < 60: continue
+                    if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
+                        similarity = (v.desc_emb @ embedding.T).item()
+                        print("sim =",similarity,v.desc,path)
+                        if similarity > 0.28:
+                            send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
+                            alerts[k].last_det = time.time()
+                            database.run_put("alerts", cam_name, alerts[k], k)
+                            break
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
