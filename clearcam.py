@@ -90,8 +90,8 @@ import cv2
 from datetime import datetime
 import os
 import threading
+from utils.helpers import BASE_DIR
 
-BASE_DIR = Path(__file__).parent / "data"
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
@@ -1357,14 +1357,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             name = folder.split("/")[2]
             vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID)
+            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
             alerts = database.run_get("alerts", name)
             # todo, move to own loop
-            for key, alert in alerts.items():
+            for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
                 alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
-                database.run_put("alerts", name, alert, id=key)
+                database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
           print(f"CLIP error: {e}")

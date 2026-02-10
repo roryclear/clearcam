@@ -7,7 +7,7 @@ from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
 import time
-from utils.helpers import send_notif
+from utils.helpers import send_notif, export_and_upload
 
 class Model: pass
 
@@ -91,7 +91,7 @@ class CachedCLIPSearch:
                             object_folders.append(date_path)
         return object_folders
     # db for progress
-    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None):
+    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
         cache_file = os.path.join(folder_path, "embeddings.pkl")
         folder_embeddings = {}
         folder_paths = {}
