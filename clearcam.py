@@ -452,7 +452,7 @@ class VideoCapture:
               os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
               mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
               temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), length=20)
+              export_clip(BASE_DIR / "cameras" / f"{self.cam_name}/streams/{datetime.now().strftime('%Y-%m-%d')}", Path(mp4_filename), length=20)
               subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
               os.replace(temp_output, mp4_filename)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
@@ -713,11 +713,11 @@ class HLSStreamer:
                 self.ffmpeg_proc.kill()
 
 
-def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0):
+def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
   segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
   recent_segments = deque()
-  cutoff = time.time() - length if live else time.time() - length
-  end = time.time() - end
+  cutoff = start if start is not None else time.time() - length if live else time.time() - length
+  end = start + length if start is not None else time.time() - end
   recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
   recent_segments.extend(recent_raw)
   concat_list_path = stream_dir / "concat_list.txt"
