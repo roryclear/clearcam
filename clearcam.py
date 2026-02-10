@@ -1211,6 +1211,7 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
+        videocapture.hls_proc.kill()
         sys.stdout.flush()
         python = sys.executable
         os.execv(python, [python] + sys.argv)
