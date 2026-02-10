@@ -50,8 +50,8 @@ def send_notif(session_token: str, text=None):
 def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
   segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
   recent_segments = deque()
-  cutoff = start if start is not None else time.time() - length if live else time.time() - length
-  end = start + length if start is not None else time.time() - end
+  cutoff = os.path.getmtime(segments[0]) + start if start is not None else time.time() - length if live else time.time() - length
+  end = os.path.getmtime(segments[0]) + start + length if start is not None else time.time() - end
   recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
   recent_segments.extend(recent_raw)
   concat_list_path = stream_dir / "concat_list.txt"
@@ -116,11 +116,11 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
       file_size = len(file_data)
       comp += 5
 
-def export_and_upload(base_dir, cam_name, thumbnail, userID, key, start=None, end=0, length=20):
-    os.makedirs(base_dir / "cameras" / cam_name / "event_clips", exist_ok=True)
-    mp4_filename = base_dir / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-    temp_output = base_dir / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-    export_clip(base_dir / "cameras" / f"{cam_name}/streams/{datetime.now().strftime('%Y-%m-%d')}", Path(mp4_filename), length=length, start=start, end=end)
+def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, length=20):
+    os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
+    mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+    temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+    export_clip(BASE_DIR / "cameras" / f"{cam_name}/streams/{datetime.now().strftime('%Y-%m-%d')}", Path(mp4_filename), length=length, start=start, end=end)
     subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(thumbnail), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
     os.replace(temp_output, mp4_filename)
     encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)

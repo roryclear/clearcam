@@ -7,7 +7,7 @@ from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
 import time
-from utils.helpers import send_notif, export_and_upload
+from utils.helpers import send_notif, export_and_upload, BASE_DIR
 
 class Model: pass
 
@@ -159,7 +159,8 @@ class CachedCLIPSearch:
                             send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
                             alerts[k].last_det = time.time()
                             database.run_put("alerts", cam_name, alerts[k], k)
-                            seen_time = path.split("_")[-2]
+                            seen_time = float(path.split("/")[-1].split("_")[0])
+                            export_and_upload(cam_name=cam_name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
                             break
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path

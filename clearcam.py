@@ -435,7 +435,7 @@ class VideoCapture:
                     last_det = time.time()
                     alert.last_det = time.time()
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              export_and_upload(BASE_DIR, self.cam_name, filename, userID, key)
+              export_and_upload(cam_name=self.cam_name, thumbnail=filename, userID=userID, key=key)
               send_det = False
           if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
