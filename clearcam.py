@@ -26,7 +26,7 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
-from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file
+from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -435,15 +435,7 @@ class VideoCapture:
                     last_det = time.time()
                     alert.last_det = time.time()
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
-              mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-              temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-              export_clip(BASE_DIR / "cameras" / f"{self.cam_name}/streams/{datetime.now().strftime('%Y-%m-%d')}", Path(mp4_filename), length=20)
-              subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
-              os.replace(temp_output, mp4_filename)
-              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-              threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
-              os.unlink(mp4_filename)
+              export_and_upload(BASE_DIR, self.cam_name, filename, userID, key)
               send_det = False
           if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()

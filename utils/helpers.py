@@ -9,6 +9,8 @@ import subprocess
 import urllib
 import json
 import struct
+from datetime import datetime
+import threading
 
 def send_notif(session_token: str, text=None):
     host = "www.clearcam.org"
@@ -112,6 +114,17 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
         file_data = f.read()
       file_size = len(file_data)
       comp += 5
+
+def export_and_upload(base_dir, cam_name, thumbnail, userID, key):
+    os.makedirs(base_dir / "cameras" / cam_name / "event_clips", exist_ok=True)
+    mp4_filename = base_dir / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+    temp_output = base_dir / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
+    export_clip(base_dir / "cameras" / f"{cam_name}/streams/{datetime.now().strftime('%Y-%m-%d')}", Path(mp4_filename), length=20)
+    subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(thumbnail), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+    os.replace(temp_output, mp4_filename)
+    encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+    threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+    os.unlink(mp4_filename)
 
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
