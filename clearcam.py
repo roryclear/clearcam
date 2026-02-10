@@ -411,6 +411,7 @@ class VideoCapture:
             filename = BASE_DIR / "cameras" / f"{self.cam_name}/preview.png"
             write_png(filename, self.raw_frame)
           for _,alert in self.alert_counters.items():
+              if alert.desc is not None: continue
               if not alert.is_active():
                 alert.reset_counts()
                 continue
@@ -466,9 +467,9 @@ class VideoCapture:
               self.reset_vod()
               if "reset" in new_settings: del new_settings["reset"]
             self.settings = new_settings
-               
-            self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
-
+          
+          self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+              
           if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
