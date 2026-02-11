@@ -23,7 +23,7 @@
 
 <tr>
   <td colspan="2" align="center" style="padding: 20px 0;">
-    <img src="images/notif.jpeg" alt="Notification" width="400" />
+    <img src="images/notif.jpg" alt="Notification" width="400" />
   </td>
 </tr>
 
