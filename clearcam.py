@@ -26,6 +26,7 @@ from utils.db import db
 import multiprocessing
 import re
 import base64
+from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -89,8 +90,8 @@ import cv2
 from datetime import datetime
 import os
 import threading
+from utils.helpers import BASE_DIR
 
-BASE_DIR = Path(__file__).parent / "data"
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
@@ -171,20 +172,6 @@ def write_png(filename, array):
     )
     with open(filename, "wb") as f:
         f.write(png_bytes)
-
-def find_ffmpeg():
-    ffmpeg_path = shutil.which('ffmpeg')
-    if ffmpeg_path:
-        return ffmpeg_path
-    common_paths = [
-        '/opt/homebrew/bin/ffmpeg',
-        '/usr/local/bin/ffmpeg',
-        '/usr/bin/ffmpeg'
-    ]
-    for path in common_paths:
-        if os.path.exists(path):
-            return path
-    return 'ffmpeg'
 
 import numpy as np
 
@@ -424,6 +411,7 @@ class VideoCapture:
             filename = BASE_DIR / "cameras" / f"{self.cam_name}/preview.png"
             write_png(filename, self.raw_frame)
           for _,alert in self.alert_counters.items():
+              if alert.desc is not None: continue
               if not alert.is_active():
                 alert.reset_counts()
                 continue
@@ -431,7 +419,7 @@ class VideoCapture:
               if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
-                    if alert.is_notif: send_det = True
+                    if alert.is_notif and alert.desc is None: send_det = True
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
@@ -448,17 +436,7 @@ class VideoCapture:
                     last_det = time.time()
                     alert.last_det = time.time()
           if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              os.makedirs(BASE_DIR / "cameras" / self.cam_name / "event_clips", exist_ok=True)
-              mp4_filename = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
-              temp_output = BASE_DIR / "cameras" / f"{self.cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
-              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), length=20)
-
-              # img preview?
-              subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(filename), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
-              os.replace(temp_output, mp4_filename)
-              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-              threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
-              os.unlink(mp4_filename)
+              export_and_upload(cam_name=self.cam_name, thumbnail=filename, userID=userID, key=key)
               send_det = False
           if userID and not self.vod and (time.time() - last_live_check) >= 5:
               last_live_check = time.time()
@@ -489,9 +467,9 @@ class VideoCapture:
               self.reset_vod()
               if "reset" in new_settings: del new_settings["reset"]
             self.settings = new_settings
-               
-            self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
-
+          
+          self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+              
           if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
@@ -713,75 +691,6 @@ class HLSStreamer:
             except subprocess.TimeoutExpired:
                 self.ffmpeg_proc.kill()
 
-
-def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0):
-  segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
-  recent_segments = deque()
-  cutoff = time.time() - length if live else time.time() - length
-  end = time.time() - end
-  recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
-  recent_segments.extend(recent_raw)
-  concat_list_path = stream_dir / "concat_list.txt"
-  with open(concat_list_path, "w") as f: f.writelines(f"file '{segment.resolve()}'\n" for segment in recent_segments)
-  output_path.parent.mkdir(parents=True, exist_ok=True)
-  ffmpeg_path = find_ffmpeg()
-  if live:
-    command = [
-        ffmpeg_path,
-        "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_list_path),
-        "-loglevel", "quiet",
-        "-vf", "scale=-2:240,fps=24,format=yuv420p",
-        "-c:v", "libx264",  
-        "-pix_fmt", "yuv420p",
-        "-preset", "veryslow",
-        "-crf", "32",
-        "-an",
-        str(output_path)
-    ]
-    subprocess.run(command, check=True)
-  else:
-    with open(stream_dir / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
-    command = [
-      ffmpeg_path,
-      "-y",
-      "-f", "concat",
-      "-safe", "0",
-      "-i", str(concat_list_path),
-      "-c:v", "libx264",
-      "-crf", "18",
-      "-pix_fmt", "yuv420p",
-      "-an",  # No audio
-      str(output_path)
-    ]
-    subprocess.run(command, check=True)
-    comp = 5
-    file_size = 10*1024*1024
-    with open(output_path, "rb") as f:
-      file_data = f.read()
-      file_size = len(file_data)
-    while file_size >= 9*1024*1024: # max size 10MB, # todo, calculate time from ts files
-      temp_output = output_path.with_stem(output_path.stem + "_compressed")
-      command = [
-        ffmpeg_path,
-        "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_list_path),
-        "-c:v", "libx264",
-        "-crf", str(18 + comp),
-        "-pix_fmt", "yuv420p",  # needed for android
-        "-an",  # No audio
-        str(temp_output)
-      ]
-      subprocess.run(command, check=True)
-      os.replace(temp_output, output_path)
-      with open(output_path, "rb") as f:
-        file_data = f.read()
-      file_size = len(file_data)
-      comp += 5
 
 def point_not_in_polygon(coords, poly):
     n = len(poly)
@@ -1302,162 +1211,10 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
+        videocapture.hls_proc.kill()
         sys.stdout.flush()
         python = sys.executable
         os.execv(python, [python] + sys.argv)
-
-def send_notif(session_token: str, text=None):
-    host = "www.clearcam.org"
-    endpoint = "/send" #/test
-    boundary = f"Boundary-{uuid.uuid4()}"
-    content_type = f"multipart/form-data; boundary={boundary}"
-    lines = [
-        f"--{boundary}",
-        'Content-Disposition: form-data; name="session_token"',
-        "",
-        session_token,
-        f"--{boundary}--",
-        ""
-    ]
-    if text is not None:
-      lines.extend([
-      f"--{boundary}",
-      'Content-Disposition: form-data; name="text"',
-      "",
-      text,
-    ])
-    body = "\r\n".join(lines).encode("utf-8")
-    conn = http.client.HTTPSConnection(host)
-    headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
-    try:
-        conn.request("POST", endpoint, body, headers)
-        response = conn.getresponse()
-        print(f"Status: {response.status} {response.reason}")
-        print(response.read().decode())
-    except Exception as e:
-        print(f"Error sending session token: {e}")
-    finally:
-        conn.close()
-
-import aes
-MAGIC_NUMBER = 0x4D41474943
-HEADER_SIZE = 8
-AES_BLOCK_SIZE = 16
-AES_KEY_SIZE = 32
-
-def prepare_key(key: str) -> bytes:
-    key_bytes = key.encode('utf-8')[:AES_KEY_SIZE]
-    return key_bytes.ljust(AES_KEY_SIZE, b'\0')
-
-def pkcs7_pad(data: bytes, block_size: int) -> bytes:
-    pad_len = block_size - (len(data) % block_size)
-    return data + bytes([pad_len] * pad_len)
-
-def encrypt_cbc(data: bytes, key: bytes, iv: bytes) -> bytes:
-    aes_cipher = aes.AES(key)
-    encrypted = bytearray()
-    prev_block = iv
-
-    for i in range(0, len(data), AES_BLOCK_SIZE):
-        block = data[i:i + AES_BLOCK_SIZE]
-        xored = bytes([b ^ p for b, p in zip(block, prev_block)])
-        encrypted_block = bytes(aes_cipher.encrypt(xored))
-        encrypted += encrypted_block
-        prev_block = encrypted_block
-    return bytes(encrypted)
-
-def encrypt_file(input_path: Path, output_path: Path, key: str):
-    try:
-        key_bytes = prepare_key(key)
-        iv = os.urandom(AES_BLOCK_SIZE)
-
-        with open(input_path, 'rb') as f:
-            plaintext = f.read()
-        data = struct.pack('<Q', MAGIC_NUMBER) + plaintext
-        padded = pkcs7_pad(data, AES_BLOCK_SIZE)
-
-        ciphertext = encrypt_cbc(padded, key_bytes, iv)
-
-        with open(output_path, 'wb') as f:
-            f.write(iv + ciphertext)
-
-        return True
-
-    except Exception as e:
-        print(f"ENCRYPTION FAILED: {e}")
-        return False
-
-def upload_file(file_path: Path, session_token: str):
-    if not file_path.exists():
-        print(f"File not found: {file_path}")
-        return False
-
-    try:
-        with open(file_path, 'rb') as f:
-            file_data = f.read()
-        file_name = file_path.name
-        file_size = len(file_data)
-    except Exception as e:
-        print(f"Error reading file: {e}")
-        return False
-
-    try:
-        params = {
-            "filename": file_name,
-            "session_token": session_token,
-            "size": str(file_size)
-        }
-        query_string = urllib.parse.urlencode(params)
-        url = f"https://clearcam.org/upload?{query_string}"
-        
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status != 200:
-                print(f"Failed to get upload URL: {response.status}")
-                return False
-            response_data = json.loads(response.read().decode('utf-8'))
-            presigned_url = response_data.get("url")
-            if not presigned_url:
-                print("Invalid response - missing upload URL")
-                return False
-    except Exception as e:
-        print(f"Error getting upload URL: {e}")
-        return False
-    success = False
-    for attempt in range(10):
-        try:
-            url_parts = urllib.parse.urlparse(presigned_url)
-            if url_parts.scheme == 'https':
-                conn = http.client.HTTPSConnection(url_parts.netloc)
-            else:
-                conn = http.client.HTTPConnection(url_parts.netloc)
-            
-            headers = {
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(file_size)
-            }
-            conn.request("PUT", url_parts.path + "?" + url_parts.query, body=file_data, headers=headers)
-            upload_response = conn.getresponse()
-            
-            if 200 <= upload_response.status < 300:
-                os.unlink(file_path) # todo remove on failure or success
-                print(f"File uploaded successfully on attempt {attempt + 1}")
-                success = True
-                conn.close()
-                break
-            else:
-                print(f"Upload failed with status {upload_response.status} on attempt {attempt + 1}")
-                conn.close()
-        except Exception as e:
-            print(f"Upload error on attempt {attempt + 1}: {e}")
-        if attempt < 3: time.sleep(10 * attempt)
-
-    try:
-        file_path.unlink()
-        print(f"Deleted file: {file_path}")
-    except Exception as e:
-        print(f"Failed to delete file: {e}")
-    return success
 
 def get_lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1602,14 +1359,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             name = folder.split("/")[2]
             vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name)
+            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
-            #alerts = database.run_get("alerts", name)
+            alerts = database.run_get("alerts", name)
             # todo, move to own loop
-            #for key, alert in alerts.items():
-            #  if alert.desc is not None and alert.desc_emb is None:
-            #    alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
-            #    database.run_put("alerts", name, alert, id=key)
+            for k, alert in alerts.items():
+              if alert.desc is not None and alert.desc_emb is None:
+                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
+                database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
           print(f"CLIP error: {e}")
