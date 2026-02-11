@@ -261,7 +261,6 @@ class VideoCapture:
     
     is_rtsp = self.src.startswith("rtsp")
     if self.vod:
-      for _ in range(100): print(self.vod, path, self.src)
       command = [
         ffmpeg_path,
         "-i", self.src,
