@@ -253,6 +253,7 @@ class VideoCapture:
 
   def _open_ffmpeg(self):
     path = self._get_new_stream_dir()
+       
     self._safe_kill_process(self.proc)
     self._safe_kill_process(self.hls_proc)
 
@@ -260,23 +261,20 @@ class VideoCapture:
     
     is_rtsp = self.src.startswith("rtsp")
     if self.vod:
+      for _ in range(100): print(self.vod, path, self.src)
       command = [
-          ffmpeg_path,
-          "-rtsp_transport", "tcp",
-          "-use_wallclock_as_timestamps", "1",
-          "-fflags", "+genpts+discardcorrupt",
-          "-i", self.src,
-          "-c:v", "copy",
-          "-an",
-          "-f", "hls",
-          "-hls_time", "2",
-          "-hls_list_size", "1800",
-          "-hls_flags",
-              "delete_segments+append_list+program_date_time+independent_segments",
-          "-hls_segment_type", "fmp4",
-          "-hls_fmp4_init_filename", "init.mp4",
-          "-hls_segment_filename", str(path / "seg_%06d.m4s"),
-          str(path / "stream.m3u8"),
+        ffmpeg_path,
+        "-i", self.src,
+        "-c:v", "copy",
+        "-an",
+        "-f", "hls",
+        "-hls_time", "2",
+        "-hls_list_size", "0",
+        "-hls_flags", "independent_segments",
+        "-hls_segment_type", "fmp4",
+        "-hls_fmp4_init_filename", "init.mp4",
+        "-hls_segment_filename", str(path / "seg_%06d.m4s"),
+        str(path / "stream.m3u8"),
       ]
       self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.proc = None
