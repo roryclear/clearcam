@@ -484,7 +484,7 @@ class VideoCapture:
             if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
         if not self.vod: time.sleep(1 / 30)
       except Exception as e:
-        print("Error in capture_loop:", e)
+        print("Error in capture_loop:", e, self.cam_name)
         self._open_ffmpeg()
         time.sleep(1)
   
