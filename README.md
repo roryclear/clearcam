@@ -20,7 +20,13 @@
     <img src="images/sonata.PNG" alt="Sonata" style="width:100%; max-width:1000px;" />
   </td>
 </tr>
-  
+
+<tr>
+  <td colspan="2" align="center" style="padding: 20px 0;">
+    <img src="images/notif.jpg" alt="Notification" width="400" />
+  </td>
+</tr>
+
 <tr>
 <td>
 <img src="images/ios_live.PNG" alt="iOS Live" width="400" />
