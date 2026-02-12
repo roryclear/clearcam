@@ -155,7 +155,7 @@ class CachedCLIPSearch:
                     if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
                         similarity = (v.desc_emb @ embedding.T).item()
                         print("sim =",similarity,v.desc,path, type(path))
-                        if similarity > 0.28:
+                        if similarity > v.threshold:
                             send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
                             alerts[k].last_det = time.time()
                             database.run_put("alerts", cam_name, alerts[k], k)
