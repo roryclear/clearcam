@@ -151,7 +151,7 @@ class CachedCLIPSearch:
             for path, embedding in zip(batch_paths, embeddings):
                 #if userID is not None:
                 for k, v in alerts.items():
-                    if time.time() - v.last_det < 60: continue
+                    if time.time() - v.last_det < 60 or not v.is_active(): continue
                     if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
                         similarity = (v.desc_emb @ embedding.T).item()
                         print("sim =",similarity,v.desc,path, type(path))
