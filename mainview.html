@@ -1735,8 +1735,11 @@
 
             html += `</tbody></table>`;
           }
-          let originalTable = `
-            <table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
+          let originalTable = "";
+
+          if (normalAlerts.length > 0) {
+            originalTable += `
+              <table style="width:100%; border-collapse:collapse; font-size:0.95rem;">
               <thead>
                 <tr>
                   <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Max</th>
@@ -1761,6 +1764,7 @@
                   <th style="text-align:center; padding:6px; border-bottom:1px solid #ccc;">Actions</th>
                 </tr>
               </thead><tbody>`;
+          }
 
           for (const alert of normalAlerts) {
 
@@ -1793,7 +1797,8 @@
             const isOn = alert.hasOwnProperty("is_on") ? alert.is_on : true;
             const isNotif = alert.hasOwnProperty("is_notif") ? alert.is_notif : true;
             const isZone = alert.hasOwnProperty("zone") ? alert.zone : true;
-
+            
+            
             originalTable += `<tr>
               <td style="padding:6px; border-bottom:1px solid #eee; text-align:center;">${alert.max}</td>
               <td style="padding:6px; border-bottom:1px solid #eee; max-width:150px; white-space:normal; word-wrap:break-word; line-height:1.3;">${classNames}</td>
@@ -1819,7 +1824,7 @@
               </td>
             </tr>`;
           }
-
+          
           originalTable += `</tbody></table>
             <div style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
               <button onclick="openAlertModal()">Add Alert</button>
