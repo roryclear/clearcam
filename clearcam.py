@@ -95,7 +95,7 @@ from utils.helpers import BASE_DIR
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 
 class RollingClassCounter:
-  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None, desc=None, threshold=0.27):
+  def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None, desc=None, threshold=0.28):
     self.window = window_seconds
     self.data = defaultdict(deque)
     self.max = max
@@ -283,6 +283,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                  "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
@@ -350,6 +352,14 @@ class VideoCapture:
      
 
   def capture_loop(self):
+
+    # add missing params to alerts for now
+    alerts = database.run_get("alerts", cam_name)
+    for id,a in alerts.items():
+      if not hasattr(a, "desc"): a.desc = None
+      if not hasattr(a, "threshold"): a.threshold = 0.28
+      database.run_put("alerts", cam_name, a, id)
+
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
