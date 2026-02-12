@@ -867,6 +867,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone = query.get("zone", [None])[0]
             is_notif = query.get("is_notif", [None])[0]
             desc = query.get("desc", [None])[0]
+            threshold = query.get("threshold", [None])[0]
+            if threshold is not None: threshold = float(threshold) / 100
             if alert_id is None: # no id, add alert
                 window = query.get("window", [None])[0]
                 max_count = query.get("max", [None])[0]
@@ -883,6 +885,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                         sched=sched,
                         cam_name=cam_name,
                         desc=desc,
+                        threshold=threshold
                     )
                 raw_alerts[alert_id] = alert
             else:
@@ -891,6 +894,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 if is_notif is not None: raw_alerts[alert_id].is_notif = str(is_notif).lower() == "true"
                 if zone is not None: raw_alerts[alert_id].zone = str(zone).lower() == "true"
                 if desc is not None: raw_alerts[alert_id].desc = desc
+                if threshold is not None: raw_alerts[alert_id].threshold = threshold
                 alert = raw_alerts[alert_id]
                 alert.new = True
               else:

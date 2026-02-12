@@ -1461,9 +1461,29 @@
         </div>
         <form id="alertForm" onsubmit="addAlert(event)" style="display: flex; flex-direction: column; align-items: center;">
           <div class="form-group checkbox-group" style="width: 90%; text-align: center;">
+          <div class="form-group" style="width: 90%; text-align: center; margin-bottom: 15px;">
+          <label style="font-weight: 600; margin-bottom: 10px; display: block;">
+            <span class="tooltip">
+              Description & Threshold (Optional)
+              <span class="tooltip-icon">?</span>
+              <span class="tooltiptext">
+                Alert when an object of your description is seen (must select an object type and have CLIP enabled).
+              </span>
+            </span>
+          </label>
+
+            <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
+              <input type="text" id="alertDesc" name="desc" placeholder="Description"
+                style="width: 180px; padding: 4px; text-align: center;">
+
+              <input type="number" id="alertThreshold" name="threshold" min="1"
+                placeholder="Threshold %"
+                style="width: 100px; padding: 4px; text-align: center;">
+            </div>
+          </div>
             <div id="checkboxContainer" class="checkbox-container" style="display: grid; grid-template-columns: auto auto; gap: 8px 16px; max-height: 200px; overflow-y: auto; margin: 0 auto; padding: 8px; justify-content: center;"></div>
           </div>
-          <div class="form-group" style="width: 90%; text-align: center; margin-top: 15px;">
+          <div id="timeWindowSection" class="form-group" style="width: 90%; text-align: center; margin-top: 15px;">
             <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Window (Optional)</label>
             <div style="margin-bottom: 10px;">
               <label for="maxCount">Trigger if there are</label>
@@ -1579,6 +1599,27 @@
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
+
+    const descInput = document.getElementById("alertDesc");
+    const thresholdInput = document.getElementById("alertThreshold");
+    const timeWindowSection = document.getElementById("timeWindowSection");
+
+    function toggleTimeWindow() {
+      const hasDesc = descInput.value.trim() !== "";
+      const hasThreshold = thresholdInput.value.trim() !== "";
+
+      const disable = hasDesc || hasThreshold;
+
+      timeWindowSection.style.opacity = disable ? "0.5" : "1";
+      timeWindowSection.querySelectorAll("input").forEach(input => {
+        input.disabled = disable;
+      });
+    }
+
+    descInput.addEventListener("input", toggleTimeWindow);
+    thresholdInput.addEventListener("input", toggleTimeWindow);
+
+
     let uploadedImageData = null;
     const classLabels = {
       0: 'person',
@@ -1873,23 +1914,32 @@
     function addAlert(event) {
       event.preventDefault();
       if (!currentAlertsCamera) return;
+
       const form = event.target;
       const formData = new FormData(form);
+
+      const desc = formData.get("desc") || "";
+      const threshold = formData.get("threshold") || "";
+
       const windowMinutes = parseFloat(formData.get('window'));
       const windowSeconds = windowMinutes ? Math.round(windowMinutes * 60) : null;
-      // Default max to 1 if empty
+
       const maxCount = formData.get('max') || '1';
       const checked = form.querySelectorAll('input[name="class_ids"]:checked');
       const classIds = Array.from(checked).map(cb => cb.value).join(',');
+
       const scheduleFrom = formData.get("schedule_from") || "00:00";
       const scheduleTo = formData.get("schedule_to") || "23:59";
+
       const toSeconds = (hhmm) => {
         const parts = hhmm.split(":").map(Number);
         const [h = 0, m = 0] = parts;
         return h * 3600 + m * 60;
       };
+
       const fromSec = toSeconds(scheduleFrom);
       const toSec = toSeconds(scheduleTo);
+
       const dayChecks = form.querySelectorAll('input[name="days"]');
       const dayBools = Array.from(dayChecks).map(cb => cb.checked);
       const schedArray = [[fromSec, toSec], ...dayBools];
@@ -1902,9 +1952,19 @@
         is_notif: 'true',
         zone: 'true'
       });
+
       if (windowSeconds !== null) {
         params.set('window', windowSeconds);
       }
+
+      if (desc) {
+        params.set('desc', desc);
+      }
+
+      if (threshold) {
+        params.set('threshold', threshold);
+      }
+
       fetch(`/edit_alert?${params.toString()}`)
         .then(res => {
           if (!res.ok) throw new Error("Failed to add alert");
@@ -1920,6 +1980,7 @@
           alert("Failed to add alert.");
         });
     }
+
 
     let currentAlertsCamera = null;
     function toggleAlert(alertId, isChecked, field) {
