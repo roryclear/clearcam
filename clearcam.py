@@ -941,6 +941,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                     "is_on": alert.is_on,
                     "is_notif": alert.is_notif,
                     "zone": alert.zone,
+                    "desc": alert.desc,
+                    "threshold": alert.threshold,
                 })
             self.send_200(alert_info)
             return
