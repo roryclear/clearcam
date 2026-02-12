@@ -350,14 +350,6 @@ class VideoCapture:
      
 
   def capture_loop(self):
-
-    # add missing params to alerts for now
-    alerts = database.run_get("alerts", cam_name)
-    for id,a in alerts.items():
-      if not hasattr(a, "desc"): a.desc = None
-      if not hasattr(a, "threshold"): a.threshold = 0.28
-      database.run_put("alerts", cam_name, a, id)
-
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
