@@ -226,8 +226,8 @@
     self.isLoadingVideos = NO;
     
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.timeoutIntervalForRequest = 60.0;
-    config.timeoutIntervalForResource = 600.0;
+    config.timeoutIntervalForRequest = 30.0;
+    config.timeoutIntervalForResource = 120.0;
     self.downloadSession = [NSURLSession sessionWithConfiguration:config];
     self.loadedFilenames = [NSMutableSet set];
     [self setupDownloadDirectory];
@@ -495,9 +495,7 @@
 
 - (void)getEvents {
     if (self.isLoadingVideos) return;
-    
     self.isLoadingVideos = YES;
-    
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
@@ -518,10 +516,6 @@
     [request setHTTPMethod:@"GET"];
     
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.isLoadingVideos = NO;
-        });
-        
         if (error) return;
         
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
@@ -538,29 +532,38 @@
     }] resume];
 }
 
-
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
-        [self loadExistingVideos];
+        self.isLoadingVideos = NO;
         return;
     }
     self.isLoadingVideos = YES;
+    NSOperationQueue *downloadQueue = [[NSOperationQueue alloc] init];
+    downloadQueue.maxConcurrentOperationCount = 1;
     dispatch_group_t downloadGroup = dispatch_group_create();
-    
     for (NSString *fileURL in fileURLs) {
         dispatch_group_enter(downloadGroup);
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [downloadQueue addOperationWithBlock:^{
             [self downloadSingleFile:fileURL completion:^(BOOL success) {
+                if (success) {
+                    NSURL *url = [NSURL URLWithString:fileURL];
+                    NSString *fileName = url.lastPathComponent;
+                    NSString *fullPath = [self.downloadDirectory stringByAppendingPathComponent:fileName];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [self loadExistingVideos];
+                    });
+                }
                 dispatch_group_leave(downloadGroup);
             }];
-        });
+        }];
     }
-    
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
         self.isLoadingVideos = NO;
-        [self loadExistingVideos];
     });
 }
+
+
+
 
 - (void)downloadSingleFile:(NSString *)fileURL completion:(void(^)(BOOL success))completion {
     NSURL *url = [NSURL URLWithString:fileURL];
