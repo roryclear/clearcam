@@ -2598,11 +2598,10 @@
       }
       const checkbox = document.querySelector(`.show-detections-checkbox[data-camera="${camName}"]`);
       const showDetections = checkbox ? checkbox.checked : false;
-      const streamSuffix = showDetections ? "_det" : "";
       
       const encoded = encodeURIComponent(camName);
       const baseUrl = window.location.origin;
-      const streamUrl = `${baseUrl}/${encoded}${streamSuffix}/streams/${currentStreamDate}/stream.m3u8`;
+      const streamUrl = `${baseUrl}/${encoded}/streams/${currentStreamDate}/stream.m3u8`;
       
       activeVideoStreams.set(camName, {
         video: video,
@@ -2683,35 +2682,9 @@
       if (!checkbox) return;
       fetch(`/get_settings?cam=${encodeURIComponent(cameraName)}`)
         .then(res => res.json())
-        .then(data => {
-          const showDetections = data.show_dets === 1 || data.show_dets === true;
-          checkbox.checked = showDetections;
-          updateCameraStream(cameraName, showDetections);
-          if (showDetections) {
-            startDetectionHeartbeat(cameraName);
-          }
-        })
         .catch(err => {
           console.error(`Failed to load detection settings for ${cameraName}:`, err);
         });
-
-      checkbox.addEventListener('change', function() {
-        const showDetections = this.checked;
-        updateCameraStream(cameraName, showDetections);
-        fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=${showDetections ? 1 : 0}`)
-          .then(res => {
-            if (!res.ok) throw new Error("Failed to update detection settings");
-            if (showDetections) {
-              startDetectionHeartbeat(cameraName);
-            } else {
-              stopDetectionHeartbeat(cameraName);
-            }
-          })
-          .catch(err => {
-            console.error(`Failed to update detection settings for ${cameraName}:`, err);
-            this.checked = !showDetections;
-          });
-      });
     }
 
     function updateCameraStream(cameraName, showDetections) {
@@ -2725,30 +2698,6 @@
         cleanupCameraStream(cameraName);
         setTimeout(() => startCameraStream(cameraName), 100);
       }
-    }
-
-    function startDetectionHeartbeat(cameraName) {
-      stopDetectionHeartbeat(cameraName);
-      fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
-        .then(res => {
-          if (!res.ok) throw new Error("Failed to update detection settings");
-          console.log(`Detection heartbeat started for ${cameraName}`);
-        })
-        .catch(err => {
-          console.error(`Failed to start detection heartbeat for ${cameraName}:`, err);
-        });
-      const interval = setInterval(() => {
-        fetch(`/edit_settings?cam=${encodeURIComponent(cameraName)}&show_dets=1`)
-          .then(res => {
-            if (!res.ok) throw new Error("Failed to refresh detection settings");
-            console.log(`Detection settings refreshed for ${cameraName}`);
-          })
-          .catch(err => {
-            console.error(`Failed to refresh detection settings for ${cameraName}:`, err);
-          });
-      }, 30000);
-      
-      detectionIntervals.set(cameraName, interval);
     }
 
     function stopDetectionHeartbeat(cameraName) {
