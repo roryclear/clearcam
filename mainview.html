@@ -2418,14 +2418,11 @@
           if (timestamp - lastFrameTime >= frameInterval) {
             lastFrameTime = timestamp;
             
-            shape_seg = findLastLowerThan(detectionCache, timestamp);
-            console.log("shape seg =",camName,shape_seg);
+            shape_seg = findLastLowerThan(detectionCache, video.currentTime);
+            console.log("shape seg =",camName,shape_seg, video.currentTime);
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            const seconds = video.currentTime;
-            const mod = seconds % 60;  // 0 → 59
-
+            const mod = video.currentTime % 60;
             const maxSize = Math.min(canvas.width, canvas.height) * 0.8;
             const size = (mod / 60) * maxSize;
 
