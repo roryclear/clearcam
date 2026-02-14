@@ -2429,9 +2429,9 @@
                 if (detectionData) {
                   detectionData.forEach(box => {
                       console.log("box:", box); // AND THIS
-                      const [x1, y1, x2, y2, conf] = box; // Assuming first 4 are coordinates (0-1)
-                      
-                      ctx.strokeStyle = `rgba(255, 0, 0, ${conf || 1})`;
+                      const [x1, y1, x2, y2, conf, classId] = box;
+                      const hue = (classId * 0.618033988749895) % 1.0;
+                      ctx.strokeStyle = `hsla(${hue * 360}, 80%, 60%, ${conf || 1})`
                       ctx.lineWidth = 2;
                       ctx.strokeRect(
                           x1 * canvas.width, 
@@ -2442,24 +2442,6 @@
                   });
               }
             }
-
-
-            /*
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const mod = video.currentTime % 60;
-            const maxSize = Math.min(canvas.width, canvas.height) * 0.8;
-            const size = (mod / 60) * maxSize;
-
-            ctx.strokeStyle = "red";
-            ctx.lineWidth = 4;
-
-            ctx.strokeRect(
-              (canvas.width - size) / 2,
-              (canvas.height - size) / 2,
-              size,
-              size
-            );
-            */
           }
         }
 
