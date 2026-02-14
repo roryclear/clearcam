@@ -512,8 +512,10 @@ class VideoCapture:
       if frame is not None:
         preds, frame = self.run_inference(frame)
         with self.lock:
-          self.last_preds = preds
+          self.last_preds = preds.copy()
           self.last_frame = frame.numpy().copy()
+
+      
         if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
           h, w = frame.shape[:2]
           preds[:, [0, 2]] /= w
@@ -529,7 +531,7 @@ class VideoCapture:
           json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
           self.shape_seg += 1
           self.det_shapes = []
-
+        
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
