@@ -509,14 +509,16 @@ class VideoCapture:
         with self.lock:
           self.last_preds = preds
           self.last_frame = frame.numpy().copy()
-        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24: self.det_shapes.append({time.time() - self.streamer.start_time: preds})
+        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
+          h, w = frame.shape[:2]
+          preds[:, [0, 2]] /= w
+          preds[:, [1, 3]] /= h
+          self.det_shapes.append({time.time() - self.streamer.start_time: preds})
         if time.time() - self.last_shapes_time >= 4:
           print("4 secs")
           print(self.det_shapes)
           self.det_shapes = []
           self.last_shapes_time = time.time()
-
-
 
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
