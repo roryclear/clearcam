@@ -493,17 +493,6 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
-      show_dets = (self.settings.get("show_dets") if self.settings else None) or None
-      if show_dets:
-        show_dets = int(show_dets)
-        if (time.time() - show_dets) < 120 and not self.streamer.feeding_frames:
-           self.streamer.feeding_frames = True
-           self.streamer._stop_event.clear()
-           self.streamer.feeding_frames_thread = threading.Thread(target=self.streamer._feed_frames,daemon=True)
-           self.streamer.feeding_frames_thread.start()
-        elif hasattr(self, 'streamer') and self.streamer.feeding_frames:
-           self.streamer.feeding_frames = False
-           self.streamer._stop_event.set()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
@@ -591,8 +580,6 @@ class HLSStreamer:
         self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
-        self.ffmpeg_proc = None
-        self.ffmpeg_proc_raw = None
         self.start_time = time.time()
         self.feeding_frames = False
         self._stop_event = threading.Event()
@@ -612,55 +599,6 @@ class HLSStreamer:
         self.running = True
         self.current_stream_dir_det, self.current_stream_dir_raw = self._get_new_stream_dir()
         self.start_time = time.time()
-        ffmpeg_path = find_ffmpeg()
-        ffmpeg_cmd = [
-            ffmpeg_path,
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{self.cam.width}x{self.cam.height}",
-            "-use_wallclock_as_timestamps", "1",
-            "-fflags", "+genpts",
-            "-i", "-",
-            "-loglevel", "quiet",
-            "-c:v", "libx264",
-            "-crf", "21",
-            "-preset", "veryfast",
-            "-g", str(30 * self.segment_time),
-            "-f", "hls",
-            "-hls_time", "1",
-            "-hls_list_size", "0",
-            "-hls_flags", "delete_segments",
-            "-hls_allow_cache", "0",
-            str(self.current_stream_dir_det / "stream.m3u8")
-        ]
-        self.ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
-
-    def _feed_frames(self):
-        last_frame_time = time.time()
-        stall_timeout = 10
-        
-        while self.running and not self._stop_event.is_set():
-            frame, raw_frame = self.cam.get_frame()
-            if frame is None:
-                if time.time() - last_frame_time > stall_timeout:
-                    print("Camera feed stalled, attempting recovery...")
-                    self._safe_restart()
-                time.sleep(0.1)
-                continue
-
-            last_frame_time = time.time()
-
-            try:
-                if self.ffmpeg_proc is None or self.ffmpeg_proc.poll() is not None:
-                    raise BrokenPipeError("FFmpeg process not running") 
-                self.ffmpeg_proc.stdin.write(frame.tobytes())
-                self.ffmpeg_proc.stdin.flush()
-                
-            except (BrokenPipeError, OSError, ValueError) as e:
-                print(f"HLS write failed: {e}, restarting...")
-                self._safe_restart()
-                
-            time.sleep(1 / 30)
 
     def _safe_restart(self):
         try:
@@ -681,12 +619,6 @@ class HLSStreamer:
     
     def stop(self):
         self.running = False
-        if self.ffmpeg_proc:
-            self.ffmpeg_proc.terminate()
-            try:
-                self.ffmpeg_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.ffmpeg_proc.kill()
 
 
 def point_not_in_polygon(coords, poly):
@@ -727,7 +659,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.clip = kwargs.pop('clip_instance', None)
         self.searcher = kwargs.pop('searcher_instance', None)
-        self.show_dets = None
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args): pass # don't print stuff
@@ -839,7 +770,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
-            if (val := query.get("show_dets", [None])[0]) is not None: zone["show_dets"] = str(int(time.time()))
             database.run_put("settings", cam_name, zone) # todo, key for each
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1027,9 +957,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == '/' or parsed_path.path == f'/{cam_name}':
             selected_dir = parse_qs(parsed_path.query).get("folder", [datetime.now().strftime("%Y-%m-%d")])[0]
             start_param = parse_qs(parsed_path.query).get("start", [None])[0]
-            show_detections_param = parse_qs(parsed_path.query).get("show_detections", ["false"])[0]
-            show_detections = show_detections_param.lower() in ("true", "1", "yes")
-
             try:
                 start_time = max(float(start_param),0) if start_param is not None else None
             except ValueError:
