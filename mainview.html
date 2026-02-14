@@ -2385,7 +2385,6 @@
             if (!response.ok) {
               if (response.status === 404) {
                 console.log('File not found (404) - skipping');
-                return; 
               }
               throw new Error(`HTTP error! status: ${response.status}`);
             }
