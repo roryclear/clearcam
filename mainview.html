@@ -2419,14 +2419,32 @@
             
             shape_seg = findLastLowerThan(detectionCache, video.currentTime);
             console.log("shape seg =",camName,shape_seg, video.currentTime);
-
             if (shape_seg) {
                 const bestMatch = shape_seg[1].filter(item => Object.keys(item)[0] < video.currentTime).pop();
                 const detectionData = bestMatch?.[Object.keys(bestMatch)[0]];
                 console.log(detectionData);
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detectionData) {
+                  detectionData.forEach(box => {
+                      console.log("box:", box); // AND THIS
+                      const [x1, y1, x2, y2, conf] = box; // Assuming first 4 are coordinates (0-1)
+                      
+                      ctx.strokeStyle = `rgba(255, 0, 0, ${conf || 1})`;
+                      ctx.lineWidth = 2;
+                      ctx.strokeRect(
+                          x1 * canvas.width, 
+                          y1 * canvas.height, 
+                          (x2 - x1) * canvas.width, 
+                          (y2 - y1) * canvas.height
+                      );
+                  });
+              }
             }
 
 
+            /*
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const mod = video.currentTime % 60;
             const maxSize = Math.min(canvas.width, canvas.height) * 0.8;
@@ -2441,6 +2459,7 @@
               size,
               size
             );
+            */
           }
         }
 
