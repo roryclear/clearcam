@@ -2208,6 +2208,8 @@
           newCards.push(card);
         } else {
           card = createCameraCard(cam);
+          const videoId = `video-${cam}`;
+          setTimeout(() => initOverlay(videoId), 100);
           newCards.push(card);
         }
       });
@@ -2258,6 +2260,7 @@
       card.innerHTML = `
         <div class="video-container">
           <video id="${videoId}" controls muted playsinline></video>
+          <canvas class="video-overlay"></canvas>
           <div class="video-placeholder" id="${placeholderId}">Loading stream...</div>
         </div>
         <div class="camera-info">
@@ -2284,6 +2287,7 @@
         </div>
       `;
       setTimeout(() => initDetectionSettings(camName), 100);
+      setTimeout(() => initOverlay(videoId), 100);
       return card;
     }
 
@@ -2346,6 +2350,89 @@
                 console.error("Failed to load zone:", err);
             });
     }
+
+
+    function initOverlay(videoId) {
+      const video = document.getElementById(videoId);
+      const canvas = video.parentElement.querySelector('.video-overlay');
+      const ctx = canvas.getContext('2d');
+
+      function resizeCanvas() {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+        canvas.style.position = "absolute";
+        canvas.style.top = 0;
+        canvas.style.left = 0;
+        canvas.style.pointerEvents = "none"; // important
+      }
+
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      let lastFrameTime = 0;
+      const targetFPS = 24;
+      const frameInterval = 1000 / targetFPS;
+      let animationFrame;
+
+      function draw(timestamp) {
+        if (video.currentTime > 0) {
+          if (timestamp - lastFrameTime >= frameInterval) {
+            lastFrameTime = timestamp;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const seconds = video.currentTime;
+            const mod = seconds % 60;  // 0 → 59
+
+            const maxSize = Math.min(canvas.width, canvas.height) * 0.8;
+            const size = (mod / 60) * maxSize;
+
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 4;
+
+            ctx.strokeRect(
+              (canvas.width - size) / 2,
+              (canvas.height - size) / 2,
+              size,
+              size
+            );
+          }
+        }
+
+        animationFrame = requestAnimationFrame(draw);
+      }
+      if (video.currentTime > 0) {
+        animationFrame = requestAnimationFrame(draw);
+      }
+
+      video.addEventListener('play', () => {
+        if (!animationFrame) {
+          animationFrame = requestAnimationFrame(draw);
+        }
+      });
+
+      video.addEventListener('pause', () => {
+        // Keep drawing when paused to maintain the overlay
+        if (!animationFrame) {
+          animationFrame = requestAnimationFrame(draw);
+        }
+      });
+
+      // Also draw when time updates (scrubbing)
+      video.addEventListener('timeupdate', () => {
+        if (!animationFrame) {
+          animationFrame = requestAnimationFrame(draw);
+        }
+      });
+
+      // Clean up on page unload
+      window.addEventListener('beforeunload', () => {
+        if (animationFrame) {
+          cancelAnimationFrame(animationFrame);
+        }
+      });
+    }
+
 
     function closeZoneModal() {
         zoneModal.style.display = "none";
