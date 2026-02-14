@@ -2209,7 +2209,7 @@
         } else {
           card = createCameraCard(cam);
           const videoId = `video-${cam}`;
-          setTimeout(() => initOverlay(videoId), 100);
+          setTimeout(() => initOverlay(cam), 100);
           newCards.push(card);
         }
       });
@@ -2352,8 +2352,8 @@
     }
 
 
-    function initOverlay(videoId) {
-      const video = document.getElementById(videoId);
+    function initOverlay(camName) {
+      const video = document.getElementById(`video-${camName}`);
       const canvas = video.parentElement.querySelector('.video-overlay');
       const ctx = canvas.getContext('2d');
 
@@ -2375,6 +2375,7 @@
       let animationFrame;
 
       function draw(timestamp) {
+        console.log(currentStreamDate);
         if (video.currentTime > 0) {
           if (timestamp - lastFrameTime >= frameInterval) {
             lastFrameTime = timestamp;
