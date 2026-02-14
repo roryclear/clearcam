@@ -2353,6 +2353,7 @@
 
 
     function initOverlay(camName) {
+      const detectionCache = [];
       let lastLogTime = 0
       const video = document.getElementById(`video-${camName}`);
       const canvas = video.parentElement.querySelector('.video-overlay');
@@ -2397,6 +2398,21 @@
                 return [parseFloat(time), filename];
               });
             console.log(data2D);
+            for (const [time, filename] of data2D) {
+              if (!detectionCache.some(entry => entry[0] === time)) {
+                try {
+                  const fileResponse = await fetch(`/${camName}/dets/${currentStreamDate}/${filename}`);
+                  if (fileResponse.ok) {
+                    const contents = await fileResponse.json();
+                    detectionCache.push([time, contents]);
+                    console.log(`Cached detection for time ${time}`);
+                  }
+                } catch (error) {
+                  console.error(`Failed to load ${filename}:`, error);
+                }
+              }
+            }
+            console.log(detectionCache);
           }
 
           if (timestamp - lastFrameTime >= frameInterval) {
