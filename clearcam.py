@@ -27,6 +27,7 @@ import multiprocessing
 import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
+import queue
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -194,6 +195,7 @@ def is_vod(cam_name): return Path("data/cameras", cam_name, "streams", "video").
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
+    self.start_time = None
     self.vod = vod
     self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
@@ -211,6 +213,7 @@ class VideoCapture:
     self.running = True
 
     self.raw_frame = None
+    self.frame_ts = None
     self.annotated_frame = None
     self.last_preds = []
     self.last_frame = None
@@ -297,12 +300,11 @@ class VideoCapture:
           "-hls_flags", "append_list+independent_segments+temp_file",
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8"),
-
           "-map", "0:v",
           "-an",
           "-f", "rawvideo",
           "-pix_fmt", "bgr24",
-          "-vf", f"scale={self.width}:{self.height}",
+          "-vf", f"scale={self.width}:{self.height},showinfo",
           "-vsync", "2",
           "-fflags", "+discardcorrupt+flush_packets+nobuffer",
           "-avioflags", "direct",
@@ -310,8 +312,30 @@ class VideoCapture:
           "-max_delay", "100000",
           "-threads", "1",
           "-"
-      ]
-      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      ]    
+      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      self.timestamp_queue = queue.Queue()
+      self.timestamp_thread = threading.Thread(target=self._parse_ffmpeg_timestamps, daemon=True)
+      self.timestamp_thread.start()
+
+
+  def _parse_ffmpeg_timestamps(self):
+      """Parse timestamps from ffmpeg stderr output"""
+      while self.running and self.proc:
+          try:
+              line = self.proc.stderr.readline()
+              if not line:
+                  break
+              line = line.decode('utf-8', errors='ignore')
+              if 'showinfo' in line and 'pts_time:' in line:
+                  import re
+                  match = re.search(r'pts_time:([\d.]+)', line)
+                  if match:
+                      timestamp = float(match.group(1))
+                      self.timestamp_queue.put(timestamp)
+          except Exception as e:
+              print(f"Error parsing timestamps: {e}")
+              break
 
   def save_object(self, p, ts=0):
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -374,6 +398,11 @@ class VideoCapture:
           database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
+          try:
+              seconds_ts = self.timestamp_queue.get(timeout=0.1)
+          except queue.Empty:
+              seconds_ts = time.time() - self.streamer.start_time
+
           if len(raw_bytes) != frame_size:
             fail_count += 1
             if fail_count > 5:
@@ -472,6 +501,7 @@ class VideoCapture:
             count+=1
         with self.lock:
             self.raw_frame = frame.copy()
+            self.frame_ts = float(seconds_ts)
             if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
         if not self.vod: time.sleep(1 / 30)
       except Exception as e:
@@ -493,6 +523,7 @@ class VideoCapture:
         continue
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
+        seconds_ts = float(self.frame_ts) if self.frame_ts is not None else None
       if frame is not None:
         preds, frame = self.run_inference(frame)
         with self.lock:
@@ -504,11 +535,10 @@ class VideoCapture:
           h, w = frame.shape[:2]
           preds[:, [0, 2]] /= w
           preds[:, [1, 3]] /= h
-          t = time.time() - self.streamer.start_time
-          self.det_shapes.append({t: preds.tolist()})
+          self.det_shapes.append({seconds_ts: preds.tolist()})
           if len(self.det_shapes) == 1:
             with open(self.det_manifest, 'a') as f:
-                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
+              f.write(f"{seconds_ts:.3f}: {self.shape_seg}.json\n")
         if time.time() - self.last_shapes_time >= 4:
           print("4 secs")
           self.last_shapes_time = time.time()
