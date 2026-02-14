@@ -355,6 +355,7 @@ class VideoCapture:
      
 
   def capture_loop(self):
+    self.shape_seg = 0
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -365,6 +366,9 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
+    self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
+    Path(self.det_path).mkdir(parents=True, exist_ok=True)
+
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -513,12 +517,14 @@ class VideoCapture:
           h, w = frame.shape[:2]
           preds[:, [0, 2]] /= w
           preds[:, [1, 3]] /= h
-          self.det_shapes.append({time.time() - self.streamer.start_time: preds})
+          self.det_shapes.append({time.time() - self.streamer.start_time: preds.tolist()})
         if time.time() - self.last_shapes_time >= 4:
           print("4 secs")
           print(self.det_shapes)
-          self.det_shapes = []
           self.last_shapes_time = time.time()
+          json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
+          self.shape_seg += 1
+          self.det_shapes = []
 
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
@@ -1352,8 +1358,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         shutil.rmtree(oldest_recording)
         event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
         object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        dets_dir = largest_cam.with_name(largest_cam.name) / Path("dets") / Path(oldest_recording.name)
         if event_images_dir.exists(): shutil.rmtree(event_images_dir)
         if object_images_dir.exists(): shutil.rmtree(object_images_dir)
+        if dets_dir.exists(): shutil.rmtree(dets_dir)
         print(f"Deleted oldest recording: {oldest_recording}")
 
     def server_close(self):
