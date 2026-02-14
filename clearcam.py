@@ -217,6 +217,9 @@ class VideoCapture:
     self.last_frame = None
 
     self.settings = None
+
+    self.last_shapes_time = time.time()
+    self.det_shapes = []
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
     if not self.alert_counters:
@@ -283,6 +286,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
@@ -504,6 +509,15 @@ class VideoCapture:
         with self.lock:
           self.last_preds = preds
           self.last_frame = frame.numpy().copy()
+        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24: self.det_shapes.append({time.time() - self.streamer.start_time: preds})
+        if time.time() - self.last_shapes_time >= 4:
+          print("4 secs")
+          print(self.det_shapes)
+          self.det_shapes = []
+          self.last_shapes_time = time.time()
+
+
+
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
@@ -968,7 +982,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             with open('cameraview.html', 'r', encoding='utf-8') as f: html = f.read()
             replacements = {
                 '{selected_dir}': selected_dir,
-                '{show_detections_checked}': 'checked' if show_detections else '',
                 '{class_labels}': json.dumps(class_labels),
                 '{start_time}': str(start_time) if start_time is not None else 'null',
                 '{cam_name}': cam_name
