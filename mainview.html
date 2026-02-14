@@ -2353,6 +2353,7 @@
 
 
     function initOverlay(camName) {
+      let lastLogTime = 0
       const video = document.getElementById(`video-${camName}`);
       const canvas = video.parentElement.querySelector('.video-overlay');
       const ctx = canvas.getContext('2d');
@@ -2374,9 +2375,30 @@
       const frameInterval = 1000 / targetFPS;
       let animationFrame;
 
-      function draw(timestamp) {
-        console.log(currentStreamDate);
+      async function draw(timestamp) {
         if (video.currentTime > 0) {
+          if (timestamp - lastLogTime >= 4000) {
+            lastLogTime = timestamp;
+            console.log(camName, currentStreamDate, video.currentTime);
+            const response = await fetch(`/${camName}/dets/${currentStreamDate}/det_manifest.txt`);
+            if (!response.ok) {
+              if (response.status === 404) {
+                console.log('File not found (404) - skipping');
+                return; 
+              }
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const text = await response.text();
+            const data2D = text
+              .trim()
+              .split('\n')
+              .map(line => {
+                const [time, filename] = line.split(': ');
+                return [parseFloat(time), filename];
+              });
+            console.log(data2D);
+          }
+
           if (timestamp - lastFrameTime >= frameInterval) {
             lastFrameTime = timestamp;
 
