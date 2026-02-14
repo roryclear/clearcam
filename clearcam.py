@@ -208,7 +208,6 @@ class VideoCapture:
     self.width = 1920
     self.height = 1080
     self.proc = None
-    self.hls_proc = None
     self.running = True
 
     self.raw_frame = None
@@ -256,9 +255,7 @@ class VideoCapture:
 
   def _open_ffmpeg(self):
     path = self._get_new_stream_dir()
-       
     self._safe_kill_process(self.proc)
-    self._safe_kill_process(self.hls_proc)
 
     ffmpeg_path = find_ffmpeg()
     
@@ -278,20 +275,20 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      self.proc = None
+      self.proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
     else:  # Live streams
       # Original live stream pipeline
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
-                "-headers", "Referer: https://www,earthcam.com\r\n",
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "-headers", "Referer: https://www.earthcam.com\r\n",
+          "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
-          "-c", "copy",
+          "-map", "0:v",
+          "-c:v", "copy",
           "-an",
           "-f", "hls",
           "-hls_time", "2",
@@ -299,28 +296,15 @@ class VideoCapture:
           "-hls_playlist_type", "event",
           "-hls_flags", "append_list+independent_segments+temp_file",
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
-          str(path / "stream.m3u8")
-      ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          str(path / "stream.m3u8"),
 
-      time.sleep(15)
-      
-      command = [
-          ffmpeg_path,
-          "-live_start_index", "-1",
-          "-i", str(path / "stream.m3u8"),
-          "-loglevel", "quiet",
-          "-reconnect", "1",
-          "-reconnect_streamed", "1",
-          "-reconnect_delay_max", "2",
+          "-map", "0:v",
           "-an",
           "-f", "rawvideo",
           "-pix_fmt", "bgr24",
           "-vf", f"scale={self.width}:{self.height}",
-          "-timeout", "5000000",
-          "-rw_timeout", "15000000",
           "-vsync", "2",
-          "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
+          "-fflags", "+discardcorrupt+flush_packets+nobuffer",
           "-avioflags", "direct",
           "-flags", "low_delay",
           "-max_delay", "100000",
@@ -579,9 +563,7 @@ class VideoCapture:
   def release(self):
       self.running = False
       if self.proc:
-          self.proc.kill()
-      if self.hls_proc:
-         self.hls_proc.kill()    
+         self.proc.kill()    
 
 def is_bright_color(color):
   r, g, b = color
