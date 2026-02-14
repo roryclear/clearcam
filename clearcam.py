@@ -368,6 +368,7 @@ class VideoCapture:
     count = 0
     self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
     Path(self.det_path).mkdir(parents=True, exist_ok=True)
+    self.det_manifest = str(self.det_path / "det_manifest.txt")
 
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
@@ -517,10 +518,13 @@ class VideoCapture:
           h, w = frame.shape[:2]
           preds[:, [0, 2]] /= w
           preds[:, [1, 3]] /= h
-          self.det_shapes.append({time.time() - self.streamer.start_time: preds.tolist()})
+          t = time.time() - self.streamer.start_time
+          self.det_shapes.append({t: preds.tolist()})
+          if len(self.det_shapes) == 1:
+            with open(self.det_manifest, 'a') as f:
+                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
         if time.time() - self.last_shapes_time >= 4:
           print("4 secs")
-          print(self.det_shapes)
           self.last_shapes_time = time.time()
           json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
           self.shape_seg += 1
