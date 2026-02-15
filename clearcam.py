@@ -27,7 +27,6 @@ import multiprocessing
 import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
-import queue
 
 def resize(img, new_size):
     img = img.permute(2,0,1)
@@ -195,7 +194,6 @@ def is_vod(cam_name): return Path("data/cameras", cam_name, "streams", "video").
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
-    self.start_time = None
     self.vod = vod
     self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
@@ -210,10 +208,10 @@ class VideoCapture:
     self.width = 1920
     self.height = 1080
     self.proc = None
+    self.hls_proc = None
     self.running = True
 
     self.raw_frame = None
-    self.frame_ts = None
     self.annotated_frame = None
     self.last_preds = []
     self.last_frame = None
@@ -258,7 +256,9 @@ class VideoCapture:
 
   def _open_ffmpeg(self):
     path = self._get_new_stream_dir()
+       
     self._safe_kill_process(self.proc)
+    self._safe_kill_process(self.hls_proc)
 
     ffmpeg_path = find_ffmpeg()
     
@@ -278,20 +278,20 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      self.proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.proc = None
         
     else:  # Live streams
       # Original live stream pipeline
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
-          "-headers", "Referer: https://www.earthcam.com\r\n",
-          "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
-          "-map", "0:v",
-          "-c:v", "copy",
+          "-c", "copy",
           "-an",
           "-f", "hls",
           "-hls_time", "2",
@@ -299,74 +299,35 @@ class VideoCapture:
           "-hls_playlist_type", "event",
           "-hls_flags", "append_list+independent_segments+temp_file",
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
-          str(path / "stream.m3u8"),
-          "-map", "0:v",
+          str(path / "stream.m3u8")
+      ]
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.start_time = time.time()
+      time.sleep(15)
+      
+      command = [
+          ffmpeg_path,
+          "-live_start_index", "-1",
+          "-i", str(path / "stream.m3u8"),
+          "-loglevel", "quiet",
+          "-reconnect", "1",
+          "-reconnect_streamed", "1",
+          "-reconnect_delay_max", "2",
           "-an",
           "-f", "rawvideo",
           "-pix_fmt", "bgr24",
-          "-vf", f"scale={self.width}:{self.height},showinfo",
+          "-vf", f"scale={self.width}:{self.height}",
+          "-timeout", "5000000",
+          "-rw_timeout", "15000000",
           "-vsync", "2",
-          "-fflags", "+discardcorrupt+flush_packets+nobuffer",
+          "-fflags", "+discardcorrupt+fastseek+flush_packets+nobuffer",
           "-avioflags", "direct",
           "-flags", "low_delay",
           "-max_delay", "100000",
           "-threads", "1",
           "-"
       ]
-
-      if is_rtsp:
-        command = [
-            ffmpeg_path,
-            "-rtsp_transport", "tcp",
-            "-rtsp_flags", "prefer_tcp",
-            "-fflags", "+genpts",
-            "-use_wallclock_as_timestamps", "1",
-            "-flags", "+global_header",
-            "-strict", "experimental",
-            "-i", self.src,
-            "-map", "0:v",
-            "-c:v", "copy",
-            "-an",
-            "-f", "hls",
-            "-hls_time", "2",
-            "-hls_list_size", "0",
-            "-hls_playlist_type", "event",
-            "-hls_flags", "append_list+independent_segments+independent_segments+temp_file",
-            "-hls_segment_filename", str(path / "stream_%06d.ts"),
-            str(path / "stream.m3u8"),
-            "-map", "0:v",
-            "-an",
-            "-vf", f"scale={self.width}:{self.height},showinfo",
-            "-pix_fmt", "bgr24",
-            "-f", "rawvideo",
-            "-vsync", "1",
-            "-"
-        ]
-
-
-      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      self.timestamp_queue = queue.Queue()
-      self.timestamp_thread = threading.Thread(target=self._parse_ffmpeg_timestamps, daemon=True)
-      self.timestamp_thread.start()
-
-
-  def _parse_ffmpeg_timestamps(self):
-      """Parse timestamps from ffmpeg stderr output"""
-      while self.running and self.proc:
-          try:
-              line = self.proc.stderr.readline()
-              if not line:
-                  break
-              line = line.decode('utf-8', errors='ignore')
-              if 'showinfo' in line and 'pts_time:' in line:
-                  import re
-                  match = re.search(r'pts_time:([\d.]+)', line)
-                  if match:
-                      timestamp = float(match.group(1))
-                      self.timestamp_queue.put(timestamp)
-          except Exception as e:
-              print(f"Error parsing timestamps: {e}")
-              break
+      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p, ts=0):
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -429,11 +390,6 @@ class VideoCapture:
           database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           raw_bytes = self.proc.stdout.read(frame_size)
-          try:
-              seconds_ts = self.timestamp_queue.get(timeout=0.1)
-          except queue.Empty:
-              seconds_ts = time.time() - self.streamer.start_time
-
           if len(raw_bytes) != frame_size:
             fail_count += 1
             if fail_count > 5:
@@ -532,7 +488,6 @@ class VideoCapture:
             count+=1
         with self.lock:
             self.raw_frame = frame.copy()
-            self.frame_ts = float(seconds_ts)
             if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
         if not self.vod: time.sleep(1 / 30)
       except Exception as e:
@@ -554,7 +509,6 @@ class VideoCapture:
         continue
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
-        seconds_ts = float(self.frame_ts) if self.frame_ts is not None else None
       if frame is not None:
         preds, frame = self.run_inference(frame)
         with self.lock:
@@ -566,10 +520,11 @@ class VideoCapture:
           h, w = frame.shape[:2]
           preds[:, [0, 2]] /= w
           preds[:, [1, 3]] /= h
-          self.det_shapes.append({seconds_ts: preds.tolist()})
+          t = time.time() - self.start_time
+          self.det_shapes.append({t: preds.tolist()})
           if len(self.det_shapes) == 1:
             with open(self.det_manifest, 'a') as f:
-              f.write(f"{seconds_ts:.3f}: {self.shape_seg}.json\n")
+                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
         if time.time() - self.last_shapes_time >= 4:
           print("4 secs")
           self.last_shapes_time = time.time()
@@ -624,7 +579,9 @@ class VideoCapture:
   def release(self):
       self.running = False
       if self.proc:
-         self.proc.kill()    
+          self.proc.kill()
+      if self.hls_proc:
+         self.hls_proc.kill()    
 
 def is_bright_color(color):
   r, g, b = color
@@ -1211,7 +1168,7 @@ def schedule_daily_restart(hls_streamer, videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
-        videocapture.proc.kill()
+        videocapture.hls_proc.kill()
         sys.stdout.flush()
         python = sys.executable
         os.execv(python, [python] + sys.argv)
@@ -1512,3 +1469,4 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
+
