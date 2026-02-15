@@ -312,7 +312,38 @@ class VideoCapture:
           "-max_delay", "100000",
           "-threads", "1",
           "-"
-      ]    
+      ]
+
+      if is_rtsp:
+        command = [
+            ffmpeg_path,
+            "-rtsp_transport", "tcp",
+            "-rtsp_flags", "prefer_tcp",
+            "-fflags", "+genpts",
+            "-use_wallclock_as_timestamps", "1",
+            "-flags", "+global_header",
+            "-strict", "experimental",
+            "-i", self.src,
+            "-map", "0:v",
+            "-c:v", "copy",
+            "-an",
+            "-f", "hls",
+            "-hls_time", "2",
+            "-hls_list_size", "0",
+            "-hls_playlist_type", "event",
+            "-hls_flags", "append_list+independent_segments+independent_segments+temp_file",
+            "-hls_segment_filename", str(path / "stream_%06d.ts"),
+            str(path / "stream.m3u8"),
+            "-map", "0:v",
+            "-an",
+            "-vf", f"scale={self.width}:{self.height},showinfo",
+            "-pix_fmt", "bgr24",
+            "-f", "rawvideo",
+            "-vsync", "1",
+            "-"
+        ]
+
+
       self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       self.timestamp_queue = queue.Queue()
       self.timestamp_thread = threading.Thread(target=self._parse_ffmpeg_timestamps, daemon=True)
