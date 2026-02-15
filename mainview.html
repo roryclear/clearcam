@@ -2418,14 +2418,15 @@
             lastFrameTime = timestamp;
             
             shape_seg = findLastLowerThan(detectionCache, video.currentTime);
+            if (shape_seg && video.currentTime - shape_seg[0] > 4) { // 4 secs...segment time #todo unhardcode
+              shape_seg = null;
+            }
             console.log("shape seg =",camName,shape_seg, video.currentTime);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (shape_seg) {
                 const bestMatch = shape_seg[1].filter(item => Object.keys(item)[0] < video.currentTime).pop();
                 const detectionData = bestMatch?.[Object.keys(bestMatch)[0]];
                 console.log(detectionData);
-
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
                 if (detectionData) {
                   detectionData.forEach(box => {
                       console.log("box:", box); // AND THIS
