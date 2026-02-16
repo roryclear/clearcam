@@ -194,6 +194,7 @@ def is_vod(cam_name): return Path("data/cameras", cam_name, "streams", "video").
 
 class VideoCapture:
   def __init__(self, src,cam_name="clearcamPy", vod=False):
+    self.prev_time = None
     self.vod = vod
     self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
@@ -233,7 +234,6 @@ class VideoCapture:
     if not self.vod or not self.output_dir_raw.exists():
       self._open_ffmpeg()
       threading.Thread(target=self.capture_loop, daemon=True).start()
-    if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -401,6 +401,7 @@ class VideoCapture:
           else:
             fail_count = 0
           frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+        self.last_preds = self.inference(frame)
         filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
         for p in filtered_preds:
           if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
@@ -500,42 +501,44 @@ class VideoCapture:
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
 
-  def inference_loop(self):
-    prev_time = time.time()
-    while self.running:
-      if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
-        time.sleep(1)
-        with self.lock: self.last_preds = [] # to remove annotation when no alerts active
-        continue
+  def inference(self, frame):
+    if not self.prev_time: self.prev_time = time.time()
+    if not any(counter.is_active() for _, counter in self.alert_counters.items()):
+      time.sleep(1)
+      with self.lock: self.last_preds = []
+      return self.last_preds
+    with self.lock:
+      frame = self.raw_frame.copy() if self.raw_frame is not None else None
+    if frame is not None:
+      preds, frame = self.run_inference(frame)
       with self.lock:
-        frame = self.raw_frame.copy() if self.raw_frame is not None else None
-      if frame is not None:
-        preds, frame = self.run_inference(frame)
-        with self.lock:
-          self.last_preds = preds.copy()
-          self.last_frame = frame.numpy().copy()
-
+        self.last_preds = preds.copy()
+        self.last_frame = frame.numpy().copy()
       
-        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
-          h, w = frame.shape[:2]
-          preds[:, [0, 2]] /= w
-          preds[:, [1, 3]] /= h
-          t = time.time() - self.start_time
-          self.det_shapes.append({t: preds.tolist()})
-          if len(self.det_shapes) == 1:
-            with open(self.det_manifest, 'a') as f:
-                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
-        if time.time() - self.last_shapes_time >= 4:
-          print("4 secs")
-          self.last_shapes_time = time.time()
-          json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
-          self.shape_seg += 1
-          self.det_shapes = []
-        
-        curr_time = time.time()
-        fps = 1 / (curr_time - prev_time)
-        prev_time = curr_time
-        print(f"\rFPS: {fps:.2f}", end="", flush=True)
+      '''
+      if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
+        h, w = frame.shape[:2]
+        preds[:, [0, 2]] /= w
+        preds[:, [1, 3]] /= h
+        t = time.time() - self.start_time
+        self.det_shapes.append({t: preds.tolist()})
+        if len(self.det_shapes) == 1:
+          with open(self.det_manifest, 'a') as f:
+              f.write(f"{t:.3f}: {self.shape_seg}.json\n")
+      if time.time() - self.last_shapes_time >= 4:
+        print("4 secs")
+        self.last_shapes_time = time.time()
+        json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
+        self.shape_seg += 1
+        self.det_shapes = []
+      '''
+      
+      curr_time = time.time()
+      fps = 1 / (curr_time - self.prev_time)
+      self.prev_time = curr_time
+      print(f"\rFPS: {fps:.2f}", end="", flush=True)
+      return self.last_preds
+    return []
 
   def run_inference(self, frame):
     frame = Tensor(frame)

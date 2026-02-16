@@ -2208,8 +2208,6 @@
           newCards.push(card);
         } else {
           card = createCameraCard(cam);
-          const videoId = `video-${cam}`;
-          setTimeout(() => initOverlay(cam), 100);
           newCards.push(card);
         }
       });
@@ -2260,7 +2258,6 @@
       card.innerHTML = `
         <div class="video-container">
           <video id="${videoId}" controls muted playsinline></video>
-          <canvas class="video-overlay"></canvas>
           <div class="video-placeholder" id="${placeholderId}">Loading stream...</div>
         </div>
         <div class="camera-info">
@@ -2287,7 +2284,6 @@
         </div>
       `;
       setTimeout(() => initDetectionSettings(camName), 100);
-      setTimeout(() => initOverlay(videoId), 100);
       return card;
     }
 
@@ -2350,154 +2346,6 @@
                 console.error("Failed to load zone:", err);
             });
     }
-
-
-    function initOverlay(camName) {
-      const detectionCache = [];
-      let lastLogTime = 0
-      const video = document.getElementById(`video-${camName}`);
-      const canvas = video.parentElement.querySelector('.video-overlay');
-      const ctx = canvas.getContext('2d');
-
-      function resizeCanvas() {
-        canvas.width = video.clientWidth;
-        canvas.height = video.clientHeight;
-        canvas.style.position = "absolute";
-        canvas.style.top = 0;
-        canvas.style.left = 0;
-        canvas.style.pointerEvents = "none"; // important
-      }
-
-      resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
-
-      let lastFrameTime = 0;
-      const targetFPS = 24;
-      const frameInterval = 1000 / targetFPS;
-      let animationFrame;
-
-      async function draw(timestamp) {
-        if (video.currentTime > 0) {
-          if (timestamp - lastLogTime >= 4000) {
-            lastLogTime = timestamp;
-            console.log(camName, currentStreamDate, video.currentTime);
-            const response = await fetch(`/${camName}/dets/${currentStreamDate}/det_manifest.txt`);
-            if (!response.ok) {
-              if (response.status === 404) {
-                console.log('File not found (404) - skipping');
-              }
-            }
-            const text = await response.text();
-            const data2D = text
-              .trim()
-              .split('\n')
-              .map(line => {
-                const [time, filename] = line.split(': ');
-                return [parseFloat(time), filename];
-              });
-            console.log(data2D);
-            for (const [time, filename] of data2D) {
-              if (!detectionCache.some(entry => entry[0] === time)) {
-                try {
-                  const fileResponse = await fetch(`/${camName}/dets/${currentStreamDate}/${filename}`);
-                  if (fileResponse.ok) {
-                    const contents = await fileResponse.json();
-                    detectionCache.push([time, contents]);
-                    console.log(`Cached detection for time ${time}`);
-                  }
-                } catch (error) {
-                  console.error(`Failed to load ${filename}:`, error);
-                }
-               }
-            }
-            console.log(detectionCache);
-          }
-            
-          if (timestamp - lastFrameTime >= frameInterval) {
-            lastFrameTime = timestamp;
-            
-            shape_seg = findLastLowerThan(detectionCache, video.currentTime);
-            if (shape_seg && video.currentTime - shape_seg[0] > 4) { // 4 secs...segment time #todo unhardcode
-              shape_seg = null;
-            }
-            console.log("shape seg =",camName,shape_seg, video.currentTime);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (shape_seg) {
-                const bestMatch = shape_seg[1].filter(item => Object.keys(item)[0] < video.currentTime).pop();
-                const detectionData = bestMatch?.[Object.keys(bestMatch)[0]];
-                console.log(detectionData);
-                if (detectionData) {
-                  detectionData.forEach(box => {
-                      console.log("box:", box); // AND THIS
-                      const [x1, y1, x2, y2, conf, classId] = box;
-                      const hue = (classId * 0.618033988749895) % 1.0;
-                      ctx.strokeStyle = `hsla(${hue * 360}, 80%, 60%, ${conf || 1})`
-                      ctx.lineWidth = 2;
-                      ctx.strokeRect(
-                          x1 * canvas.width, 
-                          y1 * canvas.height, 
-                          (x2 - x1) * canvas.width, 
-                          (y2 - y1) * canvas.height
-                      );
-                  });
-              }
-            }
-          }
-        }
-
-        animationFrame = requestAnimationFrame(draw);
-      }
-      if (video.currentTime > 0) {
-        animationFrame = requestAnimationFrame(draw);
-      }
-
-      video.addEventListener('play', () => {
-        if (!animationFrame) {
-          animationFrame = requestAnimationFrame(draw);
-        }
-      });
-
-      video.addEventListener('pause', () => {
-        // Keep drawing when paused to maintain the overlay
-        if (!animationFrame) {
-          animationFrame = requestAnimationFrame(draw);
-        }
-      });
-
-      // Also draw when time updates (scrubbing)
-      video.addEventListener('timeupdate', () => {
-        if (!animationFrame) {
-          animationFrame = requestAnimationFrame(draw);
-        }
-      });
-
-      // Clean up on page unload
-      window.addEventListener('beforeunload', () => {
-        if (animationFrame) {
-          cancelAnimationFrame(animationFrame);
-        }
-      });
-    }
-
-    function findLastLowerThan(arr, x) {
-      let left = 0;
-      let right = arr.length - 1;
-      let result = -1;
-
-      while (left <= right) {
-        const mid = Math.floor((left + right) / 2);
-
-        if (arr[mid][0] < x) {
-          result = mid;
-          left = mid + 1;
-        } else {
-          right = mid - 1;
-        }
-      }
-
-      return result === -1 ? null : arr[result];
-    }
-
 
     function closeZoneModal() {
         zoneModal.style.display = "none";
