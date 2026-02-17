@@ -217,6 +217,10 @@ class VideoCapture:
     self.last_frame = None
 
     self.settings = None
+
+    #self.last_shapes_time = time.time()
+    #self.det_shapes = []
+    self.new_frame_event = threading.Event()
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
     if not self.alert_counters:
@@ -297,7 +301,7 @@ class VideoCapture:
           str(path / "stream.m3u8")
       ]
       self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
+      self.start_time = time.time()
       time.sleep(15)
       
       command = [
@@ -350,6 +354,7 @@ class VideoCapture:
      
 
   def capture_loop(self):
+    self.shape_seg = 0
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -360,6 +365,10 @@ class VideoCapture:
     last_counter_update = time.time()
     pred_occs = {}
     count = 0
+    self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
+    Path(self.det_path).mkdir(parents=True, exist_ok=True)
+    self.det_manifest = str(self.det_path / "det_manifest.txt")
+
     if self.vod:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -478,7 +487,7 @@ class VideoCapture:
             count+=1
         with self.lock:
             self.raw_frame = frame.copy()
-            if self.streamer.feeding_frames: self.annotated_frame = draw_predictions(frame.copy(), filtered_preds, class_labels, color_dict)
+        self.new_frame_event.set()
         if not self.vod: time.sleep(1 / 30)
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
@@ -493,6 +502,8 @@ class VideoCapture:
   def inference_loop(self):
     prev_time = time.time()
     while self.running:
+      self.new_frame_event.wait()
+      self.new_frame_event.clear()
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
         time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
@@ -502,8 +513,26 @@ class VideoCapture:
       if frame is not None:
         preds, frame = self.run_inference(frame)
         with self.lock:
-          self.last_preds = preds
+          self.last_preds = preds.copy()
           self.last_frame = frame.numpy().copy()
+
+        '''
+        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
+          h, w = frame.shape[:2]
+          preds[:, [0, 2]] /= w
+          preds[:, [1, 3]] /= h
+          t = time.time() - self.start_time
+          self.det_shapes.append({t: preds.tolist()})
+          if len(self.det_shapes) == 1:
+            with open(self.det_manifest, 'a') as f:
+                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
+        if time.time() - self.last_shapes_time >= 4:
+          print("4 secs")
+          self.last_shapes_time = time.time()
+          json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
+          self.shape_seg += 1
+          self.det_shapes = []
+        '''
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
         prev_time = curr_time
@@ -968,7 +997,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             with open('cameraview.html', 'r', encoding='utf-8') as f: html = f.read()
             replacements = {
                 '{selected_dir}': selected_dir,
-                '{show_detections_checked}': 'checked' if show_detections else '',
                 '{class_labels}': json.dumps(class_labels),
                 '{start_time}': str(start_time) if start_time is not None else 'null',
                 '{cam_name}': cam_name
@@ -1337,8 +1365,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         shutil.rmtree(oldest_recording)
         event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
         object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        #dets_dir = largest_cam.with_name(largest_cam.name) / Path("dets") / Path(oldest_recording.name)
         if event_images_dir.exists(): shutil.rmtree(event_images_dir)
         if object_images_dir.exists(): shutil.rmtree(object_images_dir)
+        #if dets_dir.exists(): shutil.rmtree(dets_dir)
         print(f"Deleted oldest recording: {oldest_recording}")
 
     def server_close(self):
@@ -1440,3 +1470,4 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
+
