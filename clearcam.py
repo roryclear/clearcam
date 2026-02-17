@@ -218,8 +218,8 @@ class VideoCapture:
 
     self.settings = None
 
-    self.last_shapes_time = time.time()
-    self.det_shapes = []
+    #self.last_shapes_time = time.time()
+    #self.det_shapes = []
     self.new_frame_event = threading.Event()
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
