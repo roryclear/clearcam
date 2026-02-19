@@ -3315,6 +3315,11 @@
     }
 
     function playVideoAtTime(camName, timestamp, folder) {
+      if(folder != document.getElementById('streamDateSelect').value){
+        document.getElementById('streamDateSelect').value = folder;
+        currentStreamDate = folder;
+        restartAllStreams();
+      }
       const videoId = `video-${camName}`;
       const video = document.getElementById(videoId);      
       if (video) {
