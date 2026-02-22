@@ -502,7 +502,7 @@
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
     if (sessionToken) [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
     
-    NSDate *latestDate = [self latestDownloadedFileDate];
+    NSDate *latestDate = [[NSUserDefaults standardUserDefaults] objectForKey:@"lastDownloadedFileDate"];
     if (latestDate) {
         NSTimeInterval timestamp = [latestDate timeIntervalSince1970];
         NSString *timestampString = [NSString stringWithFormat:@"%.0f", timestamp];
@@ -559,6 +559,11 @@
     }
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
         self.isLoadingVideos = NO;
+        NSDate *latestDate = [self latestDownloadedFileDate];
+        if (latestDate) {
+            [[NSUserDefaults standardUserDefaults] setObject:latestDate forKey:@"lastDownloadedFileDate"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+        }
     });
 }
 
