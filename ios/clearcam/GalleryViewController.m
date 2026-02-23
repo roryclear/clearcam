@@ -95,6 +95,10 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(appDidBecomeActive)
+                                                 name:UIApplicationDidBecomeActiveNotification
+                                               object:nil];
     self.fileServer = [FileServer sharedInstance];
     [self.fileServer start];
     [self.navigationController setNavigationBarHidden:YES animated:NO];
@@ -241,6 +245,11 @@
                                                       userInfo:nil
                                                        repeats:YES];
     [self updateInternetStatus];
+}
+
+- (void)appDidBecomeActive {
+    self.isLoadingVideos = NO;
+    [self getEvents];
 }
 
 - (void)updateInternetStatus {
@@ -494,7 +503,7 @@
 }
 
 - (void)getEvents {
-    if (self.isLoadingVideos) return;
+    if (self.isLoadingVideos) self.isLoadingVideos = NO;
     self.isLoadingVideos = YES;
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
@@ -502,7 +511,7 @@
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray array];
     if (sessionToken) [queryItems addObject:[NSURLQueryItem queryItemWithName:@"session_token" value:sessionToken]];
     
-    NSDate *latestDate = [[NSUserDefaults standardUserDefaults] objectForKey:@"lastDownloadedFileDate"];
+    NSDate *latestDate = [self latestDownloadedFileDate];
     if (latestDate) {
         NSTimeInterval timestamp = [latestDate timeIntervalSince1970];
         NSString *timestampString = [NSString stringWithFormat:@"%.0f", timestamp];
@@ -516,7 +525,12 @@
     [request setHTTPMethod:@"GET"];
     
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) return;
+        if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.isLoadingVideos = NO;
+            });
+            return;
+        }
         
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (httpResponse.statusCode == 200) {
@@ -559,11 +573,6 @@
     }
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
         self.isLoadingVideos = NO;
-        NSDate *latestDate = [self latestDownloadedFileDate];
-        if (latestDate) {
-            [[NSUserDefaults standardUserDefaults] setObject:latestDate forKey:@"lastDownloadedFileDate"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-        }
     });
 }
 
@@ -1082,3 +1091,4 @@
 }
 
 @end
+
