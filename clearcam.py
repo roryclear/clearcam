@@ -28,33 +28,6 @@ import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
 
-def resize(img, new_size):
-    img = img.permute(2,0,1)
-    img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
-    img = img.permute(1, 2, 0)
-    return img
-
-@TinyJit
-def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
-  shape = image.shape[:2]  # current shape [height, width]
-  new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
-  r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-  r = min(r, 1.0) if not scaleup else r
-  new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
-  dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-  dw, dh = (np.mod(dw, stride), np.mod(dh, stride)) if auto else (0.0, 0.0)
-  new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
-  dw /= 2
-  dh /= 2
-  image = resize(image, new_unpad)
-  top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-  left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-  image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
-  return image
-
-def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)):
-    return img.pad(((top,top),(left,left),(0,0)))
-
 def clip_boxes(boxes, shape):
   boxes[..., [0, 2]] = np.clip(boxes[..., [0, 2]], 0, shape[1])  # x1, x2
   boxes[..., [1, 3]] = np.clip(boxes[..., [1, 3]], 0, shape[0])  # y1, y2
@@ -540,7 +513,7 @@ class VideoCapture:
 
   def run_inference(self, frame):
     frame = Tensor(frame)
-    pre = preprocess(frame)
+    pre = yolo_infer.preprocess(frame)
     preds = do_inf(pre, yolo_infer).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
     online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280

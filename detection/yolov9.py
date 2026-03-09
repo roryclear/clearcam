@@ -7,6 +7,7 @@ import tinygrad.nn as nn
 import numpy as np
 from collections import defaultdict
 from pathlib import Path
+from tinygrad import TinyJit
 
 class Sequential():
     def __init__(self, size=0, list=None):
@@ -375,6 +376,33 @@ class YOLOv9():
     
     return postprocess(x[0])[0]
 
+
+  @TinyJit
+  def preprocess(self, image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
+    shape = image.shape[:2]  # current shape [height, width]
+    new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    r = min(r, 1.0) if not scaleup else r
+    new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
+    dw, dh = (np.mod(dw, stride), np.mod(dh, stride)) if auto else (0.0, 0.0)
+    new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
+    dw /= 2
+    dh /= 2
+    image = resize(image, new_unpad)
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
+    return image
+
+def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)): return img.pad(((top,top),(left,left),(0,0)))
+
+def resize(img, new_size):
+  img = img.permute(2,0,1)
+  img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
+  img = img.permute(1, 2, 0)
+  return img
+
 def compute_iou_matrix(boxes):
   x1s = boxes[:, :, 0]
   y1s = boxes[:, :, 1]
@@ -428,15 +456,6 @@ def compute_transform(image, new_shape=(1280, 1280), auto=False, scaleFill=False
   left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
   image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
   return Tensor(image)
-
-def preprocess(im, imgsz=1280, model_stride=32, model_pt=True):
-  same_shapes = all(x.shape == im[0].shape for x in im)
-  auto = same_shapes and model_pt
-  im = [compute_transform(x, new_shape=imgsz, auto=auto, stride=model_stride) for x in im]
-  im = Tensor.stack(*im) if len(im) > 1 else im[0].unsqueeze(0)
-  im = im[..., ::-1].permute(0, 3, 1, 2)  # BGR to RGB, BHWC to BCHW, (n, 3, h, w)
-  im = im / 255.0  # 0 - 255 to 0.0 - 1.0
-  return im
 
 def rescale_bounding_boxes(predictions, from_size=None, to_size=None):
     from_w, from_h = from_size
