@@ -72,7 +72,7 @@ if __name__ == "__main__":
       im /= 255
       if len(im.shape) == 3:
           im = im[None]
-      pred = do_inf(im, model).numpy()[0]
+      pred = do_inf(im, model).numpy()
       pred[:, :4] = scale_coords(pred[:, :4], ratio, (dw, dh))
       # no tracker, todo clean
       #pred = pred[pred[:, 4] >= 0.25]

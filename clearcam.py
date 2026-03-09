@@ -541,7 +541,7 @@ class VideoCapture:
   def run_inference(self, frame):
     frame = Tensor(frame)
     pre = preprocess(frame)
-    preds = do_inf(pre, yolo_infer)[0].numpy()
+    preds = do_inf(pre, yolo_infer).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
     online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
     preds = []
@@ -1470,4 +1470,3 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
-

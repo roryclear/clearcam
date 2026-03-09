@@ -373,7 +373,7 @@ class YOLOv9():
       x = m(x)
       y.append(x)
     
-    return postprocess(x[0])
+    return postprocess(x[0])[0]
 
 def compute_iou_matrix(boxes):
   x1s = boxes[:, :, 0]
