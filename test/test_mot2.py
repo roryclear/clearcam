@@ -36,15 +36,6 @@ def resize(img, new_size):
   img = img.permute(1, 2, 0)
   return img
 
-def preprocess(img, res):
-  print("rory pre pre shape =",img.shape)
-  means = Tensor([[[0.485, 0.456, 0.406]]])
-  stds = Tensor([[[0.229, 0.224, 0.225]]])
-  img = resize(img, (res, res))
-  img = (img - means) / stds
-  img = img.permute(2, 0, 1).unsqueeze(0)
-  return img
-
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
@@ -74,7 +65,7 @@ if __name__ == "__main__":
     im = im0
     im = Tensor(im).cast(dtype=dtypes.float32)
     im /= 255.0 # IMPORTANT
-    im = preprocess(im, 384)
+    im = model.preprocess(im, 384)
     output = do_inf(im, model, h, w).numpy()
     online_targets = t.update(output, [w, h], [w, h], 0.25)
     preds = []
