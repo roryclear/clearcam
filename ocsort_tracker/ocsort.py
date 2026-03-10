@@ -177,7 +177,7 @@ class OCSort(object):
         self.use_byte = use_byte
         KalmanBoxTracker.count = 0
 
-    def update(self, output_results, img_info, img_size, det_thresh=0.25):
+    def update(self, output_results, det_thresh=0.25):
         """
         Params:
           dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
@@ -195,9 +195,6 @@ class OCSort(object):
         bboxes = output_results[:, :4]  # x1y1x2y2
         class_ids = output_results[:, 5].astype(int)
 
-        img_h, img_w = img_info[0], img_info[1]
-        scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
-        bboxes /= scale
         dets = np.concatenate((bboxes, np.expand_dims(scores, axis=-1)), axis=1)
         inds_low = scores > 0.1
         inds_high = scores < det_thresh

@@ -27,7 +27,7 @@ if __name__ == "__main__":
     im = Tensor(im).cast(dtypes.float32)
     im = model.preprocess(im, 960)
     pred = model(im).numpy()
-    online_targets = ocs_tracker.update(pred, [w, h], [w, h], 0.25)
+    online_targets = ocs_tracker.update(pred, 0.25)
     preds = []
     for x in online_targets:
       if x.tracklet_len < 1 or x.speed < 2.5: continue
