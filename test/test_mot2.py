@@ -71,7 +71,7 @@ if __name__ == "__main__":
     preds = []
     for x in online_targets:
       if x.tracklet_len < 1 or x.speed < 2.5: continue
-      if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
+      if x.class_id == 1 and x.track_id not in ppl: ppl.add(x.track_id)
       preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
     #tlx tly w h, track_id, age, class_id, score
     print("ppl =",len(ppl))
