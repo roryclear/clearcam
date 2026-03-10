@@ -9,22 +9,14 @@ from pathlib import Path
 @TinyJit
 def do_inf(im, model): return model(im)
 
-def letterbox(im, new_shape=(960, 960), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+def letterbox(im, new_shape=(960, 960), color=(114, 114, 114), stride=32):
     shape = im.shape[:2]
-    if isinstance(new_shape, int): new_shape = (new_shape, new_shape)
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    if not scaleup: r = min(r, 1.0)
-
+    r = min(r, 1.0)
     ratio = r, r
     new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
     dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-    if auto:
-        dw, dh = np.mod(dw, stride), np.mod(dh, stride)
-    elif scaleFill:  # stretch
-        dw, dh = 0.0, 0.0
-        new_unpad = (new_shape[1], new_shape[0])
-        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]
-
+    dw, dh = np.mod(dw, stride), np.mod(dh, stride)
     dw /= 2
     dh /= 2
 
@@ -65,7 +57,7 @@ if __name__ == "__main__":
     while True:
       ret, im0 = cap.read()
       if not ret: break
-      im, ratio, (dw, dh) = letterbox(im0, new_shape=(960, 960), stride=32, auto=True)
+      im, ratio, (dw, dh) = letterbox(im0, new_shape=(960, 960), stride=32)
       im = im.transpose((2, 0, 1))[::-1]
       im = np.ascontiguousarray(im)
       im = Tensor(im).cast(dtypes.float32)
