@@ -1,4 +1,4 @@
-from detection.rfdetr import LWDETR, COCO_CLASSES
+from detection.rfdetr import RFDETR, COCO_CLASSES
 from detection.yolov9 import draw_bounding_boxes
 import cv2
 from tinygrad import Tensor, TinyJit
@@ -26,7 +26,7 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   w, h = int(cap.get(3)), int(cap.get(4))
-  model = LWDETR("nano", w=w, h=h)
+  model = RFDETR("nano", w=w, h=h)
   out = cv2.VideoWriter(f"test_outputs/out_detr.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
   i = 0
