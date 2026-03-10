@@ -612,8 +612,9 @@ class LWDETR():
       state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/rf-detr/resolve/main/{name}.safetensors'))
       load_state_dict(self, state_dict)
 
-    def predict(self, processed_images):
-      predictions = self(processed_images)
+    @TinyJit
+    def __call__(self, processed_images):
+      predictions = self.predict(processed_images)
       out_logits, out_bbox = predictions
       prob = out_logits.sigmoid()
       topk_values, topk_indexes = Tensor.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
@@ -625,7 +626,7 @@ class LWDETR():
       out_logits.realize() # todo, why do we have to do this?
       return Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
 
-    def __call__(self, samples, targets=None):
+    def predict(self, samples, targets=None):
         _, _, h, w = samples.shape
         mask = Tensor.zeros((1, h, w), dtype=dtypes.bool)
         feature, mask = self.backbone(samples, mask)

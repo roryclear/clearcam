@@ -6,13 +6,6 @@ from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
 
-@TinyJit
-def do_inf(im, model):
-  im = im.unsqueeze(0)
-  im = im.permute(0, 3, 1, 2)
-  im = im / 255.0
-  return model(im)
-
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
@@ -33,7 +26,7 @@ if __name__ == "__main__":
     im = im0
     im = Tensor(im).cast(dtypes.float32)
     im = model.preprocess(im, 960)
-    pred = do_inf(im, model).numpy()
+    pred = model(im).numpy()
     online_targets = ocs_tracker.update(pred, [w, h], [w, h], 0.25)
     preds = []
     for x in online_targets:

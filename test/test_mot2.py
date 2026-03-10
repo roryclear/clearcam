@@ -6,9 +6,6 @@ from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
 
-@TinyJit
-def do_inf(im, model): return model.predict(im)
-
 def scale_coords(boxes, ratio, dwdh):
   boxes[:, [0, 2]] -= dwdh[0]
   boxes[:, [1, 3]] -= dwdh[1]
@@ -41,7 +38,7 @@ if __name__ == "__main__":
     im = im0
     im = Tensor(im).cast(dtype=dtypes.float32)
     im = model.preprocess(im, 384)
-    output = do_inf(im, model).numpy()
+    output = model(im).numpy()
     online_targets = ocs_tracker.update(output, [w, h], [w, h], 0.25)
     preds = []
     for x in online_targets:

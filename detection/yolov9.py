@@ -370,7 +370,11 @@ class YOLOv9():
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     load_state_dict(self, state_dict)
 
+  @TinyJit
   def __call__(self, x):
+    x = x.unsqueeze(0)
+    x = x.permute(0, 3, 1, 2)
+    x = x / 255.0
     y = []  # outputs
     for i in range(len(self.model)):
       m = self.model[i]

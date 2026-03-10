@@ -45,14 +45,6 @@ def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
     pred[:4] = boxes_np
   return predictions
 
-@TinyJit
-def do_inf(im, yolo_infer):
-  im = im.unsqueeze(0)
-  im = im.permute(0, 3, 1, 2)
-  im = im / 255.0
-  predictions = yolo_infer(im)
-  return predictions
-
 # RTSP URL
 # Video capture thread
 import subprocess
@@ -516,7 +508,7 @@ class VideoCapture:
   def run_inference(self, frame):
     frame = Tensor(frame)
     pre = yolo_infer.preprocess(frame)
-    preds = do_inf(pre, yolo_infer).numpy()
+    preds = yolo_infer(pre).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
     online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
     preds = []
