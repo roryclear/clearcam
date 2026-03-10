@@ -480,7 +480,9 @@ class MLP():
       return x
     
 class LWDETR():
-    def __init__(self, name):
+    def __init__(self, name, w, h):
+      self.w = w
+      self.h = h
       self.num_queries = 300
 
       config = {"nano":{"n_layers":2, "size": 577}, "small":{"n_layers":3, "size":1025},
@@ -620,7 +622,7 @@ class LWDETR():
       state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/rf-detr/resolve/main/{name}.safetensors'))
       load_state_dict(self, state_dict)
 
-    def predict(self, processed_images, h, w):
+    def predict(self, processed_images):
       predictions = self(processed_images)
       out_logits, out_bbox = predictions
       prob = out_logits.sigmoid()
@@ -629,7 +631,7 @@ class LWDETR():
       labels = topk_indexes % out_logits.shape[2]
       boxes = box_cxcywh_to_xyxy(out_bbox)
       boxes = Tensor.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
-      boxes = boxes * Tensor([w, h, w, h])
+      boxes = boxes * Tensor([self.w, self.h, self.w, self.h])
       out_logits.realize() # todo, why do we have to do this?
       return Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
 
@@ -650,6 +652,7 @@ class LWDETR():
         return outputs_class, outputs_coord[-1]
 
     def preprocess(self, img, res):
+      img /= 255.0
       means = Tensor([[[0.485, 0.456, 0.406]]])
       stds = Tensor([[[0.229, 0.224, 0.225]]])
       img = resize(img, (res, res))

@@ -21,8 +21,7 @@ COCO_CLASSES = {1: "person", 2: "bicycle", 3: "car", 4: "motorcycle", 5: "airpla
 COCO_CLASSES = ["","person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","","backpack","umbrella","","","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","","dining table","","","toilet","","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","","book","clock","vase","scissors","teddy bear","hair drier"]
 
 @TinyJit
-def do_inf(im, model, h, w):
-  return model.predict(im, h, w)
+def do_inf(im, model): return model.predict(im)
 
 def scale_coords(boxes, ratio, dwdh):
   boxes[:, [0, 2]] -= dwdh[0]
@@ -42,7 +41,6 @@ if __name__ == "__main__":
 
   size = "t"
   #model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
-  model = LWDETR("nano")
   #state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
   #load_state_dict(model, state_dict)
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
@@ -54,6 +52,7 @@ if __name__ == "__main__":
 
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   w, h = int(cap.get(3)), int(cap.get(4))
+  model = LWDETR("nano", w=w, h=h)
   out = cv2.VideoWriter(f"test_outputs/out_detr.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
   i = 0
@@ -64,9 +63,8 @@ if __name__ == "__main__":
     if not ret: break
     im = im0
     im = Tensor(im).cast(dtype=dtypes.float32)
-    im /= 255.0 # IMPORTANT
     im = model.preprocess(im, 384)
-    output = do_inf(im, model, h, w).numpy()
+    output = do_inf(im, model).numpy()
     online_targets = t.update(output, [w, h], [w, h], 0.25)
     preds = []
     for x in online_targets:
