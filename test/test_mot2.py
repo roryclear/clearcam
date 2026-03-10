@@ -67,6 +67,71 @@ def preprocess(img, res):
   img = img.permute(2, 0, 1).unsqueeze(0)
   return img
 
+
+def draw_bounding_boxes(orig_img_path, predictions, class_labels):
+  color_dict = {
+      label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256))
+      for i, label in enumerate(class_labels)
+  }
+  font = cv2.FONT_HERSHEY_SIMPLEX
+
+  def is_bright_color(color):
+    r, g, b = color
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 127
+
+  orig_img = (
+      cv2.imread(orig_img_path)
+      if not isinstance(orig_img_path, np.ndarray)
+      else cv2.imdecode(orig_img_path, 1)
+  )
+
+  height, width, _ = orig_img.shape
+  box_thickness = int((height + width) / 400)
+  font_scale = (height + width) / 2500
+  
+  for pred in predictions:
+    if len(pred) == 7: # todo
+      x1, y1, x2, y2, conf, class_id, _ = pred
+    else:
+      x1, y1, x2, y2, conf, class_id = pred
+    if conf == 0:
+        continue
+
+    x1, y1, x2, y2, class_id = map(int, (x1, y1, x2, y2, class_id))
+    color = color_dict[class_id] # todo different to yolov9
+
+    cv2.rectangle(orig_img, (x1, y1), (x2, y2), color, box_thickness)
+
+    label = f"{class_labels[class_id]} {conf:.2f}"
+    text_size, _ = cv2.getTextSize(label, font, font_scale, 1)
+    label_y, bg_y = (
+        (y1 - 4, y1 - text_size[1] - 4)
+        if y1 - text_size[1] - 4 > 0
+        else (y1 + text_size[1], y1)
+    )
+
+    cv2.rectangle(
+        orig_img,
+        (x1, bg_y),
+        (x1 + text_size[0], bg_y + text_size[1]),
+        color,
+        -1,
+    )
+
+    font_color = (0, 0, 0) if is_bright_color(color) else (255, 255, 255)
+    cv2.putText(
+        orig_img,
+        label,
+        (x1, label_y),
+        font,
+        font_scale,
+        font_color,
+        1,
+        cv2.LINE_AA,
+    )
+  return orig_img
+
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
@@ -81,8 +146,11 @@ if __name__ == "__main__":
   trackers = [ocs_tracker]
   excepted_ppl = [162]
 
+  t = trackers[0]
+
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   w, h = int(cap.get(3)), int(cap.get(4))
+  out = cv2.VideoWriter(f"test_outputs/out_detr.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
   i = 0
   ppl = set()
@@ -92,30 +160,23 @@ if __name__ == "__main__":
     if not ret: break
     im = im0
     im = Tensor(im).cast(dtype=dtypes.float32)
-    h, w = im.shape[:2]
     im /= 255.0 # IMPORTANT
     im = preprocess(im, 384)
-    output = do_inf(im, model, h, w).numpy()      
-    
-    boxes = output[:, :4]
-    scores = output[:, 4]
-    class_ids = output[:, 5].astype(int)
-
-    keep = scores > threshold
-    scores = scores[keep]
-    class_ids = class_ids[keep]
-    boxes = boxes[keep]
-
-    labels = [f"{COCO_CLASSES[class_id]}" for class_id in class_ids]
-    annotated_image = im0.copy()
-
-    for box, label, class_id in zip(boxes, labels, class_ids):
-      x1, y1, x2, y2 = map(int, box)
-      color = ((int(class_id)*37)%255, (int(class_id)*17)%255, (int(class_id)*97)%255); cv2.rectangle(annotated_image, (x1, y1), (x2, y2), color, 2); cv2.rectangle(annotated_image, (x1, y1-18), (x1+len(label)*9, y1), color, -1); cv2.putText(annotated_image, label, (x1, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1, cv2.LINE_AA)
-    cv2.imwrite(f"annotated_image_{i}.jpg", annotated_image)
-    
+    output = do_inf(im, model, h, w).numpy()
+    online_targets = t.update(output, [w, h], [w, h], 0.25)
+    preds = []
+    for x in online_targets:
+      if x.tracklet_len < 1 or x.speed < 2.5: continue
+      if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
+      preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
+    #tlx tly w h, track_id, age, class_id, score
+    print("ppl =",len(ppl))
+    _, buffer = cv2.imencode(".jpg", im0)
 
     
+    out.write(draw_bounding_boxes(buffer, preds, COCO_CLASSES))
+      
     i+=1
     print("frame",i)
   cap.release()
+  out.release()
