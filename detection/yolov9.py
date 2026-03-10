@@ -376,10 +376,9 @@ class YOLOv9():
     
     return postprocess(x[0])[0]
 
-
   @TinyJit
   def preprocess(self, image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
-    shape = image.shape[:2]  # current shape [height, width]
+    shape = image.shape[:2]
     new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
     r = min(r, 1.0) if not scaleup else r
@@ -390,12 +389,10 @@ class YOLOv9():
     dw /= 2
     dh /= 2
     image = resize(image, new_unpad)
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
+    image = image.pad(((int(round(dh - 0.1)),int(round(dh - 0.1))),(int(round(dw - 0.1)),int(round(dw - 0.1))),(0,0)))
     return image
 
-def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)): return img.pad(((top,top),(left,left),(0,0)))
+def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)): return 
 
 def resize(img, new_size):
   img = img.permute(2,0,1)
