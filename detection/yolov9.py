@@ -392,8 +392,6 @@ class YOLOv9():
     image = image.pad(((int(round(dh - 0.1)),int(round(dh - 0.1))),(int(round(dw - 0.1)),int(round(dw - 0.1))),(0,0)))
     return image
 
-def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)): return 
-
 def resize(img, new_size):
   img = img.permute(2,0,1)
   img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
