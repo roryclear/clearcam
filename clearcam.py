@@ -1408,8 +1408,6 @@ if __name__ == "__main__":
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if url:
     yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
-    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
-    load_state_dict(yolo_infer, state_dict)
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)

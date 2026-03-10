@@ -40,16 +40,7 @@ if __name__ == "__main__":
   ocs_tracker = ocsort.OCSort(max_age=60)
 
   size = "t"
-  #model = YOLOv9(*SIZES[size]) if size in SIZES else YOLOv9()
-  #state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
-  #load_state_dict(model, state_dict)
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
-
-  trackers = [ocs_tracker]
-  excepted_ppl = [162]
-
-  t = trackers[0]
-
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   w, h = int(cap.get(3)), int(cap.get(4))
   model = LWDETR("nano", w=w, h=h)
@@ -65,7 +56,7 @@ if __name__ == "__main__":
     im = Tensor(im).cast(dtype=dtypes.float32)
     im = model.preprocess(im, 384)
     output = do_inf(im, model).numpy()
-    online_targets = t.update(output, [w, h], [w, h], 0.25)
+    online_targets = ocs_tracker.update(output, [w, h], [w, h], 0.25)
     preds = []
     for x in online_targets:
       if x.tracklet_len < 1 or x.speed < 2.5: continue

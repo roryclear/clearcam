@@ -366,6 +366,10 @@ class YOLOv9():
       self.model[40] = Concat(f=[-1, 29])
       self.model[41] = RepNCSPELAN4(1024, 256, 512, n=2)
       self.model[42] = DDetect(a=256, b=512, c=512, d=256, f=[35, 38, 41]) 
+
+    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
+    load_state_dict(self, state_dict)
+
   def __call__(self, x):
     y = []  # outputs
     for i in range(len(self.model)):
