@@ -1,4 +1,5 @@
 from detection.rfdetr import LWDETR
+from detection.yolov9 import draw_bounding_boxes
 import cv2
 from tinygrad import Tensor, TinyJit
 from tinygrad.dtype import dtypes
@@ -16,6 +17,8 @@ COCO_CLASSES = {1: "person", 2: "bicycle", 3: "car", 4: "motorcycle", 5: "airpla
 80: "toaster", 81: "sink", 82: "refrigerator", 84: "book", 85: "clock", 86: "vase", 87: "scissors", 88: "teddy bear",
 89: "hair drier", 90: "toothbrush",
 }
+
+COCO_CLASSES = ["","person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","","backpack","umbrella","","","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","","dining table","","","toilet","","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","","book","clock","vase","scissors","teddy bear","hair drier"]
 
 @TinyJit
 def do_inf(im, model, h, w):
@@ -67,71 +70,6 @@ def preprocess(img, res):
   img = img.permute(2, 0, 1).unsqueeze(0)
   return img
 
-
-def draw_bounding_boxes(orig_img_path, predictions, class_labels):
-  color_dict = {
-      label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256))
-      for i, label in enumerate(class_labels)
-  }
-  font = cv2.FONT_HERSHEY_SIMPLEX
-
-  def is_bright_color(color):
-    r, g, b = color
-    brightness = (r * 299 + g * 587 + b * 114) / 1000
-    return brightness > 127
-
-  orig_img = (
-      cv2.imread(orig_img_path)
-      if not isinstance(orig_img_path, np.ndarray)
-      else cv2.imdecode(orig_img_path, 1)
-  )
-
-  height, width, _ = orig_img.shape
-  box_thickness = int((height + width) / 400)
-  font_scale = (height + width) / 2500
-  
-  for pred in predictions:
-    if len(pred) == 7: # todo
-      x1, y1, x2, y2, conf, class_id, _ = pred
-    else:
-      x1, y1, x2, y2, conf, class_id = pred
-    if conf == 0:
-        continue
-
-    x1, y1, x2, y2, class_id = map(int, (x1, y1, x2, y2, class_id))
-    color = color_dict[class_id] # todo different to yolov9
-
-    cv2.rectangle(orig_img, (x1, y1), (x2, y2), color, box_thickness)
-
-    label = f"{class_labels[class_id]} {conf:.2f}"
-    text_size, _ = cv2.getTextSize(label, font, font_scale, 1)
-    label_y, bg_y = (
-        (y1 - 4, y1 - text_size[1] - 4)
-        if y1 - text_size[1] - 4 > 0
-        else (y1 + text_size[1], y1)
-    )
-
-    cv2.rectangle(
-        orig_img,
-        (x1, bg_y),
-        (x1 + text_size[0], bg_y + text_size[1]),
-        color,
-        -1,
-    )
-
-    font_color = (0, 0, 0) if is_bright_color(color) else (255, 255, 255)
-    cv2.putText(
-        orig_img,
-        label,
-        (x1, label_y),
-        font,
-        font_scale,
-        font_color,
-        1,
-        cv2.LINE_AA,
-    )
-  return orig_img
-
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
@@ -173,7 +111,6 @@ if __name__ == "__main__":
     print("ppl =",len(ppl))
     _, buffer = cv2.imencode(".jpg", im0)
 
-    
     out.write(draw_bounding_boxes(buffer, preds, COCO_CLASSES))
       
     i+=1
