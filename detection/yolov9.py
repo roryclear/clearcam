@@ -390,7 +390,9 @@ class YOLOv9():
     dh /= 2
     image = resize(image, new_unpad)
     image = image.pad(((int(round(dh - 0.1)),int(round(dh - 0.1))),(int(round(dw - 0.1)),int(round(dw - 0.1))),(0,0)))
-    return image
+    image = image.unsqueeze(0)
+    image = image[..., ::-1].permute(0, 3, 1, 2)
+    return image / 255.0
 
 def resize(img, new_size):
   img = img.permute(2,0,1)

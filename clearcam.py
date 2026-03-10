@@ -46,12 +46,7 @@ def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
   return predictions
 
 @TinyJit
-def do_inf(im, yolo_infer):
-  im = im.unsqueeze(0)
-  im = im[..., ::-1].permute(0, 3, 1, 2)
-  im = im / 255.0
-  predictions = yolo_infer(im)
-  return predictions
+def do_inf(im, yolo_infer): return yolo_infer(im)
 
 # RTSP URL
 # Video capture thread
@@ -563,6 +558,7 @@ def is_bright_color(color):
   return brightness > 127
 
 def draw_predictions(frame, preds, class_labels, color_dict):
+  print("rory preds =",preds)
   for x1, y1, x2, y2, conf, cls, _ in preds:
     x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
     label = f"{class_labels[int(cls)]}:{conf:.2f}"

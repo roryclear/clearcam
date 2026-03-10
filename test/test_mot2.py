@@ -83,3 +83,4 @@ if __name__ == "__main__":
     print("frame",i)
   cap.release()
   out.release()
+  assert len(ppl) == 174
