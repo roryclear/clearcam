@@ -46,7 +46,12 @@ def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
   return predictions
 
 @TinyJit
-def do_inf(im, yolo_infer): return yolo_infer(im)
+def do_inf(im, yolo_infer):
+  im = im.unsqueeze(0)
+  im = im.permute(0, 3, 1, 2)
+  im = im / 255.0
+  predictions = yolo_infer(im)
+  return predictions
 
 # RTSP URL
 # Video capture thread
@@ -255,6 +260,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
@@ -558,7 +565,6 @@ def is_bright_color(color):
   return brightness > 127
 
 def draw_predictions(frame, preds, class_labels, color_dict):
-  print("rory preds =",preds)
   for x1, y1, x2, y2, conf, cls, _ in preds:
     x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
     label = f"{class_labels[int(cls)]}:{conf:.2f}"

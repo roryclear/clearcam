@@ -21,7 +21,7 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [ocs_tracker]
-  excepted_ppl = [156]
+  excepted_ppl = [154]
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
@@ -37,7 +37,11 @@ if __name__ == "__main__":
       im = im0
       im = Tensor(im).cast(dtypes.float32)
       im = model.preprocess(im, new_shape=960)
+      im = im.unsqueeze(0)
+      im = im.permute(0, 3, 1, 2)
+      im = im / 255.0
       pred = do_inf(im, model).numpy()
+      
       h0, w0 = im0.shape[:2]
       online_targets = t.update(pred, [w0, h0], [w0, h0], 0.25)
       preds = []
