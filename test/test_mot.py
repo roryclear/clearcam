@@ -44,7 +44,7 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
 
   trackers = [ocs_tracker]
-  excepted_ppl = [162]
+  excepted_ppl = [154]
   for j,t in enumerate(trackers):
 
     cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
@@ -57,20 +57,13 @@ if __name__ == "__main__":
     while True:
       ret, im0 = cap.read()
       if not ret: break
-      im, ratio, (dw, dh) = letterbox(im0, new_shape=(960, 960), stride=32)
-      im = im.transpose((2, 0, 1))[::-1]
-      im = np.ascontiguousarray(im)
+      im = im0
       im = Tensor(im).cast(dtypes.float32)
       im /= 255
-      if len(im.shape) == 3:
-          im = im[None]
+      im = model.preprocess(im, new_shape=960)
+      im = im.unsqueeze(0)
+      im = im.permute(0, 3, 1, 2)
       pred = do_inf(im, model).numpy()
-      pred[:, :4] = scale_coords(pred[:, :4], ratio, (dw, dh))
-      # no tracker, todo clean
-      #pred = pred[pred[:, 4] >= 0.25]
-      #pred = rescale_bounding_boxes(pred, from_size=(im.shape[2:][::-1]), to_size=im0.shape[:2][::-1])
-      #_, buffer = cv2.imencode(".jpg", im0)
-      #out.write(draw_bounding_boxes(buffer, pred, class_labels))
       
       h0, w0 = im0.shape[:2]
       online_targets = t.update(pred, [w0, h0], [w0, h0], 0.25)
