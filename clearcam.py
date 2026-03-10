@@ -404,7 +404,7 @@ class VideoCapture:
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
+                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                     ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
@@ -564,7 +564,7 @@ def is_bright_color(color):
   brightness = (r * 299 + g * 587 + b * 114) / 1000
   return brightness > 127
 
-def draw_predictions(frame, preds, class_labels, color_dict):
+def draw_predictions(frame, preds, color_dict):
   for x1, y1, x2, y2, conf, cls, _ in preds:
     x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
     label = f"{class_labels[int(cls)]}:{conf:.2f}"
