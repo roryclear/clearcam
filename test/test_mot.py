@@ -9,29 +9,6 @@ from pathlib import Path
 @TinyJit
 def do_inf(im, model): return model(im)
 
-def letterbox(im, new_shape=(960, 960), color=(114, 114, 114), stride=32):
-    shape = im.shape[:2]
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    r = min(r, 1.0)
-    ratio = r, r
-    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-    dw, dh = np.mod(dw, stride), np.mod(dh, stride)
-    dw /= 2
-    dh /= 2
-
-    if shape[::-1] != new_unpad: im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-    return im, ratio, (dw, dh)
-
-def scale_coords(boxes, ratio, dwdh):
-  boxes[:, [0, 2]] -= dwdh[0]
-  boxes[:, [1, 3]] -= dwdh[1]
-  boxes[:, :4] /= ratio[0]
-  return boxes
-
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
