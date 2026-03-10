@@ -1,16 +1,12 @@
 import numpy as np
-from typing import List, Literal, Optional, Union, Tuple, Callable, Set, Any
 import math
 from tinygrad.dtype import dtypes
 from tinygrad.nn.state import get_state_dict, load_state_dict, safe_save, safe_load
 from tinygrad.helpers import fetch
-
 from tinygrad import Tensor, nn
-import cv2
 from tinygrad import TinyJit
 
 COCO_CLASSES = ["","person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","","backpack","umbrella","","","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","","dining table","","","toilet","","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","","book","clock","vase","scissors","teddy bear","hair drier"]
-
 detr_to_yolo = [80, 0, 1, 2, -1, -1, 5, 6, 7, 8, 9, 10, 80, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 80, 24, 25, 80, 80, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 80, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, -1, -1, 59, 80, -1, 80, 80, 61, 80, -1, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 80, 73, 74, 75, 76, 77, 78]
 
 class WindowedDinov2WithRegistersEmbeddings():
@@ -680,51 +676,9 @@ class seq:
         layer = getattr(self, str(i))
         x = layer(x)
       return x
-        
-excepted_xyxys = [
-[
-[63.98152,247.93846,643.0879,931.84863,],
-[0.9997773,357.19293,650.101,1261.7733,],
-[623.5975,723.0886,698.9821,787.7163,],
-],
-
-[
-[68.54183,247.87341,625.942,930.71606,],
-[0.49844027,657.9232,441.90753,1267.5795,],
-[-1.336813,349.85284,645.86804,1263.5271,],
-[622.811,716.0851,701.54803,787.1113,],
-],
-
-[
-[69.56826,248.08185,620.5264,927.0038,],
-[626.8524,733.55194,696.87067,788.07404,],
-[0.3557253,356.64658,649.5055,1265.8727,],
-[-0.14803648,661.9878,443.29095,1270.992,],
-],
-
-[
-[68.09412,249.721,635.6606,928.99536,],
-[2.2342587,356.97098,579.0276,1268.9092,],
-[625.3909,731.5665,697.01495,786.87537,],
-[-0.12702942,662.12537,439.97614,1271.6777,],
-]
-]
-
-def sort_boxes(xyxy):
-  xyxy = np.asarray(xyxy)
-  order = np.lexsort((xyxy[:,3], xyxy[:,2], xyxy[:,1], xyxy[:,0]))
-  return xyxy[order]
 
 def resize(img, new_size):
   img = img.permute(2,0,1)
   img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
   img = img.permute(1, 2, 0)
-  return img
-
-def preprocess(img, res):
-  means = Tensor([[[0.485, 0.456, 0.406]]])
-  stds = Tensor([[[0.229, 0.224, 0.225]]])
-  img = resize(img, (res, res))
-  img = (img - means) / stds
-  img = img.permute(2, 0, 1).unsqueeze(0)
   return img
