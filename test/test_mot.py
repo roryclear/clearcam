@@ -31,6 +31,10 @@ if __name__ == "__main__":
     im = Tensor(im).cast(dtypes.float32)
     im = model.preprocess(im)
     pred = model(im).numpy()
+    if type(model) == RFDETR:
+      pred[:,:4] *= [w, h, w, h]
+    else:
+      pred = scale_boxes(im.shape[:2], pred, im0.shape)
     online_targets = ocs_tracker.update(pred, 0.25)
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
@@ -39,7 +43,6 @@ if __name__ == "__main__":
       if x.tracklet_len < 1 or x.speed < 2.5: continue
       if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
       preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
-    if type(model) != RFDETR: preds = scale_boxes(im.shape[:2], preds, im0.shape)
     print("ppl =",len(ppl))
     _, buffer = cv2.imencode(".jpg", im0)
     out.write(draw_bounding_boxes(buffer, preds, class_labels))
@@ -48,4 +51,4 @@ if __name__ == "__main__":
     print("frame",i)
   cap.release()
   out.release()
-  assert len(ppl) == 154
+  assert len(ppl) == 153

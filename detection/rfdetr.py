@@ -620,7 +620,6 @@ class RFDETR():
     labels = topk_indexes % out_logits.shape[2]
     boxes = box_cxcywh_to_xyxy(out_bbox)
     boxes = Tensor.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
-    boxes = boxes * Tensor([self.w, self.h, self.w, self.h])
     out_logits.realize() # todo, why do we have to do this?
     return Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
 
