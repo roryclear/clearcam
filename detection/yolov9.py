@@ -295,7 +295,8 @@ class Silence():
     def __call__(self, x): return x
 
 class YOLOv9():
-  def __init__(self, size="t"):
+  def __init__(self, size="t", res=1280):
+    self.res = res
     if size is not None:
       a, b, c, d, e, f, g, h, i, j, k, l, m, n, p, q, r, s, t, u, v, w, size = SIZES[size]
       self.model = Sequential(size=23)
@@ -385,7 +386,8 @@ class YOLOv9():
     return postprocess(x[0])[0]
 
   @TinyJit
-  def preprocess(self, image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
+  def preprocess(self, image, new_shape=None, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
+    if new_shape is None: new_shape = self.res
     shape = image.shape[:2]
     new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])

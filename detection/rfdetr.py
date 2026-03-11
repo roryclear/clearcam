@@ -467,13 +467,14 @@ class MLP():
       return x
     
 class RFDETR():
-  def __init__(self, name, w, h):
+  def __init__(self, name, w, h, res=384):
     self.w = w
     self.h = h
     self.num_queries = 300
+    config = {"nano":{"n_layers":2, "size": 577, "res": 384}, "small":{"n_layers":3, "size":1025, "res":512},
+                "medium":{"n_layers":4, "size":1297, "res":576}, "large":{"n_layers":4, "size":1937, "res":704}}
+    self.res = config[name]["res"] if res is None else res
 
-    config = {"nano":{"n_layers":2, "size": 577}, "small":{"n_layers":3, "size":1025},
-                "medium":{"n_layers":4, "size":1297}, "large":{"n_layers":4, "size":1937}}
     num_windows = 2
     self.position_embedding = PositionEmbeddingSine()
     self.query_feat = Tensor.empty((3900, 256))
@@ -640,12 +641,12 @@ class RFDETR():
       return outputs_class, outputs_coord[-1]
 
   @TinyJit
-  def preprocess(self, img, res=384):
+  def preprocess(self, img):
     img = img.cast(dtypes.float32)
     img /= 255.0
     means = Tensor([[[0.485, 0.456, 0.406]]])
     stds = Tensor([[[0.229, 0.224, 0.225]]])
-    img = resize(img, (res, res))
+    img = resize(img, (self.res, self.res))
     img = (img - means) / stds
     img = img.permute(2, 0, 1).unsqueeze(0)
     return img

@@ -1399,7 +1399,7 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if url:
-    yolo_infer = YOLOv9(yolo_variant)
+    yolo_infer = YOLOv9(yolo_variant, res=1280)
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)

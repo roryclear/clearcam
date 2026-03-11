@@ -26,7 +26,7 @@ if __name__ == "__main__":
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   w, h = int(cap.get(3)), int(cap.get(4))
-  model = RFDETR("nano", w=w, h=h)
+  model = RFDETR("nano", w=w, h=h, res=384)
   out = cv2.VideoWriter(f"test_outputs/out_detr.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
   i = 0
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     if not ret: break
     im = im0
     im = Tensor(im).cast(dtype=dtypes.float32)
-    im = model.preprocess(im, 384)
+    im = model.preprocess(im)
     output = model(im).numpy()
     online_targets = ocs_tracker.update(output, 0.25)
     preds = []

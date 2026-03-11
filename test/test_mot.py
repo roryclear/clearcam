@@ -11,7 +11,7 @@ if __name__ == "__main__":
   ocs_tracker = ocsort.OCSort(max_age=60)
 
   size = "t"
-  model = YOLOv9(size)
+  model = YOLOv9(size, res=960)
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     if not ret: break
     im = im0
     im = Tensor(im).cast(dtypes.float32)
-    im = model.preprocess(im, 960)
+    im = model.preprocess(im)
     pred = model(im).numpy()
     online_targets = ocs_tracker.update(pred, 0.25)
     preds = []
