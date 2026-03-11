@@ -19,8 +19,8 @@ if __name__ == "__main__":
   w, h = int(cap.get(3)), int(cap.get(4))
   out = cv2.VideoWriter(f"test_outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
-  model = YOLOv9(size, res=960)
-  #model = RFDETR("nano", w, h)
+  #model = YOLOv9(size, res=960)
+  model = RFDETR("nano", w, h)
 
   i = 0
   ppl = set()
@@ -39,7 +39,7 @@ if __name__ == "__main__":
       if x.tracklet_len < 1 or x.speed < 2.5: continue
       if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
       preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
-    preds = scale_boxes(im.shape[:2], preds, im0.shape)
+    if type(model) != RFDETR: preds = scale_boxes(im.shape[:2], preds, im0.shape)
     print("ppl =",len(ppl))
     _, buffer = cv2.imencode(".jpg", im0)
     out.write(draw_bounding_boxes(buffer, preds, class_labels))
