@@ -467,7 +467,7 @@ class MLP():
       return x
     
 class RFDETR():
-  def __init__(self, name, res=384):
+  def __init__(self, name, res=None):
     self.num_queries = 300
     config = {"nano":{"n_layers":2, "size": 577, "res": 384}, "small":{"n_layers":3, "size":1025, "res":512},
                 "medium":{"n_layers":4, "size":1297, "res":576}, "large":{"n_layers":4, "size":1937, "res":704}}
@@ -621,19 +621,19 @@ class RFDETR():
     return Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
 
   def predict(self, samples, targets=None):
-      _, _, h, w = samples.shape
-      mask = Tensor.zeros((1, h, w), dtype=dtypes.bool)
-      feature, mask = self.backbone(samples, mask)
-      refpoint_embed_weight = self.refpoint_embed[:self.num_queries]
-      query_feat_weight = self.query_feat[:self.num_queries]
-      hs, ref_unsigmoid = self.transformer(feature, mask, refpoint_embed_weight, query_feat_weight)
-      outputs_coord_delta = self.bbox_embed(hs)
+    _, _, h, w = samples.shape
+    mask = Tensor.zeros((1, h, w), dtype=dtypes.bool)
+    feature, mask = self.backbone(samples, mask)
+    refpoint_embed_weight = self.refpoint_embed[:self.num_queries]
+    query_feat_weight = self.query_feat[:self.num_queries]
+    hs, ref_unsigmoid = self.transformer(feature, mask, refpoint_embed_weight, query_feat_weight)
+    outputs_coord_delta = self.bbox_embed(hs)
 
-      outputs_coord_cxcy = outputs_coord_delta[..., :2] * ref_unsigmoid[..., 2:] + ref_unsigmoid[..., :2]
-      outputs_coord_wh = outputs_coord_delta[..., 2:].exp() * ref_unsigmoid[..., 2:]
-      outputs_coord = Tensor.cat(outputs_coord_cxcy, outputs_coord_wh, dim=-1)
-      outputs_class = self.class_embed(hs)[-1]
-      return outputs_class, outputs_coord[-1]
+    outputs_coord_cxcy = outputs_coord_delta[..., :2] * ref_unsigmoid[..., 2:] + ref_unsigmoid[..., :2]
+    outputs_coord_wh = outputs_coord_delta[..., 2:].exp() * ref_unsigmoid[..., 2:]
+    outputs_coord = Tensor.cat(outputs_coord_cxcy, outputs_coord_wh, dim=-1)
+    outputs_class = self.class_embed(hs)[-1]
+    return outputs_class, outputs_coord[-1]
 
   @TinyJit
   def preprocess(self, img):
