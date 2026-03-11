@@ -512,23 +512,6 @@ def draw_bounding_boxes(orig_img_path, predictions, class_labels):
     object_count[class_labels[class_id]] += 1
   return orig_img
 
-def clip_boxes(boxes, shape):
-  boxes[..., [0, 2]] = np.clip(boxes[..., [0, 2]], 0, shape[1])  # x1, x2
-  boxes[..., [1, 3]] = np.clip(boxes[..., [1, 3]], 0, shape[0])  # y1, y2
-  return boxes
-
-def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
-  gain = ratio_pad if ratio_pad else min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
-  pad = ((img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2)
-  for pred in predictions:
-    boxes_np = pred[:4].numpy() if isinstance(pred[:4], Tensor) else pred[:4]
-    boxes_np[..., [0, 2]] -= pad[0]
-    boxes_np[..., [1, 3]] -= pad[1]
-    boxes_np[..., :4] /= gain
-    boxes_np = clip_boxes(boxes_np, img0_shape)
-    pred[:4] = boxes_np
-  return predictions
-
 SIZES = {"t": [16, 64, 96, 24, 128, 256, 224, 160, 48, 144, 192, 80, 32, 16, 3, 96, 32, 64, 128, 64, 64, 128,"t"],
 "s": [32, 128, 192, 48, 256, 512, 448, 320, 96, 288, 384, 128, 64, 32, 3, 192, 64, 64, 128, 128, 128, 256, "s"],
 "m": [32, 240, 360, 90, 480, 960, 840, 600, 184, 544, 720, 240, 128, 60, 1, 360, 120, 64, 128, 240, 240, 480, "m"],
