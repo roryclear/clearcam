@@ -445,23 +445,6 @@ def postprocess(output, max_det=300, conf_threshold=0.25, iou_threshold=0.45):
   no_overlap_mask = high_iou_mask.sum(axis=1) == 0
   return boxes * no_overlap_mask.unsqueeze(-1)
 
-def rescale_bounding_boxes(predictions, from_size=None, to_size=None):
-    from_w, from_h = from_size
-    to_w, to_h = to_size
-    scale_x = to_w / from_w
-    scale_y = to_h / from_h
-    
-    rescaled_predictions = []
-    for pred in predictions:
-        x1, y1, x2, y2, conf, class_id = pred
-        x1_scaled = x1 * scale_x
-        y1_scaled = y1 * scale_y
-        x2_scaled = x2 * scale_x
-        y2_scaled = y2 * scale_y
-        
-        rescaled_predictions.append([x1_scaled, y1_scaled, x2_scaled, y2_scaled, conf, class_id])
-    return rescaled_predictions
-
 def draw_bounding_boxes(orig_img_path, predictions, class_labels):
   color_dict = {
       label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256))

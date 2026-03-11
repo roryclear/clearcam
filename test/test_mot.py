@@ -1,5 +1,5 @@
 from detection.yolov9 import YOLOv9, safe_load, load_state_dict, Sequential, Silence, Conv, RepNCSPELAN4, AConv,\
-ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch, rescale_bounding_boxes, draw_bounding_boxes
+ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch, draw_bounding_boxes
 import cv2
 from tinygrad import Tensor, TinyJit
 from tinygrad.dtype import dtypes
