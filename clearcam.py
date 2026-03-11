@@ -501,7 +501,9 @@ class VideoCapture:
       if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
       outside = False
       if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
-        outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
+        scaled_coors = np.array(self.settings["coords"])
+        scaled_coors[:,] *= [frame.shape[1], frame.shape[0]] # decimal to full
+        outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], scaled_coors)
         outside = outside ^ self.settings["outside"]
       non_zone_alert = False
       if outside: # check if any alerts don't use zone

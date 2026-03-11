@@ -2386,8 +2386,6 @@
         
         let coords = null;
         if (points.length >= 3) {
-            const videoWidth = 1280;
-            const videoHeight = 720;
             const previewRect = previewEl.getBoundingClientRect();
 
             coords = points.map(point => {
@@ -2395,8 +2393,8 @@
                 const centerX = pointRect.left + pointRect.width / 2;
                 const centerY = pointRect.top + pointRect.height / 2;
                 
-                const x = ((centerX - previewRect.left) / previewRect.width) * videoWidth;
-                const y = ((centerY - previewRect.top) / previewRect.height) * videoHeight;
+                const x = ((centerX - previewRect.left) / previewRect.width);
+                const y = ((centerY - previewRect.top) / previewRect.height);
                 
                 return [x, y];
             });
@@ -2449,8 +2447,8 @@
       const displayedHeight = img.clientHeight;
       clearPolygon();     
       coords.forEach(coord => {
-        const x = (coord[0] / videoWidth) * displayedWidth;
-        const y = (coord[1] / videoHeight) * displayedHeight;
+        const x = 1280 * (coord[0] / videoWidth) * displayedWidth;
+        const y = 720 * (coord[1] / videoHeight) * displayedHeight;
         console.log("Creating point at:", x, y, "from coord:", coord);
         createPoint(x, y);
       });
