@@ -5,6 +5,7 @@ from tinygrad import Tensor, TinyJit
 from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
+from clearcam import scale_boxes
 
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
@@ -33,7 +34,7 @@ if __name__ == "__main__":
       if x.tracklet_len < 1 or x.speed < 2.5: continue
       if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
       preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
-    #tlx tly w h, track_id, age, class_id, score
+    preds = scale_boxes(im.shape[:2], preds, im0.shape)
     print("ppl =",len(ppl))
     _, buffer = cv2.imencode(".jpg", im0)
     out.write(draw_bounding_boxes(buffer, preds, class_labels))
