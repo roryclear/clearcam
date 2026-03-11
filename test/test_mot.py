@@ -1,4 +1,4 @@
-from detection.yolov9 import YOLOv9, SIZES, safe_load, load_state_dict, Sequential, Silence, Conv, RepNCSPELAN4, AConv,\
+from detection.yolov9 import YOLOv9, safe_load, load_state_dict, Sequential, Silence, Conv, RepNCSPELAN4, AConv,\
 ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch, rescale_bounding_boxes, draw_bounding_boxes
 import cv2
 from tinygrad import Tensor, TinyJit
@@ -11,7 +11,7 @@ if __name__ == "__main__":
   ocs_tracker = ocsort.OCSort(max_age=60)
 
   size = "t"
-  model = YOLOv9(*SIZES["t"]) if size in SIZES else YOLOv9()
+  model = YOLOv9(size)
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
