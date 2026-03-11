@@ -618,7 +618,6 @@ class RFDETR():
     labels = topk_indexes % out_logits.shape[2]
     boxes = box_cxcywh_to_xyxy(out_bbox)
     boxes = Tensor.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
-    out_logits.realize() # todo, why do we have to do this?
     return Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
 
   def predict(self, samples, targets=None):
@@ -633,7 +632,6 @@ class RFDETR():
       outputs_coord_cxcy = outputs_coord_delta[..., :2] * ref_unsigmoid[..., 2:] + ref_unsigmoid[..., :2]
       outputs_coord_wh = outputs_coord_delta[..., 2:].exp() * ref_unsigmoid[..., 2:]
       outputs_coord = Tensor.cat(outputs_coord_cxcy, outputs_coord_wh, dim=-1)
-
       outputs_class = self.class_embed(hs)[-1]
       return outputs_class, outputs_coord[-1]
 
