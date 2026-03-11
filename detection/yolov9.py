@@ -445,23 +445,6 @@ def postprocess(output, max_det=300, conf_threshold=0.25, iou_threshold=0.45):
   no_overlap_mask = high_iou_mask.sum(axis=1) == 0
   return boxes * no_overlap_mask.unsqueeze(-1)
 
-def compute_transform(image, new_shape=(1280, 1280), auto=False, scaleFill=False, scaleup=True, stride=32) -> Tensor:
-  shape = image.shape[:2]  # current shape [height, width]
-  new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
-  r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-  r = min(r, 1.0) if not scaleup else r
-  new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
-  dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-  dw, dh = (np.mod(dw, stride), np.mod(dh, stride)) if auto else (0.0, 0.0)
-  new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
-  dw /= 2
-  dh /= 2
-  image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR) if shape[::-1] != new_unpad else image
-  top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-  left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-  image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
-  return Tensor(image)
-
 def rescale_bounding_boxes(predictions, from_size=None, to_size=None):
     from_w, from_h = from_size
     to_w, to_h = to_size
