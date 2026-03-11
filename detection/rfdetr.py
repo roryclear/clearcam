@@ -648,6 +648,10 @@ class RFDETR():
     img = img.permute(2, 0, 1).unsqueeze(0)
     return img
 
+  def scale_boxes(self, img1_shape, predictions, img0_shape):
+    predictions[:,:4] *= [img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]]
+    return predictions
+
 def box_cxcywh_to_xyxy(x):
   x_c, y_c, w, h = [t.squeeze(-1) for t in x.split(1, dim=-1)]
   w_pos = w.clip(0.0, float("inf"))

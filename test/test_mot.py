@@ -6,7 +6,6 @@ from tinygrad import Tensor, TinyJit
 from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
-from clearcam import scale_boxes
 
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
@@ -31,10 +30,7 @@ if __name__ == "__main__":
     im = Tensor(im).cast(dtypes.float32)
     im = model.preprocess(im)
     pred = model(im).numpy()
-    if type(model) == RFDETR:
-      pred[:,:4] *= [w, h, w, h]
-    else:
-      pred = scale_boxes(im.shape[:2], pred, im0.shape)
+    pred = model.scale_boxes(im.shape[:2], pred, im0.shape)
     online_targets = ocs_tracker.update(pred, 0.25)
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]

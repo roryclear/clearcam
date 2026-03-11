@@ -28,21 +28,6 @@ import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
 
-def clip_boxes(boxes, shape):
-  boxes[..., [0, 2]] = np.clip(boxes[..., [0, 2]], 0, shape[1])  # x1, x2
-  boxes[..., [1, 3]] = np.clip(boxes[..., [1, 3]], 0, shape[0])  # y1, y2
-  return boxes
-
-def scale_boxes(img1_shape, predictions, img0_shape):
-  pad = ((img1_shape[1] - img0_shape[1]) / 2, (img1_shape[0] - img0_shape[0]) / 2)
-  for pred in predictions:
-    boxes_np = pred[:4].numpy() if isinstance(pred[:4], Tensor) else pred[:4]
-    boxes_np[..., [0, 2]] -= pad[0]
-    boxes_np[..., [1, 3]] -= pad[1]
-    boxes_np = clip_boxes(boxes_np, img0_shape)
-    pred[:4] = boxes_np
-  return predictions
-
 # RTSP URL
 # Video capture thread
 import subprocess
@@ -535,7 +520,7 @@ class VideoCapture:
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
             
     preds = np.array(preds)
-    return scale_boxes(pre.shape[:2], preds, frame.shape), frame
+    return yolo_infer.scale_boxes(pre.shape[:2], preds, frame.shape), frame
 
   def get_frame(self):
       with self.lock:
