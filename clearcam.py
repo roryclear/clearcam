@@ -2,6 +2,7 @@ from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.helpers import fetch
 from detection.yolov9 import safe_load, load_state_dict, YOLOv9
+from detection.rfdetr import RFDETR, detr_to_yolo
 import numpy as np
 from pathlib import Path
 import cv2
@@ -490,10 +491,13 @@ class VideoCapture:
 
   def run_inference(self, frame):
     frame = Tensor(frame)
-    pre = yolo_infer.preprocess(frame)
-    preds = yolo_infer(pre).numpy()
+    pre = model.preprocess(frame)
+    preds = model(pre).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
+    preds = model.scale_boxes(pre.shape[:2], preds, frame.shape)
     online_targets = tracker.update(preds, thresh)
+    if type(model) == RFDETR: # RF-DETR has different class_ids
+      for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
     preds = []
     for x in online_targets:
       if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
@@ -520,7 +524,7 @@ class VideoCapture:
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
             
     preds = np.array(preds)
-    return yolo_infer.scale_boxes(pre.shape[:2], preds, frame.shape), frame
+    return preds, frame
 
   def get_frame(self):
       with self.lock:
@@ -1382,7 +1386,8 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if url:
-    yolo_infer = YOLOv9(yolo_variant, res=1280)
+    model = YOLOv9(yolo_variant, res=1280)
+    #model = RFDETR("nano")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
