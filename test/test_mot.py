@@ -19,8 +19,8 @@ if __name__ == "__main__":
   w, h = int(cap.get(3)), int(cap.get(4))
   out = cv2.VideoWriter(f"test_outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
-  #model = YOLOv9(size, res=960)
-  model = RFDETR("nano", w, h)
+  model = YOLOv9(size, res=960)
+  #model = RFDETR("nano")
 
   i = 0
   ppl = set()

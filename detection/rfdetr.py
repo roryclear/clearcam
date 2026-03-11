@@ -467,9 +467,7 @@ class MLP():
       return x
     
 class RFDETR():
-  def __init__(self, name, w, h, res=384):
-    self.w = w
-    self.h = h
+  def __init__(self, name, res=384):
     self.num_queries = 300
     config = {"nano":{"n_layers":2, "size": 577, "res": 384}, "small":{"n_layers":3, "size":1025, "res":512},
                 "medium":{"n_layers":4, "size":1297, "res":576}, "large":{"n_layers":4, "size":1937, "res":704}}
