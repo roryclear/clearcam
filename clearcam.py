@@ -1,7 +1,8 @@
 from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.helpers import fetch
-from detection.yolov9 import safe_load, load_state_dict, YOLOv9, SIZES
+from detection.yolov9 import safe_load, load_state_dict, YOLOv9
+from detection.rfdetr import RFDETR, detr_to_yolo
 import numpy as np
 from pathlib import Path
 import cv2
@@ -27,58 +28,6 @@ import multiprocessing
 import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
-
-def resize(img, new_size):
-    img = img.permute(2,0,1)
-    img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
-    img = img.permute(1, 2, 0)
-    return img
-
-@TinyJit
-def preprocess(image, new_shape=1280, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
-  shape = image.shape[:2]  # current shape [height, width]
-  new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
-  r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-  r = min(r, 1.0) if not scaleup else r
-  new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
-  dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-  dw, dh = (np.mod(dw, stride), np.mod(dh, stride)) if auto else (0.0, 0.0)
-  new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
-  dw /= 2
-  dh /= 2
-  image = resize(image, new_unpad)
-  top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-  left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-  image = copy_make_border(image, top, bottom, left, right, value=(114,114,114))
-  return image
-
-def copy_make_border(img, top, bottom, left, right, value=(0, 0, 0)):
-    return img.pad(((top,top),(left,left),(0,0)))
-
-def clip_boxes(boxes, shape):
-  boxes[..., [0, 2]] = np.clip(boxes[..., [0, 2]], 0, shape[1])  # x1, x2
-  boxes[..., [1, 3]] = np.clip(boxes[..., [1, 3]], 0, shape[0])  # y1, y2
-  return boxes
-
-def scale_boxes(img1_shape, predictions, img0_shape, ratio_pad=None):
-  gain = ratio_pad if ratio_pad else min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
-  pad = ((img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2)
-  for pred in predictions:
-    boxes_np = pred[:4].numpy() if isinstance(pred[:4], Tensor) else pred[:4]
-    boxes_np[..., [0, 2]] -= pad[0]
-    boxes_np[..., [1, 3]] -= pad[1]
-    boxes_np[..., :4] /= gain
-    boxes_np = clip_boxes(boxes_np, img0_shape)
-    pred[:4] = boxes_np
-  return predictions
-
-@TinyJit
-def do_inf(im, yolo_infer):
-  im = im.unsqueeze(0)
-  im = im[..., ::-1].permute(0, 3, 1, 2)
-  im = im / 255.0
-  predictions = yolo_infer(im)
-  return predictions
 
 # RTSP URL
 # Video capture thread
@@ -429,7 +378,7 @@ class VideoCapture:
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, class_labels, color_dict)
+                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                     ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
@@ -540,16 +489,21 @@ class VideoCapture:
 
   def run_inference(self, frame):
     frame = Tensor(frame)
-    pre = preprocess(frame)
-    preds = do_inf(pre, yolo_infer).numpy()
+    pre = model.preprocess(frame)
+    preds = model(pre).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
-    online_targets = tracker.update(preds, [1280,1280], [1280,1280], thresh) #todo, zone in js also hardcoded to 1280
+    preds = model.scale_boxes(pre.shape[:2], preds, frame.shape)
+    online_targets = tracker.update(preds, thresh)
+    if type(model) == RFDETR: # RF-DETR has different class_ids
+      for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
     preds = []
     for x in online_targets:
       if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
       outside = False
       if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
-        outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], self.settings["coords"])
+        scaled_coors = np.array(self.settings["coords"])
+        scaled_coors[:,] *= [frame.shape[1], frame.shape[0]] # decimal to full
+        outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], scaled_coors)
         outside = outside ^ self.settings["outside"]
       non_zone_alert = False
       if outside: # check if any alerts don't use zone
@@ -570,7 +524,7 @@ class VideoCapture:
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
             
     preds = np.array(preds)
-    return scale_boxes(pre.shape[:2], preds, frame.shape), frame
+    return preds, frame
 
   def get_frame(self):
       with self.lock:
@@ -589,7 +543,7 @@ def is_bright_color(color):
   brightness = (r * 299 + g * 587 + b * 114) / 1000
   return brightness > 127
 
-def draw_predictions(frame, preds, class_labels, color_dict):
+def draw_predictions(frame, preds, color_dict):
   for x1, y1, x2, y2, conf, cls, _ in preds:
     x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
     label = f"{class_labels[int(cls)]}:{conf:.2f}"
@@ -1432,9 +1386,8 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if url:
-    yolo_infer = YOLOv9(*SIZES[yolo_variant]) if yolo_variant in SIZES else YOLOv9()
-    state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{yolo_variant}.safetensors'))
-    load_state_dict(yolo_infer, state_dict)
+    model = YOLOv9(yolo_variant, res=1280)
+    #model = RFDETR("nano")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
