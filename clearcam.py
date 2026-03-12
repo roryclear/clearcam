@@ -1141,7 +1141,7 @@ def get_lan_ip():
 
 def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, "frozen", False) else ([sys.executable, sys.argv[0]], sys.argv[1:])
 
-def start_cam(rtsp, cam_name, yolo_variant='n'):
+def start_cam(rtsp, cam_name, yolo_variant='t', yolo_res=640):
     if not rtsp or not cam_name: return
     
     def upsert_arg(args, key, value):
@@ -1156,6 +1156,7 @@ def start_cam(rtsp, cam_name, yolo_variant='n'):
     new_args = upsert_arg(base_args, "cam_name", cam_name)
     new_args = upsert_arg(new_args, "rtsp", rtsp)
     new_args = upsert_arg(new_args, "yolo_size", yolo_variant)
+    new_args = upsert_arg(new_args, "yolo_res", yolo_res)
     new_args = upsert_arg(new_args, "use_clip", use_clip)
     proc = subprocess.Popen(executable + new_args, close_fds=True)
     active_subprocesses.append(proc)
@@ -1350,8 +1351,11 @@ if __name__ == "__main__":
   use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
   if use_clip: use_clip = use_clip != "False" # str to bool
   yolo_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
+  yolo_res = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_res=")), 640)
   if not yolo_variant:
     yolo_variant = input("Select YOLOV9 size from [t,s,m,c,e], or press enter to skip (defaults to t):") or "t"
+    yolo_ress = {"1":320, "2":640, "3":960,"4":1280,"5":1536}
+    yolo_res = yolo_ress[input("Select a YOLOV9 resoltuion option [1: 320, 2: 640, 3: 960, 4: 1280, 5: 1536] or press enter to skip (defaults to 640):") or "2"]
     use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
@@ -1380,14 +1384,14 @@ if __name__ == "__main__":
   
   if url is None:
     for cam_name in cams.keys():
-      start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant)
+      start_cam(rtsp=cams[cam_name],cam_name=cam_name,yolo_variant=yolo_variant, yolo_res=yolo_res)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if url:
-    model = YOLOv9(yolo_variant, res=1280)
-    #model = RFDETR("nano")
+    model = YOLOv9(yolo_variant, res=int(yolo_res))
+    #model = RFDETR("small")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
