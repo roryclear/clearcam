@@ -618,7 +618,8 @@ class RFDETR():
     labels = topk_indexes % out_logits.shape[2]
     boxes = box_cxcywh_to_xyxy(out_bbox)
     boxes = Tensor.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
-    return Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
+    ret = Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
+    return ret
 
   def predict(self, samples, targets=None):
     _, _, h, w = samples.shape
@@ -649,6 +650,22 @@ class RFDETR():
   def scale_boxes(self, img1_shape, predictions, img0_shape):
     predictions[:,:4] *= [img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]]
     return predictions
+
+def compute_iou_matrix(boxes):
+  x1s = boxes[:, :, 0]
+  y1s = boxes[:, :, 1]
+  x2s = boxes[:, :, 2]
+  y2s = boxes[:, :, 3]
+  areas = (x2s - x1s) * (y2s - y1s)
+  x1 = Tensor.maximum(x1s[:, :, None], x1s[:, None, :])
+  y1 = Tensor.maximum(y1s[:, :, None], y1s[:, None, :])
+  x2 = Tensor.minimum(x2s[:, :, None], x2s[:, None, :])
+  y2 = Tensor.minimum(y2s[:, :, None], y2s[:, None, :])
+  w = Tensor.maximum(Tensor(0), x2 - x1)
+  h = Tensor.maximum(Tensor(0), y2 - y1)
+  intersection = w * h
+  union = areas[:, :, None] + areas[:, None, :] - intersection
+  return intersection / union
 
 def box_cxcywh_to_xyxy(x):
   x_c, y_c, w, h = [t.squeeze(-1) for t in x.split(1, dim=-1)]
