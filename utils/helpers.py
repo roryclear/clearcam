@@ -2,7 +2,7 @@ import uuid
 import http
 from pathlib import Path
 import shutil
-from collections import deque
+from collections import deque, defaultdict
 import time
 import os
 import subprocess
@@ -11,6 +11,8 @@ import json
 import struct
 from datetime import datetime
 import threading
+import cv2
+import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
 
 def send_notif(session_token: str, text=None):
@@ -46,6 +48,73 @@ def send_notif(session_token: str, text=None):
     finally:
         conn.close()
 
+
+def draw_bounding_boxes(orig_img_path, predictions, class_labels):
+  color_dict = {
+      label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256))
+      for i, label in enumerate(class_labels)
+  }
+  font = cv2.FONT_HERSHEY_SIMPLEX
+
+  def is_bright_color(color):
+    r, g, b = color
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 127
+
+  orig_img = (
+      cv2.imread(orig_img_path)
+      if not isinstance(orig_img_path, np.ndarray)
+      else cv2.imdecode(orig_img_path, 1)
+  )
+
+  height, width, _ = orig_img.shape
+  box_thickness = int((height + width) / 400)
+  font_scale = (height + width) / 2500
+  object_count = defaultdict(int)
+  
+  for pred in predictions:
+    if len(pred) == 7: # todo
+      x1, y1, x2, y2, conf, class_id, _ = pred
+    else:
+      x1, y1, x2, y2, conf, class_id = pred
+    if conf == 0:
+        continue
+
+    x1, y1, x2, y2, class_id = map(int, (x1, y1, x2, y2, class_id))
+    color = color_dict[class_labels[class_id]]
+
+    cv2.rectangle(orig_img, (x1, y1), (x2, y2), color, box_thickness)
+
+    label = f"{class_labels[class_id]} {conf:.2f}"
+    text_size, _ = cv2.getTextSize(label, font, font_scale, 1)
+    label_y, bg_y = (
+        (y1 - 4, y1 - text_size[1] - 4)
+        if y1 - text_size[1] - 4 > 0
+        else (y1 + text_size[1], y1)
+    )
+
+    cv2.rectangle(
+        orig_img,
+        (x1, bg_y),
+        (x1 + text_size[0], bg_y + text_size[1]),
+        color,
+        -1,
+    )
+
+    font_color = (0, 0, 0) if is_bright_color(color) else (255, 255, 255)
+    cv2.putText(
+        orig_img,
+        label,
+        (x1, label_y),
+        font,
+        font_scale,
+        font_color,
+        1,
+        cv2.LINE_AA,
+    )
+
+    object_count[class_labels[class_id]] += 1
+  return orig_img
 
 def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
   segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
