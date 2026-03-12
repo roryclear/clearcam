@@ -31,9 +31,7 @@ if __name__ == "__main__":
     if not ret: break
     im = im0
     im = Tensor(im).cast(dtypes.float32)
-    im = model.preprocess(im)
-    pred = model(im)
-    pred = model.scale_boxes(im.shape[:2], pred, im0.shape).numpy()
+    pred = model(im).numpy()
     online_targets = ocs_tracker.update(pred, 0.25)
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]

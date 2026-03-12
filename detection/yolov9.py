@@ -372,8 +372,9 @@ class YOLOv9():
     load_state_dict(self, state_dict)
 
   @TinyJit
-  def __call__(self, x):
-    x = x.unsqueeze(0)
+  def __call__(self, frame):
+    pre = self.preprocess(frame)
+    x = pre.unsqueeze(0)
     x = x.permute(0, 3, 1, 2)
     x = x / 255.0
     y = []  # outputs
@@ -382,10 +383,10 @@ class YOLOv9():
       if m.f != -1: x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
       x = m(x)
       y.append(x)
-    
-    return postprocess(x[0])[0]
+    preds = postprocess(x[0])[0]
+    preds = self.scale_boxes(pre.shape[:2], preds, frame.shape)
+    return preds
 
-  @TinyJit
   def preprocess(self, image, new_shape=None, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
     if new_shape is None: new_shape = self.res
     shape = image.shape[:2]
@@ -402,7 +403,6 @@ class YOLOv9():
     image = image.pad(((int(round(dh - 0.1)),int(round(dh - 0.1))),(int(round(dw - 0.1)),int(round(dw - 0.1))),(0,0)))
     return image
 
-  @TinyJit
   def scale_boxes(self, img1_shape, predictions, img0_shape):
       gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
       pad_x = (img1_shape[1] - img0_shape[1] * gain) / 2
