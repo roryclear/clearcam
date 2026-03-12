@@ -402,22 +402,23 @@ class YOLOv9():
     image = image.pad(((int(round(dh - 0.1)),int(round(dh - 0.1))),(int(round(dw - 0.1)),int(round(dw - 0.1))),(0,0)))
     return image
 
+  @TinyJit
   def scale_boxes(self, img1_shape, predictions, img0_shape):
-    gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
-    pad = ((img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2)
-    for pred in predictions:
-      boxes_np = pred[:4].numpy() if isinstance(pred[:4], Tensor) else pred[:4]
-      boxes_np[..., [0, 2]] -= pad[0]
-      boxes_np[..., [1, 3]] -= pad[1]
-      boxes_np[..., :4] /= gain
-      boxes_np = clip_boxes(boxes_np, img0_shape)
-      pred[:4] = boxes_np
-    return predictions
+      gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
+      pad_x = (img1_shape[1] - img0_shape[1] * gain) / 2
+      pad_y = (img1_shape[0] - img0_shape[0] * gain) / 2
+      boxes = predictions[:, :4].contiguous()
+      boxes[:, [0, 2]] -= pad_x
+      boxes[:, [1, 3]] -= pad_y
+      boxes /= gain
+      boxes = clip_boxes(boxes, img0_shape)
+      predictions[:, :4] = boxes
+      return predictions
 
 def clip_boxes(boxes, shape):
-  boxes[..., [0, 2]] = np.clip(boxes[..., [0, 2]], 0, shape[1])  # x1, x2
-  boxes[..., [1, 3]] = np.clip(boxes[..., [1, 3]], 0, shape[0])  # y1, y2
-  return boxes
+    boxes[..., [0, 2]] = boxes[..., [0, 2]].clip(0, shape[1])
+    boxes[..., [1, 3]] = boxes[..., [1, 3]].clip(0, shape[0])
+    return boxes
 
 def resize(img, new_size):
   img = img.permute(2,0,1)

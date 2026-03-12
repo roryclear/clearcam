@@ -647,8 +647,9 @@ class RFDETR():
     img = img.permute(2, 0, 1).unsqueeze(0)
     return img
 
+  @TinyJit
   def scale_boxes(self, img1_shape, predictions, img0_shape):
-    predictions[:,:4] *= [img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]]
+    predictions[:,:4] *= Tensor([img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]])
     return predictions
 
 def compute_iou_matrix(boxes):

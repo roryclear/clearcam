@@ -236,6 +236,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
@@ -490,9 +492,10 @@ class VideoCapture:
   def run_inference(self, frame):
     frame = Tensor(frame)
     pre = model.preprocess(frame)
-    preds = model(pre).numpy()
+    preds = model(pre)
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
     preds = model.scale_boxes(pre.shape[:2], preds, frame.shape)
+    preds = preds.numpy()
     online_targets = tracker.update(preds, thresh)
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
@@ -1390,8 +1393,8 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   #depth, width, ratio = get_variant_multiples(yolo_variant)
   if url:
-    model = YOLOv9(yolo_variant, res=int(yolo_res))
-    #model = RFDETR("small")
+    #model = YOLOv9(yolo_variant, res=int(yolo_res))
+    model = RFDETR("small")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
