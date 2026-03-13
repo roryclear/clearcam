@@ -37,8 +37,6 @@ def speed_direction_batch(dets_pad, tracks_pad):
 
 
 def linear_assignment(cost_matrix):
-    if cost_matrix.size == 0:
-        return np.empty((0, 2), dtype=int)
     cost = cost_matrix.copy()
     rows, cols = cost.shape
     assignments = []
@@ -65,6 +63,7 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
 
     Y, X = speed_direction_batch(dets_tensor, prev_tensor)
     Y, X = Y.numpy(), X.numpy()
+
 
     inertia_Y, inertia_X = vel_pad[:,0], vel_pad[:,1]
     inertia_Y = np.repeat(inertia_Y[:,None], MAX, axis=1)
@@ -102,21 +101,19 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     detections = dets_pad[det_mask]
     trackers = trks_pad[trk_mask]
 
-    for d, _ in enumerate(detections):
-        if(d not in matched_indices[:,0]):
-            unmatched_detections.append(d)
-    unmatched_trackers = []
-    for t, _ in enumerate(trackers):
-        if(t not in matched_indices[:,1]):
-            unmatched_trackers.append(t)
+    all_detections = np.arange(len(detections))
+    all_trackers = np.arange(len(trackers))
+    matched_detections = matched_indices[:, 0]
+    matched_trackers = matched_indices[:, 1]
 
-    matches = []
-    for m in matched_indices:
-        if(iou_matrix[m[0], m[1]]<iou_threshold):
-            unmatched_detections.append(m[0])
-            unmatched_trackers.append(m[1])
-        else:
-            matches.append(m.reshape(1,2))
-    matches = np.concatenate(matches,axis=0)
+    unmatched_detections = np.setdiff1d(all_detections, matched_detections)
+    unmatched_trackers = np.setdiff1d(all_trackers, matched_trackers)
+
+    iou_vals = iou_matrix[matched_indices[:, 0], matched_indices[:, 1]]
+    low_mask = iou_vals < iou_threshold
+
+    unmatched_detections = np.concatenate([unmatched_detections, matched_indices[low_mask, 0]])
+    unmatched_trackers = np.concatenate([unmatched_trackers, matched_indices[low_mask, 1]])
+    matches = matched_indices[~low_mask]
 
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
