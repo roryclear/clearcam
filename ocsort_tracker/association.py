@@ -63,71 +63,53 @@ def linear_assignment300(cost):
         assignments[i] = [r, c]
         cost[r, :] = np.inf
         cost[:, c] = np.inf
-    return assignments[is_valid]
+    return assignments, is_valid
 
 
 def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     MAX = 300
     dets_tensor = Tensor(dets_pad)
     prev_tensor = Tensor(prev_pad.astype(np.int32))
-
     Y, X = speed_direction_batch(dets_tensor, prev_tensor)
     Y, X = Y.numpy(), X.numpy()
-
-
     inertia_Y, inertia_X = vel_pad[:,0], vel_pad[:,1]
     inertia_Y = np.repeat(inertia_Y[:,None], MAX, axis=1)
     inertia_X = np.repeat(inertia_X[:,None], MAX, axis=1)
-
     diff_angle_cos = inertia_X * X + inertia_Y * Y
     diff_angle_cos = np.clip(diff_angle_cos, -1, 1)
-
     diff_angle = np.arccos(diff_angle_cos)
     diff_angle = (np.pi/2.0 - np.abs(diff_angle)) / np.pi
-
     valid_mask = np.ones(MAX)
     valid_mask[np.where(prev_pad[:,4] < 0)] = 0
     valid_mask = np.repeat(valid_mask[:,None], MAX, axis=1)
-
     iou_matrix = iou_batch(dets_pad, trks_pad)
-
     scores = np.repeat(dets_pad[:,-1][:,None], MAX, axis=1)
-
     angle_diff_cost = (valid_mask * diff_angle) * vdc_weight
     angle_diff_cost = angle_diff_cost.T
     angle_diff_cost = angle_diff_cost * scores
-
     det_mask = np.any(dets_pad != 0, axis=1)
     trk_mask = np.any(trks_pad != 0, axis=1)
-
     full_cost = -(iou_matrix + angle_diff_cost)
     full_cost[~det_mask, :] = np.inf
     full_cost[:, ~trk_mask] = np.inf
-
-
-    angle_diff_cost = angle_diff_cost[det_mask][:, trk_mask]
-    matched_indices = linear_assignment300(full_cost)
+    matched_indices, mask = linear_assignment300(full_cost)
     unmatched_detections = []
+
+    matched_indices = matched_indices[mask]
 
     det_mask = np.any(dets_pad != 0, axis=1)
     trk_mask = np.any(trks_pad != 0, axis=1)
-    detections = dets_pad[det_mask]
-    trackers = trks_pad[trk_mask]
-
-    all_detections = np.arange(len(detections))
-    all_trackers = np.arange(len(trackers))
+    all_valid_detections = np.where(det_mask)[0]
+    all_valid_trackers = np.where(trk_mask)[0]
     matched_detections = matched_indices[:, 0]
     matched_trackers = matched_indices[:, 1]
-
-    unmatched_detections = np.setdiff1d(all_detections, matched_detections)
-    unmatched_trackers = np.setdiff1d(all_trackers, matched_trackers)
-
-    iou_matrix = iou_matrix[det_mask][:, trk_mask]
-    iou_vals = iou_matrix[matched_indices[:, 0], matched_indices[:, 1]]
+    unmatched_detections = np.setdiff1d(all_valid_detections, matched_detections)
+    unmatched_trackers = np.setdiff1d(all_valid_trackers, matched_trackers)
+    iou_vals = iou_matrix[matched_detections, matched_trackers]
     low_mask = iou_vals < iou_threshold
-
-    unmatched_detections = np.concatenate([unmatched_detections, matched_indices[low_mask, 0]])
-    unmatched_trackers = np.concatenate([unmatched_trackers, matched_indices[low_mask, 1]])
+    unmatched_detections = np.concatenate([unmatched_detections, matched_detections[low_mask]])
+    unmatched_trackers = np.concatenate([unmatched_trackers, matched_trackers[low_mask]])
     matches = matched_indices[~low_mask]
-
+    valid_match_mask = np.all(matches != -1, axis=1)
+    matches = matches[valid_match_mask]
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
