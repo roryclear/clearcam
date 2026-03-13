@@ -1,23 +1,28 @@
 import numpy as np
 from tinygrad import Tensor, TinyJit
+import math
 
 def iou_batch(bboxes1, bboxes2):
-    """
-    From SORT: Computes IOU between two bboxes in the form [x1,y1,x2,y2]
-    """
-    bboxes2 = np.expand_dims(bboxes2, 0)
-    bboxes1 = np.expand_dims(bboxes1, 1)
+    bboxes1 = Tensor(bboxes1.astype(np.float32))
+    bboxes2 = Tensor(bboxes2.astype(np.float32))
+
+    bboxes2 = bboxes2.unsqueeze(0)
+    bboxes1 = bboxes1.unsqueeze(1)
+
     
-    xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
-    yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
-    xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
-    yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
-    w = np.maximum(0., xx2 - xx1)
-    h = np.maximum(0., yy2 - yy1)
+    xx1 = (bboxes1[..., 0]).maximum(bboxes2[..., 0])
+    yy1 = (bboxes1[..., 1]).maximum(bboxes2[..., 1])
+    xx2 = (bboxes1[..., 2]).minimum(bboxes2[..., 2])
+    yy2 = (bboxes1[..., 3]).minimum(bboxes2[..., 3])
+    
+    w = (xx2 - xx1).maximum(0.)
+    h = (yy2 - yy1).maximum(0.)
     wh = w * h
-    o = wh / ((bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1])                                      
-        + (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) - wh)                                              
-    return(o)  
+    
+    o = wh / ((bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1]) + 
+              (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) - wh)
+    
+    return o.numpy()
 
 @TinyJit
 def speed_direction_batch(dets_pad, tracks_pad):
@@ -68,24 +73,31 @@ def linear_assignment300(cost):
 
 def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     MAX = 300
-    dets_tensor = Tensor(dets_pad)
-    prev_tensor = Tensor(prev_pad.astype(np.int32))
-    Y, X = speed_direction_batch(dets_tensor, prev_tensor)
-    Y, X = Y.numpy(), X.numpy()
+    trks_pad = Tensor(trks_pad.astype(np.float32))
+    vdc_weight = Tensor(vdc_weight)
+    dets_pad = Tensor(dets_pad)
+    prev_pad = Tensor(prev_pad.astype(np.int32))
+    vel_pad = Tensor(vel_pad.astype(np.int32))
+    Y, X = speed_direction_batch(dets_pad, prev_pad)
     inertia_Y, inertia_X = vel_pad[:,0], vel_pad[:,1]
-    inertia_Y = np.repeat(inertia_Y[:,None], MAX, axis=1)
-    inertia_X = np.repeat(inertia_X[:,None], MAX, axis=1)
+
+
+    inertia_Y = inertia_Y.reshape(-1, 1).expand(-1, MAX)
+    inertia_X = inertia_X.reshape(-1, 1).expand(-1, MAX)
     diff_angle_cos = inertia_X * X + inertia_Y * Y
-    diff_angle_cos = np.clip(diff_angle_cos, -1, 1)
-    diff_angle = np.arccos(diff_angle_cos)
-    diff_angle = (np.pi/2.0 - np.abs(diff_angle)) / np.pi
-    valid_mask = np.ones(MAX)
-    valid_mask[np.where(prev_pad[:,4] < 0)] = 0
-    valid_mask = np.repeat(valid_mask[:,None], MAX, axis=1)
+    diff_angle_cos = diff_angle_cos.clip(-1, 1)
+    diff_angle = Tensor.acos(diff_angle_cos)
+    diff_angle = (math.pi/2.0 - Tensor. abs(diff_angle)) / math.pi
+    valid_mask = Tensor.ones(MAX)
+    valid_mask *= Tensor.where(prev_pad[:,4] < 0, 1, 0)
+    valid_mask = valid_mask.reshape(-1, 1).expand(-1, MAX)
+    dets_pad = dets_pad.numpy()
+    trks_pad = trks_pad.numpy()
     iou_matrix = iou_batch(dets_pad, trks_pad)
     scores = np.repeat(dets_pad[:,-1][:,None], MAX, axis=1)
     angle_diff_cost = (valid_mask * diff_angle) * vdc_weight
     angle_diff_cost = angle_diff_cost.T
+    angle_diff_cost = angle_diff_cost.numpy()
     angle_diff_cost = angle_diff_cost * scores
     det_mask = np.any(dets_pad != 0, axis=1)
     trk_mask = np.any(trks_pad != 0, axis=1)
