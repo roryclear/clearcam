@@ -37,24 +37,21 @@ def speed_direction_batch(dets_pad, tracks_pad):
 
 
 def linear_assignment(cost_matrix):
-    cost = cost_matrix.copy()
+    cost = cost_matrix.astype(float).copy()
     rows, cols = cost.shape
-    assignments = []
-    row_used = np.zeros(rows, dtype=bool)
-    col_used = np.zeros(cols, dtype=bool)
-    flat_indices = np.argsort(cost, axis=None)
-    row_indices = flat_indices // cols
-    col_indices = flat_indices % cols
+    num_assignments = min(rows, cols)
     
-    for r, c in zip(row_indices, col_indices):
-        if not row_used[r] and not col_used[c]:
-            assignments.append([r, c])
-            row_used[r] = True
-            col_used[c] = True
-            if row_used.all() or col_used.all():
-                break
+    # Pre-allocate the result
+    assignments = np.empty((num_assignments, 2), dtype=int)
     
-    return np.array(assignments)
+    for i in range(num_assignments):
+        idx = np.argmin(cost)
+        r, c = np.unravel_index(idx, cost.shape)
+        assignments[i] = [r, c]
+        cost[r, :] = np.inf
+        cost[:, c] = np.inf
+        
+    return assignments
 
 def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     MAX = 300
