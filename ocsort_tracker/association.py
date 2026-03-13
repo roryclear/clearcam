@@ -59,45 +59,56 @@ def linear_assignment(cost_matrix):
     return np.array(assignments)
 
 def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight):
-    if(len(trackers)==0):
+
+    MAX = 300
+
+    if len(trackers) == 0:
         return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
 
-    dets_pad = np.zeros((300, 5), dtype=detections.dtype)
-    tracks_pad = np.zeros((300, 5), dtype=previous_obs.dtype)
+    dets_pad = np.zeros((MAX,5), dtype=detections.dtype)
+    trks_pad = np.zeros((MAX,5), dtype=trackers.dtype)
+    prev_pad = np.zeros((MAX,5), dtype=previous_obs.dtype)
+    vel_pad  = np.zeros((MAX,2), dtype=velocities.dtype)
+
     dets_pad[:detections.shape[0]] = detections
-    tracks_pad[:previous_obs.shape[0]] = previous_obs
+    trks_pad[:trackers.shape[0]] = trackers
+    prev_pad[:previous_obs.shape[0]] = previous_obs
+    vel_pad[:velocities.shape[0]] = velocities
 
-    tracks_pad = tracks_pad.astype(np.int32)
-    dets_pad = Tensor(dets_pad)
-    tracks_pad = Tensor(tracks_pad)
-    Y, X = speed_direction_batch(dets_pad, tracks_pad)
+    # -------- SPEED DIRECTION --------
+    dets_tensor = Tensor(dets_pad)
+    prev_tensor = Tensor(prev_pad.astype(np.int32))
+
+    Y, X = speed_direction_batch(dets_tensor, prev_tensor)
     Y, X = Y.numpy(), X.numpy()
-    dets_pad, tracks_pad = dets_pad.numpy(), tracks_pad.numpy()
-    det_mask = np.any(dets_pad != 0, axis=1)
-    trk_mask = np.any(tracks_pad != 0, axis=1)
-    n_det = det_mask.sum()
-    n_trk = trk_mask.sum()
-    Y, X = Y[:n_trk, :n_det], X[:n_trk, :n_det]
 
-    inertia_Y, inertia_X = velocities[:,0], velocities[:,1]
-    inertia_Y = np.repeat(inertia_Y[:, np.newaxis], Y.shape[1], axis=1)
-    inertia_X = np.repeat(inertia_X[:, np.newaxis], X.shape[1], axis=1)
+    inertia_Y, inertia_X = vel_pad[:,0], vel_pad[:,1]
+    inertia_Y = np.repeat(inertia_Y[:,None], MAX, axis=1)
+    inertia_X = np.repeat(inertia_X[:,None], MAX, axis=1)
+
     diff_angle_cos = inertia_X * X + inertia_Y * Y
-    diff_angle_cos = np.clip(diff_angle_cos, a_min=-1, a_max=1)
+    diff_angle_cos = np.clip(diff_angle_cos, -1, 1)
+
     diff_angle = np.arccos(diff_angle_cos)
-    diff_angle = (np.pi /2.0 - np.abs(diff_angle)) / np.pi
-    
-    valid_mask = np.ones(previous_obs.shape[0])
-    valid_mask[np.where(previous_obs[:,4]<0)] = 0
-    
-    iou_matrix = iou_batch(detections, trackers)
-    scores = np.repeat(detections[:,-1][:, np.newaxis], trackers.shape[0], axis=1)
-    # iou_matrix = iou_matrix * scores # a trick sometiems works, we don't encourage this
-    valid_mask = np.repeat(valid_mask[:, np.newaxis], X.shape[1], axis=1)
+    diff_angle = (np.pi/2.0 - np.abs(diff_angle)) / np.pi
+
+    valid_mask = np.ones(MAX)
+    valid_mask[np.where(prev_pad[:,4] < 0)] = 0
+    valid_mask = np.repeat(valid_mask[:,None], MAX, axis=1)
+
+    iou_matrix = iou_batch(dets_pad, trks_pad)
+
+    scores = np.repeat(dets_pad[:,-1][:,None], MAX, axis=1)
 
     angle_diff_cost = (valid_mask * diff_angle) * vdc_weight
     angle_diff_cost = angle_diff_cost.T
     angle_diff_cost = angle_diff_cost * scores
+
+    det_mask = np.any(dets_pad != 0, axis=1)
+    trk_mask = np.any(trks_pad != 0, axis=1)
+
+    iou_matrix = iou_matrix[det_mask][:, trk_mask]
+    angle_diff_cost = angle_diff_cost[det_mask][:, trk_mask]
 
     matched_indices = linear_assignment(-(iou_matrix+angle_diff_cost))
     unmatched_detections = []
