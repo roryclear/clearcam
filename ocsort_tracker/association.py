@@ -51,7 +51,7 @@ def linear_assignment(cost_matrix):
     
     return np.array(assignments)
 
-def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight):    
+def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight):
     if(len(trackers)==0):
         return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
 
@@ -63,7 +63,7 @@ def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc
     diff_angle_cos = np.clip(diff_angle_cos, a_min=-1, a_max=1)
     diff_angle = np.arccos(diff_angle_cos)
     diff_angle = (np.pi /2.0 - np.abs(diff_angle)) / np.pi
-
+    
     valid_mask = np.ones(previous_obs.shape[0])
     valid_mask[np.where(previous_obs[:,4]<0)] = 0
     
@@ -76,25 +76,16 @@ def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc
     angle_diff_cost = angle_diff_cost.T
     angle_diff_cost = angle_diff_cost * scores
 
-    if min(iou_matrix.shape) > 0:
-        a = (iou_matrix > iou_threshold).astype(np.int32)
-        if a.sum(1).max() == 1 and a.sum(0).max() == 1:
-            matched_indices = np.stack(np.where(a), axis=1)
-        else:
-            matched_indices = linear_assignment(-(iou_matrix+angle_diff_cost))
-    else:
-        matched_indices = np.empty(shape=(0,2))
-
+    matched_indices = linear_assignment(-(iou_matrix+angle_diff_cost))
     unmatched_detections = []
-    for d, det in enumerate(detections):
+    for d, _ in enumerate(detections):
         if(d not in matched_indices[:,0]):
             unmatched_detections.append(d)
     unmatched_trackers = []
-    for t, trk in enumerate(trackers):
+    for t, _ in enumerate(trackers):
         if(t not in matched_indices[:,1]):
             unmatched_trackers.append(t)
 
-    # filter out matched with low IOU
     matches = []
     for m in matched_indices:
         if(iou_matrix[m[0], m[1]]<iou_threshold):
@@ -102,9 +93,6 @@ def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc
             unmatched_trackers.append(m[1])
         else:
             matches.append(m.reshape(1,2))
-    if(len(matches)==0):
-        matches = np.empty((0,2),dtype=int)
-    else:
-        matches = np.concatenate(matches,axis=0)
+    matches = np.concatenate(matches,axis=0)
 
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)

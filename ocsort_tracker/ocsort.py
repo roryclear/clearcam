@@ -216,40 +216,10 @@ class OCSort(object):
 
         velocities = np.array([trk.velocity for trk in self.trackers])
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
-        k_observations = np.array(
-            [k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
+        k_observations = np.array([k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
 
-        """
-            First round of association
-        """
-        matched, unmatched_dets, unmatched_trks = associate(
-            dets, trks, self.iou_threshold, velocities, k_observations, self.inertia)
-        for m in matched:
-            self.trackers[m[1]].update(dets[m[0], :], scores[m[0]], class_ids[m[0]])
-
-        """
-            Second round of associaton by OCR
-        """
-        # BYTE association
-        if self.use_byte and len(dets_second) > 0 and unmatched_trks.shape[0] > 0:
-            u_trks = trks[unmatched_trks]
-            iou_left = self.asso_func(dets_second, u_trks)          # iou between low score detections and unmatched tracks
-            iou_left = np.array(iou_left)
-            if iou_left.max() > self.iou_threshold:
-                """
-                    NOTE: by using a lower threshold, e.g., self.iou_threshold - 0.1, you may
-                    get a higher performance especially on MOT17/MOT20 datasets. But we keep it
-                    uniform here for simplicity
-                """
-                matched_indices = linear_assignment(-iou_left)
-                to_remove_trk_indices = []
-                for m in matched_indices:
-                    det_ind, trk_ind = m[0], unmatched_trks[m[1]]
-                    if iou_left[m[0], m[1]] < self.iou_threshold:
-                        continue
-                    self.trackers[trk_ind].update(dets_second[det_ind, :], scores_second[det_ind], class_ids_second[det_ind])
-                    to_remove_trk_indices.append(trk_ind)
-                unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk_indices))
+        matched, unmatched_dets, unmatched_trks = associate(dets, trks, self.iou_threshold, velocities, k_observations, self.inertia)
+        for m in matched: self.trackers[m[1]].update(dets[m[0], :], scores[m[0]], class_ids[m[0]])
 
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
             left_dets = dets[unmatched_dets]
@@ -275,10 +245,8 @@ class OCSort(object):
                 unmatched_dets = np.setdiff1d(unmatched_dets, np.array(to_remove_det_indices))
                 unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk_indices))
 
-        for m in unmatched_trks:
-            self.trackers[m].update(None)
+        for m in unmatched_trks: self.trackers[m].update(None)
 
-        # create and initialise new trackers for unmatched detections
         for i in unmatched_dets:
             trk = KalmanBoxTracker(dets[i, :], delta_t=self.delta_t)
             trk.class_id = class_ids[i]
@@ -290,20 +258,14 @@ class OCSort(object):
             if trk.last_observation.sum() < 0:
                 d = trk.get_state()[0]
             else:
-                """
-                    this is optional to use the recent observation or the kalman filter prediction,
-                    we didn't notice significant difference here
-                """
                 d = trk.last_observation[:4]
             if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
-                # +1 as MOT benchmark requires positive
                 ret.append(np.concatenate((d, [trk.id+1, trk.age, trk.class_id, trk.score, trk.speed])).reshape(1, -1))
             i -= 1
             # remove dead tracklet
             if(trk.time_since_update > self.max_age):
                 if trk.speed > 2 or trk.time_since_update > 600: self.trackers.pop(i)
-        # tlx tly w h, track_id, age, class_id, score
+
         out = []
-        for x in ret:
-          out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5], speed=x[0][8]))
+        for x in ret: out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5], speed=x[0][8]))
         return out
