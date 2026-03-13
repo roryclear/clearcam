@@ -196,12 +196,6 @@ class OCSort(object):
         class_ids = output_results[:, 5].astype(int)
 
         dets = np.concatenate((bboxes, np.expand_dims(scores, axis=-1)), axis=1)
-        inds_low = scores > 0.1
-        inds_high = scores < det_thresh
-        inds_second = np.logical_and(inds_low, inds_high)
-        dets_second = dets[inds_second]  # detections for second matching
-        class_ids_second = class_ids[inds_second]
-        scores_second = scores[inds_second]
         remain_inds = scores > det_thresh
         dets = dets[remain_inds]
         class_ids = class_ids[remain_inds]
