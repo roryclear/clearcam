@@ -212,7 +212,11 @@ class OCSort(object):
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
         k_observations = np.array([k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
 
-        matched, unmatched_dets, unmatched_trks = associate(dets, trks, self.iou_threshold, velocities, k_observations, self.inertia)
+
+        if len(trks) == 0:
+            matched, unmatched_dets, unmatched_trks=  np.empty((0,2),dtype=int), np.arange(len(dets)), np.empty((0,5),dtype=int)
+        else:
+            matched, unmatched_dets, unmatched_trks = associate(dets, trks, self.iou_threshold, velocities, k_observations, self.inertia)
         for m in matched: self.trackers[m[1]].update(dets[m[0], :], scores[m[0]], class_ids[m[0]])
 
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:

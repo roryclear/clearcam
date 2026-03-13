@@ -59,12 +59,7 @@ def linear_assignment(cost_matrix):
     return np.array(assignments)
 
 def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight):
-
     MAX = 300
-
-    if len(trackers) == 0:
-        return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
-
     dets_pad = np.zeros((MAX,5), dtype=detections.dtype)
     trks_pad = np.zeros((MAX,5), dtype=trackers.dtype)
     prev_pad = np.zeros((MAX,5), dtype=previous_obs.dtype)
