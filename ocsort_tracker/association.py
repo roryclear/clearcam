@@ -53,6 +53,19 @@ def linear_assignment(cost_matrix):
         
     return assignments
 
+def linear_assignment300(cost):
+    assignments = np.zeros((300, 2), dtype=int)
+    is_valid = np.zeros(300, dtype=bool)
+    for i in range(300):
+        idx = np.argmin(cost)
+        r, c = np.unravel_index(idx, cost.shape)
+        is_valid[i] = (cost[r, c] < 1e9)
+        assignments[i] = [r, c]
+        cost[r, :] = np.inf
+        cost[:, c] = np.inf
+    return assignments[is_valid]
+
+
 def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     MAX = 300
     dets_tensor = Tensor(dets_pad)
@@ -87,10 +100,13 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     det_mask = np.any(dets_pad != 0, axis=1)
     trk_mask = np.any(trks_pad != 0, axis=1)
 
-    iou_matrix = iou_matrix[det_mask][:, trk_mask]
-    angle_diff_cost = angle_diff_cost[det_mask][:, trk_mask]
+    full_cost = -(iou_matrix + angle_diff_cost)
+    full_cost[~det_mask, :] = np.inf
+    full_cost[:, ~trk_mask] = np.inf
 
-    matched_indices = linear_assignment(-(iou_matrix+angle_diff_cost))
+
+    angle_diff_cost = angle_diff_cost[det_mask][:, trk_mask]
+    matched_indices = linear_assignment300(full_cost)
     unmatched_detections = []
 
     det_mask = np.any(dets_pad != 0, axis=1)
@@ -106,6 +122,7 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     unmatched_detections = np.setdiff1d(all_detections, matched_detections)
     unmatched_trackers = np.setdiff1d(all_trackers, matched_trackers)
 
+    iou_matrix = iou_matrix[det_mask][:, trk_mask]
     iou_vals = iou_matrix[matched_indices[:, 0], matched_indices[:, 1]]
     low_mask = iou_vals < iou_threshold
 
