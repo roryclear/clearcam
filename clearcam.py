@@ -489,10 +489,8 @@ class VideoCapture:
 
   def run_inference(self, frame):
     frame = Tensor(frame)
-    pre = model.preprocess(frame)
-    preds = model(pre).numpy()
+    preds = model(frame).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
-    preds = model.scale_boxes(pre.shape[:2], preds, frame.shape)
     online_targets = tracker.update(preds, thresh)
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]

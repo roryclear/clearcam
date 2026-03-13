@@ -609,8 +609,9 @@ class RFDETR():
     load_state_dict(self, state_dict)
 
   @TinyJit
-  def __call__(self, processed_images):
-    predictions = self.predict(processed_images)
+  def __call__(self, frame):
+    pre = self.preprocess(frame)
+    predictions = self.predict(pre)
     out_logits, out_bbox = predictions
     prob = out_logits.sigmoid()
     topk_values, topk_indexes = Tensor.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
@@ -619,6 +620,7 @@ class RFDETR():
     boxes = box_cxcywh_to_xyxy(out_bbox)
     boxes = Tensor.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
     ret = Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
+    ret = self.scale_boxes(pre.shape[:2], ret, frame.shape)
     return ret
 
   def predict(self, samples, targets=None):
@@ -636,7 +638,6 @@ class RFDETR():
     outputs_class = self.class_embed(hs)[-1]
     return outputs_class, outputs_coord[-1]
 
-  @TinyJit
   def preprocess(self, img):
     img = img.cast(dtypes.float32)
     img /= 255.0
@@ -648,7 +649,7 @@ class RFDETR():
     return img
 
   def scale_boxes(self, img1_shape, predictions, img0_shape):
-    predictions[:,:4] *= [img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]]
+    predictions[:,:4] *= Tensor([img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]])
     return predictions
 
 def compute_iou_matrix(boxes):
