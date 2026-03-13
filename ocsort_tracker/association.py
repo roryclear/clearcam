@@ -58,19 +58,8 @@ def linear_assignment(cost_matrix):
     
     return np.array(assignments)
 
-def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight):
+def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     MAX = 300
-    dets_pad = np.zeros((MAX,5), dtype=detections.dtype)
-    trks_pad = np.zeros((MAX,5), dtype=trackers.dtype)
-    prev_pad = np.zeros((MAX,5), dtype=previous_obs.dtype)
-    vel_pad  = np.zeros((MAX,2), dtype=velocities.dtype)
-
-    dets_pad[:detections.shape[0]] = detections
-    trks_pad[:trackers.shape[0]] = trackers
-    prev_pad[:previous_obs.shape[0]] = previous_obs
-    vel_pad[:velocities.shape[0]] = velocities
-
-    # -------- SPEED DIRECTION --------
     dets_tensor = Tensor(dets_pad)
     prev_tensor = Tensor(prev_pad.astype(np.int32))
 
@@ -107,6 +96,12 @@ def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc
 
     matched_indices = linear_assignment(-(iou_matrix+angle_diff_cost))
     unmatched_detections = []
+
+    det_mask = np.any(dets_pad != 0, axis=1)
+    trk_mask = np.any(trks_pad != 0, axis=1)
+    detections = dets_pad[det_mask]
+    trackers = trks_pad[trk_mask]
+
     for d, _ in enumerate(detections):
         if(d not in matched_indices[:,0]):
             unmatched_detections.append(d)
