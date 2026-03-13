@@ -1,5 +1,5 @@
 import numpy as np
-from tinygrad import Tensor, TinyJit
+from tinygrad import Tensor, TinyJit, dtypes
 import math
 
 def iou_batch(bboxes1, bboxes2):
@@ -23,6 +23,26 @@ def iou_batch(bboxes1, bboxes2):
               (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) - wh)
     
     return o.numpy()
+
+
+def iou_batch2(bboxes1, bboxes2):
+    bboxes2 = bboxes2.unsqueeze(0)
+    bboxes1 = bboxes1.unsqueeze(1)
+
+    
+    xx1 = (bboxes1[..., 0]).maximum(bboxes2[..., 0])
+    yy1 = (bboxes1[..., 1]).maximum(bboxes2[..., 1])
+    xx2 = (bboxes1[..., 2]).minimum(bboxes2[..., 2])
+    yy2 = (bboxes1[..., 3]).minimum(bboxes2[..., 3])
+    
+    w = (xx2 - xx1).maximum(0.)
+    h = (yy2 - yy1).maximum(0.)
+    wh = w * h
+    
+    o = wh / ((bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1]) + 
+              (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) - wh)
+    
+    return o
 
 @TinyJit
 def speed_direction_batch(dets_pad, tracks_pad):
@@ -91,32 +111,39 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     valid_mask = Tensor.ones(MAX)
     valid_mask *= Tensor.where(prev_pad[:,4] < 0, 1, 0)
     valid_mask = valid_mask.reshape(-1, 1).expand(-1, MAX)
-    dets_pad = dets_pad.numpy()
-    trks_pad = trks_pad.numpy()
-    iou_matrix = iou_batch(dets_pad, trks_pad)
-    scores = np.repeat(dets_pad[:,-1][:,None], MAX, axis=1)
+    iou_matrix = iou_batch2(dets_pad, trks_pad)
+    scores = dets_pad[:, -1].reshape(-1, 1).expand(-1, MAX)
     angle_diff_cost = (valid_mask * diff_angle) * vdc_weight
     angle_diff_cost = angle_diff_cost.T
-    angle_diff_cost = angle_diff_cost.numpy()
     angle_diff_cost = angle_diff_cost * scores
-    det_mask = np.any(dets_pad != 0, axis=1)
-    trk_mask = np.any(trks_pad != 0, axis=1)
     full_cost = -(iou_matrix + angle_diff_cost)
-    full_cost[~det_mask, :] = np.inf
-    full_cost[:, ~trk_mask] = np.inf
+
+
+    trk_mask = (trks_pad != 0).any(axis=1)
+
+    det_mask = (dets_pad != 0).any(axis=1)
+    mask = det_mask.cast(dtypes.float32).reshape(-1, 1)
+
+
+    full_cost = full_cost * mask + (1 - mask) * 1e9
+    trk_mask_col = trk_mask.cast(dtypes.float32).reshape(1, -1)
+    full_cost = full_cost * trk_mask_col + (1 - trk_mask_col) * 1e9
+    full_cost = full_cost.numpy()
     matched_indices, mask = linear_assignment300(full_cost)
     unmatched_detections = []
 
     matched_indices = matched_indices[mask]
 
-    det_mask = np.any(dets_pad != 0, axis=1)
-    trk_mask = np.any(trks_pad != 0, axis=1)
+
+    det_mask = det_mask.numpy()
     all_valid_detections = np.where(det_mask)[0]
+    trk_mask = trk_mask.numpy()
     all_valid_trackers = np.where(trk_mask)[0]
     matched_detections = matched_indices[:, 0]
     matched_trackers = matched_indices[:, 1]
     unmatched_detections = np.setdiff1d(all_valid_detections, matched_detections)
     unmatched_trackers = np.setdiff1d(all_valid_trackers, matched_trackers)
+    iou_matrix = iou_matrix.numpy()
     iou_vals = iou_matrix[matched_detections, matched_trackers]
     low_mask = iou_vals < iou_threshold
     unmatched_detections = np.concatenate([unmatched_detections, matched_detections[low_mask]])
@@ -125,3 +152,4 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     valid_match_mask = np.all(matches != -1, axis=1)
     matches = matches[valid_match_mask]
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
+
