@@ -6,7 +6,7 @@ ocs_tracker = ocsort.OCSort(max_age=60)
 tracks = pickle.load(open('test/tracks.pkl', 'rb'))
 
 st = time.time()
-for i in range(len(tracks)):
+for i in range(260):#range(len(tracks)):
     out = ocs_tracker.update(tracks[i][0], 0.25)
     preds = []
     expected = []

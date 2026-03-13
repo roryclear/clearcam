@@ -1,4 +1,5 @@
 import numpy as np
+from tinygrad import Tensor, TinyJit
 
 def iou_batch(bboxes1, bboxes2):
     """
@@ -18,16 +19,22 @@ def iou_batch(bboxes1, bboxes2):
         + (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1]) - wh)                                              
     return(o)  
 
-def speed_direction_batch(dets, tracks):
-    tracks = tracks[..., np.newaxis]
-    CX1, CY1 = (dets[:,0] + dets[:,2])/2.0, (dets[:,1]+dets[:,3])/2.0
-    CX2, CY2 = (tracks[:,0] + tracks[:,2]) /2.0, (tracks[:,1]+tracks[:,3])/2.0
-    dx = CX1 - CX2 
-    dy = CY1 - CY2 
-    norm = np.sqrt(dx**2 + dy**2) + 1e-6
-    dx = dx / norm 
-    dy = dy / norm
-    return dy, dx # size: num_track x num_det
+@TinyJit
+def speed_direction_batch(dets_pad, tracks_pad):
+    CX1 = (dets_pad[:,0] + dets_pad[:,2]) / 2.0
+    CY1 = (dets_pad[:,1] + dets_pad[:,3]) / 2.0
+    CX2 = (tracks_pad[:,0] + tracks_pad[:,2]) / 2.0
+    CY2 = (tracks_pad[:,1] + tracks_pad[:,3]) / 2.0
+
+    # broadcast to pairwise (tracks x dets)
+    dx = CX1[None, :] - CX2[:, None]
+    dy = CY1[None, :] - CY2[:, None]
+
+    norm = Tensor.sqrt(dx**2 + dy**2) + 1e-6
+    dx /= norm
+    dy /= norm
+    return dy, dx
+
 
 def linear_assignment(cost_matrix):
     if cost_matrix.size == 0:
@@ -55,7 +62,23 @@ def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc
     if(len(trackers)==0):
         return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
 
-    Y, X = speed_direction_batch(detections, previous_obs)
+    dets_pad = np.zeros((300, 5), dtype=detections.dtype)
+    tracks_pad = np.zeros((300, 5), dtype=previous_obs.dtype)
+    dets_pad[:detections.shape[0]] = detections
+    tracks_pad[:previous_obs.shape[0]] = previous_obs
+
+    tracks_pad = tracks_pad.astype(np.int32)
+    dets_pad = Tensor(dets_pad)
+    tracks_pad = Tensor(tracks_pad)
+    Y, X = speed_direction_batch(dets_pad, tracks_pad)
+    Y, X = Y.numpy(), X.numpy()
+    dets_pad, tracks_pad = dets_pad.numpy(), tracks_pad.numpy()
+    det_mask = np.any(dets_pad != 0, axis=1)
+    trk_mask = np.any(tracks_pad != 0, axis=1)
+    n_det = det_mask.sum()
+    n_trk = trk_mask.sum()
+    Y, X = Y[:n_trk, :n_det], X[:n_trk, :n_det]
+
     inertia_Y, inertia_X = velocities[:,0], velocities[:,1]
     inertia_Y = np.repeat(inertia_Y[:, np.newaxis], Y.shape[1], axis=1)
     inertia_X = np.repeat(inertia_X[:, np.newaxis], X.shape[1], axis=1)
