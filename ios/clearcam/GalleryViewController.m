@@ -15,9 +15,6 @@
 @property (nonatomic, strong) UILabel *titleLabel;
 @end
 
-@interface GalleryViewController () <UITableViewDelegate, UITableViewDataSource, QLPreviewControllerDataSource, QLPreviewControllerDelegate>
-@end
-
 @implementation VideoTableViewCell
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
@@ -245,6 +242,7 @@
                                                       userInfo:nil
                                                        repeats:YES];
     [self updateInternetStatus];
+    [self getEvents];
 }
 
 - (void)appDidBecomeActive {
@@ -495,7 +493,9 @@
 }
 
 - (void)getEvents {
-    if (self.isLoadingVideos) self.isLoadingVideos = NO;
+    if (self.isLoadingVideos) {
+        return;
+    }
     self.isLoadingVideos = YES;
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
@@ -520,6 +520,7 @@
         if (error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.isLoadingVideos = NO;
+                [self.refreshControl endRefreshing];
             });
             return;
         }
@@ -541,6 +542,7 @@
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
         self.isLoadingVideos = NO;
+        [self.refreshControl endRefreshing];
         return;
     }
     self.isLoadingVideos = YES;
@@ -565,6 +567,7 @@
     }
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
         self.isLoadingVideos = NO;
+        [self.refreshControl endRefreshing];
     });
 }
 
