@@ -442,14 +442,6 @@
     }
 }
 
-- (void)setIsLoadingVideos:(BOOL)isLoadingVideos {
-    _isLoadingVideos = isLoadingVideos;
-    
-    if (!isLoadingVideos && self.refreshControl.isRefreshing) {
-        [self.refreshControl endRefreshing];
-    }
-}
-
 - (void)setupDownloadDirectory {
     NSString *documentsDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     self.downloadDirectory = [documentsDir stringByAppendingPathComponent:@"downloaded-events"];
