@@ -298,6 +298,7 @@ class VideoCapture:
     x2_new = max(0, min(x2_new, W))
     y1_new = max(0, min(y1_new, H))
     y2_new = max(0, min(y2_new, H))
+    if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
      
@@ -351,7 +352,6 @@ class VideoCapture:
           frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
         filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
         for p in filtered_preds:
-          if (p[2]-p[0]) < 100 or (p[3]-p[1]) < 100: continue # todo, best min size
           if p[6] not in pred_occs: pred_occs[p[6]] = [time.time()]
           if (len(pred_occs[p[6]]) < 20 and (time.time() - pred_occs[p[6]][-1]) > 1) or (time.time() - pred_occs[p[6]][-1]) > 600:
             pred_occs[p[6]].append(time.time())
