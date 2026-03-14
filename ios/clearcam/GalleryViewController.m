@@ -632,10 +632,7 @@
         NSString *outputFilePath = filePath;
         if ([file hasSuffix:@".aes"]) {
             NSData *encryptedData = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:filePath] options:0 error:&error];
-            if (!encryptedData) {
-                [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to read the file: %@", error.localizedDescription]];
-                return;
-            }
+            if (!encryptedData) return;
             NSArray<NSString *> *storedKeys = [[SecretManager sharedManager] getAllDecryptionKeys];
             NSData *decryptedData = nil;
             for (NSString *key in storedKeys) {
@@ -647,16 +644,10 @@
                 outputFilePath = [self.downloadDirectory stringByAppendingPathComponent:outputFilename];
                 NSError *writeError = nil;
                 BOOL success = [decryptedData writeToFile:outputFilePath options:NSDataWritingAtomic error:&writeError];
-                if (!success) {
-                    [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to write decrypted file: %@", writeError.localizedDescription]];
-                    return;
-                }
+                if (!success) return;
                 NSError *deleteError = nil;
                 BOOL removed = [[NSFileManager defaultManager] removeItemAtPath:filePath error:&deleteError];
-                if (!removed) {
-                    [self showErrorAlertWithMessage:[NSString stringWithFormat:@"Failed to delete original encrypted file: %@", deleteError.localizedDescription]];
-                    return;
-                }
+                if (!removed) return;
             }
             
         }
