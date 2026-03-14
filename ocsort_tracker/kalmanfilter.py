@@ -109,7 +109,6 @@ class KalmanFilterNew(object):
         if not self.observed and self.attr_saved: self.unfreeze()
         self.observed = True
         R = self.R
-        z = reshape_z(z, self.dim_z, self.x.ndim)
         H = self.H
         self.y = z - dot(H, self.x)
         PHT = dot(self.P, H.T)
@@ -119,23 +118,4 @@ class KalmanFilterNew(object):
         self.x = self.x + dot(self.K, self.y)
         I_KH = self._I - dot(self.K, H)
         self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
-
-def reshape_z(z, dim_z, ndim):
-    """ensure z is a (dim_z, 1) shaped vector"""
-
-    z = np.atleast_2d(z)
-    if z.shape[1] == dim_z:
-        z = z.T
-
-    if z.shape != (dim_z, 1):
-        raise ValueError(
-            "z (shape {}) must be convertible to shape ({}, 1)".format(z.shape, dim_z)
-        )
-
-    if ndim == 1:
-        z = z[:, 0]
-
-    if ndim == 0:
-        z = z[0, 0]
-
-    return z
+        
