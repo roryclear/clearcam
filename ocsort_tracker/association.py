@@ -101,7 +101,7 @@ def linear_assignment300(cost):
 
             k += 1
 
-    return assignments, is_valid
+    return assignments[is_valid]
 
 
 def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
@@ -142,10 +142,8 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     trk_mask_col = trk_mask.cast(dtypes.float32).reshape(1, -1)
     full_cost = full_cost * trk_mask_col + (1 - trk_mask_col) * 1e9
     full_cost = full_cost.numpy()
-    matched_indices, mask = linear_assignment300(full_cost)
+    matched_indices = linear_assignment300(full_cost)
     unmatched_detections = []
-
-    matched_indices = matched_indices[mask]
 
 
     det_mask = det_mask.numpy()
@@ -165,5 +163,6 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     valid_match_mask = np.all(matches != -1, axis=1)
     matches = matches[valid_match_mask]
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
+
 
 
