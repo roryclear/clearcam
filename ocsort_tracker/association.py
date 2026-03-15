@@ -81,13 +81,26 @@ def linear_assignment(cost_matrix):
 def linear_assignment300(cost):
     assignments = np.zeros((300, 2), dtype=int)
     is_valid = np.zeros(300, dtype=bool)
-    for i in range(300):
-        idx = np.argmin(cost)
-        r, c = np.unravel_index(idx, cost.shape)
-        is_valid[i] = (cost[r, c] < 1e9)
-        assignments[i] = [r, c]
-        cost[r, :] = np.inf
-        cost[:, c] = np.inf
+
+    flat = cost.ravel()
+    order = np.argsort(flat)
+
+    pairs = np.column_stack((order // 300, order % 300))
+
+    used_rows = np.zeros(300, dtype=bool)
+    used_cols = np.zeros(300, dtype=bool)
+
+    k = 0
+    for r, c in pairs:
+        if not used_rows[r] and not used_cols[c] and k < 300:
+            assignments[k] = [r, c]
+            is_valid[k] = (cost[r, c] < 1e9)
+
+            used_rows[r] = True
+            used_cols[c] = True
+
+            k += 1
+
     return assignments, is_valid
 
 
@@ -152,4 +165,5 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     valid_match_mask = np.all(matches != -1, axis=1)
     matches = matches[valid_match_mask]
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
+
 
