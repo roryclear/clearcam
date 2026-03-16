@@ -373,10 +373,8 @@ class YOLOv9():
 
   @TinyJit
   def __call__(self, frame):
+    print(frame.shape)
     pre = self.preprocess(frame)
-    x = pre.unsqueeze(0)
-    x = x.permute(0, 3, 1, 2)
-    x = x / 255.0
     y = []  # outputs
     for i in range(len(self.model)):
       m = self.model[i]
@@ -401,6 +399,9 @@ class YOLOv9():
     dh /= 2
     image = resize(image, new_unpad)
     image = image.pad(((int(round(dh - 0.1)),int(round(dh - 0.1))),(int(round(dw - 0.1)),int(round(dw - 0.1))),(0,0)))
+    image = image.unsqueeze(0)
+    image = image.permute(0, 3, 1, 2)
+    image = image / 255.0
     return image
 
   def scale_boxes(self, img1_shape, predictions, img0_shape):
