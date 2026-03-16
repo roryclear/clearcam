@@ -375,7 +375,7 @@ class YOLOv9():
   def __call__(self, frame):
     pre = self.preprocess(frame)
     x = pre.unsqueeze(0)
-    x = x.permute(0, 3, 1, 2)
+    x = x[..., ::-1].permute(0, 3, 1, 2) #BGR to RGB!
     x = x / 255.0
     y = []  # outputs
     for i in range(len(self.model)):
