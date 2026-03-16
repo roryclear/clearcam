@@ -1140,7 +1140,7 @@ def get_lan_ip():
 
 def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, "frozen", False) else ([sys.executable, sys.argv[0]], sys.argv[1:])
 
-def start_cam(rtsp, cam_name, model_variant='t', yolo_res=640):
+def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
     if not rtsp or not cam_name: return
     
     def upsert_arg(args, key, value):
@@ -1355,7 +1355,7 @@ if __name__ == "__main__":
     model_variant = int(input("Select a YOLOv9 model from: \n1: tiny\n2: small\n3: medium\n4: large\n5: xl\nor an RFDETER Model from \n6: nano\n7: small\n8: medium\n9: large\nor press enter to skip (defaults to tiny):") or "1")
     if model_variant < 6:
       yolo_ress = {"1":320, "2":640, "3":960,"4":1280,"5":1536}
-      yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 640):") or "2"]
+      yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 960):") or "3"]
     use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
 
