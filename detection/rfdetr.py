@@ -268,18 +268,18 @@ def gen_sineembed_for_position(pos_tensor, dim=128):
 
 class TransformerDecoder(): # todo remove unused
     def __call__(self, tgt, memory, memory_key_padding_mask=None,
-      refpoints_unsigmoid=None, level_start_index=None, spatial_shapes=None, valid_ratios=None):
+      refpoints_unsigmoid=None, level_start_index=None, spatial_shapes=None):
         intermediate = []
-        def get_reference(refpoints_unsigmoid, valid_ratios):
+        def get_reference(refpoints_unsigmoid):
           obj_center = refpoints_unsigmoid[..., :4]
-          refpoints_input = obj_center[:, :, None] * Tensor.cat(valid_ratios, valid_ratios, dim=-1)[:, None]
+          refpoints_input = obj_center[:, :, None]
           query_sine_embed = gen_sineembed_for_position(
               refpoints_input[:, :, 0, :], 256 / 2) # bs, nq, 256*2
           query_pos = self.ref_point_head(query_sine_embed)
           return refpoints_input, query_pos
 
         for _, layer in enumerate(self.layers):
-          refpoints_input, query_pos = get_reference(refpoints_unsigmoid, valid_ratios) #todo
+          refpoints_input, query_pos = get_reference(refpoints_unsigmoid) #todo
 
           tgt = layer(tgt, memory,
             memory_key_padding_mask=memory_key_padding_mask,
@@ -386,8 +386,7 @@ class Transformer():
         hs, references = self.decoder(tgt, src, memory_key_padding_mask=mask,
                         refpoints_unsigmoid=refpoint_embed,
                         level_start_index=level_start_index,
-                        spatial_shapes=h,
-                        valid_ratios=Tensor([[[1., 1.]]]))
+                        spatial_shapes=h)
 
         return hs, references
 
