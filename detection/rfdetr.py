@@ -468,6 +468,8 @@ class MLP():
     
 class RFDETR():
   def __init__(self, name, res=None):
+    self.means = Tensor.empty(1,1,3)
+    self.stds = Tensor.empty(1,1,3)
     self.num_queries = 300
     config = {"nano":{"n_layers":2, "size": 577, "res": 384}, "small":{"n_layers":3, "size":1025, "res":512},
                 "medium":{"n_layers":4, "size":1297, "res":576}, "large":{"n_layers":4, "size":1937, "res":704}}
@@ -642,10 +644,8 @@ class RFDETR():
     img = img.cast(dtypes.float32)
     img = img[:, :, ::-1] # BGR to RGB
     img /= 255.0
-    means = Tensor([[[0.485, 0.456, 0.406]]])
-    stds = Tensor([[[0.229, 0.224, 0.225]]])
     img = resize(img, (self.res, self.res))
-    img = (img - means) / stds
+    img = (img - self.means) / self.stds
     img = img.permute(2, 0, 1).unsqueeze(0)
     return img
 
