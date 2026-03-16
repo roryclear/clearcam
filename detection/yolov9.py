@@ -373,7 +373,6 @@ class YOLOv9():
 
   @TinyJit
   def __call__(self, frame):
-    print(frame.shape)
     pre = self.preprocess(frame)
     y = []  # outputs
     for i in range(len(self.model)):
