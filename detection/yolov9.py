@@ -297,7 +297,7 @@ class Silence():
 class YOLOv9():
   def __init__(self, size="t", res=1280):
     self.res = res
-    if size is not None:
+    if size != "e":
       a, b, c, d, e, f, g, h, i, j, k, l, m, n, p, q, r, s, t, u, v, w, size = SIZES[size]
       self.model = Sequential(size=23)
       self.model[0] = Conv(in_channels=3, out_channels=a, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
