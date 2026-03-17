@@ -97,7 +97,7 @@ class CachedCLIPSearch:
         folder_paths = {}
         
         # if userID
-        alerts = database.run_get("alerts", cam_name)
+        if userID: alerts = database.run_get("alerts", cam_name)
 
 
         if os.path.exists(cache_file):
@@ -150,18 +150,19 @@ class CachedCLIPSearch:
 
             for path, embedding in zip(batch_paths, embeddings):
                 #if userID is not None:
-                for k, v in alerts.items():
-                    if time.time() - v.last_det < 60 or not v.is_active(): continue
-                    if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
-                        similarity = (v.desc_emb @ embedding.T).item()
-                        print("sim =",similarity,v.desc,path, type(path))
-                        if similarity > v.threshold:
-                            send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
-                            alerts[k].last_det = time.time()
-                            database.run_put("alerts", cam_name, alerts[k], k)
-                            seen_time = float(path.split("/")[-1].split("_")[0])
-                            export_and_upload(cam_name=cam_name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
-                            break
+                if userID:
+                    for k, v in alerts.items():
+                        if time.time() - v.last_det < 60 or not v.is_active(): continue
+                        if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
+                            similarity = (v.desc_emb @ embedding.T).item()
+                            print("sim =",similarity,v.desc,path, type(path))
+                            if similarity > v.threshold:
+                                send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
+                                alerts[k].last_det = time.time()
+                                database.run_put("alerts", cam_name, alerts[k], k)
+                                seen_time = float(path.split("/")[-1].split("_")[0])
+                                export_and_upload(cam_name=cam_name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
+                                break
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
