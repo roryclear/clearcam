@@ -95,11 +95,6 @@ class CachedCLIPSearch:
         cache_file = os.path.join(folder_path, "embeddings.pkl")
         folder_embeddings = {}
         folder_paths = {}
-        
-        # if userID
-        if userID: alerts = database.run_get("alerts", cam_name)
-
-
         if os.path.exists(cache_file):
             with open(cache_file, "rb") as f:
                 cache = pickle.load(f)
@@ -124,8 +119,10 @@ class CachedCLIPSearch:
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             with open(cache_file, "wb") as f:
                 pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
-            return
+            return [], []
         new_image_list = list(new_images)
+        emb_ret = []
+        path_ret = []
         for i in range(0, len(new_image_list), batch_size):
             batch_paths = new_image_list[i:i + batch_size]
             batch_np = []
@@ -147,30 +144,16 @@ class CachedCLIPSearch:
                 for j in range(len(batch_np)):
                     emb = precompute_embedding_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
                     embeddings.append(emb)
-
+            emb_ret.extend(embeddings)
+            path_ret.extend(batch_paths)
             for path, embedding in zip(batch_paths, embeddings):
-                #if userID is not None:
-                if userID:
-                    for k, v in alerts.items():
-                        if time.time() - v.last_det < 60 or not v.is_active(): continue
-                        if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
-                            similarity = (v.desc_emb @ embedding.T).item()
-                            print("sim =",similarity,v.desc,path, type(path))
-                            if similarity > v.threshold:
-                                send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
-                                alerts[k].last_det = time.time()
-                                database.run_put("alerts", cam_name, alerts[k], k)
-                                seen_time = float(path.split("/")[-1].split("_")[0])
-                                export_and_upload(cam_name=cam_name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
-                                break
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        with open(cache_file, "wb") as f:
-            pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
-
+        with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
+        return emb_ret, path_ret
     def precompute_embedding_bs1_np(self, img):
       if type(img) == bytes: # todo, another level up?
         img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)

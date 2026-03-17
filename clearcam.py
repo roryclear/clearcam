@@ -1271,9 +1271,24 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             name = folder.split("/")[2]
             vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
-            if vod: database.run_delete("analysis_prog", folder.split("/")[2])
+            embeddings, batch_paths = self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
             alerts = database.run_get("alerts", name)
+            if userID:
+              for path, embedding in zip(batch_paths, embeddings):
+                for k, v in alerts.items():
+                    if time.time() - v.last_det < 60 or not v.is_active(): continue
+                    if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
+                        similarity = (v.desc_emb @ embedding.T).item()
+                        print("sim =",similarity,v.desc,path)
+                        if similarity > v.threshold:
+                            send_notif(userID, f"Event Detected ({name}: {v.desc})")
+                            alerts[k].last_det = time.time()
+                            database.run_put("alerts", name, alerts[k], k)
+                            seen_time = float(path.split("/")[-1].split("_")[0])
+                            export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
+                            break
+
+            if vod: database.run_delete("analysis_prog", folder.split("/")[2])
             # todo, move to own loop
             for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
