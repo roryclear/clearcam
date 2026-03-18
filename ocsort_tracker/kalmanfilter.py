@@ -98,7 +98,7 @@ class KalmanFilterNew(object):
         I_KH = self._I - dot(self.K, H)
         self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
 
-    def update(self, z, R=None, H=None):
+    def update(self, z):
         self.history_obs.append(z)
         if z is None:
             if self.observed:

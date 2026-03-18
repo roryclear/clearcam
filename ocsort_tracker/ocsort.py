@@ -100,17 +100,27 @@ class KalmanBoxTracker(object):
         if bbox is not None:
             self.occurrences[class_id] += score
             self.class_id = max(self.occurrences, key=self.occurrences.get)
-            if self.last_observation.sum() >= 0:  # no previous observation
-                previous_box = self.last_observation
-                print(self.delta_t)
-                for i in range(self.delta_t): # fixed
-                    dt = self.delta_t - i
-                    if self.age - dt in self.observations:
-                        previous_box = self.observations[self.age-dt]
-                        break
-                dist, self.velocity = speed_direction(previous_box, bbox)
-                self.avg_vel = [s + d / float(self.age) for s, d in zip(self.avg_vel, dist)]
-                self.speed = abs(self.avg_vel[0]) + abs(self.avg_vel[1])
+
+
+            valid = float(self.last_observation.sum() >= 0)
+
+            candidate_ages = self.age - np.arange(self.delta_t, 0, -1)
+
+            obs_ages = np.fromiter(self.observations.keys(), dtype=int) if self.observations else np.array([], dtype=int)
+            obs_boxes = np.stack(list(self.observations.values())) if self.observations else np.empty((0, len(bbox)))
+            matches = obs_ages[:, None] == candidate_ages[None, :] if obs_ages.size else np.zeros((0, self.delta_t), dtype=bool)
+            match_per_col = matches.any(axis=0)
+            col_idx = np.argmax(match_per_col)
+            row_idx = np.argmax(matches[:, col_idx]) if matches.size else 0
+            has_match = float(match_per_col.any())
+            all_boxes = np.vstack([self.last_observation[None, :], obs_boxes])
+            safe_idx = int(has_match) * (row_idx + 1)
+            previous_box = all_boxes[safe_idx]
+            dist, velocity = speed_direction(previous_box, bbox)
+
+            self.velocity = valid * velocity + (1.0 - valid) * self.velocity
+            self.avg_vel = np.array(self.avg_vel) + valid * (dist / float(self.age))
+            self.speed = valid * np.abs(self.avg_vel).sum() + (1.0 - valid) * self.speed
             
             """
               Insert new observations. This is a ugly way to maintain both self.observations
