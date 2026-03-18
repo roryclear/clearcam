@@ -192,7 +192,7 @@ fun LoginScreen(onLoginSuccess: (String) -> Unit) {
             text = "Help",
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://roryclear.github.io/clearcam/#how-to-sign-up-on-android"))
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://clearcam.org"))
                 context.startActivity(intent)
             }
         )
@@ -225,7 +225,7 @@ object PrefsHelper {
 suspend fun validateUser(userId: String): Boolean {
     return withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://rors.ai/validate_user?session_token=$userId")
+            val url = URL("https://clearcam.org/validate_user?session_token=$userId")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             val responseCode = connection.responseCode

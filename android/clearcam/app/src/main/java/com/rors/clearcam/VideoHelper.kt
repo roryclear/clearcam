@@ -188,7 +188,7 @@ suspend fun fetchLiveStreamUrl(userId: String, cameraName: String): String? {
     return withContext(Dispatchers.IO) {
         try {
             val encodedName = URLEncoder.encode(cameraName, "UTF-8")
-            val url = URL("https://rors.ai/get_stream_download_link?session_token=$userId&name=$encodedName")
+            val url = URL("https://clearcam.org/get_stream_download_link?session_token=$userId&name=$encodedName")
 
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
@@ -217,7 +217,7 @@ suspend fun deleteStreamLink(userId: String, cameraName: String) {
     withContext(Dispatchers.IO) {
         try {
             val encodedName = URLEncoder.encode(cameraName, "UTF-8")
-            val url = URL("https://rors.ai/delete_stream_download_link?session_token=$userId&name=$encodedName")
+            val url = URL("https://clearcam.org/delete_stream_download_link?session_token=$userId&name=$encodedName")
 
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
@@ -235,7 +235,7 @@ suspend fun deleteStreamLink(userId: String, cameraName: String) {
 
 suspend fun fetchCameraJson(userId: String): JSONObject? = withContext(Dispatchers.IO) {
     try {
-        val url = URL("https://rors.ai/get_live_devicesv2?session_token=$userId")
+        val url = URL("https://clearcam.org/get_live_devicesv2?session_token=$userId")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
 
@@ -255,7 +255,7 @@ suspend fun fetchEventVideos(
     newestCreationTime: Long = 0
 ): List<EventVideo> = withContext(Dispatchers.IO) {
     try {
-        val url = URL("https://rors.ai/events?session_token=$userId&newest_creation_time=$newestCreationTime")
+        val url = URL("https://clearcam.org/events?session_token=$userId&newest_creation_time=$newestCreationTime")
         val connection = url.openConnection() as HttpURLConnection
         connection.apply {
             requestMethod = "GET"

@@ -286,7 +286,7 @@ private fun requestNotificationPermissionAndRegister(
             val token = task.result
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val url = URL("https://rors.ai/add_device")
+                    val url = URL("https://clearcam.org/add_device")
                     val connection = url.openConnection() as HttpURLConnection
                     connection.apply {
                         requestMethod = "POST"

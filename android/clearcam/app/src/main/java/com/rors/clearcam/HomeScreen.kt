@@ -169,7 +169,7 @@ suspend fun deleteVideoFromBackend(userId: String, filename: String) {
         try {
             val backendFilename = filename
             val encodedName = URLEncoder.encode(backendFilename, "UTF-8")
-            val url = URL("https://rors.ai/video?session_token=$userId&name=$encodedName")
+            val url = URL("https://clearcam.org/video?session_token=$userId&name=$encodedName")
 
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
@@ -238,7 +238,7 @@ fun HomeScreen(userId: String) {
         coroutineScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    val url = URL("https://rors.ai/ping")
+                    val url = URL("https://clearcam.org/ping")
                     val connection = url.openConnection() as HttpURLConnection
                     connection.apply {
                         requestMethod = "GET"
@@ -1128,7 +1128,7 @@ fun CameraCard(
         try {
             val success = withContext(Dispatchers.IO) {
                 try {
-                    val url = URL("https://rors.ai/toggle_alerts")
+                    val url = URL("https://clearcam.org/toggle_alerts")
                     val connection = url.openConnection() as HttpURLConnection
                     connection.apply {
                         requestMethod = "POST"
