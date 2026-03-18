@@ -119,10 +119,4 @@ class KalmanFilterNew(object):
         self.x = self.x + dot(self.K, self.y)
         I_KH = self._I - dot(self.K, H)
         self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
-
-    def update3(self):
-        if self.observed: self.attr_saved = deepcopy(self.__dict__)
-        self.observed = False 
-        self.z = np.array([[None]*self.dim_z]).T
-        self.y = zeros((self.dim_z, 1))
         
