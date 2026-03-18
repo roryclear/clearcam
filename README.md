@@ -2,7 +2,7 @@
   <img src="images/logo.png" alt="logo" width="100" />
 </p>
 
-# clearcam: Turn your RTSP enabled camera or old iPhone into a state of the art AI Security Camera
+# clearcam: Add object detection, tracking, mobile notifications, and search to any security camera.
 
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
 <tr valign="top">
