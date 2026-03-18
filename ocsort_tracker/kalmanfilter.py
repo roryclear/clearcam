@@ -86,13 +86,6 @@ class KalmanFilterNew(object):
 
     def update(self, z):
         self.history_obs.append(z)
-        if z is None:
-            if self.observed:
-                self.attr_saved = deepcopy(self.__dict__)
-            self.observed = False 
-            self.z = np.array([[None]*self.dim_z]).T
-            self.y = zeros((self.dim_z, 1))
-            return
         if not self.observed and self.attr_saved: self.unfreeze()
         self.observed = True
         R = self.R
