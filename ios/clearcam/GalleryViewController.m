@@ -92,10 +92,6 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(appDidBecomeActive)
-                                                 name:UIApplicationDidBecomeActiveNotification
-                                               object:nil];
     self.fileServer = [FileServer sharedInstance];
     [self.fileServer start];
     [self.navigationController setNavigationBarHidden:YES animated:NO];
@@ -242,11 +238,6 @@
                                                       userInfo:nil
                                                        repeats:YES];
     [self updateInternetStatus];
-    [self getEvents];
-}
-
-- (void)appDidBecomeActive {
-    self.isLoadingVideos = NO;
     [self getEvents];
 }
 
@@ -1077,4 +1068,5 @@
 }
 
 @end
+
 
