@@ -7,6 +7,7 @@ import numpy as np
 from .association import *
 from ocsort_tracker.STrack import STrack
 from collections import defaultdict
+from copy import deepcopy
 
 def k_previous_obs(observations, cur_age, k):
     if len(observations) == 0:
@@ -136,7 +137,9 @@ class KalmanBoxTracker(object):
             self.hit_streak += 1
             self.kf.update(convert_bbox_to_z(bbox))
         else:
-            self.kf.update3(bbox)
+            self.kf.history_obs.append(None)
+            if self.kf.observed: self.kf.attr_saved = deepcopy(self.__dict__)
+            self.kf.update3()
 
     def predict(self):
         """
