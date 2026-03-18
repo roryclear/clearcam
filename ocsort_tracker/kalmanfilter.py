@@ -60,42 +60,43 @@ class KalmanFilterNew(object):
         self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
 
     def unfreeze(self):
-      occur = [int(d is None) for d in self.history_obs]
-      indices = np.where(np.array(occur)==0)[0]
-      index1 = indices[-2]
-      index2 = indices[-1]
-      box1 = self.history_obs[index1]
-      x1, y1, s1, r1 = box1 
-      w1 = np.sqrt(s1 * r1)
-      h1 = np.sqrt(s1 / r1)
-      box2 = self.history_obs[index2]
-      x2, y2, s2, r2 = box2 
-      w2 = np.sqrt(s2 * r2)
-      h2 = np.sqrt(s2 / r2)
-      time_gap = index2 - index1
-      dx = (x2-x1)/time_gap
-      dy = (y2-y1)/time_gap 
-      dw = (w2-w1)/time_gap 
-      dh = (h2-h1)/time_gap
-      self.__dict__ = self.attr_saved
-      for i in range(index2 - index1):
-        """
-            The default virtual trajectory generation is by linear
-            motion (constant speed hypothesis), you could modify this 
-            part to implement your own. 
-        """
-        x = x1 + (i+1) * dx 
-        y = y1 + (i+1) * dy 
-        w = w1 + (i+1) * dw 
-        h = h1 + (i+1) * dh
-        s = w * h 
-        r = w / float(h)
-        new_box = np.array([x, y, s, r]).reshape((4, 1))
-        self.update(new_box)
-        if not i == (index2-index1-1): # self.predict
-          self.x = dot(self.F, self.x)
-          self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
+        occur = np.array([d is None for d in self.history_obs], dtype=int)
+        indices = np.where(occur == 0)[0]
+        index1, index2 = indices[-2], indices[-1]
+        x1, y1, s1, r1 = self.history_obs[index1]
+        x2, y2, s2, r2 = self.history_obs[index2]
+        w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
+        w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
+        time_gap = index2 - index1
+        t = np.arange(1, time_gap + 1)
+        x = x1 + t * (x2 - x1) / time_gap
+        y = y1 + t * (y2 - y1) / time_gap
+        w = w1 + t * (w2 - w1) / time_gap
+        h = h1 + t * (h2 - h1) / time_gap
+        s = w * h
+        r = w / h
+        boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
+        self.__dict__ = self.attr_saved
+        for i in range(time_gap):
+            self.update2(boxes[i])
+            if i < time_gap - 1:
+                self.x = self.F @ self.x
+                self.P = self._alpha_sq * (self.F @ self.P @ self.F.T) + self.Q
 
+
+    def update2(self, z):
+        self.history_obs.append(z)
+        self.observed = True
+        R = self.R
+        H = self.H
+        self.y = z - dot(H, self.x)
+        PHT = dot(self.P, H.T)
+        self.S = dot(H, PHT) + R
+        self.SI = self.inv(self.S)
+        self.K = dot(PHT, self.SI)
+        self.x = self.x + dot(self.K, self.y)
+        I_KH = self._I - dot(self.K, H)
+        self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
 
     def update(self, z, R=None, H=None):
         self.history_obs.append(z)
