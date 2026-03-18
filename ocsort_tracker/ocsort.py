@@ -98,24 +98,20 @@ class KalmanBoxTracker(object):
         Updates the state vector with observed bbox.
         """
         if bbox is not None:
-            if score is not None:
-              self.occurrences[class_id] += score
-              self.class_id = max(self.occurrences, key=self.occurrences.get)
+            self.occurrences[class_id] += score
+            self.class_id = max(self.occurrences, key=self.occurrences.get)
             if self.last_observation.sum() >= 0:  # no previous observation
-                previous_box = None
-                for i in range(self.delta_t):
+                previous_box = self.last_observation
+                print(self.delta_t)
+                for i in range(self.delta_t): # fixed
                     dt = self.delta_t - i
                     if self.age - dt in self.observations:
                         previous_box = self.observations[self.age-dt]
                         break
-                if previous_box is None:
-                    previous_box = self.last_observation
-                """
-                  Estimate the track speed direction with observations \Delta t steps away
-                """
                 dist, self.velocity = speed_direction(previous_box, bbox)
                 self.avg_vel = [s + d / float(self.age) for s, d in zip(self.avg_vel, dist)]
                 self.speed = abs(self.avg_vel[0]) + abs(self.avg_vel[1])
+            
             """
               Insert new observations. This is a ugly way to maintain both self.observations
               and self.history_observations. Bear it for the moment.
