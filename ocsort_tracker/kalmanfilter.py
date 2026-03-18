@@ -84,20 +84,6 @@ class KalmanFilterNew(object):
                 self.P = self._alpha_sq * (self.F @ self.P @ self.F.T) + self.Q
 
 
-    def update2(self, z):
-        self.history_obs.append(z)
-        self.observed = True
-        R = self.R
-        H = self.H
-        self.y = z - dot(H, self.x)
-        PHT = dot(self.P, H.T)
-        self.S = dot(H, PHT) + R
-        self.SI = self.inv(self.S)
-        self.K = dot(PHT, self.SI)
-        self.x = self.x + dot(self.K, self.y)
-        I_KH = self._I - dot(self.K, H)
-        self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
-
     def update(self, z):
         self.history_obs.append(z)
         if z is None:
@@ -119,4 +105,25 @@ class KalmanFilterNew(object):
         self.x = self.x + dot(self.K, self.y)
         I_KH = self._I - dot(self.K, H)
         self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
+
+    def update2(self, z):
+        self.history_obs.append(z)
+        self.observed = True
+        R = self.R
+        H = self.H
+        self.y = z - dot(H, self.x)
+        PHT = dot(self.P, H.T)
+        self.S = dot(H, PHT) + R
+        self.SI = self.inv(self.S)
+        self.K = dot(PHT, self.SI)
+        self.x = self.x + dot(self.K, self.y)
+        I_KH = self._I - dot(self.K, H)
+        self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
+
+    def update3(self, z):
+        self.history_obs.append(None)
+        if self.observed: self.attr_saved = deepcopy(self.__dict__)
+        self.observed = False 
+        self.z = np.array([[None]*self.dim_z]).T
+        self.y = zeros((self.dim_z, 1))
         

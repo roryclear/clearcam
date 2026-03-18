@@ -136,7 +136,7 @@ class KalmanBoxTracker(object):
             self.hit_streak += 1
             self.kf.update(convert_bbox_to_z(bbox))
         else:
-            self.kf.update(bbox)
+            self.kf.update3(bbox)
 
     def predict(self):
         """
