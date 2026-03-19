@@ -152,7 +152,7 @@ class KalmanBoxTracker(object):
                     x2, y2, s2, r2 = self.kf.history_obs[index2]
                     w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
                     w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
-                    t = np.arange(1, time_gap + 1)
+                    t = np.arange(1, MAX_STEPS + 1)
                     x = x1 + t * (x2 - x1) / time_gap
                     y = y1 + t * (y2 - y1) / time_gap
                     w = w1 + t * (w2 - w1) / time_gap
@@ -161,12 +161,10 @@ class KalmanBoxTracker(object):
                     r = w / h
                     boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
                     self.kf.__dict__ = self.kf.attr_saved
-                    padded = np.zeros((MAX_STEPS, 4, 1))
-                    padded[:time_gap] = boxes
                     xs = np.zeros((MAX_STEPS, *self.kf.x.shape))
                     Ps = np.zeros((MAX_STEPS, *self.kf.P.shape))
                     for i in range(MAX_STEPS):
-                        z = padded[i]
+                        z = boxes[i]
                         self.kf.history_obs.append(z)
                         self.kf.update(z)
                         xs[i] = self.kf.x
