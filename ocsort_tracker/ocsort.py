@@ -137,7 +137,10 @@ class KalmanBoxTracker(object):
             self.history = []
             self.hits += 1
             self.hit_streak += 1
-            self.kf.update(convert_bbox_to_z(bbox))
+            converted = convert_bbox_to_z(bbox)
+            self.kf.history_obs.append(converted)
+            if not self.kf.observed and self.kf.attr_saved: self.kf.unfreeze()
+            self.kf.update(converted)
         else:
             self.kf.history_obs.append(None)
             if self.kf.observed: self.kf.attr_saved = deepcopy(self.kf.__dict__)

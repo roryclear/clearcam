@@ -78,15 +78,14 @@ class KalmanFilterNew(object):
         boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
         self.__dict__ = self.attr_saved
         for i in range(time_gap):
-            self.update2(boxes[i])
+            self.history_obs.append(boxes[i])
+            self.update(boxes[i])
             if i < time_gap - 1:
                 self.x = self.F @ self.x
                 self.P = self._alpha_sq * (self.F @ self.P @ self.F.T) + self.Q
 
 
     def update(self, z):
-        self.history_obs.append(z)
-        if not self.observed and self.attr_saved: self.unfreeze()
         self.observed = True
         R = self.R
         H = self.H
