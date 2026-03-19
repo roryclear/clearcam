@@ -9,13 +9,6 @@ from numpy import dot, zeros, eye, isscalar
 
 class KalmanFilterNew(object):
     def __init__(self, dim_x, dim_z, dim_u=0):
-        if dim_x < 1:
-            raise ValueError('dim_x must be 1 or greater')
-        if dim_z < 1:
-            raise ValueError('dim_z must be 1 or greater')
-        if dim_u < 0:
-            raise ValueError('dim_u must be 0 or greater')
-
         self.dim_x = dim_x
         self.dim_z = dim_z
         self.dim_u = dim_u
@@ -60,6 +53,7 @@ class KalmanFilterNew(object):
         self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
 
     def unfreeze(self):
+        MAX_STEPS = 300
         occur = np.array([d is None for d in self.history_obs], dtype=int)
         indices = np.where(occur == 0)[0]
         index1, index2 = indices[-2], indices[-1]
@@ -77,13 +71,26 @@ class KalmanFilterNew(object):
         r = w / h
         boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
         self.__dict__ = self.attr_saved
-        for i in range(time_gap):
-            self.history_obs.append(boxes[i])
-            self.update(boxes[i])
-            if i < time_gap - 1:
-                self.x = self.F @ self.x
-                self.P = self._alpha_sq * (self.F @ self.P @ self.F.T) + self.Q
+        padded = np.zeros((MAX_STEPS, 4, 1))
+        padded[:time_gap] = boxes
+        valid = np.zeros(MAX_STEPS, dtype=bool)
+        valid[:time_gap] = True
+        xs = np.zeros((MAX_STEPS, *self.x.shape))
+        Ps = np.zeros((MAX_STEPS, *self.P.shape))
 
+        for i in range(MAX_STEPS):
+            z = padded[i]
+            self.history_obs.append(z)
+            self.update(z)
+            xs[i] = self.x
+            Ps[i] = self.P
+            self.x = self.F @ self.x
+            self.P = self._alpha_sq * (self.F @ self.P @ self.F.T) + self.Q
+
+        last_valid = max(time_gap - 1, 0)
+        self.x = xs[last_valid]
+        self.P = Ps[last_valid]
+        self.history_obs = self.history_obs[:- (MAX_STEPS - time_gap)]
 
     def update(self, z):
         self.observed = True
