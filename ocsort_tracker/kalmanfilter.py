@@ -62,6 +62,8 @@ class KalmanFilterNew(object):
         w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
         w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
         time_gap = index2 - index1
+        # return if too old for now
+        if time_gap > MAX_STEPS: return
         t = np.arange(1, time_gap + 1)
         x = x1 + t * (x2 - x1) / time_gap
         y = y1 + t * (y2 - y1) / time_gap
