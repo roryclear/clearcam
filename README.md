@@ -35,7 +35,17 @@
 <img src="images/ios_events.PNG" alt="iOS Events" width="400" />
 </td>
 </tr>
+
+<tr>
+  <td align="center">
+    <img src="images/fiesta_notif.PNG" alt="Fiesta Notification" width="400" />
+  </td>
+  <td align="center">
+    <img src="images/fiesta_clip.PNG" alt="Fiesta Clip" width="400" />
+  </td>
+</tr>
 </table>
+
 
 ### Don't own an RTSP camera yet?
 Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m3u8 (https://kg.camera)
