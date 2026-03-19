@@ -139,7 +139,7 @@ class KalmanBoxTracker(object):
             self.hit_streak += 1
             converted = convert_bbox_to_z(bbox)
             self.kf.history_obs.append(converted)
-            if not self.kf.observed and self.kf.attr_saved: self.kf.unfreeze()
+            if not self.kf.observed and self.kf.attr_saved: self.unfreeze(self.kf)
             self.kf.update(converted)
         else:
             self.kf.history_obs.append(None)
@@ -147,6 +147,47 @@ class KalmanBoxTracker(object):
             self.kf.observed = False
             self.kf.z = np.array([[None]*self.kf.dim_z]).T
             self.kf.y = zeros((self.kf.dim_z, 1))
+
+
+    def unfreeze(self, kf):
+        MAX_STEPS = 300
+        occur = np.array([d is None for d in kf.history_obs], dtype=int)
+        indices = np.where(occur == 0)[0]
+        index1, index2 = indices[-2], indices[-1]
+        x1, y1, s1, r1 = kf.history_obs[index1]
+        x2, y2, s2, r2 = kf.history_obs[index2]
+        w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
+        w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
+        time_gap = index2 - index1
+        # return if too old for now
+        if time_gap > MAX_STEPS: return
+        t = np.arange(1, time_gap + 1)
+        x = x1 + t * (x2 - x1) / time_gap
+        y = y1 + t * (y2 - y1) / time_gap
+        w = w1 + t * (w2 - w1) / time_gap
+        h = h1 + t * (h2 - h1) / time_gap
+        s = w * h
+        r = w / h
+        boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
+        kf.__dict__ = kf.attr_saved
+        padded = np.zeros((MAX_STEPS, 4, 1))
+        padded[:time_gap] = boxes
+        xs = np.zeros((MAX_STEPS, *kf.x.shape))
+        Ps = np.zeros((MAX_STEPS, *kf.P.shape))
+
+        for i in range(MAX_STEPS):
+            z = padded[i]
+            kf.history_obs.append(z)
+            kf.update(z)
+            xs[i] = kf.x
+            Ps[i] = kf.P
+            kf.x = kf.F @ kf.x
+            kf.P = kf._alpha_sq * (kf.F @ kf.P @ kf.F.T) + kf.Q
+
+        last_valid = max(time_gap - 1, 0)
+        kf.x = xs[last_valid]
+        kf.P = Ps[last_valid]
+        kf.history_obs = kf.history_obs[:- (MAX_STEPS - time_gap)]
 
     def predict(self):
         """

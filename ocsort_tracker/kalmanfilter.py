@@ -75,8 +75,6 @@ class KalmanFilterNew(object):
         self.__dict__ = self.attr_saved
         padded = np.zeros((MAX_STEPS, 4, 1))
         padded[:time_gap] = boxes
-        valid = np.zeros(MAX_STEPS, dtype=bool)
-        valid[:time_gap] = True
         xs = np.zeros((MAX_STEPS, *self.x.shape))
         Ps = np.zeros((MAX_STEPS, *self.P.shape))
 
