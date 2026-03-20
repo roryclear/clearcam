@@ -279,6 +279,7 @@ class VideoCapture:
       self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p, ts=0):
+    p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
@@ -314,7 +315,7 @@ class VideoCapture:
     last_live_seg = time.time()
     last_preview_time = None
     last_counter_update = time.time()
-    pred_occs = {}
+    self.pred_occs = {}
     count = 0
     self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
     Path(self.det_path).mkdir(parents=True, exist_ok=True)
@@ -351,15 +352,7 @@ class VideoCapture:
           else:
             fail_count = 0
           frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-        filtered_preds = [p for p in self.last_preds if (classes is None or str(int(p[5])) in classes)]
-        for p in filtered_preds:
-          if p[6] not in pred_occs: pred_occs[p[6]] = [time.time()]
-          if (len(pred_occs[p[6]]) < 20 and (time.time() - pred_occs[p[6]][-1]) > 1) or (time.time() - pred_occs[p[6]][-1]) > 600:
-            pred_occs[p[6]].append(time.time())
-          else:
-            continue
-          ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
-          self.save_object(p, ts)
+        filtered_preds = self.last_preds
 
         if count > 10:
           if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
@@ -493,11 +486,20 @@ class VideoCapture:
     preds = model(frame).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
     online_targets = tracker.update(preds, thresh)
+    online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
     preds = []
     for x in online_targets:
-      if x.tracklet_len < 1 or x.speed < 2.5: continue # dont alert for 1 frame, too many false positives.  min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
+      if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives.  
+      # add to objects, regarless of speed
+      if x.track_id not in self.pred_occs: self.pred_occs[x.track_id] = [time.time()]
+      if (len(self.pred_occs[x.track_id]) < 20 and (time.time() - self.pred_occs[x.track_id][-1]) > 1) or (time.time() - self.pred_occs[x.track_id][-1]) > 10:
+        self. pred_occs[x.track_id].append(time.time())
+        ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+        self.save_object(x, ts)
+
+      if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
       outside = False
       if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
         scaled_coors = np.array(self.settings["coords"])
@@ -521,7 +523,7 @@ class VideoCapture:
         if new_in_zone: self.object_set_zone.add(int(x.track_id))
         for _, alert in self.alert_counters.items():
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
-            
+  
     preds = np.array(preds)
     return preds, frame
 
