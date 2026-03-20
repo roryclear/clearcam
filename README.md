@@ -44,6 +44,14 @@
     <img src="images/fiesta_clip.PNG" alt="Fiesta Clip" width="400" />
   </td>
 </tr>
+<tr>
+  <td align="center">
+    <img src="images/fire_notif.jpg" alt="Fiesta Notification" width="400" />
+  </td>
+  <td align="center">
+    <img src="images/fire_clip.jpg" alt="Fiesta Clip" width="400" />
+  </td>
+</tr>
 </table>
 
 
