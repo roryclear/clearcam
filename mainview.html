@@ -1600,6 +1600,9 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
 
+    let autoRefreshInterval = null;
+    let dontRefresh = false;
+
     const descInput = document.getElementById("alertDesc");
     const thresholdInput = document.getElementById("alertThreshold");
     const timeWindowSection = document.getElementById("timeWindowSection");
@@ -1669,6 +1672,14 @@
       fetchCounts();
     }
 
+    function startAutoRefresh() {
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        autoRefreshInterval = setInterval(() => {
+            if (!dontRefresh) {
+                loadEventImages(false);
+            }
+        }, 5000);
+    }
 
     function initAlertCheckboxes() {
         const container = document.getElementById('checkboxContainer');
@@ -2000,6 +2011,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
       initAlertCheckboxes();
+      startAutoRefresh();
     });
 
     function resetCounts() {
@@ -2956,6 +2968,7 @@
 
     let currentImageSearchText = '';
     function searchEventImages() {
+      dontRefresh = true;
       const searchInput = document.getElementById('imageSearchInput');
       const searchButton = document.getElementById('searchButton');
       const searchText = document.getElementById('searchText');
@@ -2980,6 +2993,7 @@
     }
 
     function clearSearch() {
+      dontRefresh = false;
       const searchButton = document.getElementById('searchButton');
       const searchText = document.getElementById('searchText');
       const searchSpinner = document.getElementById('searchSpinner');
@@ -3190,6 +3204,7 @@
 
     async function loadMoreEventImages() {
       if (!hasMoreEvents) return;
+      dontRefresh = true;
       const btn = document.getElementById('loadMoreEventsBtn');
       const text = document.getElementById('loadMoreText');
       const spinner = document.getElementById('loadMoreSpinner');
@@ -3208,6 +3223,9 @@
         btn.disabled = false;
         text.textContent = 'More results';
         spinner.style.display = 'none';
+        if (!append && !dontRefresh) {
+            dontRefresh = false;
+        }
       }
     }
 
