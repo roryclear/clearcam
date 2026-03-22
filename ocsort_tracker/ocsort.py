@@ -101,7 +101,7 @@ class KalmanBoxTracker(object):
 
             candidate_ages = self.age - np.arange(self.delta_t, 0, -1)
 
-            obs_ages = np.arange(len(self.observations)) + 1
+            obs_ages = np.fromiter(self.observations.keys(), dtype=int) if self.observations else np.array([], dtype=int)
             obs_boxes = np.stack(list(self.observations.values())) if self.observations else np.empty((0, len(bbox)))
             matches = obs_ages[:, None] == candidate_ages[None, :] if obs_ages.size else np.zeros((0, self.delta_t), dtype=bool)
             match_per_col = matches.any(axis=0)
@@ -313,4 +313,3 @@ class OCSort(object):
         out = []
         for x in ret: out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5], speed=x[0][8]))
         return out
-
