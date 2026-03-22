@@ -87,6 +87,7 @@ class KalmanBoxTracker(object):
         self.speed = 0
         self.obs_ages = []
         self.last_ob = np.array([-1, -1, -1, -1, -1])
+        self.last_converted = None
 
     def update(self, bbox, score=None, class_id=None):
         """
@@ -134,8 +135,8 @@ class KalmanBoxTracker(object):
                 index1, index2 = indices[-2], indices[-1]
                 time_gap = index2 - index1
                 # return if too old for now
-                x1, y1, s1, r1 = self.kf.history_obs[index1]
-                x2, y2, s2, r2 = self.kf.history_obs[index2]
+                x1, y1, s1, r1 = self.last_converted
+                x2, y2, s2, r2 = converted
                 w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
                 w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
                 t = np.arange(1, MAX_STEPS + 1)
@@ -163,6 +164,7 @@ class KalmanBoxTracker(object):
                     self.kf.x = xs[last_valid]
                     self.kf.P = Ps[last_valid]
                     self.kf.history_obs = self.kf.history_obs[:- (MAX_STEPS - time_gap)]
+            self.last_converted = converted
             self.kf.update(converted)
         else:
             self.kf.history_obs.append(None)
