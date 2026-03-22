@@ -69,7 +69,6 @@ class KalmanBoxTracker(object):
         self.time_since_update = 0
         self.id = KalmanBoxTracker.count
         KalmanBoxTracker.count += 1
-        self.history = []
         self.hits = 0
         self.hit_streak = 0
         self.age = 0
@@ -124,7 +123,6 @@ class KalmanBoxTracker(object):
             self.observations.append(bbox)
 
             self.time_since_update = 0
-            self.history = []
             self.hits += 1
             self.hit_streak += 1
             converted = convert_bbox_to_z(bbox)
@@ -143,7 +141,6 @@ class KalmanBoxTracker(object):
                 s = w * h
                 r = w / h
 
-                
                 boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
                 xs = np.zeros((MAX_STEPS, *self.kf.x.shape))
                 Ps = np.zeros((MAX_STEPS, *self.kf.P.shape))
@@ -174,18 +171,11 @@ class KalmanBoxTracker(object):
             self.kf.y = zeros((self.kf.dim_z, 1))
 
     def predict(self):
-        """
-        Advances the state vector and returns the predicted bounding box estimate.
-        """
-        if((self.kf.x[6]+self.kf.x[2]) <= 0):
-            self.kf.x[6] *= 0.0
         self.kf.predict()
         self.age += 1
-        if(self.time_since_update > 0):
-            self.hit_streak = 0
+        if(self.time_since_update > 0): self.hit_streak = 0
         self.time_since_update += 1
-        self.history.append(convert_x_to_bbox(self.kf.x))
-        return self.history[-1]
+        return convert_x_to_bbox(self.kf.x)
 
     def get_state(self):
         """
