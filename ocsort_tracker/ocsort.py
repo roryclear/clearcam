@@ -83,7 +83,7 @@ class KalmanBoxTracker(object):
         self.observations = dict()
         self.history_observations = []
         self.delta_t = delta_t
-        self.velocity = np.array((0, 0))
+        self.velocity = np.array((-math.inf, -math.inf))
         self.avg_vel = np.array((0, 0))
         self.speed = 0
 
@@ -237,18 +237,20 @@ class OCSort(object):
 
         # get predicted locations from existing trackers.
 
-        vel_pad = [[-math.inf, -math.inf]] * MAX
-        vel_pad[:len(self.trackers)] = [v.velocity for v in self.trackers]
+        trackers_pad = [KalmanBoxTracker(bbox=[0,0,0,0])] * MAX
+        trackers_pad[:len(self.trackers)] = self.trackers
+
+        vel_pad = [v.velocity for v in trackers_pad]
         vel_pad = np.array(vel_pad)
 
         trks = np.zeros((len(self.trackers), 5))
         ret = []
         for t, trk in enumerate(trks):
-            pos = self.trackers[t].predict()[0]
+            pos = trackers_pad[t].predict()[0]
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
 
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
-        k_observations = np.array([(obs[max(obs.keys())] if len(obs) > 0 else [-1, -1, -1, -1, -1]) for obs in (trk.observations for trk in self.trackers)])
+        k_observations = np.array([(obs[max(obs.keys())] if len(obs) > 0 else [-1, -1, -1, -1, -1]) for obs in (trk.observations for trk in trackers_pad)])
 
         dets_pad = np.zeros((MAX,5), dtype=dets.dtype)
         trks_pad = np.zeros((MAX,5), dtype=trks.dtype)
@@ -312,3 +314,4 @@ class OCSort(object):
         out = []
         for x in ret: out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5], speed=x[0][8]))
         return out
+
