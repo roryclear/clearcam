@@ -88,90 +88,18 @@ class KalmanBoxTracker(object):
         self.last_ob = np.array([-1, -1, -1, -1, -1])
         self.last_converted = None
 
+    def update2(self):
+        self.kf.history_obs.append(None)
+        if self.kf.observed:
+            self.kf.attr_saved = deepcopy(self.kf.__dict__)
+            self.kf.time_gap = 1
+        self.kf.time_gap += 1
+        self.kf.observed = False
+        self.kf.z = np.array([[None]*self.kf.dim_z]).T
+        self.kf.y = zeros((self.kf.dim_z, 1))
+
+
     def update(self, bbox, score=None, class_id=None):
-        """
-        Updates the state vector with observed bbox.
-        """
-        if bbox is not None:
-            self.occurrences[class_id] += score
-            self.class_id = max(self.occurrences, key=self.occurrences.get)
-
-
-            valid = float(self.last_observation.sum() >= 0)
-
-            candidate_ages = self.age - np.arange(self.delta_t, 0, -1)
-
-            obs_ages = np.fromiter(self.obs_ages, dtype=int) if len(self.observations) > 0 else np.array([], dtype=int)
-            obs_boxes = np.stack(list(self.observations)) if len(self.observations) > 0 else np.empty((0, len(bbox)))
-            matches = obs_ages[:, None] == candidate_ages[None, :] if obs_ages.size else np.zeros((0, self.delta_t), dtype=bool)
-            match_per_col = matches.any(axis=0)
-            col_idx = np.argmax(match_per_col)
-            row_idx = np.argmax(matches[:, col_idx]) if matches.size else 0
-            has_match = float(match_per_col.any())
-            all_boxes = np.vstack([self.last_observation[None, :], obs_boxes])
-            safe_idx = int(has_match) * (row_idx + 1)
-            previous_box = all_boxes[safe_idx]
-            dist, velocity = speed_direction(previous_box, bbox)
-
-            self.velocity = valid * velocity + (1.0 - valid) * self.velocity
-            self.avg_vel = np.array(self.avg_vel) + valid * (dist / float(self.age))
-            self.speed = valid * np.abs(self.avg_vel).sum() + (1.0 - valid) * self.speed
-            
-            self.last_observation = bbox
-            self.obs_ages.append(self.age)
-            self.last_ob = bbox
-            self.observations.append(bbox)
-
-            self.time_since_update = 0
-            self.hits += 1
-            self.hit_streak += 1
-            converted = convert_bbox_to_z(bbox)
-            self.kf.history_obs.append(converted)
-            if not self.kf.observed and self.kf.attr_saved:
-                time_gap = self.kf.time_gap
-                x1, y1, s1, r1 = self.last_converted
-                x2, y2, s2, r2 = converted
-                w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
-                w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
-                t = np.arange(1, MAX_STEPS + 1)
-                x = x1 + t * (x2 - x1) / time_gap
-                y = y1 + t * (y2 - y1) / time_gap
-                w = w1 + t * (w2 - w1) / time_gap
-                h = h1 + t * (h2 - h1) / time_gap
-                s = w * h
-                r = w / h
-
-                boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
-                xs = np.zeros((MAX_STEPS, *self.kf.x.shape))
-                Ps = np.zeros((MAX_STEPS, *self.kf.P.shape))
-                if time_gap <= MAX_STEPS:
-                    self.kf.__dict__ = self.kf.attr_saved
-                    self.kf.history_obs.extend(boxes[:MAX_STEPS])
-                    for i in range(MAX_STEPS):
-                        z = boxes[i]
-                        self.kf.update(z)
-                        xs[i] = self.kf.x
-                        Ps[i] = self.kf.P
-                        self.kf.x = self.kf.F @ self.kf.x
-                        self.kf.P = self.kf._alpha_sq * (self.kf.F @ self.kf.P @ self.kf.F.T) + self.kf.Q
-
-                    self.kf.x = xs[time_gap - 1]
-                    self.kf.P = Ps[time_gap - 1]
-                    #self.kf.history_obs = self.kf.history_obs[:- (MAX_STEPS - time_gap)]
-            self.last_converted = converted
-            self.kf.update(converted)
-        else:
-            self.kf.history_obs.append(None)
-            if self.kf.observed:
-                self.kf.attr_saved = deepcopy(self.kf.__dict__)
-                self.kf.time_gap = 1
-            self.kf.time_gap += 1
-            self.kf.observed = False
-            self.kf.z = np.array([[None]*self.kf.dim_z]).T
-            self.kf.y = zeros((self.kf.dim_z, 1))
-
-
-    def update2(self, bbox, score=None, class_id=None):
         self.occurrences[class_id] += score
         self.class_id = max(self.occurrences, key=self.occurrences.get)
         valid = float(self.last_observation.sum() >= 0)
@@ -315,7 +243,7 @@ class OCSort(object):
         dets_pad[:dets.shape[0]] = dets
 
         matched, unmatched_dets, unmatched_trks = associate(dets_pad, trks, self.iou_threshold, vel_pad, k_observations, self.inertia)
-        for m in matched: self.trackers[m[1]].update2(bbox=dets[m[0], :], score=scores[m[0]], class_id=class_ids[m[0]])
+        for m in matched: self.trackers[m[1]].update(bbox=dets[m[0], :], score=scores[m[0]], class_id=class_ids[m[0]])
 
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
             left_dets = dets[unmatched_dets]
@@ -341,7 +269,7 @@ class OCSort(object):
                 unmatched_dets = np.setdiff1d(unmatched_dets, np.array(to_remove_det_indices))
                 unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk_indices))
 
-        for m in unmatched_trks: self.trackers[m].update(None)
+        for m in unmatched_trks: self.trackers[m].update2()
 
         for i in unmatched_dets:
             trk = KalmanBoxTracker(dets[i, :], delta_t=self.delta_t)
