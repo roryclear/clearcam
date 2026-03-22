@@ -95,28 +95,12 @@ class KalmanFilterNew(object):
 
     def update(self, z):
         self.observed = True
-        R = self.R
-        H = self.H
-        self.y = z - dot(H, self.x)
-        PHT = dot(self.P, H.T)
-        self.S = dot(H, PHT) + R
+        self.y = z - dot(self.H, self.x)
+        PHT = dot(self.P, self.H.T)
+        self.S = dot(self.H, PHT) + self.R
         self.SI = self.inv(self.S)
         self.K = dot(PHT, self.SI)
         self.x = self.x + dot(self.K, self.y)
-        I_KH = self._I - dot(self.K, H)
-        self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
-
-    def update2(self, z):
-        self.history_obs.append(z)
-        self.observed = True
-        R = self.R
-        H = self.H
-        self.y = z - dot(H, self.x)
-        PHT = dot(self.P, H.T)
-        self.S = dot(H, PHT) + R
-        self.SI = self.inv(self.S)
-        self.K = dot(PHT, self.SI)
-        self.x = self.x + dot(self.K, self.y)
-        I_KH = self._I - dot(self.K, H)
-        self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, R), self.K.T)
+        I_KH = self._I - dot(self.K, self.H)
+        self.P = dot(dot(I_KH, self.P), I_KH.T) + dot(dot(self.K, self.R), self.K.T)
         

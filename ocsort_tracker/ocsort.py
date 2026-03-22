@@ -142,6 +142,8 @@ class KalmanBoxTracker(object):
                 h = h1 + t * (h2 - h1) / time_gap
                 s = w * h
                 r = w / h
+
+                
                 boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
                 xs = np.zeros((MAX_STEPS, *self.kf.x.shape))
                 Ps = np.zeros((MAX_STEPS, *self.kf.P.shape))
@@ -156,10 +158,9 @@ class KalmanBoxTracker(object):
                         self.kf.x = self.kf.F @ self.kf.x
                         self.kf.P = self.kf._alpha_sq * (self.kf.F @ self.kf.P @ self.kf.F.T) + self.kf.Q
 
-                    last_valid = max(time_gap - 1, 0)
-                    self.kf.x = xs[last_valid]
-                    self.kf.P = Ps[last_valid]
-                    self.kf.history_obs = self.kf.history_obs[:- (MAX_STEPS - time_gap)]
+                    self.kf.x = xs[time_gap - 1]
+                    self.kf.P = Ps[time_gap - 1]
+                    #self.kf.history_obs = self.kf.history_obs[:- (MAX_STEPS - time_gap)]
             self.last_converted = converted
             self.kf.update(converted)
         else:
