@@ -222,6 +222,7 @@ class OCSort(object):
         KalmanBoxTracker.count = 0
 
     def update(self, output_results, det_thresh=0.25):
+        MAX=300
         """
         Params:
           dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
@@ -246,29 +247,30 @@ class OCSort(object):
         scores = scores[remain_inds]
 
         # get predicted locations from existing trackers.
+
+        vel_pad = [[-math.inf, -math.inf]] * MAX
+        vel_pad[:len(self.trackers)] = [v.velocity for v in self.trackers]
+        vel_pad = np.array(vel_pad)
+
         trks = np.zeros((len(self.trackers), 5))
         ret = []
         for t, trk in enumerate(trks):
             pos = self.trackers[t].predict()[0]
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
 
-        velocities = np.array([trk.velocity for trk in self.trackers])
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
         k_observations = np.array([k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
-
-        MAX=300
-
 
         dets_pad = np.zeros((MAX,5), dtype=dets.dtype)
         trks_pad = np.zeros((MAX,5), dtype=trks.dtype)
         prev_pad = np.zeros((MAX,5), dtype=k_observations.dtype)
-        vel_pad  = np.zeros((MAX,2), dtype=velocities.dtype)
 
+
+        
         dets_pad[:dets.shape[0]] = dets
         if len(trks) != 0:
             trks_pad[:trks.shape[0]] = trks # todo
             prev_pad[:k_observations.shape[0]] = k_observations
-            vel_pad[:velocities.shape[0]] = velocities
 
         matched, unmatched_dets, unmatched_trks = associate(dets_pad, trks_pad, self.iou_threshold, vel_pad, prev_pad, self.inertia)
         for m in matched: self.trackers[m[1]].update(dets[m[0], :], scores[m[0]], class_ids[m[0]])
