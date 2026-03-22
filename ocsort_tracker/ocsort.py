@@ -134,25 +134,25 @@ class KalmanBoxTracker(object):
                 index1, index2 = indices[-2], indices[-1]
                 time_gap = index2 - index1
                 # return if too old for now
+                x1, y1, s1, r1 = self.kf.history_obs[index1]
+                x2, y2, s2, r2 = self.kf.history_obs[index2]
+                w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
+                w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
+                t = np.arange(1, MAX_STEPS + 1)
+                x = x1 + t * (x2 - x1) / time_gap
+                y = y1 + t * (y2 - y1) / time_gap
+                w = w1 + t * (w2 - w1) / time_gap
+                h = h1 + t * (h2 - h1) / time_gap
+                s = w * h
+                r = w / h
+                boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
+                xs = np.zeros((MAX_STEPS, *self.kf.x.shape))
+                Ps = np.zeros((MAX_STEPS, *self.kf.P.shape))
                 if time_gap <= MAX_STEPS:
-                    x1, y1, s1, r1 = self.kf.history_obs[index1]
-                    x2, y2, s2, r2 = self.kf.history_obs[index2]
-                    w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
-                    w2, h2 = np.sqrt(s2 * r2), np.sqrt(s2 / r2)
-                    t = np.arange(1, MAX_STEPS + 1)
-                    x = x1 + t * (x2 - x1) / time_gap
-                    y = y1 + t * (y2 - y1) / time_gap
-                    w = w1 + t * (w2 - w1) / time_gap
-                    h = h1 + t * (h2 - h1) / time_gap
-                    s = w * h
-                    r = w / h
-                    boxes = np.stack([x, y, s, r], axis=1).reshape(-1, 4, 1)
                     self.kf.__dict__ = self.kf.attr_saved
-                    xs = np.zeros((MAX_STEPS, *self.kf.x.shape))
-                    Ps = np.zeros((MAX_STEPS, *self.kf.P.shape))
+                    self.kf.history_obs.extend(boxes[:MAX_STEPS])
                     for i in range(MAX_STEPS):
                         z = boxes[i]
-                        self.kf.history_obs.append(z)
                         self.kf.update(z)
                         xs[i] = self.kf.x
                         Ps[i] = self.kf.P
@@ -309,3 +309,4 @@ class OCSort(object):
         out = []
         for x in ret: out.append(STrack(tlwh=[x[0][0], x[0][1], (x[0][2] - x[0][0]), (x[0][3] - x[0][1])], score=x[0][7], class_id=x[0][6], track_id=x[0][4], age=x[0][5], speed=x[0][8]))
         return out
+
