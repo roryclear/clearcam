@@ -80,12 +80,12 @@ class KalmanBoxTracker(object):
         fast and unified way, which you would see below k_observations = np.array([k_previous_obs(...]]), let's bear it for now.
         """
         self.last_observation = np.array([-1, -1, -1, -1, -1])  # placeholder
-        self.observations = dict()
-        self.history_observations = []
+        self.observations = []
         self.delta_t = delta_t
         self.velocity = np.array((-math.inf, -math.inf))
         self.avg_vel = np.array((0, 0))
         self.speed = 0
+        self.obs_ages = []
         self.last_ob = np.array([-1, -1, -1, -1, -1])
 
     def update(self, bbox, score=None, class_id=None):
@@ -101,8 +101,8 @@ class KalmanBoxTracker(object):
 
             candidate_ages = self.age - np.arange(self.delta_t, 0, -1)
 
-            obs_ages = np.fromiter(self.observations.keys(), dtype=int) if self.observations else np.array([], dtype=int)
-            obs_boxes = np.stack(list(self.observations.values())) if self.observations else np.empty((0, len(bbox)))
+            obs_ages = np.fromiter(self.obs_ages, dtype=int) if len(self.observations) > 0 else np.array([], dtype=int)
+            obs_boxes = np.stack(list(self.observations)) if len(self.observations) > 0 else np.empty((0, len(bbox)))
             matches = obs_ages[:, None] == candidate_ages[None, :] if obs_ages.size else np.zeros((0, self.delta_t), dtype=bool)
             match_per_col = matches.any(axis=0)
             col_idx = np.argmax(match_per_col)
@@ -117,14 +117,10 @@ class KalmanBoxTracker(object):
             self.avg_vel = np.array(self.avg_vel) + valid * (dist / float(self.age))
             self.speed = valid * np.abs(self.avg_vel).sum() + (1.0 - valid) * self.speed
             
-            """
-              Insert new observations. This is a ugly way to maintain both self.observations
-              and self.history_observations. Bear it for the moment.
-            """
             self.last_observation = bbox
-            self.observations[self.age] = bbox
+            self.obs_ages.append(self.age)
             self.last_ob = bbox
-            self.history_observations.append(bbox)
+            self.observations.append(bbox)
 
             self.time_since_update = 0
             self.history = []
