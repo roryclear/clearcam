@@ -254,16 +254,12 @@ class OCSort(object):
 
         dets_pad = np.zeros((MAX,5), dtype=dets.dtype)
         trks_pad = np.zeros((MAX,5), dtype=trks.dtype)
-        prev_pad = np.zeros((MAX,5), dtype=k_observations.dtype)
-
-
         
         dets_pad[:dets.shape[0]] = dets
         if len(trks) != 0:
             trks_pad[:trks.shape[0]] = trks # todo
-            prev_pad[:k_observations.shape[0]] = k_observations
 
-        matched, unmatched_dets, unmatched_trks = associate(dets_pad, trks_pad, self.iou_threshold, vel_pad, prev_pad, self.inertia)
+        matched, unmatched_dets, unmatched_trks = associate(dets_pad, trks_pad, self.iou_threshold, vel_pad, k_observations, self.inertia)
         for m in matched: self.trackers[m[1]].update(dets[m[0], :], scores[m[0]], class_ids[m[0]])
 
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
