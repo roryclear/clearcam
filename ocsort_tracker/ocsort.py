@@ -13,17 +13,6 @@ from copy import deepcopy
 
 MAX_STEPS = 300
 
-def k_previous_obs(observations, cur_age, k):
-    if len(observations) == 0:
-        return [-1, -1, -1, -1, -1]
-    for i in range(k):
-        dt = k - i
-        if cur_age - dt in observations:
-            return observations[cur_age-dt]
-    max_age = max(observations.keys())
-    return observations[max_age]
-
-
 def convert_bbox_to_z(bbox):
     """
     Takes a bounding box in the form [x1,y1,x2,y2] and returns z in the form
@@ -259,7 +248,7 @@ class OCSort(object):
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
 
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
-        k_observations = np.array([k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
+        k_observations = np.array([(obs[max(obs.keys())] if len(obs) > 0 else [-1, -1, -1, -1, -1]) for obs in (trk.observations for trk in self.trackers)])
 
         dets_pad = np.zeros((MAX,5), dtype=dets.dtype)
         trks_pad = np.zeros((MAX,5), dtype=trks.dtype)

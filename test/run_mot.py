@@ -22,7 +22,7 @@ if __name__ == "__main__":
   out = cv2.VideoWriter(f"test_outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
   model = YOLOv9(size, res=960) if m == "y" else RFDETR("nano")
-  expected = 153 if m == "y" else 174
+  expected = 152 if m == "y" else 174 # 152 for tinytrack
 
   i = 0
   ppl = set()
