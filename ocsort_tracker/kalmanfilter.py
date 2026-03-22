@@ -47,6 +47,7 @@ class KalmanFilterNew(object):
 
         self.attr_saved = None
         self.observed = False 
+        self.time_gap = 1
 
     def predict(self):
         self.x = dot(self.F, self.x)

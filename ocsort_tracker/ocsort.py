@@ -130,11 +130,7 @@ class KalmanBoxTracker(object):
             converted = convert_bbox_to_z(bbox)
             self.kf.history_obs.append(converted)
             if not self.kf.observed and self.kf.attr_saved:
-                occur = np.array([d is None for d in self.kf.history_obs], dtype=int)
-                indices = np.where(occur == 0)[0]
-                index1, index2 = indices[-2], indices[-1]
-                time_gap = index2 - index1
-                # return if too old for now
+                time_gap = self.kf.time_gap
                 x1, y1, s1, r1 = self.last_converted
                 x2, y2, s2, r2 = converted
                 w1, h1 = np.sqrt(s1 * r1), np.sqrt(s1 / r1)
@@ -168,7 +164,10 @@ class KalmanBoxTracker(object):
             self.kf.update(converted)
         else:
             self.kf.history_obs.append(None)
-            if self.kf.observed: self.kf.attr_saved = deepcopy(self.kf.__dict__)
+            if self.kf.observed:
+                self.kf.attr_saved = deepcopy(self.kf.__dict__)
+                self.kf.time_gap = 1
+            self.kf.time_gap += 1
             self.kf.observed = False
             self.kf.z = np.array([[None]*self.kf.dim_z]).T
             self.kf.y = zeros((self.kf.dim_z, 1))
