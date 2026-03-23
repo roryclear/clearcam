@@ -49,9 +49,6 @@ class KalmanFilterNew(object):
         self.observed = False 
         self.time_gap = 1
 
-    def predict(self):
-        self.x = dot(self.F, self.x)
-        self.P = self._alpha_sq * dot(dot(self.F, self.P), self.F.T) + self.Q
 
     def unfreeze(self):
         MAX_STEPS = 300

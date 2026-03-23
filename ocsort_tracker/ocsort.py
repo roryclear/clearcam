@@ -8,7 +8,7 @@ from .association import *
 from ocsort_tracker.STrack import STrack
 from collections import defaultdict
 from copy import deepcopy
-from numpy import zeros
+from numpy import zeros, dot
 from copy import deepcopy
 
 MAX_STEPS = 300
@@ -163,7 +163,8 @@ class KalmanBoxTracker(object):
         self.kf.update(converted)
 
     def predict(self):
-        self.kf.predict()
+        self.kf.x = dot(self.kf.F, self.kf.x)
+        self.kf.P = self.kf._alpha_sq * dot(dot(self.kf.F, self.kf.P), self.kf.F.T) + self.kf.Q
         self.age += 1
         if(self.time_since_update > 0): self.hit_streak = 0
         self.time_since_update += 1
