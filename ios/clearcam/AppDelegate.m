@@ -37,8 +37,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
 
 #pragma mark - Device Token
 
-- (void)application:(UIApplication *)application
-didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
     const unsigned char *dataBuffer = (const unsigned char *)[deviceToken bytes];
     if (!dataBuffer) return;
     NSMutableString *token = [NSMutableString stringWithCapacity:(deviceToken.length * 2)];
