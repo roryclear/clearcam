@@ -290,10 +290,6 @@ class TransformerDecoder(): # todo remove unused
 
           x = self.norm(tgt)
           intermediate.append(x)
-        
-        tgt = self.norm(tgt)
-        intermediate.pop()
-        intermediate.append(tgt)
         return [(Tensor.stack(intermediate)), (refpoints_unsigmoid.unsqueeze(0))]
 
 def gen_encoder_output_proposals(memory, memory_padding_mask, spatial_shape, unsigmoid=True):
