@@ -266,21 +266,19 @@ def gen_sineembed_for_position(pos_tensor, dim=128):
   pos = Tensor.cat(pos_y, pos_x, pos_w, pos_h, dim=2)
   return pos
 
-class TransformerDecoder(): # todo remove unused
+class TransformerDecoder():
     def __call__(self, tgt, memory, memory_key_padding_mask=None,
       refpoints_unsigmoid=None, level_start_index=None, spatial_shapes=None):
         intermediate = []
         def get_reference(refpoints_unsigmoid):
           obj_center = refpoints_unsigmoid[..., :4]
           refpoints_input = obj_center[:, :, None]
-          query_sine_embed = gen_sineembed_for_position(
-              refpoints_input[:, :, 0, :], 256 / 2) # bs, nq, 256*2
+          query_sine_embed = gen_sineembed_for_position(refpoints_input[:, :, 0, :], 256 / 2)
           query_pos = self.ref_point_head(query_sine_embed)
           return refpoints_input, query_pos
 
-        for _, layer in enumerate(self.layers):
-          refpoints_input, query_pos = get_reference(refpoints_unsigmoid) #todo
-
+        refpoints_input, query_pos = get_reference(refpoints_unsigmoid) 
+        for layer in self.layers:
           tgt = layer(tgt, memory,
             memory_key_padding_mask=memory_key_padding_mask,
             query_pos=query_pos,
@@ -291,7 +289,7 @@ class TransformerDecoder(): # todo remove unused
           x = self.norm(tgt)
           intermediate.append(x)
         return [(Tensor.stack(intermediate)), (refpoints_unsigmoid.unsqueeze(0))]
-
+    
 def gen_encoder_output_proposals(memory, memory_padding_mask, spatial_shape, unsigmoid=True):
     memory_padding_mask = memory_padding_mask.cast(dtype=dtypes.bool)
 
@@ -399,7 +397,6 @@ class Bottleneck():
 class C2f():
     def __init__(self): self.c = 128
     def __call__(self, x):
-        """Forward pass using split() instead of chunk()."""
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         y = Tensor.cat(*y, dim=1)
