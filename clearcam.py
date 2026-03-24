@@ -283,7 +283,7 @@ class VideoCapture:
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
-    object_filename = filepath / f"{ts}_{int(p[6])}.jpg"
+    object_filename = filepath / f"{ts}_{int(p[6])}_{int(p[5])}.jpg"
     x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
     cx = (x1 + x2) // 2
     cy = (y1 + y2) // 2
@@ -652,7 +652,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
       for path_str, score in results:
         if score < 0.21: break
         img_path = Path(path_str).resolve()
-        ts = int(img_path.stem.split('_')[0])
+        ts = event_img_info(img_path.stem)["ts"]
         parts = img_path.parts
         cam_index = parts.index("cameras") + 1
         cam = parts[cam_index]
@@ -1142,6 +1142,8 @@ def get_lan_ip():
 
 def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, "frozen", False) else ([sys.executable, sys.argv[0]], sys.argv[1:])
 
+def event_img_info(image): return {"ts": int(image.split('_')[0]), "object_id":int(image.split('_')[1]), "class_id":int(image.split('_')[2])}
+
 def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
     if not rtsp or not cam_name: return
     
@@ -1286,7 +1288,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                             send_notif(userID, f"Event Detected ({name}: {v.desc})")
                             alerts[k].last_det = time.time()
                             database.run_put("alerts", name, alerts[k], k)
-                            seen_time = float(path.split("/")[-1].split("_")[0])
+                            seen_time = event_img_info(path.split("/")[-1].split(".")[0])["ts"]
                             export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
                             break
 
