@@ -78,30 +78,34 @@ def linear_assignment(cost_matrix):
         
     return assignments
 
+
 def linear_assignment300(cost):
-    assignments = np.zeros((300, 2), dtype=int)
-    is_valid = np.zeros(300, dtype=bool)
+    assignments = np.zeros((300*300, 2), dtype=int)
 
     flat = cost.ravel()
     order = np.argsort(flat)
+    rows = order // 300
+    cols = order % 300
+    
+    assignments = np.stack((rows, cols), axis=1)
+    
 
-    pairs = np.column_stack((order // 300, order % 300))
+    selected = get_selected(rows, cols)
 
+    assignments = assignments[selected]
+    valid = cost[assignments[:, 0], assignments[:, 1]] < 1e9
+    return assignments[valid]
+
+def get_selected(rows, cols):
     used_rows = np.zeros(300, dtype=bool)
     used_cols = np.zeros(300, dtype=bool)
-
-    k = 0
-    for r, c in pairs:
-        if not used_rows[r] and not used_cols[c] and k < 300:
-            assignments[k] = [r, c]
-            is_valid[k] = (cost[r, c] < 1e9)
-
+    selected = np.zeros(300*300, dtype=bool)
+    for i, (r, c) in enumerate(zip(rows, cols)):
+        if not used_rows[r] and not used_cols[c]:
             used_rows[r] = True
             used_cols[c] = True
-
-            k += 1
-
-    return assignments[is_valid]
+            selected[i] = True
+    return selected
 
 
 def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
@@ -163,6 +167,4 @@ def associate(dets_pad, trks_pad, iou_threshold, vel_pad, prev_pad, vdc_weight):
     valid_match_mask = np.all(matches != -1, axis=1)
     matches = matches[valid_match_mask]
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
-
-
 
