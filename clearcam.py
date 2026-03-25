@@ -755,6 +755,11 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             database.run_put("settings", cam_name, zone) # todo, key for each
+            if (url := query.get("url")) is not None:
+              for _ in range(100): print(url)
+              database.run_put("links", cam_name, url)
+              print(database.run_get("links", None))
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
