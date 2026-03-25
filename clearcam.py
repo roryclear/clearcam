@@ -206,6 +206,7 @@ class VideoCapture:
         pass
 
   def _open_ffmpeg(self):
+    print("RORY OPENING FFMPEG SRC =",self.src)
     path = self._get_new_stream_dir()
        
     self._safe_kill_process(self.proc)
@@ -237,6 +238,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                  "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
@@ -316,6 +319,7 @@ class VideoCapture:
     last_preview_time = None
     last_counter_update = time.time()
     self.pred_occs = {}
+    self.last_link_check = time.time()
     count = 0
     self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
     Path(self.det_path).mkdir(parents=True, exist_ok=True)
@@ -326,6 +330,12 @@ class VideoCapture:
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     while self.running:
+      if time.time() - last_live_check > 5:
+        last_live_check = time.time()
+        link = database.run_get("links", self.cam_name)[0]
+        if link != self.src:
+          self.src = link
+          self._open_ffmpeg()
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
@@ -1151,7 +1161,7 @@ def event_img_info(image): return {"ts": int(image.split('_')[0]), "object_id":i
 
 def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
     if not rtsp or not cam_name: return
-    
+    print("rory starting cam link =", rtsp)
     def upsert_arg(args, key, value):
         prefix = f"--{key}="
         for i, arg in enumerate(args):
