@@ -7,7 +7,7 @@ import sys
 import numpy as np
 from numpy import dot, zeros, eye, isscalar
 
-class KalmanFilterNew(object):
+class KalmanFilter(object):
     def __init__(self, dim_x, dim_z, dim_u=0):
         if dim_x < 1:
             raise ValueError('dim_x must be 1 or greater')

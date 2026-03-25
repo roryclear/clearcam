@@ -66,7 +66,7 @@ class KalmanBoxTracker(object):
         Initialises a tracker using initial bounding box.
         """
 
-        from .kalmanfilter import KalmanFilterNew as KalmanFilter
+        from .kalmanfilter import KalmanFilter
         self.kf = KalmanFilter(dim_x=7, dim_z=4)
         self.kf.F = np.array([[1, 0, 0, 0, 1, 0, 0], [0, 1, 0, 0, 0, 1, 0], [0, 0, 1, 0, 0, 0, 1], [
                             0, 0, 0, 1, 0, 0, 0],  [0, 0, 0, 0, 1, 0, 0], [0, 0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 0, 1]])
