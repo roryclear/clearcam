@@ -331,7 +331,8 @@ class VideoCapture:
     while self.running:
       if time.time() - last_live_check > 5:
         last_live_check = time.time()
-        link = database.run_get("links", self.cam_name)[0]
+        link = database.run_get("links", self.cam_name)
+        if type(link) == list: link = link[0] # todo, flakey?
         if link != self.src:
           self.src = link
           self._open_ffmpeg()
