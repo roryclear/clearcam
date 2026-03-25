@@ -316,6 +316,7 @@ class VideoCapture:
     last_preview_time = None
     last_counter_update = time.time()
     self.pred_occs = {}
+    self.last_link_check = time.time()
     count = 0
     self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
     Path(self.det_path).mkdir(parents=True, exist_ok=True)
@@ -326,6 +327,13 @@ class VideoCapture:
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     while self.running:
+      if time.time() - last_live_check > 5:
+        last_live_check = time.time()
+        link = database.run_get("links", self.cam_name)
+        if type(link) == list: link = link[0] # todo, flakey?
+        if link != self.src:
+          self.src = link
+          self._open_ffmpeg()
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
@@ -755,6 +763,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             database.run_put("settings", cam_name, zone) # todo, key for each
+            if (url := query.get("url")) is not None: database.run_put("links", cam_name, url)
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -1146,7 +1156,6 @@ def event_img_info(image): return {"ts": int(image.split('_')[0]), "object_id":i
 
 def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
     if not rtsp or not cam_name: return
-    
     def upsert_arg(args, key, value):
         prefix = f"--{key}="
         for i, arg in enumerate(args):

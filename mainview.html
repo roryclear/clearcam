@@ -1419,6 +1419,10 @@
                     Detection Threshold:
                     <input type="number" id="zoneThreshold" value="50" min="0" max="100" step="1" style="width: 60px;"> %
                 </label>
+                <label style="display: flex; align-items: center; gap: 6px;">
+                    Change source:
+                    <input type="text" id="zoneSource" placeholder="Enter new URL (optional)" style="width: 200px;">
+                </label>
             </div>
             <div style="display: flex; gap: 10px;">
                 <button type="button" class="clear-zone-button" onclick="clearPolygon()">Clear Zone</button>
@@ -2386,58 +2390,60 @@
         previewEl.addEventListener('click', handlePreviewClick);
     }
 
-    function saveZone() {
-        if (!currentEditingCamera) {
-            console.error("No camera is currently being edited");
-            alert("Error: No camera selected for editing.");
-            return;
-        }
+      function saveZone() {
+          if (!currentEditingCamera) {
+              console.error("No camera is currently being edited");
+              alert("Error: No camera selected for editing.");
+              return;
+          }
 
-        const previewEl = document.getElementById("zonePreview");
-        const points = Array.from(document.querySelectorAll('.polygon-point'));
-        
-        let coords = null;
-        if (points.length >= 3) {
-            const previewRect = previewEl.getBoundingClientRect();
+          const previewEl = document.getElementById("zonePreview");
+          const points = Array.from(document.querySelectorAll('.polygon-point'));
+          
+          let coords = null;
+          if (points.length >= 3) {
+              const previewRect = previewEl.getBoundingClientRect();
 
-            coords = points.map(point => {
-                const pointRect = point.getBoundingClientRect();
-                const centerX = pointRect.left + pointRect.width / 2;
-                const centerY = pointRect.top + pointRect.height / 2;
-                
-                const x = ((centerX - previewRect.left) / previewRect.width);
-                const y = ((centerY - previewRect.top) / previewRect.height);
-                
-                return [x, y];
-            });
-        } else if (points.length === 0) {
-            coords = [0];
-        }
-        const outside = document.getElementById("outsideZoneCheckbox").checked;
-        const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
-        const threshold = thresholdPercent / 100;
-        
-        const params = new URLSearchParams({
-            cam: currentEditingCamera,
-            threshold: threshold.toFixed(2),
-            outside: outside
-        });
-        
-        if (coords) {
-            params.set('coords', JSON.stringify(coords));
-        }
+              coords = points.map(point => {
+                  const pointRect = point.getBoundingClientRect();
+                  const centerX = pointRect.left + pointRect.width / 2;
+                  const centerY = pointRect.top + pointRect.height / 2;
+                  
+                  const x = ((centerX - previewRect.left) / previewRect.width);
+                  const y = ((centerY - previewRect.top) / previewRect.height);
+                  
+                  return [x, y];
+              });
+          } else if (points.length === 0) {
+              coords = [0];
+          }
+          const outside = document.getElementById("outsideZoneCheckbox").checked;
+          const thresholdPercent = parseFloat(document.getElementById("zoneThreshold").value) || 50;
+          const threshold = thresholdPercent / 100;
+          
+          const params = new URLSearchParams({
+              cam: currentEditingCamera,
+              threshold: threshold.toFixed(2),
+              outside: outside
+          });
+          
+          if (coords) {
+              params.set('coords', JSON.stringify(coords));
+          }
+          const src = document.getElementById("zoneSource").value.trim();
+          if (src) params.set('url', src);
 
-        fetch(`/edit_settings?${params.toString()}`)
-            .then(res => {
-                if (!res.ok) throw new Error("Failed to save settings");
-                console.log("Settings saved successfully for camera:", currentEditingCamera);
-                closeZoneModal();
-            })
-            .catch(err => {
-                console.error("Save settings failed:", err);
-                alert("Failed to save settings.");
-            });
-    }
+          fetch(`/edit_settings?${params.toString()}`)
+              .then(res => {
+                  if (!res.ok) throw new Error("Failed to save settings");
+                  console.log("Settings saved successfully for camera:", currentEditingCamera);
+                  closeZoneModal();
+              })
+              .catch(err => {
+                  console.error("Save settings failed:", err);
+                  alert("Failed to save settings.");
+              });
+      }
 
     function loadPolygon(coords, previewEl) {
       const videoWidth = 1280;
