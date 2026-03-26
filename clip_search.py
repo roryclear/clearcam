@@ -124,15 +124,13 @@ class CLIPSearch:
 
         print(f"\nTotal images loaded: {total_loaded}")
 
-    def _encode_text(self, query, realize=False):
+    def _encode_text(self, query):
         tokens = [49406]
         tokens += self.tokenizer.encode(query)
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
         tokens = Tensor([tokens])
-        text_emb = encode_text(self.model, tokens)
-        if realize: return text_emb.numpy()
-        return text_emb
+        return encode_text(self.model, tokens)
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None):
         if not self.image_embeddings:

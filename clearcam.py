@@ -634,7 +634,7 @@ def point_not_in_polygon(coords, poly):
     return True
 
 def run_encode_text(return_q, searcher, text):
-  res = searcher._encode_text(text, realize=True)
+  res = searcher._encode_text(text).numpy()
   return_q.put(res)
   return res
 
