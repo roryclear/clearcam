@@ -634,7 +634,7 @@ def point_not_in_polygon(coords, poly):
     return True
 
 def run_encode_text(return_q, searcher, text):
-  res = searcher._encode_text(text).numpy()
+  res = searcher._encode_text(text)
   return_q.put(res)
   return res
 
@@ -1305,7 +1305,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             # todo, move to own loop
             for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
+                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc).numpy()
                 database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
