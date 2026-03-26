@@ -5,6 +5,7 @@ from tinygrad.helpers import fetch
 from clearcam import event_img_info
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
+import math
 
 class Model:
     pass
@@ -33,9 +34,7 @@ class CLIPSearch:
         self.model.ln_final.weight = weights["ln_final.weight"].to(device)
         self.model.ln_final.bias = weights["ln_final.bias"].to(device)
 
-        attn_mask = np.where(np.tri(77, dtype=bool), 0.0, -np.inf).astype(np.float32)
-        self.model.attn_mask = Tensor(attn_mask) 
-
+        self.model.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
         self.model.resblocks = []
         
         for i in range(12):
