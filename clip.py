@@ -74,8 +74,8 @@ class CachedCLIPSearch:
         
         # for BEAM
         if prewarm:
-          precompute_embeddings(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-          precompute_embeddings(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+          precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+          precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -138,11 +138,11 @@ class CachedCLIPSearch:
             batch_np = np.stack(batch_np)
 
             if len(batch_np) == batch_size:
-                embeddings = precompute_embeddings(self.model, Tensor(batch_np)).numpy()
+                embeddings = precompute_embeddings_jit(self.model, Tensor(batch_np)).numpy()
             else:
                 embeddings = []
                 for j in range(len(batch_np)):
-                    emb = precompute_embedding_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
+                    emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
                     embeddings.append(emb)
             emb_ret.extend(embeddings)
             path_ret.extend(batch_paths)
@@ -154,6 +154,7 @@ class CachedCLIPSearch:
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
         return emb_ret, path_ret
+    
     def precompute_embedding_bs1_np(self, img):
       if type(img) == bytes: # todo, another level up?
         img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
@@ -162,14 +163,14 @@ class CachedCLIPSearch:
         img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
       img = [preprocess(img)]
-      ret = precompute_embedding_bs1(self.model, Tensor(img)).numpy()
+      ret = precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy()
       return ret
       
 @TinyJit
-def precompute_embeddings(model, x): return precompute_embedding(model, x)
+def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
 
 @TinyJit
-def precompute_embedding_bs1(model, x): return precompute_embedding(model, x)
+def precompute_embedding_jit_bs1(model, x): return precompute_embedding(model, x)
 
 def precompute_embedding(model, x):
     x = model.visual_conv1(x)
@@ -218,21 +219,3 @@ def preprocess(img):
     img = (img - 0.5) / 0.5
     img = np.transpose(img, (2, 0, 1))
     return img
-
-'''
-if __name__ == "__main__":
-    searcher = CachedCLIPSearch(
-        model_name="ViT-L-14",
-        pretrained_name="laion2b_s32b_b82k"
-    )
-
-    while True:
-        object_folders = searcher.find_object_folders("data/cameras")
-        print(f"{datetime.now()}: Found {len(object_folders)} object folders")
-
-        for folder in object_folders:
-            searcher.precompute_embeddings(folder)
-
-        print(f"{datetime.now()}: Sleeping for 15 mins...")
-        time.sleep(900)
-'''
