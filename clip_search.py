@@ -124,13 +124,15 @@ class CLIPSearch:
 
         print(f"\nTotal images loaded: {total_loaded}")
 
-    def _encode_text(self, query):
+    def _encode_text(self, query, realize=False):
         tokens = [49406]
         tokens += self.tokenizer.encode(query)
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
         tokens = Tensor([tokens])
-        return encode_text(self.model, tokens)
+        text_emb = encode_text(self.model, tokens)
+        if realize: return text_emb.numpy()
+        return text_emb
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None):
         if not self.image_embeddings:
@@ -208,14 +210,3 @@ def encode_text(model, text):
     x = x[0][argmax]
     x = x @ model.text_projection
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
-
-'''
-if __name__ == "__main__":
-    searcher = CLIPSearch()
-    query = input("\nEnter search query (or 'quit' to exit): ").strip()
-    results = searcher.search(query, top_k=10)
-
-    print(f"\nTop results for '{query}' (best per object):")
-    for i, (path, score) in enumerate(results, 1):
-        print(f"{i}. Score: {score:.3f} - \"{path}\"")
-'''

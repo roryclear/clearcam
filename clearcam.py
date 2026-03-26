@@ -634,7 +634,7 @@ def point_not_in_polygon(coords, poly):
     return True
 
 def run_encode_text(return_q, searcher, text):
-  res = searcher._encode_text(text)
+  res = searcher._encode_text(text, realize=True)
   return_q.put(res)
   return res
 
@@ -1291,7 +1291,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 for k, v in alerts.items():
                     if time.time() - v.last_det < 60 or not v.is_active(): continue
                     if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
-                        similarity = (v.desc_emb.numpy() @ embedding.T).item()
+                        similarity = (v.desc_emb @ embedding.T).item()
                         print("sim =",similarity,v.desc,path)
                         if similarity > v.threshold:
                             send_notif(userID, f"Event Detected ({name}: {v.desc})")
@@ -1454,3 +1454,4 @@ if __name__ == "__main__":
       hls_streamer.stop()
       cam.release()
       server.shutdown()
+
