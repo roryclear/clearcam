@@ -1291,7 +1291,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 for k, v in alerts.items():
                     if time.time() - v.last_det < 60 or not v.is_active(): continue
                     if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
-                        similarity = (v.desc_emb @ embedding.T).item()
+                        similarity = (v.desc_emb.numpy() @ embedding.T).item()
                         print("sim =",similarity,v.desc,path)
                         if similarity > v.threshold:
                             send_notif(userID, f"Event Detected ({name}: {v.desc})")
@@ -1305,7 +1305,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             # todo, move to own loop
             for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc).numpy()
+                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.searcher, alert.desc)
                 database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
