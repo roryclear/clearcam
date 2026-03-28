@@ -69,7 +69,7 @@ https://x.com/RoryClear/status/1959249250811785405
 ## run NVR + inference in python from source
 1. pip install -r requirements.txt
 2. python3 clearcam.py
-3. (optional) enter your Clearcam premium userID (viewable in iOS app) to receive streams and notifications
+3. (optional) enter your Clearcam premium userID (viewable in iOS app settings page) to receive streams and notifications
 4. open localhost:8080 in your browser
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 
