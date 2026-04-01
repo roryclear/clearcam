@@ -158,7 +158,11 @@ class CachedCLIPSearch:
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
         return emb_ret, path_ret
 
-    def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy()
+    def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
+
+    def precompute_face_embedding_bs1_np(self, img):
+      print("rory img shape =",img.shape, "should be 112, 112, 3 uchar")
+      return adaface_jit(self.model, Tensor(img)).numpy() # todo remove
 
     def preprocess_clip(self, img):
       if type(img) == bytes: # todo, another level up?
