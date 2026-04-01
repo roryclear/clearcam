@@ -645,7 +645,7 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
-def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
+def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
   embedding = clip.precompute_embedding_bs1_np(im)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
   return_q.put(res)
@@ -1047,12 +1047,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             similar_img  = data.get("similar_img")
             start = data.get("start")
             count = data.get("count")
+            is_face = data.get("is_face") or False
             if start is None: start, count = 0, 100
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
               if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
               uploaded_image = base64.b64decode(uploaded_image)
-              is_face = data.get("is_face")
               print("rory is face =",is_face) # todo why multiple times when small?
 
             if cam_name:
@@ -1076,12 +1076,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
             if uploaded_image and use_clip:
               if not is_face:
-                results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
+                results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir, is_face)
                 self.send_results(results, start, count)
                 return
 
             if similar_img and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
 
