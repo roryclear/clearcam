@@ -99,14 +99,7 @@ class CachedCLIPSearch:
         return object_folders
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
-        cache_file = os.path.join(folder_path, "embeddings.pkl")
-        folder_embeddings = {}
-        folder_paths = {}
-        if os.path.exists(cache_file):
-            with open(cache_file, "rb") as f:
-                cache = pickle.load(f)
-                folder_embeddings = cache.get("embeddings", {})
-                folder_paths = cache.get("paths", {})
+        folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
 
         current_images = {
             os.path.join(folder_path, f)
@@ -122,11 +115,7 @@ class CachedCLIPSearch:
             folder_embeddings.pop(img, None)
             folder_paths.pop(img, None)
 
-        if not new_images:
-            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-            with open(cache_file, "wb") as f:
-                pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
-            return [], []
+        if not new_images: return [], []
         new_image_list = list(new_images)
         self.process_faces(new_image_list)
         emb_ret = []
@@ -159,8 +148,7 @@ class CachedCLIPSearch:
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
+        save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
         return emb_ret, path_ret
     
     def precompute_embedding_bs1_np(self, img):
@@ -214,6 +202,23 @@ class CachedCLIPSearch:
               cropped = orig[new_y1:new_y2, new_x1:new_x2]
               face_img = cv2.resize(cropped, (112, 112))
               embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
+
+
+def get_embeddings(path, filename):
+  cache_file = os.path.join(path, filename)
+  folder_embeddings = {}
+  folder_paths = {}
+  if os.path.exists(cache_file):
+      with open(cache_file, "rb") as f:
+          cache = pickle.load(f)
+          folder_embeddings = cache.get("embeddings", {})
+          folder_paths = cache.get("paths", {})
+  return folder_embeddings, folder_paths
+
+def save_embeddings(folder_path, file_name, folder_embeddings, folder_paths):
+    cache_file = os.path.join(folder_path, file_name)
+    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+    with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
