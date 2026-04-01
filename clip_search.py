@@ -14,7 +14,9 @@ class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
         self.base_path = base_path
         self.image_embeddings = {}
+        self.face_embeddings = {}
         self.image_paths = {}
+        self.face_paths = {}
         self.tokenizer = SimpleTokenizer()
 
         device = Device.DEFAULT
@@ -94,35 +96,37 @@ class CLIPSearch:
             print(f"Error loading {cache_file}: {e}")
             return 0
 
-    def _load_all_embeddings(self):
+    def _load_all_embeddings(self, face=False):
         total_loaded = 0
         valid_paths = set()
-        if not os.path.exists(self.base_path): return
+        cache_filename = "face_embeddings.pkl" if face else "embeddings.pkl"
+        target_embeddings = self.face_embeddings if face else self.image_embeddings
+        target_paths = self.face_paths if face else self.image_paths
+
         for camera_folder in os.listdir(self.base_path):
-          camera_path = os.path.join(self.base_path, camera_folder)
-          if not os.path.isdir(camera_path): continue
-
-          objects_path = os.path.join(camera_path, "objects")
-          if not os.path.isdir(objects_path): continue
-          for date_folder in os.listdir(objects_path):
-            date_path = os.path.join(objects_path, date_folder)
-            if not os.path.isdir(date_path): continue
-            cache_file = os.path.join(date_path, "embeddings.pkl")
-            if not os.path.exists(cache_file): continue
-            with open(cache_file, "rb") as f: cache = pickle.load(f)
-            folder_embeddings = cache.get("embeddings", {})
-            folder_paths = cache.get("paths", {})
-            valid_paths.update(folder_embeddings.keys())
-            self.image_embeddings.update(folder_embeddings)
-            self.image_paths.update(folder_paths)
-            total_loaded += len(folder_embeddings)
-
-        stale_keys = set(self.image_embeddings.keys()) - valid_paths
+            camera_path = os.path.join(self.base_path, camera_folder)
+            if not os.path.isdir(camera_path): continue
+            objects_path = os.path.join(camera_path, "objects")
+            if not os.path.isdir(objects_path): continue
+            for date_folder in os.listdir(objects_path):
+                date_path = os.path.join(objects_path, date_folder)
+                if not os.path.isdir(date_path): continue
+                cache_file = os.path.join(date_path, cache_filename)
+                if not os.path.exists(cache_file): continue
+                with open(cache_file, "rb") as f:
+                    cache = pickle.load(f)
+                folder_embeddings = cache.get("embeddings", {})
+                folder_paths = cache.get("paths", {})
+                valid_paths.update(folder_embeddings.keys())
+                target_embeddings.update(folder_embeddings)
+                target_paths.update(folder_paths)
+                total_loaded += len(folder_embeddings)
+        stale_keys = set(target_embeddings.keys()) - valid_paths
         for k in stale_keys:
-            del self.image_embeddings[k]
-            self.image_paths.pop(k, None)
+            del target_embeddings[k]
+            target_paths.pop(k, None)
 
-        print(f"\nTotal images loaded: {total_loaded}")
+        print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
 
     def _encode_text(self, query, realize=False):
         tokens = [49406]
