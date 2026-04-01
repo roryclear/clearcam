@@ -1052,6 +1052,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if uploaded_image:
               if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
               uploaded_image = base64.b64decode(uploaded_image)
+              is_face = data.get("is_face")
+              print("rory is face =",is_face) # todo why multiple times when small?
 
             if cam_name:
               camera_dirs = [BASE_DIR / "cameras" / cam_name]
@@ -1073,9 +1075,10 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
             if uploaded_image and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
-              self.send_results(results, start, count)
-              return
+              if not is_face:
+                results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
+                self.send_results(results, start, count)
+                return
 
             if similar_img and use_clip:
               results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
