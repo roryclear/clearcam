@@ -157,18 +157,17 @@ class CachedCLIPSearch:
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
         return emb_ret, path_ret
-    
-    def precompute_embedding_bs1_np(self, img):
+
+    def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy()
+
+    def preprocess_clip(self, img):
       if type(img) == bytes: # todo, another level up?
         img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
       else:
         img = f"data/cameras{img}"
         img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-      img = [preprocess(img)]
-      ret = precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy()
-      return ret
- 
+      return [preprocess(img)]
 
     def process_faces(self, paths):
       ret_paths = []

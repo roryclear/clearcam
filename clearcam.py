@@ -646,6 +646,7 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   return_q.put(res)
 
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
+  im = clip.preprocess_clip(im)
   embedding = clip.precompute_embedding_bs1_np(im)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
   return_q.put(res)
