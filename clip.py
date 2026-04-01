@@ -9,6 +9,7 @@ import cv2
 import time
 from utils.helpers import send_notif, export_and_upload, BASE_DIR
 from blazeface import BlazeFace
+from adaface import ADAFACE
 
 class Model: pass
 
@@ -74,9 +75,11 @@ class CachedCLIPSearch:
         weights = None
         
         self.blazeface = BlazeFace()
+        self.adaface = ADAFACE()
         
         # prewarm
-        jit_call(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
+        blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
+        adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
         precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
         precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
@@ -174,43 +177,43 @@ class CachedCLIPSearch:
 
     def process_faces(self, paths):
         for path in paths:
-            if path.endswith("_0.jpg"): # person
-                orig = cv2.imread(path)
+          if path.endswith("_0.jpg"): # person
+            orig = cv2.imread(path)
 
-                h, w = orig.shape[:2]
-                scale = 640 / max(h, w)
-                resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
-                delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
-                top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-                left, right = delta_w // 2, delta_w - (delta_w // 2)
-                orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
-                detections = jit_call(self.blazeface, Tensor(orig)).numpy()
-                detections = detections[detections[:, 4] != 0]
+            h, w = orig.shape[:2]
+            scale = 640 / max(h, w)
+            resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
+            delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
+            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+            left, right = delta_w // 2, delta_w - (delta_w // 2)
+            orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
+            detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
+            detections = detections[detections[:, 4] != 0]
 
 
-                for face in detections:
-                    x1, y1, x2, y2 = face[:4]
-                    #1.5x bigger (keep center)
-                    cx = (x1 + x2) / 2
-                    cy = (y1 + y2) / 2
-                    w = (x2 - x1)
-                    h = (y2 - y1)
-                    scale = 1.5
-                    new_w = w * scale
-                    new_h = h * scale
-                    new_x1 = int(cx - new_w / 2)
-                    new_y1 = int(cy - new_h / 2)
-                    new_x2 = int(cx + new_w / 2)
-                    new_y2 = int(cy + new_h / 2)
+            for face in detections:
+              x1, y1, x2, y2 = face[:4]
+              #1.5x bigger (keep center)
+              cx = (x1 + x2) / 2
+              cy = (y1 + y2) / 2
+              w = (x2 - x1)
+              h = (y2 - y1)
+              scale = 1.5
+              new_w = w * scale
+              new_h = h * scale
+              new_x1 = int(cx - new_w / 2)
+              new_y1 = int(cy - new_h / 2)
+              new_x2 = int(cx + new_w / 2)
+              new_y2 = int(cy + new_h / 2)
 
-                    H, W = orig.shape[:2]
-                    new_x1 = max(0, new_x1)
-                    new_y1 = max(0, new_y1)
-                    new_x2 = min(W, new_x2)
-                    new_y2 = min(H, new_y2)
-                    cropped = orig[new_y1:new_y2, new_x1:new_x2]
-                    face_img = cv2.resize(cropped, (112, 112))
-                    print("Processed face shape:", face_img.shape)
+              H, W = orig.shape[:2]
+              new_x1 = max(0, new_x1)
+              new_y1 = max(0, new_y1)
+              new_x2 = min(W, new_x2)
+              new_y2 = min(H, new_y2)
+              cropped = orig[new_y1:new_y2, new_x1:new_x2]
+              face_img = cv2.resize(cropped, (112, 112))
+              embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
 
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
@@ -218,11 +221,11 @@ def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
 @TinyJit
 def precompute_embedding_jit_bs1(model, x): return precompute_embedding(model, x)
 
-# todo, can call precompute_embedding_jit_bs1 in this?
 @TinyJit
-def jit_call(model, x):
-    print("rory here dtype =",x.dtype, x.shape)
-    return model(x)
+def blazeface_jit(model, x): return model(x)
+
+@TinyJit
+def adaface_jit(model, x): return model(x)
 
 def precompute_embedding(model, x):
     x = model.visual_conv1(x)
