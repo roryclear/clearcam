@@ -138,15 +138,16 @@ class CLIPSearch:
         if realize: return text_emb.numpy()
         return text_emb
 
-    def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None):
-        if not self.image_embeddings:
+    def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
+        embeddings = {} if is_face else self.image_embeddings
+        if not embeddings:
             print("No embeddings available.")
             return []
         if text_embedding is None:
             text_embedding = self._encode_text(query)
             text_embedding = text_embedding.numpy()
         all_similarities = []
-        for path, img_embedding in self.image_embeddings.items():
+        for path, img_embedding in embeddings.items():
             normalized_path = path.replace("\\", "/")
             if cam_name and f"/cameras/{cam_name}/" not in normalized_path:
                 continue
