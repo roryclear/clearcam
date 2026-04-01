@@ -100,6 +100,7 @@ class CachedCLIPSearch:
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
         folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
+        folder_embeddings_face, folder_paths_face = get_embeddings(folder_path, "face_embeddings.pkl")
 
         current_images = {
             os.path.join(folder_path, f)
@@ -118,6 +119,12 @@ class CachedCLIPSearch:
         if not new_images: return [], []
         new_image_list = list(new_images)
         self.process_faces(new_image_list)
+        face_paths, face_embeddings = self.process_faces(new_image_list)
+        for path, emb in zip(face_paths, face_embeddings):
+          folder_embeddings_face[path] = emb
+          folder_paths_face[path] = path # todo, why?
+        save_embeddings(folder_path, "face_embeddings.pkl", folder_embeddings_face, folder_paths_face)           
+
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):
@@ -139,8 +146,8 @@ class CachedCLIPSearch:
             else:
                 embeddings = []
                 for j in range(len(batch_np)):
-                    emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
-                    embeddings.append(emb)
+                  emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
+                  embeddings.append(emb)
             emb_ret.extend(embeddings)
             path_ret.extend(batch_paths)
             for path, embedding in zip(batch_paths, embeddings):
@@ -164,45 +171,50 @@ class CachedCLIPSearch:
  
 
     def process_faces(self, paths):
-        for path in paths:
-          if path.endswith("_0.jpg"): # person
-            orig = cv2.imread(path)
+      ret_paths = []
+      ret_embeddings = []
+      for path in paths:
+        if path.endswith("_0.jpg"): # person
+          orig = cv2.imread(path)
 
-            h, w = orig.shape[:2]
-            scale = 640 / max(h, w)
-            resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
-            delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
-            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-            left, right = delta_w // 2, delta_w - (delta_w // 2)
-            orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
-            detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
-            detections = detections[detections[:, 4] != 0]
+          h, w = orig.shape[:2]
+          scale = 640 / max(h, w)
+          resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
+          delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
+          top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+          left, right = delta_w // 2, delta_w - (delta_w // 2)
+          orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
+          detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
+          detections = detections[detections[:, 4] != 0]
 
+          # one face per person for now
+          if detections.shape[0] > 0:
+            x1, y1, x2, y2 = detections[0][:4]
+            #1.5x bigger (keep center)
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            w = (x2 - x1)
+            h = (y2 - y1)
+            scale = 1.5
+            new_w = w * scale
+            new_h = h * scale
+            new_x1 = int(cx - new_w / 2)
+            new_y1 = int(cy - new_h / 2)
+            new_x2 = int(cx + new_w / 2)
+            new_y2 = int(cy + new_h / 2)
 
-            for face in detections:
-              x1, y1, x2, y2 = face[:4]
-              #1.5x bigger (keep center)
-              cx = (x1 + x2) / 2
-              cy = (y1 + y2) / 2
-              w = (x2 - x1)
-              h = (y2 - y1)
-              scale = 1.5
-              new_w = w * scale
-              new_h = h * scale
-              new_x1 = int(cx - new_w / 2)
-              new_y1 = int(cy - new_h / 2)
-              new_x2 = int(cx + new_w / 2)
-              new_y2 = int(cy + new_h / 2)
+            H, W = orig.shape[:2]
+            new_x1 = max(0, new_x1)
+            new_y1 = max(0, new_y1)
+            new_x2 = min(W, new_x2)
+            new_y2 = min(H, new_y2)
+            cropped = orig[new_y1:new_y2, new_x1:new_x2]
+            face_img = cv2.resize(cropped, (112, 112))
+            embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
+            ret_embeddings.append(embeddings)
+            ret_paths.append(path)
 
-              H, W = orig.shape[:2]
-              new_x1 = max(0, new_x1)
-              new_y1 = max(0, new_y1)
-              new_x2 = min(W, new_x2)
-              new_y2 = min(H, new_y2)
-              cropped = orig[new_y1:new_y2, new_x1:new_x2]
-              face_img = cv2.resize(cropped, (112, 112))
-              embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
-
+      return ret_paths, ret_embeddings
 
 def get_embeddings(path, filename):
   cache_file = os.path.join(path, filename)
