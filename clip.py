@@ -174,7 +174,7 @@ class CachedCLIPSearch:
 
     def process_faces(self, paths):
         for path in paths:
-            if path.endswith("_0.jpg"):
+            if path.endswith("_0.jpg"): # person
                 orig = cv2.imread(path)
 
                 h, w = orig.shape[:2]
@@ -186,9 +186,31 @@ class CachedCLIPSearch:
                 orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
                 detections = jit_call(self.blazeface, Tensor(orig)).numpy()
                 detections = detections[detections[:, 4] != 0]
-                print("rory faces found =",len(detections))
-                
-            print("rory path =",path)
+
+
+                for face in detections:
+                    x1, y1, x2, y2 = face[:4]
+                    #1.5x bigger (keep center)
+                    cx = (x1 + x2) / 2
+                    cy = (y1 + y2) / 2
+                    w = (x2 - x1)
+                    h = (y2 - y1)
+                    scale = 1.5
+                    new_w = w * scale
+                    new_h = h * scale
+                    new_x1 = int(cx - new_w / 2)
+                    new_y1 = int(cy - new_h / 2)
+                    new_x2 = int(cx + new_w / 2)
+                    new_y2 = int(cy + new_h / 2)
+
+                    H, W = orig.shape[:2]
+                    new_x1 = max(0, new_x1)
+                    new_y1 = max(0, new_y1)
+                    new_x2 = min(W, new_x2)
+                    new_y2 = min(H, new_y2)
+                    cropped = orig[new_y1:new_y2, new_x1:new_x2]
+                    face_img = cv2.resize(cropped, (112, 112))
+                    print("Processed face shape:", face_img.shape)
 
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
