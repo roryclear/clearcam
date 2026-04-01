@@ -126,6 +126,11 @@ class CLIPSearch:
             del target_embeddings[k]
             target_paths.pop(k, None)
 
+        if face:
+            self.face_embeddings = target_embeddings
+        else:
+            self.image_embeddings = target_embeddings
+
         print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
 
     def _encode_text(self, query, realize=False):
