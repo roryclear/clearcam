@@ -646,8 +646,9 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   return_q.put(res)
 
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
-  im = clip.preprocess_clip(im)
-  embedding = clip.precompute_embedding_bs1_np(im)
+  im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
+  print("rory im here =",im)
+  embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
   return_q.put(res)
 
@@ -1076,13 +1077,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
 
             if uploaded_image and use_clip:
-              if not is_face:
-                results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir, is_face)
-                self.send_results(results, start, count)
-                return
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir, is_face)
+              self.send_results(results, start, count)
+              return
 
             if similar_img and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, is_face)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, False) # no similar face func for now
               self.send_results(results, start, count)
               return
 
