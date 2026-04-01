@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import time
 from utils.helpers import send_notif, export_and_upload, BASE_DIR
+from blazeface import BlazeFace
 
 class Model: pass
 
@@ -72,10 +73,13 @@ class CachedCLIPSearch:
         
         weights = None
         
+        self.blazeface = BlazeFace()
         # for BEAM
         if prewarm:
           precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
           precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+          jit_call(self.blazeface, Tensor.rand((640, 640, 3)))
+
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -121,6 +125,7 @@ class CachedCLIPSearch:
                 pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
             return [], []
         new_image_list = list(new_images)
+        self.process_faces(new_image_list)
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):
@@ -165,12 +170,38 @@ class CachedCLIPSearch:
       img = [preprocess(img)]
       ret = precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy()
       return ret
-      
+ 
+
+    def process_faces(self, paths):
+        for path in paths:
+            if path.endswith("_0.jpg"):
+                orig = cv2.imread(path)
+
+                h, w = orig.shape[:2]
+                scale = 640 / max(h, w)
+                resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
+                delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
+                top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+                left, right = delta_w // 2, delta_w - (delta_w // 2)
+                orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
+
+                img = Tensor(orig)
+                print("got img", img.shape)
+                #detections = jit_call(self.blazeface, img).numpy()
+                #detections = detections[detections[:, 4] != 0]
+                #print("rory faces found =",len(detections))
+                
+            print("rory path =",path)
+
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
 
 @TinyJit
 def precompute_embedding_jit_bs1(model, x): return precompute_embedding(model, x)
+
+# todo, can call precompute_embedding_jit_bs1 in this?
+#@TinyJit
+def jit_call(model, x): return model(x)
 
 def precompute_embedding(model, x):
     x = model.visual_conv1(x)
