@@ -14,7 +14,7 @@ class Model: pass
 
 
 class CachedCLIPSearch:
-    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True):
+    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k"):
         self.image_embeddings = {}
         self.image_paths = {}
         
@@ -74,11 +74,11 @@ class CachedCLIPSearch:
         weights = None
         
         self.blazeface = BlazeFace()
-        # for BEAM
-        if prewarm:
-          precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-          precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
-          jit_call(self.blazeface, Tensor.rand((640, 640, 3)))
+        
+        # prewarm
+        jit_call(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
+        precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+        precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
 
     def find_object_folders(self, base_path="data/cameras"):
@@ -184,12 +184,9 @@ class CachedCLIPSearch:
                 top, bottom = delta_h // 2, delta_h - (delta_h // 2)
                 left, right = delta_w // 2, delta_w - (delta_w // 2)
                 orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
-
-                img = Tensor(orig)
-                print("got img", img.shape)
-                #detections = jit_call(self.blazeface, img).numpy()
-                #detections = detections[detections[:, 4] != 0]
-                #print("rory faces found =",len(detections))
+                detections = jit_call(self.blazeface, Tensor(orig)).numpy()
+                detections = detections[detections[:, 4] != 0]
+                print("rory faces found =",len(detections))
                 
             print("rory path =",path)
 
@@ -200,8 +197,10 @@ def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
 def precompute_embedding_jit_bs1(model, x): return precompute_embedding(model, x)
 
 # todo, can call precompute_embedding_jit_bs1 in this?
-#@TinyJit
-def jit_call(model, x): return model(x)
+@TinyJit
+def jit_call(model, x):
+    print("rory here dtype =",x.dtype, x.shape)
+    return model(x)
 
 def precompute_embedding(model, x):
     x = model.visual_conv1(x)
