@@ -185,7 +185,7 @@ class CachedCLIPSearch:
       for path in paths:
         if path.endswith("_0.jpg"): # person
           orig = cv2.imread(path)
-
+          orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
           h, w = orig.shape[:2]
           scale = 640 / max(h, w)
           resized = cv2.resize(orig, (int(w*scale), int(h*scale)))

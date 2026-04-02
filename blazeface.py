@@ -173,10 +173,7 @@ class BlazeFace():
         pad_bottom = 256 - new_h - pad_top
         pad_left = (256 - new_w) // 2
         pad_right = 256 - new_w - pad_left
-        img = img.pad(((pad_top, pad_bottom), (pad_left, pad_right), (0,0)), value=0)
-
-        x = img[..., ::-1] # bgr to rgb
-
+        x = img.pad(((pad_top, pad_bottom), (pad_left, pad_right), (0,0)), value=0)
         x = x.permute((2, 0, 1))
         x = x.unsqueeze(0)
         x = x / 127.5 - 1.0
