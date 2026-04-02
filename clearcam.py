@@ -285,6 +285,7 @@ class VideoCapture:
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
+    (BASE_DIR / "cameras" / f"{self.cam_name}/faces/{timestamp}").mkdir(parents=True, exist_ok=True)
     object_filename = filepath / f"{ts}_{int(p[6])}_{int(p[5])}.jpg"
     x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
     cx = (x1 + x2) // 2
@@ -451,6 +452,7 @@ class VideoCapture:
   def reset_vod(self):
     self.cap = cv2.VideoCapture(self.src) # reset video on settings change
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
+    shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
 
   def inference_loop(self):
@@ -648,6 +650,7 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
+  for _ in range(100):print("rory emb =",embedding.shape)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   return_q.put(res)
 
@@ -1354,9 +1357,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         shutil.rmtree(oldest_recording)
         event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
         object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        face_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
         #dets_dir = largest_cam.with_name(largest_cam.name) / Path("dets") / Path(oldest_recording.name)
         if event_images_dir.exists(): shutil.rmtree(event_images_dir)
         if object_images_dir.exists(): shutil.rmtree(object_images_dir)
+        if face_images_dir.exists(): shutil.rmtree(face_images_dir)
         #if dets_dir.exists(): shutil.rmtree(dets_dir)
         print(f"Deleted oldest recording: {oldest_recording}")
 

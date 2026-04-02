@@ -144,7 +144,8 @@ class CLIPSearch:
         return text_emb
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
-        embeddings = {} if is_face else self.image_embeddings
+        embeddings = self.face_embeddings if is_face else self.image_embeddings
+        print("search rory emb =", len(embeddings.keys()), text_embedding)
         if not embeddings:
             print("No embeddings available.")
             return []

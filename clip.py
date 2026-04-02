@@ -201,11 +201,12 @@ class CachedCLIPSearch:
           # one face per person for now
           if detections.shape[0] > 0:
             x1, y1, x2, y2 = detections[0][:4]
-            #1.5x bigger (keep center)
+
+            # 1.5x bigger
             cx = (x1 + x2) / 2
             cy = (y1 + y2) / 2
-            w = (x2 - x1)
-            h = (y2 - y1)
+            w = x2 - x1
+            h = y2 - y1
             scale = 1.5
             new_w = w * scale
             new_h = h * scale
@@ -213,14 +214,15 @@ class CachedCLIPSearch:
             new_y1 = int(cy - new_h / 2)
             new_x2 = int(cx + new_w / 2)
             new_y2 = int(cy + new_h / 2)
-
             H, W = orig.shape[:2]
             new_x1 = max(0, new_x1)
             new_y1 = max(0, new_y1)
             new_x2 = min(W, new_x2)
             new_y2 = min(H, new_y2)
-            cropped = orig[new_y1:new_y2, new_x1:new_x2]
+
+            cropped = orig[int(new_x1):int(new_x2), int(new_y1):int(new_y2)]
             face_img = cv2.resize(cropped, (112, 112))
+            cv2.imwrite(path.replace("objects","faces"), face_img)
             embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
             ret_embeddings.append(embeddings)
             ret_paths.append(path)

@@ -130,7 +130,7 @@ class BlazeFace():
         self.y_scale = 256.0
         self.h_scale = 256.0
         self.w_scale = 256.0
-        self.min_score_thresh = 0.75
+        self.min_score_thresh = 0.85
         self.min_suppression_threshold = 0.3
 
         load_state_dict(self, safe_load("blazeface.safetensors"))
