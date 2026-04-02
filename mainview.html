@@ -1360,9 +1360,16 @@
         <polyline points="21 15 16 10 5 21"></polyline>
       </svg>
       </label>
+      <label for="faceUpload" style="cursor: pointer; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); display: flex; align-items: center; justify-content: center;" title="Search by face">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M6 20c0-4 3-6 6-6s6 2 6 6"></path>
+        </svg>
+      </label>
+      <input type="file" id="faceUpload" accept="image/*" style="display: none;">
       <span class="tooltip">
         <span class="tooltip-icon">?</span>
-        <span class="tooltiptext">Use an image to find similar objects in your footage.</span>
+        <span class="tooltiptext">Use an image or face to find similar objects in your footage.</span>
       </span>
       <input type="file" id="imageUpload" accept="image/*" style="display: none;">
     </div>
@@ -3020,32 +3027,40 @@
       loadEventImages(false);
     }
 
-    document.getElementById('imageUpload').addEventListener('change', function(event) {
+    function handleImageUpload(event, isFace=false) {
       const file = event.target.files[0];
       if (!file) return;
+
       const reader = new FileReader();
       reader.onload = function(e) {
         const fullDataUrl = e.target.result;
         uploadedImageData = fullDataUrl.split(',')[1];
-        
+
         document.getElementById('imageSearchInput').value = '';
         currentSimilarImage = null;
+
         const searchText = document.getElementById('searchText');
         const searchSpinner = document.getElementById('searchSpinner');
-        
+
         searchText.textContent = 'Searching';
         searchSpinner.style.display = 'block';
         document.getElementById('searchButton').disabled = true;
-        
-        loadEventImages(false).finally(() => {
+
+        loadEventImages(false, isFace).finally(() => {
           searchText.textContent = 'Search';
           searchSpinner.style.display = 'none';
           document.getElementById('searchButton').disabled = false;
         });
       };
-      
+
       reader.readAsDataURL(file);
-    });
+    }
+
+    document.getElementById('imageUpload')
+      .addEventListener('change', (e) => handleImageUpload(e, false));
+
+    document.getElementById('faceUpload')
+      .addEventListener('change', (e) => handleImageUpload(e, true));
 
     document.getElementById('imageSearchInput').addEventListener('keypress', function(event) {
       if (event.key === 'Enter') {
@@ -3061,7 +3076,7 @@
 
     
     let previousEventImages = null;
-    async function loadEventImages(append = false) {
+    async function loadEventImages(append=false, is_face=false) {
       dontRefresh = true;
       if (!append) {
         eventStart = 0;
@@ -3075,7 +3090,7 @@
           image_text: null,
           similar_img: null,
           uploaded_image: null,
-          is_face: false,
+          is_face: is_face,
         };
         payload.start = eventStart;
         payload.count = EVENT_PAGE_SIZE;
