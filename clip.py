@@ -220,6 +220,7 @@ class CachedCLIPSearch:
 
             cropped = orig[int(new_x1):int(new_x2), int(new_y1):int(new_y2)]
             face_img = cv2.resize(cropped, (112, 112))
+            face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
             cv2.imwrite(path.replace("objects","faces"), face_img)
             embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
             ret_embeddings.append(embeddings)
