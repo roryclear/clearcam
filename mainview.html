@@ -3062,6 +3062,7 @@
     
     let previousEventImages = null;
     async function loadEventImages(append = false) {
+      dontRefresh = true;
       if (!append) {
         eventStart = 0;
         hasMoreEvents = true;
@@ -3073,7 +3074,8 @@
           name_contains: alertsOnlyFilter ? "_notif" : null,
           image_text: null,
           similar_img: null,
-          uploaded_image: null
+          uploaded_image: null,
+          is_face: false,
         };
         payload.start = eventStart;
         payload.count = EVENT_PAGE_SIZE;
@@ -3086,7 +3088,6 @@
         } else if (currentImageSearchText) {
           payload.image_text = currentImageSearchText;
         }
-
         const res = await fetch("/event_thumbs", {
           method: "POST",
           headers: {
@@ -3188,7 +3189,6 @@
           container.innerHTML =
             '<p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>';
         }
-
       } catch (err) {
         console.error("Failed to load event images:", err);
         document.getElementById("eventImagesContainer").innerHTML =
