@@ -174,6 +174,7 @@ class CachedCLIPSearch:
     def preprocess_face(self, img):
       img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+      if img.shape != (112, 112, 3): return # wrong size
       img = cv2.resize(img, (112, 112), interpolation=cv2.INTER_CUBIC)
       return img
 
