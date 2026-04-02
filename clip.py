@@ -174,11 +174,46 @@ class CachedCLIPSearch:
     def preprocess_face(self, img):
       img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-      if img.shape != (112, 112, 3): return # wrong size
-      img = cv2.resize(img, (112, 112), interpolation=cv2.INTER_CUBIC)
+      if img.shape != (112, 112, 3): img = self.img_to_face(img)
       return img
 
-         
+    def img_to_face(self, orig):
+      h, w = orig.shape[:2]
+      scale = 640 / max(h, w)
+      resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
+      delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
+      top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+      left, right = delta_w // 2, delta_w - (delta_w // 2)
+      orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
+      detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
+      detections = detections[detections[:, 4] != 0]
+      print("rory here detections =",detections)
+      # one face per person for now
+      if detections.shape[0] > 0:
+        x1, y1, x2, y2 = detections[0][:4]
+        if (x2 - x1) < 30: return # min size of 40 for now?
+        # 1.5x bigger
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        w = x2 - x1
+        h = y2 - y1
+        scale = 1.5
+        new_w = w * scale
+        new_h = h * scale
+        new_x1 = int(cx - new_w / 2)
+        new_y1 = int(cy - new_h / 2)
+        new_x2 = int(cx + new_w / 2)
+        new_y2 = int(cy + new_h / 2)
+        H, W = orig.shape[:2]
+        new_x1 = max(0, new_x1)
+        new_y1 = max(0, new_y1)
+        new_x2 = min(W, new_x2)
+        new_y2 = min(H, new_y2)
+
+        cropped = orig[int(new_x1):int(new_x2), int(new_y1):int(new_y2)]
+        face_img = cv2.resize(cropped, (112, 112))
+        face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
+        return face_img
 
     def process_faces(self, paths):
       ret_paths = []
@@ -187,45 +222,12 @@ class CachedCLIPSearch:
         if path.endswith("_0.jpg"): # person
           orig = cv2.imread(path)
           orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
-          h, w = orig.shape[:2]
-          scale = 640 / max(h, w)
-          resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
-          delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
-          top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-          left, right = delta_w // 2, delta_w - (delta_w // 2)
-          orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
-          detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
-          detections = detections[detections[:, 4] != 0]
-
-          # one face per person for now
-          if detections.shape[0] > 0:
-            x1, y1, x2, y2 = detections[0][:4]
-            if (x2 - x1) < 30: continue # min size of 40 for now?
-            # 1.5x bigger
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
-            w = x2 - x1
-            h = y2 - y1
-            scale = 1.5
-            new_w = w * scale
-            new_h = h * scale
-            new_x1 = int(cx - new_w / 2)
-            new_y1 = int(cy - new_h / 2)
-            new_x2 = int(cx + new_w / 2)
-            new_y2 = int(cy + new_h / 2)
-            H, W = orig.shape[:2]
-            new_x1 = max(0, new_x1)
-            new_y1 = max(0, new_y1)
-            new_x2 = min(W, new_x2)
-            new_y2 = min(H, new_y2)
-
-            cropped = orig[int(new_x1):int(new_x2), int(new_y1):int(new_y2)]
-            face_img = cv2.resize(cropped, (112, 112))
-            face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(path.replace("objects","faces"), face_img)
-            embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
-            ret_embeddings.append(embeddings)
-            ret_paths.append(path)
+          face_img = self.img_to_face(orig)
+          if face_img is None: continue
+          cv2.imwrite(path.replace("objects","faces"), face_img)
+          embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
+          ret_embeddings.append(embeddings)
+          ret_paths.append(path)
 
       return ret_paths, ret_embeddings
 

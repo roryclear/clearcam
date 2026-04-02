@@ -654,7 +654,6 @@ def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_fac
     res = searcher.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   else:
     res = []
-  print("rory res =",res)
   return_q.put(res)
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
@@ -1060,7 +1059,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if uploaded_image:
               if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
               uploaded_image = base64.b64decode(uploaded_image)
-              print("rory is face =",is_face) # todo why multiple times when small?
 
             if cam_name:
               camera_dirs = [BASE_DIR / "cameras" / cam_name]
