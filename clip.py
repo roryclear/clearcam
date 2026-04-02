@@ -22,7 +22,7 @@ class CachedCLIPSearch:
         self.model = Model()
         device = Device.DEFAULT
         # convert
-        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
+        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors")) # todo upload as safetensors
 
         self.model.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
         self.model.visual_conv1.weight = weights["visual.conv1.weight"].to(device)
@@ -160,9 +160,7 @@ class CachedCLIPSearch:
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
-    def precompute_face_embedding_bs1_np(self, img):
-      print("rory img shape =",img.shape, "should be 112, 112, 3 uchar")
-      return adaface_jit(self.adaface, Tensor(img))[0].numpy() # todo remove
+    def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img))[0].numpy() # todo remove
 
     def preprocess_clip(self, img):
       if type(img) == bytes: # todo, another level up?
