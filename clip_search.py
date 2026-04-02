@@ -99,14 +99,14 @@ class CLIPSearch:
     def _load_all_embeddings(self, face=False):
         total_loaded = 0
         valid_paths = set()
-        cache_filename = "face_embeddings.pkl" if face else "embeddings.pkl"
+        cache_filename = "embeddings.pkl"
         target_embeddings = self.face_embeddings if face else self.image_embeddings
         target_paths = self.face_paths if face else self.image_paths
 
         for camera_folder in os.listdir(self.base_path):
             camera_path = os.path.join(self.base_path, camera_folder)
             if not os.path.isdir(camera_path): continue
-            objects_path = os.path.join(camera_path, "objects")
+            objects_path = os.path.join(camera_path, "faces" if face else "objects")
             if not os.path.isdir(objects_path): continue
             for date_folder in os.listdir(objects_path):
                 date_path = os.path.join(objects_path, date_folder)
@@ -145,7 +145,6 @@ class CLIPSearch:
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
         embeddings = self.face_embeddings if is_face else self.image_embeddings
-        print("search rory emb =", len(embeddings.keys()), text_embedding)
         if not embeddings:
             print("No embeddings available.")
             return []

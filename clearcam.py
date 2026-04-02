@@ -650,7 +650,6 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
 def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
-  for _ in range(100):print("rory emb =",embedding.shape)
   res = searcher.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   return_q.put(res)
 

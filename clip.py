@@ -100,7 +100,7 @@ class CachedCLIPSearch:
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
         folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
-        folder_embeddings_face, folder_paths_face = get_embeddings(folder_path, "face_embeddings.pkl")
+        folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
 
         current_images = {
             os.path.join(folder_path, f)
@@ -123,7 +123,7 @@ class CachedCLIPSearch:
         for path, emb in zip(face_paths, face_embeddings):
           folder_embeddings_face[path] = emb
           folder_paths_face[path] = path # todo, why?
-        save_embeddings(folder_path, "face_embeddings.pkl", folder_embeddings_face, folder_paths_face)           
+        save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)           
 
         emb_ret = []
         path_ret = []
