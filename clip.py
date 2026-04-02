@@ -187,7 +187,6 @@ class CachedCLIPSearch:
       orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
       detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
       detections = detections[detections[:, 4] != 0]
-      print("rory here detections =",detections)
       # one face per person for now
       if detections.shape[0] > 0:
         x1, y1, x2, y2 = detections[0][:4]
