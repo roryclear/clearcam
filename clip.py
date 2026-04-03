@@ -11,11 +11,35 @@ from utils.helpers import send_notif, export_and_upload, BASE_DIR
 from blazeface import BlazeFace
 from adaface import ADAFACE
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
+from utils.clip_tokenizer import SimpleTokenizer
+import math
 
 class Blank: pass
 
 class OpenCLIP:
-    def __init__(self):        
+    def __init__(self):
+        self.tokenizer = SimpleTokenizer()
+        self.text_projection = Tensor.empty(768, 768)
+        self.positional_embedding_text = Tensor.empty(77, 768)
+        self.token_embedding = nn.Embedding(49408, 768)
+
+        self.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
+        self.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
+        self.resblocks = []
+        
+        for i in range(12):
+            resblock = Blank()
+            resblock.ln_1 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            resblock.ln_2 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            resblock.attn_out_proj_weight = Tensor.empty(768, 768)
+            resblock.attn_out_proj_bias = Tensor.empty(768)
+            resblock.mlp_c_fc = nn.Linear(768, 3072)
+            resblock.mlp_c_proj = nn.Linear(3072, 768)
+            resblock.in_proj_weight = Tensor.empty(2304, 768)
+            resblock.in_proj_bias = Tensor.empty(2304)        
+            self.resblocks.append(resblock)
+
+
         self.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
         self.class_embedding = Tensor.empty(1024)
         self.positional_embedding = Tensor.empty(257, 1024)
@@ -40,8 +64,58 @@ class OpenCLIP:
         state_dict = safe_load("model_comb.safetensors")
         load_state_dict(self, state_dict)
 
-        #print("rory saving 0")
-        #safe_save(state_dict, "model0.safetensors")
+    def _encode_text(self, query, realize=False):
+        tokens = [49406]
+        tokens += self.tokenizer.encode(query)
+        tokens.append(49407)
+        if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
+        tokens = Tensor([tokens])
+        text_emb = encode_text(self, tokens)
+        if realize: return text_emb.numpy()
+        return text_emb
+    
+@TinyJit
+def encode_text(model, text):
+    x = text
+    x = model.token_embedding(x)
+    x = x + model.positional_embedding_text
+    
+    for i in range(len(model.resblocks)):
+        residual = x
+        x = model.resblocks[i].ln_1(x)
+        
+        B, L, D = x.shape
+        H = 12 #resblock.attn.num_heads
+        d_head = D // H
+
+        qkv = x.matmul(model.resblocks[i].in_proj_weight.T) + model.resblocks[i].in_proj_bias
+        q, k, v = qkv.split(D, dim=-1)
+        q = q.view(B, L, H, d_head).transpose(1, 2)
+        k = k.view(B, L, H, d_head).transpose(1, 2)
+        v = v.view(B, L, H, d_head).transpose(1, 2)
+
+        scale = 1.0 / (d_head ** 0.5)
+        attn_scores = q.matmul(k.transpose(-2, -1)) * scale  # (B,H,L,L)
+        bool_mask = model.attn_mask < 0
+        attn_scores = attn_scores.masked_fill(bool_mask, float("-inf"))
+        attn_probs = Tensor.softmax(attn_scores)
+        context = attn_probs.matmul(v)
+        context = context.transpose(1, 2).contiguous().view(B, L, D)
+        x = context.matmul(model.resblocks[i].attn_out_proj_weight.T) + model.resblocks[i].attn_out_proj_bias
+
+        x += residual
+        residual = x
+        x = model.resblocks[i].ln_2(x)
+        x = model.resblocks[i].mlp_c_fc(x)
+        x = x.gelu()
+        x = model.resblocks[i].mlp_c_proj(x)
+        x += residual
+
+    x = model.ln_final(x)  # [batch_size, n_ctx, transformer.width]
+    argmax = text.argmax()
+    x = x[0][argmax]
+    x = x @ model.text_projection
+    return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class CachedCLIPSearch:
     def __init__(self, prewarm=True):
