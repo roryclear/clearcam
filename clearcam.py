@@ -1242,8 +1242,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.clip = CachedCLIPSearch() if use_clip else None
-        self.searcher = CLIPSearch() if use_clip else None
+        self.clip = CachedCLIPSearch(prewarm=True) if use_clip else None
+        self.searcher = CachedCLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1411,7 +1411,6 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip:
-    from clip_search import CLIPSearch
     from clip import CachedCLIPSearch
 
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
