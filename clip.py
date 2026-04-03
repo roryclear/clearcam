@@ -10,8 +10,9 @@ import time
 from utils.helpers import send_notif, export_and_upload, BASE_DIR
 from blazeface import BlazeFace
 from adaface import ADAFACE
+from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 
-class Model: pass
+class Blank: pass
 
 
 class CachedCLIPSearch:
@@ -19,59 +20,32 @@ class CachedCLIPSearch:
         self.image_embeddings = {}
         self.image_paths = {}
         
-        self.model = Model()
-        device = Device.DEFAULT
-        # convert
-        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors")) # todo upload as safetensors
-
+        self.model = Blank()
         self.model.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
-        self.model.visual_conv1.weight = weights["visual.conv1.weight"].to(device)
-
-        self.model.class_embedding = weights["visual.class_embedding"].to(device)
-        self.model.positional_embedding = weights["visual.positional_embedding"].to(device)
-        
+        self.model.class_embedding = Tensor.empty(1024)
+        self.model.positional_embedding = Tensor.empty(257, 1024)
  
         self.model.ln_pre = nn.LayerNorm(1024)
-        self.model.ln_pre.weight = weights["visual.ln_pre.weight"].to(device)
-        self.model.ln_pre.bias = weights["visual.ln_pre.bias"].to(device)
-        
-
         self.model.ln_post = nn.LayerNorm(1024)
-        self.model.ln_post.weight = weights["visual.ln_post.weight"].to(device)
-        self.model.ln_post.bias = weights["visual.ln_post.bias"].to(device)
-
-        self.model.proj = weights["visual.proj"].to(device)
+        self.model.proj = Tensor.empty(1024, 768)
 
         self.model.resblocks = []
 
         for i in range(24):
-            resblock = Model()
-
+            resblock = Blank()
             resblock.ln_1 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
-            resblock.ln_1.weight = weights[f"visual.transformer.resblocks.{i}.ln_1.weight"].to(device)
-            resblock.ln_1.bias = weights[f"visual.transformer.resblocks.{i}.ln_1.bias"].to(device)
-
             resblock.ln_2 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
-            resblock.ln_2.weight = weights[f"visual.transformer.resblocks.{i}.ln_2.weight"].to(device)
-            resblock.ln_2.bias = weights[f"visual.transformer.resblocks.{i}.ln_2.bias"].to(device)
-
-            resblock.in_proj_weight = weights[f"visual.transformer.resblocks.{i}.attn.in_proj_weight"].to(device)
-            resblock.in_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.in_proj_bias"].to(device)
-
-            resblock.out_proj_weight = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.weight"].to(device)
-            resblock.out_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
-
-
-            resblock.mlp_c_fc = nn.Linear(4096, 1024)
-            resblock.mlp_c_fc.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
-            resblock.mlp_c_fc.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
-
-            resblock.mlp_c_proj = nn.Linear(1024, 4096)
-            resblock.mlp_c_proj.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
-            resblock.mlp_c_proj.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
-
+            resblock.in_proj_weight = Tensor.empty(3072, 1024)
+            resblock.in_proj_bias = Tensor.empty(3072)
+            resblock.out_proj_weight = Tensor.empty(1024, 1024)
+            resblock.out_proj_bias = Tensor.empty(1024)
+            resblock.mlp_c_fc = nn.Linear(1024, 4096)
+            resblock.mlp_c_proj = nn.Linear(4096, 1024)
             self.model.resblocks.append(resblock)
         
+        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
+        load_state_dict(self.model, state_dict)
+
         weights = None
         
         self.blazeface = BlazeFace()
