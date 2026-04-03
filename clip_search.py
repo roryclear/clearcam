@@ -6,74 +6,42 @@ from clearcam import event_img_info
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
 import math
+from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 
-class Model:
-    pass
+class Blank: pass
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
         self.base_path = base_path
         self.image_embeddings = {}
+        self.face_embeddings = {}
         self.image_paths = {}
+        self.face_paths = {}
         self.tokenizer = SimpleTokenizer()
+        self.text_projection = Tensor.empty(768, 768)
+        self.positional_embedding = Tensor.empty(77, 768)
+        self.token_embedding = nn.Embedding(49408, 768)
 
-        device = Device.DEFAULT
-
-
-        self.model = Model()
-
-        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
-
-        self.model.text_projection = weights["text_projection"].to(device)
-        self.model.positional_embedding = weights["positional_embedding"].to(device)
-
-        self.model.token_embedding = nn.Embedding(49408, 768) # todo unhardcode
-        self.model.token_embedding.weight = weights["token_embedding.weight"].to(device)
-
-        self.model.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
-        self.model.ln_final.weight = weights["ln_final.weight"].to(device)
-        self.model.ln_final.bias = weights["ln_final.bias"].to(device)
-
-        self.model.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
-        self.model.resblocks = []
+        self.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
+        self.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
+        self.resblocks = []
         
         for i in range(12):
-            resblock = Model()
-            layernorm = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
-            layernorm.weight = weights[f"transformer.resblocks.{i}.ln_1.weight"].to(device)
-            layernorm.bias = weights[f"transformer.resblocks.{i}.ln_1.bias"].to(device)
-            resblock.ln_1 = layernorm
+            resblock = Blank()
+            resblock.ln_1 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            resblock.ln_2 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            resblock.attn_out_proj_weight = Tensor.empty(768, 768)
+            resblock.attn_out_proj_bias = Tensor.empty(768)
+            resblock.mlp_c_fc = nn.Linear(768, 3072)
+            resblock.mlp_c_proj = nn.Linear(3072, 768)
+            resblock.in_proj_weight = Tensor.empty(2304, 768)
+            resblock.in_proj_bias = Tensor.empty(2304)        
+            self.resblocks.append(resblock)
 
-            layernorm = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
-            layernorm.weight = weights[f"transformer.resblocks.{i}.ln_2.weight"].to(device)
-            layernorm.bias = weights[f"transformer.resblocks.{i}.ln_2.bias"].to(device)
-            resblock.ln_2 = layernorm
+        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K_2.safetensors"))
+        load_state_dict(self, state_dict)
 
-            weight = weights[f"transformer.resblocks.{i}.attn.out_proj.weight"].to(device)
-            resblock.attn_out_proj_weight = weight
 
-            bias = weights[f"transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
-            resblock.attn_out_proj_bias = bias
-
-            mlpcfc = nn.Linear(3072, 768)
-            mlpcfc.weight = weights[f"transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
-            mlpcfc.bias = weights[f"transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
-            resblock.mlp_c_fc = mlpcfc
-
-            mlpcp = nn.Linear(768, 3072)
-            mlpcp.weight = weights[f"transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
-            mlpcp.bias = weights[f"transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
-            resblock.mlp_c_proj = mlpcp
-
-            weight = weights[f"transformer.resblocks.{i}.attn.in_proj_weight"].to(device)
-            resblock.in_proj_weight = weight
-
-            bias = weights[f"transformer.resblocks.{i}.attn.in_proj_bias"].to(device)
-            resblock.in_proj_bias = bias            
-
-            self.model.resblocks.append(resblock)
-
-        weights = None
 
     def _load_single_embeddings_file(self, cache_file):
         try:
@@ -94,35 +62,42 @@ class CLIPSearch:
             print(f"Error loading {cache_file}: {e}")
             return 0
 
-    def _load_all_embeddings(self):
+    def _load_all_embeddings(self, face=False):
         total_loaded = 0
         valid_paths = set()
-        if not os.path.exists(self.base_path): return
+        cache_filename = "embeddings.pkl"
+        target_embeddings = self.face_embeddings if face else self.image_embeddings
+        target_paths = self.face_paths if face else self.image_paths
+
         for camera_folder in os.listdir(self.base_path):
-          camera_path = os.path.join(self.base_path, camera_folder)
-          if not os.path.isdir(camera_path): continue
-
-          objects_path = os.path.join(camera_path, "objects")
-          if not os.path.isdir(objects_path): continue
-          for date_folder in os.listdir(objects_path):
-            date_path = os.path.join(objects_path, date_folder)
-            if not os.path.isdir(date_path): continue
-            cache_file = os.path.join(date_path, "embeddings.pkl")
-            if not os.path.exists(cache_file): continue
-            with open(cache_file, "rb") as f: cache = pickle.load(f)
-            folder_embeddings = cache.get("embeddings", {})
-            folder_paths = cache.get("paths", {})
-            valid_paths.update(folder_embeddings.keys())
-            self.image_embeddings.update(folder_embeddings)
-            self.image_paths.update(folder_paths)
-            total_loaded += len(folder_embeddings)
-
-        stale_keys = set(self.image_embeddings.keys()) - valid_paths
+            camera_path = os.path.join(self.base_path, camera_folder)
+            if not os.path.isdir(camera_path): continue
+            objects_path = os.path.join(camera_path, "faces" if face else "objects")
+            if not os.path.isdir(objects_path): continue
+            for date_folder in os.listdir(objects_path):
+                date_path = os.path.join(objects_path, date_folder)
+                if not os.path.isdir(date_path): continue
+                cache_file = os.path.join(date_path, cache_filename)
+                if not os.path.exists(cache_file): continue
+                with open(cache_file, "rb") as f:
+                    cache = pickle.load(f)
+                folder_embeddings = cache.get("embeddings", {})
+                folder_paths = cache.get("paths", {})
+                valid_paths.update(folder_embeddings.keys())
+                target_embeddings.update(folder_embeddings)
+                target_paths.update(folder_paths)
+                total_loaded += len(folder_embeddings)
+        stale_keys = set(target_embeddings.keys()) - valid_paths
         for k in stale_keys:
-            del self.image_embeddings[k]
-            self.image_paths.pop(k, None)
+            del target_embeddings[k]
+            target_paths.pop(k, None)
 
-        print(f"\nTotal images loaded: {total_loaded}")
+        if face:
+            self.face_embeddings = target_embeddings
+        else:
+            self.image_embeddings = target_embeddings
+
+        print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
 
     def _encode_text(self, query, realize=False):
         tokens = [49406]
@@ -130,19 +105,20 @@ class CLIPSearch:
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
         tokens = Tensor([tokens])
-        text_emb = encode_text(self.model, tokens)
+        text_emb = encode_text(self, tokens)
         if realize: return text_emb.numpy()
         return text_emb
 
-    def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None):
-        if not self.image_embeddings:
+    def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
+        embeddings = self.face_embeddings if is_face else self.image_embeddings
+        if not embeddings:
             print("No embeddings available.")
             return []
         if text_embedding is None:
             text_embedding = self._encode_text(query)
             text_embedding = text_embedding.numpy()
         all_similarities = []
-        for path, img_embedding in self.image_embeddings.items():
+        for path, img_embedding in embeddings.items():
             normalized_path = path.replace("\\", "/")
             if cam_name and f"/cameras/{cam_name}/" not in normalized_path:
                 continue

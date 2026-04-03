@@ -283,6 +283,7 @@ class VideoCapture:
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
     filepath.mkdir(parents=True, exist_ok=True)
+    (BASE_DIR / "cameras" / f"{self.cam_name}/faces/{timestamp}").mkdir(parents=True, exist_ok=True)
     object_filename = filepath / f"{ts}_{int(p[6])}_{int(p[5])}.jpg"
     x1, y1, x2, y2 = map(int, (p[0], p[1], p[2], p[3]))
     cx = (x1 + x2) // 2
@@ -449,6 +450,7 @@ class VideoCapture:
   def reset_vod(self):
     self.cap = cv2.VideoCapture(self.src) # reset video on settings change
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
+    shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
 
   def inference_loop(self):
@@ -643,9 +645,13 @@ def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
   res = searcher.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
-def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir):
-  embedding = clip.precompute_embedding_bs1_np(im)
-  res = searcher.search(None, top_k, cam_name, selected_dir, embedding)
+def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
+  im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
+  if im is not None:
+    embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
+    res = searcher.search(None, top_k, cam_name, selected_dir, embedding, is_face)
+  else:
+    res = []
   return_q.put(res)
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
@@ -1045,6 +1051,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             similar_img  = data.get("similar_img")
             start = data.get("start")
             count = data.get("count")
+            is_face = data.get("is_face") or False
             if start is None: start, count = 0, 100
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
@@ -1068,15 +1075,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
-
+            if image_text and use_clip: self.searcher._load_all_embeddings()
+            if (uploaded_image or similar_img) and use_clip: self.searcher._load_all_embeddings(face=is_face)
+            
             if uploaded_image and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
-
+            
             if similar_img and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
@@ -1348,9 +1356,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         shutil.rmtree(oldest_recording)
         event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
         object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        face_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
         #dets_dir = largest_cam.with_name(largest_cam.name) / Path("dets") / Path(oldest_recording.name)
         if event_images_dir.exists(): shutil.rmtree(event_images_dir)
         if object_images_dir.exists(): shutil.rmtree(object_images_dir)
+        if face_images_dir.exists(): shutil.rmtree(face_images_dir)
         #if dets_dir.exists(): shutil.rmtree(dets_dir)
         print(f"Deleted oldest recording: {oldest_recording}")
 

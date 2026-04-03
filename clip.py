@@ -8,74 +8,55 @@ import numpy as np
 import cv2
 import time
 from utils.helpers import send_notif, export_and_upload, BASE_DIR
+from blazeface import BlazeFace
+from adaface import ADAFACE
+from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 
-class Model: pass
+class Blank: pass
 
+class OpenCLIP:
+    def __init__(self):        
+        self.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
+        self.class_embedding = Tensor.empty(1024)
+        self.positional_embedding = Tensor.empty(257, 1024)
+ 
+        self.ln_pre = nn.LayerNorm(1024)
+        self.ln_post = nn.LayerNorm(1024)
+        self.proj = Tensor.empty(1024, 768)
+
+        self.resblocks = []
+        for i in range(24):
+            resblock = Blank()
+            resblock.ln_1 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
+            resblock.ln_2 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
+            resblock.in_proj_weight = Tensor.empty(3072, 1024)
+            resblock.in_proj_bias = Tensor.empty(3072)
+            resblock.out_proj_weight = Tensor.empty(1024, 1024)
+            resblock.out_proj_bias = Tensor.empty(1024)
+            resblock.mlp_c_fc = nn.Linear(1024, 4096)
+            resblock.mlp_c_proj = nn.Linear(4096, 1024)
+            self.resblocks.append(resblock)
+        
+        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
+        load_state_dict(self, state_dict)
 
 class CachedCLIPSearch:
-    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True):
+    def __init__(self, prewarm=True):
         self.image_embeddings = {}
         self.image_paths = {}
         
-        self.model = Model()
-        device = Device.DEFAULT
-        # convert
-        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
-
-        self.model.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
-        self.model.visual_conv1.weight = weights["visual.conv1.weight"].to(device)
-
-        self.model.class_embedding = weights["visual.class_embedding"].to(device)
-        self.model.positional_embedding = weights["visual.positional_embedding"].to(device)
+        self.model = OpenCLIP()
         
- 
-        self.model.ln_pre = nn.LayerNorm(1024)
-        self.model.ln_pre.weight = weights["visual.ln_pre.weight"].to(device)
-        self.model.ln_pre.bias = weights["visual.ln_pre.bias"].to(device)
+        self.blazeface = BlazeFace()
+        self.adaface = ADAFACE()
         
-
-        self.model.ln_post = nn.LayerNorm(1024)
-        self.model.ln_post.weight = weights["visual.ln_post.weight"].to(device)
-        self.model.ln_post.bias = weights["visual.ln_post.bias"].to(device)
-
-        self.model.proj = weights["visual.proj"].to(device)
-
-        self.model.resblocks = []
-
-        for i in range(24):
-            resblock = Model()
-
-            resblock.ln_1 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
-            resblock.ln_1.weight = weights[f"visual.transformer.resblocks.{i}.ln_1.weight"].to(device)
-            resblock.ln_1.bias = weights[f"visual.transformer.resblocks.{i}.ln_1.bias"].to(device)
-
-            resblock.ln_2 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
-            resblock.ln_2.weight = weights[f"visual.transformer.resblocks.{i}.ln_2.weight"].to(device)
-            resblock.ln_2.bias = weights[f"visual.transformer.resblocks.{i}.ln_2.bias"].to(device)
-
-            resblock.in_proj_weight = weights[f"visual.transformer.resblocks.{i}.attn.in_proj_weight"].to(device)
-            resblock.in_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.in_proj_bias"].to(device)
-
-            resblock.out_proj_weight = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.weight"].to(device)
-            resblock.out_proj_bias = weights[f"visual.transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
-
-
-            resblock.mlp_c_fc = nn.Linear(4096, 1024)
-            resblock.mlp_c_fc.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
-            resblock.mlp_c_fc.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
-
-            resblock.mlp_c_proj = nn.Linear(1024, 4096)
-            resblock.mlp_c_proj.weight = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
-            resblock.mlp_c_proj.bias = weights[f"visual.transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
-
-            self.model.resblocks.append(resblock)
-        
-        weights = None
-        
-        # for BEAM
+        # prewarm
         if prewarm:
-          precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-          precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+            blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
+            adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
+            precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+            precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -92,14 +73,8 @@ class CachedCLIPSearch:
         return object_folders
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
-        cache_file = os.path.join(folder_path, "embeddings.pkl")
-        folder_embeddings = {}
-        folder_paths = {}
-        if os.path.exists(cache_file):
-            with open(cache_file, "rb") as f:
-                cache = pickle.load(f)
-                folder_embeddings = cache.get("embeddings", {})
-                folder_paths = cache.get("paths", {})
+        folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
+        folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
 
         current_images = {
             os.path.join(folder_path, f)
@@ -115,12 +90,16 @@ class CachedCLIPSearch:
             folder_embeddings.pop(img, None)
             folder_paths.pop(img, None)
 
-        if not new_images:
-            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-            with open(cache_file, "wb") as f:
-                pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
-            return [], []
+        if not new_images: return [], []
         new_image_list = list(new_images)
+        ''' todo add back for faces
+        self.process_faces(new_image_list)
+        face_paths, face_embeddings = self.process_faces(new_image_list)
+        for path, emb in zip(face_paths, face_embeddings):
+          folder_embeddings_face[path] = emb
+          folder_paths_face[path] = path
+        save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)           
+        '''
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):
@@ -142,8 +121,8 @@ class CachedCLIPSearch:
             else:
                 embeddings = []
                 for j in range(len(batch_np)):
-                    emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
-                    embeddings.append(emb)
+                  emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
+                  embeddings.append(emb)
             emb_ret.extend(embeddings)
             path_ret.extend(batch_paths)
             for path, embedding in zip(batch_paths, embeddings):
@@ -151,26 +130,112 @@ class CachedCLIPSearch:
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
+        save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
         return emb_ret, path_ret
-    
-    def precompute_embedding_bs1_np(self, img):
-      if type(img) == bytes: # todo, another level up?
+
+    def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
+
+    def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img))[0].numpy() # todo remove
+
+    def preprocess_clip(self, img):
+      if type(img) == bytes:
         img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
       else:
         img = f"data/cameras{img}"
         img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-      img = [preprocess(img)]
-      ret = precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy()
-      return ret
-      
+      return [preprocess(img)]
+    
+    def preprocess_face(self, img):
+      if type(img) == bytes: # todo dup of above
+        img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
+      else:
+        img = f"data/cameras{img}"
+        img = cv2.imread(img) 
+      img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+      if img.shape != (112, 112, 3): img = self.img_to_face(img)
+      return img
+
+    def img_to_face(self, orig):
+      h, w = orig.shape[:2]
+      scale = 640 / max(h, w)
+      resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
+      delta_w, delta_h = 640 - resized.shape[1], 640 - resized.shape[0]
+      top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+      left, right = delta_w // 2, delta_w - (delta_w // 2)
+      orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
+      detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
+      detections = detections[detections[:, 4] != 0]
+      # one face per person for now
+      if detections.shape[0] > 0:
+        x1, y1, x2, y2 = detections[0][:4]
+        if (x2 - x1) < 60: return # min size of 60 for now?
+        # 1.5x bigger
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        w = x2 - x1
+        h = y2 - y1
+        scale = 1.5
+        new_w = w * scale
+        new_h = h * scale
+        new_x1 = int(cx - new_w / 2)
+        new_y1 = int(cy - new_h / 2)
+        new_x2 = int(cx + new_w / 2)
+        new_y2 = int(cy + new_h / 2)
+        H, W = orig.shape[:2]
+        new_x1 = max(0, new_x1)
+        new_y1 = max(0, new_y1)
+        new_x2 = min(W, new_x2)
+        new_y2 = min(H, new_y2)
+
+        cropped = orig[int(new_x1):int(new_x2), int(new_y1):int(new_y2)]
+        face_img = cv2.resize(cropped, (112, 112))
+        face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
+        return face_img
+
+    def process_faces(self, paths):
+      ret_paths = []
+      ret_embeddings = []
+      for path in paths:
+        if path.endswith("_0.jpg"): # person
+          orig = cv2.imread(path)
+          orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
+          face_img = self.img_to_face(orig)
+          if face_img is None: continue
+          cv2.imwrite(path.replace("objects","faces"), face_img)
+          embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
+          ret_embeddings.append(embeddings)
+          ret_paths.append(path)
+
+      return ret_paths, ret_embeddings
+
+def get_embeddings(path, filename):
+  cache_file = os.path.join(path, filename)
+  folder_embeddings = {}
+  folder_paths = {}
+  if os.path.exists(cache_file):
+      with open(cache_file, "rb") as f:
+          cache = pickle.load(f)
+          folder_embeddings = cache.get("embeddings", {})
+          folder_paths = cache.get("paths", {})
+  return folder_embeddings, folder_paths
+
+def save_embeddings(folder_path, file_name, folder_embeddings, folder_paths):
+    cache_file = os.path.join(folder_path, file_name)
+    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+    with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
+
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
 
 @TinyJit
 def precompute_embedding_jit_bs1(model, x): return precompute_embedding(model, x)
+
+@TinyJit
+def blazeface_jit(model, x): return model(x)
+
+@TinyJit
+def adaface_jit(model, x): return model(x)
 
 def precompute_embedding(model, x):
     x = model.visual_conv1(x)
