@@ -10,13 +10,8 @@ from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_d
 
 class Blank: pass
 
-class CLIPSearch:
-    def __init__(self, base_path="data/cameras"):
-        self.base_path = base_path
-        self.image_embeddings = {}
-        self.face_embeddings = {}
-        self.image_paths = {}
-        self.face_paths = {}
+class OpenCLIP:
+    def __init__(self):
         self.tokenizer = SimpleTokenizer()
         self.text_projection = Tensor.empty(768, 768)
         self.positional_embedding_text = Tensor.empty(77, 768)
@@ -40,6 +35,25 @@ class CLIPSearch:
         
         state_dict = safe_load("model_comb.safetensors")
         load_state_dict(self, state_dict)
+
+    def _encode_text(self, query, realize=False):
+        tokens = [49406]
+        tokens += self.tokenizer.encode(query)
+        tokens.append(49407)
+        if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
+        tokens = Tensor([tokens])
+        text_emb = encode_text(self, tokens)
+        if realize: return text_emb.numpy()
+        return text_emb
+
+class CLIPSearch:
+    def __init__(self, base_path="data/cameras"):
+        self.base_path = base_path
+        self.image_embeddings = {}
+        self.face_embeddings = {}
+        self.image_paths = {}
+        self.face_paths = {}
+        self.model = OpenCLIP()
 
     def _load_single_embeddings_file(self, cache_file):
         try:
@@ -97,15 +111,6 @@ class CLIPSearch:
 
         print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
 
-    def _encode_text(self, query, realize=False):
-        tokens = [49406]
-        tokens += self.tokenizer.encode(query)
-        tokens.append(49407)
-        if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
-        tokens = Tensor([tokens])
-        text_emb = encode_text(self, tokens)
-        if realize: return text_emb.numpy()
-        return text_emb
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
         embeddings = self.face_embeddings if is_face else self.image_embeddings
@@ -113,7 +118,7 @@ class CLIPSearch:
             print("No embeddings available.")
             return []
         if text_embedding is None:
-            text_embedding = self._encode_text(query)
+            text_embedding = self.model._encode_text(query)
             text_embedding = text_embedding.numpy()
         all_similarities = []
         for path, img_embedding in embeddings.items():
