@@ -14,23 +14,17 @@ from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_d
 
 class Blank: pass
 
-
-class CachedCLIPSearch:
-    def __init__(self, model_name="ViT-L-14", pretrained_name="laion2b_s32b_b82k", prewarm=True):
-        self.image_embeddings = {}
-        self.image_paths = {}
-        
-        self.model = Blank()
-        self.model.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
-        self.model.class_embedding = Tensor.empty(1024)
-        self.model.positional_embedding = Tensor.empty(257, 1024)
+class OpenCLIP:
+    def __init__(self):        
+        self.visual_conv1 = nn.Conv2d(3, 1024, (14, 14), (14, 14), (0, 0), (1, 1), 1, bias=False)
+        self.class_embedding = Tensor.empty(1024)
+        self.positional_embedding = Tensor.empty(257, 1024)
  
-        self.model.ln_pre = nn.LayerNorm(1024)
-        self.model.ln_post = nn.LayerNorm(1024)
-        self.model.proj = Tensor.empty(1024, 768)
+        self.ln_pre = nn.LayerNorm(1024)
+        self.ln_post = nn.LayerNorm(1024)
+        self.proj = Tensor.empty(1024, 768)
 
-        self.model.resblocks = []
-
+        self.resblocks = []
         for i in range(24):
             resblock = Blank()
             resblock.ln_1 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
@@ -41,12 +35,17 @@ class CachedCLIPSearch:
             resblock.out_proj_bias = Tensor.empty(1024)
             resblock.mlp_c_fc = nn.Linear(1024, 4096)
             resblock.mlp_c_proj = nn.Linear(4096, 1024)
-            self.model.resblocks.append(resblock)
+            self.resblocks.append(resblock)
         
         state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
-        load_state_dict(self.model, state_dict)
+        load_state_dict(self, state_dict)
 
-        weights = None
+class CachedCLIPSearch:
+    def __init__(self, prewarm=True):
+        self.image_embeddings = {}
+        self.image_paths = {}
+        
+        self.model = OpenCLIP()
         
         self.blazeface = BlazeFace()
         self.adaface = ADAFACE()
