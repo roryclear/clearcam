@@ -5,7 +5,7 @@ import os
 
 def setup_clip_test():
   if os.path.exists("test/clip_images/embeddings.pkl"): os.remove("test/clip_images/embeddings.pkl")
-  scanner = CachedCLIPSearch()
+  scanner = CachedCLIPSearch(prewarm=False)
   scanner.precompute_embeddings("test/clip_images")
 
 def test_clip_search():
