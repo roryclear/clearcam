@@ -24,7 +24,7 @@ class OpenCLIP:
         self.ln_post = nn.LayerNorm(1024)
         self.proj = Tensor.empty(1024, 768)
 
-        self.resblocks = []
+        self.resblocks_img = []
         for i in range(24):
             resblock = Blank()
             resblock.ln_1 = nn.LayerNorm(1024, 1e-05, elementwise_affine=True)
@@ -35,10 +35,13 @@ class OpenCLIP:
             resblock.out_proj_bias = Tensor.empty(1024)
             resblock.mlp_c_fc = nn.Linear(1024, 4096)
             resblock.mlp_c_proj = nn.Linear(4096, 1024)
-            self.resblocks.append(resblock)
-        
-        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
+            self.resblocks_img.append(resblock)
+                
+        state_dict = safe_load("model_comb.safetensors")
         load_state_dict(self, state_dict)
+
+        #print("rory saving 0")
+        #safe_save(state_dict, "model0.safetensors")
 
 class CachedCLIPSearch:
     def __init__(self, prewarm=True):
@@ -247,12 +250,12 @@ def precompute_embedding(model, x):
     x = x + model.positional_embedding
     x = model.ln_pre(x)
     # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
-    for i in range(len(model.resblocks)):
-        x_ln1 = model.resblocks[i].ln_1(x)
+    for i in range(len(model.resblocks_img)):
+        x_ln1 = model.resblocks_img[i].ln_1(x)
         B, L, D = x_ln1.shape
         H = 16 #block.attn.num_heads
         d_head = D // H
-        qkv = x_ln1 @ model.resblocks[i].in_proj_weight.T + model.resblocks[i].in_proj_bias           
+        qkv = x_ln1 @ model.resblocks_img[i].in_proj_weight.T + model.resblocks_img[i].in_proj_bias           
         q, k, v = qkv.split(D, dim=-1)
         def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
         q = shape(q)
@@ -263,13 +266,13 @@ def precompute_embedding(model, x):
         attn_probs = Tensor.softmax(attn_scores)
         context = attn_probs.matmul(v)
         context = context.transpose(1, 2).contiguous().view(B, L, D)
-        attn_out = context @ model.resblocks[i].out_proj_weight.T + model.resblocks[i].out_proj_bias      
+        attn_out = context @ model.resblocks_img[i].out_proj_weight.T + model.resblocks_img[i].out_proj_bias      
         attn_scaled = attn_out
         x = x + attn_scaled
-        x_ln2 = model.resblocks[i].ln_2(x)
-        ff = model.resblocks[i].mlp_c_fc(x_ln2)
+        x_ln2 = model.resblocks_img[i].ln_2(x)
+        ff = model.resblocks_img[i].mlp_c_fc(x_ln2)
         ff = ff.gelu()
-        ff = model.resblocks[i].mlp_c_proj(ff)
+        ff = model.resblocks_img[i].mlp_c_proj(ff)
         x = x + ff
 
     x = model.ln_post(x)

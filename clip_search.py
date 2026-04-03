@@ -19,7 +19,7 @@ class CLIPSearch:
         self.face_paths = {}
         self.tokenizer = SimpleTokenizer()
         self.text_projection = Tensor.empty(768, 768)
-        self.positional_embedding = Tensor.empty(77, 768)
+        self.positional_embedding_text = Tensor.empty(77, 768)
         self.token_embedding = nn.Embedding(49408, 768)
 
         self.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
@@ -37,11 +37,9 @@ class CLIPSearch:
             resblock.in_proj_weight = Tensor.empty(2304, 768)
             resblock.in_proj_bias = Tensor.empty(2304)        
             self.resblocks.append(resblock)
-
-        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K_2.safetensors"))
+        
+        state_dict = safe_load("model_comb.safetensors")
         load_state_dict(self, state_dict)
-
-
 
     def _load_single_embeddings_file(self, cache_file):
         try:
@@ -148,7 +146,7 @@ class CLIPSearch:
 def encode_text(model, text):
     x = text
     x = model.token_embedding(x)
-    x = x + model.positional_embedding
+    x = x + model.positional_embedding_text
     
     for i in range(len(model.resblocks)):
         residual = x
