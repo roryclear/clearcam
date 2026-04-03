@@ -641,15 +641,15 @@ def run_encode_text(return_q, model, text):
   return_q.put(res)
   return res
 
-def run_search(return_q, searcher, image_text, top_k, cam_name, selected_dir):
-  res = searcher.search(image_text, top_k, cam_name, selected_dir)
+def run_search(return_q, clip, image_text, top_k, cam_name, selected_dir):
+  res = clip.search(image_text, top_k, cam_name, selected_dir)
   return_q.put(res)
 
-def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_face):
+def run_clip(return_q, clip, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   if im is not None:
     embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
-    res = searcher.search(None, top_k, cam_name, selected_dir, embedding, is_face)
+    res = clip.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   else:
     res = []
   return_q.put(res)
@@ -657,7 +657,6 @@ def run_clip(return_q, clip, searcher, im, top_k, cam_name, selected_dir, is_fac
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         self.clip = kwargs.pop('clip_instance', None)
-        self.searcher = kwargs.pop('searcher_instance', None)
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args): pass # don't print stuff
@@ -1075,21 +1074,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: self.searcher._load_all_embeddings()
-            if (uploaded_image or similar_img) and use_clip: self.searcher._load_all_embeddings(face=is_face)
+            if image_text and use_clip: self.clip._load_all_embeddings()
+            if (uploaded_image or similar_img) and use_clip: self.clip._load_all_embeddings(face=is_face)
             
             if uploaded_image and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir, is_face)
+              results = self.server.process_with_clip_lock(run_clip, self.clip, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
             if similar_img and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+              results = self.server.process_with_clip_lock(run_clip, self.clip, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = self.server.process_with_clip_lock(run_search, self.searcher, image_text, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_search, self.clip, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1243,7 +1242,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
         self.clip = CachedCLIPSearch(prewarm=True) if use_clip else None
-        self.searcher = CachedCLIPSearch() if use_clip else None
         self.clip_stop_event = threading.Event()
         self.clip_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1264,7 +1262,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             self.clip_lock.release()
 
     def finish_request(self, request, client_address):
-      self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip, searcher_instance=self.searcher)
+      self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():

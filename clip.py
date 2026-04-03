@@ -88,8 +88,7 @@ class OpenCLIP:
             resblock.in_proj_bias = Tensor.empty(2304)        
             self.resblocks.append(resblock)
 
-
-        state_dict = safe_load("model_comb.safetensors")
+        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
         load_state_dict(self, state_dict)
 
     def _encode_text(self, query, realize=False):
@@ -191,13 +190,13 @@ class CachedCLIPSearch:
         
         self.model = OpenCLIP()
         
-        self.blazeface = BlazeFace()
-        self.adaface = ADAFACE()
+        #self.blazeface = BlazeFace()
+        #self.adaface = ADAFACE()
         
         # prewarm
         if prewarm:
-            blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
-            adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
+            #blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
+            #adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
             precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
             precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 

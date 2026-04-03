@@ -4,32 +4,32 @@ import os
 
 def setup_clip_test():
   if os.path.exists("test/clip_images/embeddings.pkl"): os.remove("test/clip_images/embeddings.pkl")
-  scanner = CachedCLIPSearch(prewarm=False)
-  scanner.precompute_embeddings("test/clip_images")
+  clip = CachedCLIPSearch(prewarm=False)
+  clip.precompute_embeddings("test/clip_images")
 
 def test_clip_search():
-  searcher = CachedCLIPSearch()
-  searcher._load_single_embeddings_file("test/clip_images/embeddings.pkl")
-  res = searcher.search("ferrari f40")
+  clip = CachedCLIPSearch()
+  clip._load_single_embeddings_file("test/clip_images/embeddings.pkl")
+  res = clip.search("ferrari f40")
   np.testing.assert_allclose(res[0][1], 0.3566271960735321, rtol=1e-03)
   np.testing.assert_allclose(res[1][1], 0.0718243420124054, rtol=1e-02) # careful now
   assert res[0][0] == "test/clip_images/f40.jpg"
   assert res[1][0] == "test/clip_images/micra.jpg"
-  res = searcher.search("nissan micra")
+  res = clip.search("nissan micra")
   np.testing.assert_allclose(res[0][1], 0.3218580484390259, rtol=1e-03)
   np.testing.assert_allclose(res[1][1], 0.07153752446174622, rtol=1e-02)
   assert res[1][0] == "test/clip_images/f40.jpg"
   assert res[0][0] == "test/clip_images/micra.jpg"
 
 def test_clip_search_jit():
-  searcher = CachedCLIPSearch()
-  searcher._load_single_embeddings_file("test/clip_images/embeddings.pkl")
-  for _ in range(5): res = searcher.search("ferrari f40")
+  clip = CachedCLIPSearch()
+  clip._load_single_embeddings_file("test/clip_images/embeddings.pkl")
+  for _ in range(5): res = clip.search("ferrari f40")
   np.testing.assert_allclose(res[0][1], 0.3566271960735321, rtol=1e-03)
   np.testing.assert_allclose(res[1][1], 0.0718243420124054, rtol=1e-02)  # careful now
   assert res[0][0] == "test/clip_images/f40.jpg"
   assert res[1][0] == "test/clip_images/micra.jpg"
-  for _ in range(5): res = searcher.search("nissan micra")
+  for _ in range(5): res = clip.search("nissan micra")
   np.testing.assert_allclose(res[0][1], 0.3218580484390259, rtol=1e-03)
   np.testing.assert_allclose(res[1][1], 0.07153752446174622, rtol=1e-02)
   assert res[1][0] == "test/clip_images/f40.jpg"
