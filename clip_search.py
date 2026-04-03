@@ -6,9 +6,9 @@ from clearcam import event_img_info
 from utils.clip_tokenizer import SimpleTokenizer
 import numpy as np
 import math
+from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 
-class Model:
-    pass
+class Blank: pass
 
 class CLIPSearch:
     def __init__(self, base_path="data/cameras"):
@@ -18,64 +18,30 @@ class CLIPSearch:
         self.image_paths = {}
         self.face_paths = {}
         self.tokenizer = SimpleTokenizer()
+        self.text_projection = Tensor.empty(768, 768)
+        self.positional_embedding = Tensor.empty(77, 768)
+        self.token_embedding = nn.Embedding(49408, 768)
 
-        device = Device.DEFAULT
-
-
-        self.model = Model()
-
-        weights = nn.state.safe_load(fetch("http://huggingface.co/laion/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/open_clip_pytorch_model.safetensors"))
-
-        self.model.text_projection = weights["text_projection"].to(device)
-        self.model.positional_embedding = weights["positional_embedding"].to(device)
-
-        self.model.token_embedding = nn.Embedding(49408, 768) # todo unhardcode
-        self.model.token_embedding.weight = weights["token_embedding.weight"].to(device)
-
-        self.model.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
-        self.model.ln_final.weight = weights["ln_final.weight"].to(device)
-        self.model.ln_final.bias = weights["ln_final.bias"].to(device)
-
-        self.model.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
-        self.model.resblocks = []
+        self.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
+        self.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
+        self.resblocks = []
         
         for i in range(12):
-            resblock = Model()
-            layernorm = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
-            layernorm.weight = weights[f"transformer.resblocks.{i}.ln_1.weight"].to(device)
-            layernorm.bias = weights[f"transformer.resblocks.{i}.ln_1.bias"].to(device)
-            resblock.ln_1 = layernorm
+            resblock = Blank()
+            resblock.ln_1 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            resblock.ln_2 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
+            resblock.attn_out_proj_weight = Tensor.empty(768, 768)
+            resblock.attn_out_proj_bias = Tensor.empty(768)
+            resblock.mlp_c_fc = nn.Linear(768, 3072)
+            resblock.mlp_c_proj = nn.Linear(3072, 768)
+            resblock.in_proj_weight = Tensor.empty(2304, 768)
+            resblock.in_proj_bias = Tensor.empty(2304)        
+            self.resblocks.append(resblock)
 
-            layernorm = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
-            layernorm.weight = weights[f"transformer.resblocks.{i}.ln_2.weight"].to(device)
-            layernorm.bias = weights[f"transformer.resblocks.{i}.ln_2.bias"].to(device)
-            resblock.ln_2 = layernorm
+        state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K_2.safetensors"))
+        load_state_dict(self, state_dict)
 
-            weight = weights[f"transformer.resblocks.{i}.attn.out_proj.weight"].to(device)
-            resblock.attn_out_proj_weight = weight
 
-            bias = weights[f"transformer.resblocks.{i}.attn.out_proj.bias"].to(device)
-            resblock.attn_out_proj_bias = bias
-
-            mlpcfc = nn.Linear(3072, 768)
-            mlpcfc.weight = weights[f"transformer.resblocks.{i}.mlp.c_fc.weight"].to(device)
-            mlpcfc.bias = weights[f"transformer.resblocks.{i}.mlp.c_fc.bias"].to(device)
-            resblock.mlp_c_fc = mlpcfc
-
-            mlpcp = nn.Linear(768, 3072)
-            mlpcp.weight = weights[f"transformer.resblocks.{i}.mlp.c_proj.weight"].to(device)
-            mlpcp.bias = weights[f"transformer.resblocks.{i}.mlp.c_proj.bias"].to(device)
-            resblock.mlp_c_proj = mlpcp
-
-            weight = weights[f"transformer.resblocks.{i}.attn.in_proj_weight"].to(device)
-            resblock.in_proj_weight = weight
-
-            bias = weights[f"transformer.resblocks.{i}.attn.in_proj_bias"].to(device)
-            resblock.in_proj_bias = bias            
-
-            self.model.resblocks.append(resblock)
-
-        weights = None
 
     def _load_single_embeddings_file(self, cache_file):
         try:
@@ -139,7 +105,7 @@ class CLIPSearch:
         tokens.append(49407)
         if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
         tokens = Tensor([tokens])
-        text_emb = encode_text(self.model, tokens)
+        text_emb = encode_text(self, tokens)
         if realize: return text_emb.numpy()
         return text_emb
 
