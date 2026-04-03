@@ -92,13 +92,14 @@ class CachedCLIPSearch:
 
         if not new_images: return [], []
         new_image_list = list(new_images)
+        ''' todo add back for faces
         self.process_faces(new_image_list)
         face_paths, face_embeddings = self.process_faces(new_image_list)
         for path, emb in zip(face_paths, face_embeddings):
           folder_embeddings_face[path] = emb
-          folder_paths_face[path] = path # todo, why?
+          folder_paths_face[path] = path
         save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)           
-
+        '''
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):
