@@ -1075,8 +1075,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if (image_text or similar_img) and use_clip: self.searcher._load_all_embeddings()
-            if uploaded_image and use_clip: self.searcher._load_all_embeddings(face=is_face)
+            if image_text and use_clip: self.searcher._load_all_embeddings()
+            if (uploaded_image or similar_img) and use_clip: self.searcher._load_all_embeddings(face=is_face)
             
             if uploaded_image and use_clip:
               results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, uploaded_image, start+count, cam_name, selected_dir, is_face)
@@ -1084,7 +1084,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               return
             
             if similar_img and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, False) # no similar face func for now
+              results = self.server.process_with_clip_lock(run_clip, self.clip, self.searcher, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 

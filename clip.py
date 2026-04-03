@@ -163,7 +163,7 @@ class CachedCLIPSearch:
     def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img))[0].numpy() # todo remove
 
     def preprocess_clip(self, img):
-      if type(img) == bytes: # todo, another level up?
+      if type(img) == bytes:
         img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
       else:
         img = f"data/cameras{img}"
@@ -172,7 +172,11 @@ class CachedCLIPSearch:
       return [preprocess(img)]
     
     def preprocess_face(self, img):
-      img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
+      if type(img) == bytes: # todo dup of above
+        img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
+      else:
+        img = f"data/cameras{img}"
+        img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
       if img.shape != (112, 112, 3): img = self.img_to_face(img)
       return img

@@ -1610,7 +1610,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
-
+    let is_face = false;
     let autoRefreshInterval = null;
     let dontRefresh = false;
 
@@ -3027,10 +3027,11 @@
       loadEventImages(false);
     }
 
-    function handleImageUpload(event, isFace=false) {
+    function handleImageUpload(event, face=false) {
+      is_face = face
       const file = event.target.files[0];
       if (!file) return;
-
+      
       const reader = new FileReader();
       reader.onload = function(e) {
         const fullDataUrl = e.target.result;
@@ -3046,7 +3047,7 @@
         searchSpinner.style.display = 'block';
         document.getElementById('searchButton').disabled = true;
 
-        loadEventImages(false, isFace).finally(() => {
+        loadEventImages(false, is_face).finally(() => {
           searchText.textContent = 'Search';
           searchSpinner.style.display = 'none';
           document.getElementById('searchButton').disabled = false;
@@ -3057,10 +3058,10 @@
     }
 
     document.getElementById('imageUpload')
-      .addEventListener('change', (e) => handleImageUpload(e, false));
+      .addEventListener('change', (e) => handleImageUpload(e, face=false));
 
     document.getElementById('faceUpload')
-      .addEventListener('change', (e) => handleImageUpload(e, true));
+      .addEventListener('change', (e) => handleImageUpload(e, face=true));
 
     document.getElementById('imageSearchInput').addEventListener('keypress', function(event) {
       if (event.key === 'Enter') {
@@ -3076,7 +3077,8 @@
 
     
     let previousEventImages = null;
-    async function loadEventImages(append=false, is_face=false) {
+    async function loadEventImages(append=false, face=null) {
+      if(face != null) is_face = face;
       dontRefresh = true;
       if (!append) {
         eventStart = 0;
@@ -3101,6 +3103,7 @@
           payload.similar_img = `/${currentSimilarImage}`;
           currentSimilarImage = null;
         } else if (currentImageSearchText) {
+          is_face = false;
           payload.image_text = currentImageSearchText;
         }
         const res = await fetch("/event_thumbs", {
@@ -3324,7 +3327,7 @@
       currentSimilarImage = match[1];
       document.getElementById('imageSearchInput').value = '';
       
-      loadEventImages(false).finally(() => {
+      loadEventImages(false, is_face).finally(() => {
         searchText.textContent = 'Search';
         searchSpinner.style.display = 'none';
         searchButton.disabled = false;
