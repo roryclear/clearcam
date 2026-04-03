@@ -190,7 +190,7 @@ class CachedCLIPSearch:
       # one face per person for now
       if detections.shape[0] > 0:
         x1, y1, x2, y2 = detections[0][:4]
-        if (x2 - x1) < 30: return # min size of 40 for now?
+        if (x2 - x1) < 60: return # min size of 60 for now?
         # 1.5x bigger
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
