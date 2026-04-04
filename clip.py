@@ -200,6 +200,16 @@ class CachedCLIPSearch:
             precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
             precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
+    def _encode_text(self, query, realize=False):
+        tokens = [49406]
+        tokens += self.model.tokenizer.encode(query)
+        tokens.append(49407)
+        if len(tokens) < 77: tokens += [0] * (77 - len(tokens))
+        tokens = Tensor([tokens])
+        text_emb = encode_text(self.model, tokens)
+        if realize: return text_emb.numpy()
+        return text_emb
+
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
