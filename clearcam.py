@@ -636,8 +636,8 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
-def run_encode_text(return_q, model, text):
-  res = model._encode_text(text, realize=True)
+def run_encode_text(return_q, clip, text):
+  res = clip.model._encode_text(text, realize=True)
   return_q.put(res)
   return res
 
