@@ -101,42 +101,6 @@ class OpenCLIP:
         if realize: return text_emb.numpy()
         return text_emb
 
-
-    def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
-        embeddings = self.face_embeddings if is_face else self.image_embeddings
-        if not embeddings:
-            print("No embeddings available.")
-            return []
-        if text_embedding is None:
-            text_embedding = self.model._encode_text(query)
-            text_embedding = text_embedding.numpy()
-        all_similarities = []
-        for path, img_embedding in embeddings.items():
-            normalized_path = path.replace("\\", "/")
-            if cam_name and f"/cameras/{cam_name}/" not in normalized_path:
-                continue
-            if timestamp and f"/objects/{timestamp}/" not in normalized_path and "/objects/video/" not in normalized_path:
-                continue
-            similarity = (img_embedding @ text_embedding.T).item()
-            filename = os.path.basename(path)
-            if filename.lower().endswith((".jpg", ".jpeg", ".png")):
-                object_id = event_img_info(filename.split(".")[0])["object_id"] if "_" in filename else None
-                all_similarities.append((path, similarity, object_id))
-        
-        if any(item[2] for item in all_similarities):
-            best_per_id = {}
-            for path, score, object_id in all_similarities:
-                if object_id is not None:
-                    if object_id not in best_per_id or score > best_per_id[object_id][1]:
-                        best_per_id[object_id] = (path, score)
-
-            items_without_id = [(path, score) for path, score, object_id in all_similarities if object_id is None]
-            results = list(best_per_id.values()) + items_without_id
-        else:
-            results = [(path, score) for path, score, _ in all_similarities]
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results[:top_k]
-
 @TinyJit
 def encode_text(model, text):
     x = text
