@@ -8,6 +8,7 @@ import numpy as np
 from collections import defaultdict
 from pathlib import Path
 from tinygrad import TinyJit
+from utils.helpers import resize
 
 class Sequential():
     def __init__(self, size=0, list=None):
@@ -419,12 +420,6 @@ def clip_boxes(boxes, shape):
     boxes[..., [0, 2]] = boxes[..., [0, 2]].clip(0, shape[1])
     boxes[..., [1, 3]] = boxes[..., [1, 3]].clip(0, shape[0])
     return boxes
-
-def resize(img, new_size):
-  img = img.permute(2,0,1)
-  img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
-  img = img.permute(1, 2, 0)
-  return img
 
 def compute_iou_matrix(boxes):
   x1s = boxes[:, :, 0]

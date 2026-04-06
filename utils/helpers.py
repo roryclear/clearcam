@@ -14,6 +14,7 @@ import threading
 import cv2
 import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
+from tinygrad import Tensor
 
 def send_notif(session_token: str, text=None):
     host = "www.clearcam.org"
@@ -115,6 +116,12 @@ def draw_bounding_boxes(orig_img_path, predictions, class_labels):
 
     object_count[class_labels[class_id]] += 1
   return orig_img
+
+def resize(img, new_size):
+  img = img.permute(2,0,1)
+  img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
+  img = img.permute(1, 2, 0)
+  return img
 
 def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
   segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
