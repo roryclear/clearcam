@@ -1,5 +1,6 @@
 from tinygrad import Tensor, nn
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
+from utils.helpers import resize
 
 class BlazeBlock():
     def __init__(self, c=None, channel_pad=0):
@@ -253,9 +254,3 @@ def compute_iou_matrix(boxes):
   intersection = w * h
   union = areas[:, :, None] + areas[:, None, :] - intersection
   return intersection / union
-
-def resize(img, new_size):
-  img = img.permute(2,0,1)
-  img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
-  img = img.permute(1, 2, 0)
-  return img
