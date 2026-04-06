@@ -118,7 +118,6 @@ def draw_bounding_boxes(orig_img_path, predictions, class_labels):
   return orig_img
 
 def resize(img, new_size):
-  print("rory shape =",img.shape, "->", new_size)
   img = img.permute(2,0,1)
   img = Tensor.interpolate(img, size=(new_size[1], new_size[0]), mode='linear', align_corners=False)
   img = img.permute(1, 2, 0)

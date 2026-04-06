@@ -615,7 +615,7 @@ class RFDETR():
     boxes = box_cxcywh_to_xyxy(out_bbox)
     boxes = Tensor.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
     ret = Tensor.cat(boxes.squeeze(0), topk_values.squeeze(0).unsqueeze(1), labels.squeeze(0).unsqueeze(1), dim=1)
-    ret = self.scale_boxes(pre.shape[:2], ret, frame.shape)
+    ret = self.scale_boxes(pre.shape[2:], ret, frame.shape[:2])
     return ret
 
   def predict(self, samples, targets=None):
@@ -635,15 +635,38 @@ class RFDETR():
 
   def preprocess(self, img):
     img = img.cast(dtypes.float32)
-    img = img[:, :, ::-1] # BGR to RGB
+    img = img[:, :, ::-1]
     img /= 255.0
-    img = resize(img, (self.res, self.res))
+    h, w = img.shape[:2]
+    scale = self.res / max(h, w)
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    img = resize(img, (new_w, new_h))
+    canvas = Tensor.zeros((self.res, self.res, 3))
+    pad_x = (self.res - new_w) // 2
+    pad_y = (self.res - new_h) // 2
+    canvas[pad_y:pad_y+new_h, pad_x:pad_x+new_w] = img
+    img = canvas
     img = (img - self.means) / self.stds
     img = img.permute(2, 0, 1).unsqueeze(0)
     return img
-
+  
   def scale_boxes(self, img1_shape, predictions, img0_shape):
-    predictions[:,:4] *= Tensor([img0_shape[1], img0_shape[0], img0_shape[1], img0_shape[0]])
+    orig_h, orig_w = img0_shape[0], img0_shape[1]
+    proc_h, proc_w = img1_shape[0], img1_shape[1]
+    scale = min(proc_w / orig_w, proc_h / orig_h)
+    new_w = int(orig_w * scale)
+    new_h = int(orig_h * scale)
+    pad_x = (proc_w - new_w) // 2
+    pad_y = (proc_h - new_h) // 2
+    predictions[:, 0] = (predictions[:, 0] * proc_w - pad_x) / scale
+    predictions[:, 1] = (predictions[:, 1] * proc_h - pad_y) / scale
+    predictions[:, 2] = (predictions[:, 2] * proc_w - pad_x) / scale
+    predictions[:, 3] = (predictions[:, 3] * proc_h - pad_y) / scale
+    predictions[:, 0] = Tensor.clip(predictions[:, 0], 0, orig_w)
+    predictions[:, 1] = Tensor.clip(predictions[:, 1], 0, orig_h)
+    predictions[:, 2] = Tensor.clip(predictions[:, 2], 0, orig_w)
+    predictions[:, 3] = Tensor.clip(predictions[:, 3], 0, orig_h)
     return predictions
 
 def compute_iou_matrix(boxes):
