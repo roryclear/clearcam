@@ -91,5 +91,6 @@ class ADAFACE():
         x = self.linear(x)
         x = self.bn2(x)
         norm = Tensor.sqrt(Tensor.sum(x * x, keepdim=True))
+        #norm = 10
         output = x / norm
-        return output, norm
+        return output

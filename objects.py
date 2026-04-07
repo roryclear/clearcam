@@ -238,7 +238,7 @@ class ObjectFinder:
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
-    def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img))[0].numpy() # todo remove
+    def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img)).numpy() # todo remove
 
     def preprocess_clip(self, img):
       if type(img) == bytes:
@@ -306,7 +306,7 @@ class ObjectFinder:
           face_img = self.img_to_face(orig)
           if face_img is None: continue
           cv2.imwrite(path.replace("objects","faces"), face_img)
-          embeddings = adaface_jit(self.adaface, Tensor(face_img))[0].numpy()
+          embeddings = adaface_jit(self.adaface, Tensor(face_img)).numpy()
           ret_embeddings.append(embeddings)
           ret_paths.append(path)
 
