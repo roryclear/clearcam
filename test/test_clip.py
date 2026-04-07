@@ -1,14 +1,14 @@
-from clip import CachedCLIPSearch as CachedCLIPSearch
+from objects import ObjectFinder
 import numpy as np
 import os
 
 def setup_clip_test():
   if os.path.exists("test/clip_images/embeddings.pkl"): os.remove("test/clip_images/embeddings.pkl")
-  clip = CachedCLIPSearch(prewarm=False)
+  clip = ObjectFinder(prewarm=False)
   clip.precompute_embeddings("test/clip_images")
 
 def test_clip_search():
-  clip = CachedCLIPSearch()
+  clip = ObjectFinder()
   clip._load_single_embeddings_file("test/clip_images/embeddings.pkl")
   res = clip.search("ferrari f40")
   np.testing.assert_allclose(res[0][1], 0.3566271960735321, rtol=1e-03)
@@ -22,7 +22,7 @@ def test_clip_search():
   assert res[0][0] == "test/clip_images/micra.jpg"
 
 def test_clip_search_jit():
-  clip = CachedCLIPSearch()
+  clip = ObjectFinder()
   clip._load_single_embeddings_file("test/clip_images/embeddings.pkl")
   for _ in range(5): res = clip.search("ferrari f40")
   np.testing.assert_allclose(res[0][1], 0.3566271960735321, rtol=1e-03)
