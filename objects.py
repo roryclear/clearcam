@@ -271,8 +271,8 @@ class ObjectFinder:
       detections = detections[detections[:, 4] != 0]
       # one face per person for now
       if detections.shape[0] > 0:
-        x1, y1, x2, y2 = detections[0][:4]
-        if (x2 - x1) < 60: return # min size of 60 for now?
+        y1, x1, y2, x2 = detections[0][:4]
+        if (x2 - x1) < 60: return
         # 1.5x bigger
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
@@ -290,8 +290,7 @@ class ObjectFinder:
         new_y1 = max(0, new_y1)
         new_x2 = min(W, new_x2)
         new_y2 = min(H, new_y2)
-
-        cropped = orig[int(new_x1):int(new_x2), int(new_y1):int(new_y2)]
+        cropped = orig[int(new_y1):int(new_y2), int(new_x1):int(new_x2)]
         face_img = cv2.resize(cropped, (112, 112))
         face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
         return face_img
