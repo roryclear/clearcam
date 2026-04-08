@@ -272,6 +272,11 @@ class ObjectFinder:
       # one face per person for now
       if detections.shape[0] > 0:
         y1, x1, y2, x2 = detections[0][:4]
+
+
+        # here get the angle, then after the resize, rotate to make the eyes parallel
+        angle = np.degrees(np.arctan2(detections[0][7]-detections[0][5], detections[0][6]-detections[0][4]))
+
         if (x2 - x1) < 60: return
         # 1.5x bigger
         cx = (x1 + x2) / 2
@@ -291,7 +296,7 @@ class ObjectFinder:
         new_x2 = min(W, new_x2)
         new_y2 = min(H, new_y2)
         cropped = orig[int(new_y1):int(new_y2), int(new_x1):int(new_x2)]
-        face_img = cv2.resize(cropped, (112, 112))
+        face_img = cv2.warpAffine(cv2.resize(cropped, (112, 112)), cv2.getRotationMatrix2D((56, 56), angle, 1.0), (112, 112))
         face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
         return face_img
 
