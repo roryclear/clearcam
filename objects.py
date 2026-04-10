@@ -275,12 +275,11 @@ class ObjectFinder:
             left_eye = np.array([detections[0][4], detections[0][5]])
             right_eye = np.array([detections[0][6], detections[0][7]])
             
-            if (x2 - x1) < 60: return None
+            if (x2 - x1) < 50: return None
             TARGET_LEFT_EYE = np.array([38, 51])
             TARGET_RIGHT_EYE = np.array([73, 51])
 
             eye_center = (left_eye + right_eye) / 2
-            eye_distance = np.linalg.norm(right_eye - left_eye)
             target_eye_distance = np.linalg.norm(TARGET_RIGHT_EYE - TARGET_LEFT_EYE)
 
             angle_rad = np.arctan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0])
@@ -302,14 +301,12 @@ class ObjectFinder:
             x2_crop = min(W, x2_crop)
             y2_crop = min(H, y2_crop)
 
-            if x2_crop <= x1_crop or y2_crop <= y1_crop:
-                return None
+            if x2_crop <= x1_crop or y2_crop <= y1_crop: return None
                 
             cropped = orig[y1_crop:y2_crop, x1_crop:x2_crop]
             crop_h, crop_w = cropped.shape[:2]
 
-            if crop_h == 0 or crop_w == 0:
-                return None
+            if crop_h == 0 or crop_w == 0: return None
             
             left_eye_crop = left_eye - np.array([x1_crop, y1_crop])
             right_eye_crop = right_eye - np.array([x1_crop, y1_crop])
@@ -335,7 +332,6 @@ class ObjectFinder:
             tx = TARGET_LEFT_EYE[0] - left_eye_rot[0] * final_scale
             ty = TARGET_LEFT_EYE[1] - left_eye_rot[1] * final_scale
             
-            # Step 4: Apply final scaling and translation
             transform_mat = np.array([[final_scale, 0, tx], [0, final_scale, ty]], dtype=np.float32)
             
             face_img = cv2.warpAffine(rotated, transform_mat, (112, 112))
