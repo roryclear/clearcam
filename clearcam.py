@@ -1244,7 +1244,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.object_finder = ObjectFinder(prewarm=True, face=True) if use_clip else None
+        self.object_finder = ObjectFinder(prewarm=True, face=face) if use_clip else None
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
