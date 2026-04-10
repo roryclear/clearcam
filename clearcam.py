@@ -1258,7 +1258,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           return_q = multiprocessing.Queue()
           p = multiprocessing.Process(target=func, args=(return_q, *args))
           p.start()
-          results = return_q.get(timeout=3600)
+          results = return_q.get(timeout=300)
           p.join()
           return results
         finally:
