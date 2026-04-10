@@ -145,22 +145,25 @@ def encode_text(model, text):
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class ObjectFinder:
-    def __init__(self, prewarm=False, base_path="data/cameras"):
+    def __init__(self, prewarm=False, base_path="data/cameras", face=False):
         self.base_path = base_path
         self.image_embeddings = {}
         self.face_embeddings = {}
         self.image_paths = {}
         self.face_paths = {}
+        self.face = face
         
         self.model = OpenCLIP()
-        
-        self.blazeface = BlazeFace()
-        self.adaface = ADAFACE()
+
+        if self.face:
+            self.blazeface = BlazeFace()
+            self.adaface = ADAFACE()
         
         # prewarm
         if prewarm:
-            blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
-            adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
+            if self.face:
+                blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
+                adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
             precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
             precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
@@ -180,7 +183,7 @@ class ObjectFinder:
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
         folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
-        folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
+        if self.face: folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
         current_images = {
             os.path.join(folder_path, f)
             for f in os.listdir(folder_path)
@@ -197,12 +200,12 @@ class ObjectFinder:
 
         if not new_images: return [], []
         new_image_list = list(new_images)
-        self.process_faces(new_image_list)
-        face_paths, face_embeddings = self.process_faces(new_image_list)
-        for path, emb in zip(face_paths, face_embeddings):
-          folder_embeddings_face[path] = emb
-          folder_paths_face[path] = path
-        save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
+        if self.face:
+            face_paths, face_embeddings = self.process_faces(new_image_list)
+            for path, emb in zip(face_paths, face_embeddings):
+                folder_embeddings_face[path] = emb
+                folder_paths_face[path] = path
+            save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):

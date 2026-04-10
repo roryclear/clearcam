@@ -1053,6 +1053,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             start = data.get("start")
             count = data.get("count")
             is_face = data.get("is_face") or False
+            if is_face and not use_face: return
             if start is None: start, count = 0, 100
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
@@ -1233,7 +1234,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, RequestHandlerClass):
+    def __init__(self, server_address, use_clip, face, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
@@ -1243,7 +1244,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.object_finder = ObjectFinder(prewarm=True) if use_clip else None
+        self.object_finder = ObjectFinder(prewarm=True, face=True) if use_clip else None
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1251,17 +1252,17 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
     def process_with_clip_lock(self, func, *args):
         if not self.object_finder_lock.acquire(timeout=30):
-            self.send_error(429, "CLIP processor busy, try again later")
-            return None
+          self.send_error(429, "CLIP processor busy, try again later")
+          return None
         try:
-            return_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=func, args=(return_q, *args))
-            p.start()
-            results = return_q.get(timeout=3600)
-            p.join()
-            return results
+          return_q = multiprocessing.Queue()
+          p = multiprocessing.Process(target=func, args=(return_q, *args))
+          p.start()
+          results = return_q.get(timeout=3600)
+          p.join()
+          return results
         finally:
-            self.object_finder_lock.release()
+          self.object_finder_lock.release()
 
     def finish_request(self, request, client_address):
       self.RequestHandlerClass(request, client_address, self, clip_instance=self.object_finder)
@@ -1388,6 +1389,8 @@ if __name__ == "__main__":
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
   use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
   if use_clip: use_clip = use_clip != "False" # str to bool
+  use_face = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_face=")), None)
+  if use_face: use_face = use_face != "False" # str to bool
   model_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
   yolo_res = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_res=")), 640)
   if not model_variant:
@@ -1395,15 +1398,18 @@ if __name__ == "__main__":
     if model_variant < 6:
       yolo_ress = {"1":320, "2":640, "3":960,"4":1280,"5":1536}
       yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 960):") or "3"]
-    use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
+    use_clip = input("Would you like to enable clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
+    if use_clip:
+      use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
+      use_face = use_face in ["y", "Y"]
 
   if url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      sys.argv.extend([f"--use_clip={use_clip}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={model_variant}"])
+      sys.argv.extend([f"--use_clip={use_clip}", f"--use_face={use_face}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={model_variant}"])
     else: userID = None
 
   if userID is not None and key is None:
@@ -1436,7 +1442,7 @@ if __name__ == "__main__":
   
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip, HLSRequestHandler)
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
