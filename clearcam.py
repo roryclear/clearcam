@@ -1275,7 +1275,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
         if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
           self.object_finder_stop_event.clear()
-          self.object_finder_thread = threading.Thread(target=self._clip_task, daemon=True, name="CLIPMaintenance")
+          self.object_finder_thread = threading.Thread(target=self._objects_task, daemon=True, name="CLIPMaintenance")
           self.object_finder_thread.start()
 
     def _cleanup_task(self):
@@ -1286,7 +1286,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 print(f"Cleanup error: {e}")
             self.cleanup_stop_event.wait(timeout=600)
 
-    def _clip_task(self):
+    def _objects_task(self):
       while not self.object_finder_stop_event.is_set():
         try:
           object_folders = self.object_finder.find_object_folders("data/cameras")
