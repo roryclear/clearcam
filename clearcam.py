@@ -1078,14 +1078,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             selected_dirs.append("video")
 
             if image_text and use_clip: self.object_finder._load_all_embeddings()
-            if (uploaded_image or similar_img) and use_clip: self.object_finder._load_all_embeddings(face=is_face)
+            if (uploaded_image or similar_img) and (use_clip or use_face): self.object_finder._load_all_embeddings(face=is_face)
             
-            if uploaded_image and use_clip:
+            if uploaded_image and (use_clip or is_face):
               results = self.server.process_with_clip_lock(run_clip, self.object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
-            if similar_img and use_clip:
+            if similar_img and (use_clip or is_face):
               results = self.server.process_with_clip_lock(run_clip, self.object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
@@ -1244,7 +1244,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.object_finder = ObjectFinder(prewarm=True, face=face) if use_clip else None
+        self.object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=face) if (use_clip or face) else None
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1273,7 +1273,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
           self.cleanup_thread.start()
 
-        if use_clip and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
+        if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
           self.object_finder_stop_event.clear()
           self.object_finder_thread = threading.Thread(target=self._clip_task, daemon=True, name="CLIPMaintenance")
           self.object_finder_thread.start()
@@ -1400,9 +1400,8 @@ if __name__ == "__main__":
       yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 960):") or "3"]
     use_clip = input("Would you like to enable clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
-    if use_clip:
-      use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
-      use_face = use_face in ["y", "Y"]
+    use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
+    use_face = use_face in ["y", "Y"]
 
   if url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
@@ -1416,7 +1415,7 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip:
+  if use_clip or use_face:
     from objects import ObjectFinder
 
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")

@@ -145,15 +145,16 @@ def encode_text(model, text):
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class ObjectFinder:
-    def __init__(self, prewarm=False, base_path="data/cameras", face=False):
+    def __init__(self, prewarm=False, base_path="data/cameras", clip=False, face=False):
         self.base_path = base_path
         self.image_embeddings = {}
         self.face_embeddings = {}
         self.image_paths = {}
         self.face_paths = {}
+        self.clip = clip
         self.face = face
         
-        self.model = OpenCLIP()
+        if self.clip: self.model = OpenCLIP()
 
         if self.face:
             self.blazeface = BlazeFace()
@@ -164,8 +165,9 @@ class ObjectFinder:
             if self.face:
                 blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
                 adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
-            precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-            precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
+            if self.clip:
+                precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
+                precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -206,6 +208,7 @@ class ObjectFinder:
                 folder_embeddings_face[path] = emb
                 folder_paths_face[path] = path
             save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
+        if not self.clip: return [], []
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):
