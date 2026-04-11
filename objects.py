@@ -185,12 +185,24 @@ class ObjectFinder:
     # db for progress
     def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
         folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
-        if self.face: folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
+
         current_images = {
             os.path.join(folder_path, f)
             for f in os.listdir(folder_path)
             if f.lower().endswith((".png", ".jpg", ".jpeg"))
         }
+
+        if self.face:
+            folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
+            cached_images_face = set(folder_embeddings_face.keys())
+            new_images_face = current_images - cached_images_face
+            deleted_images_face = cached_images_face - current_images
+
+            for img in deleted_images_face:
+                folder_embeddings_face.pop(img, None)
+                folder_embeddings_face.pop(img, None)
+            new_image_list_face = list(new_images_face)
+
 
         cached_images = set(folder_embeddings.keys())
         new_images = current_images - cached_images
@@ -203,7 +215,7 @@ class ObjectFinder:
         if not new_images: return [], []
         new_image_list = list(new_images)
         if self.face:
-            face_paths, face_embeddings = self.process_faces(new_image_list)
+            face_paths, face_embeddings = self.process_faces(new_image_list_face)
             for path, emb in zip(face_paths, face_embeddings):
                 folder_embeddings_face[path] = emb
                 folder_paths_face[path] = path
