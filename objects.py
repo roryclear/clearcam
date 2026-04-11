@@ -195,7 +195,7 @@ class ObjectFinder:
         cached_images = set(folder_embeddings.keys())
         new_images = current_images - cached_images
         deleted_images = cached_images - current_images
-
+        
         for img in deleted_images:
             folder_embeddings.pop(img, None)
             folder_paths.pop(img, None)
@@ -359,7 +359,10 @@ class ObjectFinder:
           orig = cv2.imread(path)
           orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
           face_img = self.img_to_face(orig)
-          if face_img is None: continue
+          if face_img is None:
+            ret_embeddings.append(None) # todo hack for now
+            ret_paths.append(path)
+            continue
           cv2.imwrite(path.replace("objects","faces"), face_img)
           embeddings = adaface_jit(self.adaface, Tensor(face_img)).numpy()
           ret_embeddings.append(embeddings)
@@ -377,6 +380,7 @@ class ObjectFinder:
             text_embedding = text_embedding.numpy()
         all_similarities = []
         for path, img_embedding in embeddings.items():
+            if img_embedding is None: continue
             normalized_path = path.replace("\\", "/")
             if cam_name and f"/cameras/{cam_name}/" not in normalized_path:
                 continue
