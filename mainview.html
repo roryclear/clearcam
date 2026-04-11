@@ -1360,18 +1360,16 @@
         <polyline points="21 15 16 10 5 21"></polyline>
       </svg>
       </label>
-      <!-- todo add back for face
       <label for="faceUpload" style="cursor: pointer; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); display: flex; align-items: center; justify-content: center;" title="Search by face">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4"></circle>
           <path d="M6 20c0-4 3-6 6-6s6 2 6 6"></path>
         </svg>
       </label>
-      -->
       <input type="file" id="faceUpload" accept="image/*" style="display: none;">
       <span class="tooltip">
         <span class="tooltip-icon">?</span>
-        <span class="tooltiptext">Upload an image to find similar objects in your footage.</span>
+        <span class="tooltiptext">Use an image or face to find similar objects in your footage.</span>
       </span>
       <input type="file" id="imageUpload" accept="image/*" style="display: none;">
     </div>
@@ -3094,7 +3092,7 @@
           image_text: null,
           similar_img: null,
           uploaded_image: null,
-          is_face: false, // todo use is_face when ready
+          is_face: is_face,
         };
         payload.start = eventStart;
         payload.count = EVENT_PAGE_SIZE;

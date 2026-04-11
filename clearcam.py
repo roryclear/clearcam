@@ -656,7 +656,7 @@ def run_clip(return_q, clip, im, top_k, cam_name, selected_dir, is_face):
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.clip = kwargs.pop('clip_instance', None)
+        self.object_finder = kwargs.pop('clip_instance', None)
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args): pass # don't print stuff
@@ -1051,6 +1051,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             start = data.get("start")
             count = data.get("count")
             is_face = data.get("is_face") or False
+            if is_face and not use_face: return
             if start is None: start, count = 0, 100
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
@@ -1074,21 +1075,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: self.clip._load_all_embeddings()
-            if (uploaded_image or similar_img) and use_clip: self.clip._load_all_embeddings(face=is_face)
+            if image_text and use_clip: self.object_finder._load_all_embeddings()
+            if (uploaded_image or similar_img) and (use_clip or use_face): self.object_finder._load_all_embeddings(face=is_face)
             
-            if uploaded_image and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, uploaded_image, start+count, cam_name, selected_dir, is_face)
+            if uploaded_image and (use_clip or is_face):
+              results = self.server.process_with_clip_lock(run_clip, self.object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
-            if similar_img and use_clip:
-              results = self.server.process_with_clip_lock(run_clip, self.clip, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+            if similar_img and (use_clip or is_face):
+              results = self.server.process_with_clip_lock(run_clip, self.object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = self.server.process_with_clip_lock(run_search, self.clip, image_text, start+count, cam_name, selected_dir)
+              results = self.server.process_with_clip_lock(run_search, self.object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1231,7 +1232,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, RequestHandlerClass):
+    def __init__(self, server_address, use_clip, face, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
@@ -1241,28 +1242,28 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.clip = CachedCLIPSearch(prewarm=True) if use_clip else None
-        self.clip_stop_event = threading.Event()
-        self.clip_thread = None
+        self.object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=face) if (use_clip or face) else None
+        self.object_finder_stop_event = threading.Event()
+        self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
-        self.clip_lock = threading.Lock()
+        self.object_finder_lock = threading.Lock()
 
     def process_with_clip_lock(self, func, *args):
-        if not self.clip_lock.acquire(timeout=30):
-            self.send_error(429, "CLIP processor busy, try again later")
-            return None
+        if not self.object_finder_lock.acquire(timeout=30):
+          self.send_error(429, "CLIP processor busy, try again later")
+          return None
         try:
-            return_q = multiprocessing.Queue()
-            p = multiprocessing.Process(target=func, args=(return_q, *args))
-            p.start()
-            results = return_q.get(timeout=3600)
-            p.join()
-            return results
+          return_q = multiprocessing.Queue()
+          p = multiprocessing.Process(target=func, args=(return_q, *args))
+          p.start()
+          results = return_q.get(timeout=300)
+          p.join()
+          return results
         finally:
-            self.clip_lock.release()
+          self.object_finder_lock.release()
 
     def finish_request(self, request, client_address):
-      self.RequestHandlerClass(request, client_address, self, clip_instance=self.clip)
+      self.RequestHandlerClass(request, client_address, self, clip_instance=self.object_finder)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
@@ -1270,10 +1271,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
           self.cleanup_thread.start()
 
-        if use_clip and (self.clip_thread is None or not self.clip_thread.is_alive()):
-          self.clip_stop_event.clear()
-          self.clip_thread = threading.Thread(target=self._clip_task, daemon=True, name="CLIPMaintenance")
-          self.clip_thread.start()
+        if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
+          self.object_finder_stop_event.clear()
+          self.object_finder_thread = threading.Thread(target=self._objects_task, daemon=True, name="CLIPMaintenance")
+          self.object_finder_thread.start()
 
     def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
@@ -1283,15 +1284,15 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                 print(f"Cleanup error: {e}")
             self.cleanup_stop_event.wait(timeout=600)
 
-    def _clip_task(self):
-      while not self.clip_stop_event.is_set():
+    def _objects_task(self):
+      while not self.object_finder_stop_event.is_set():
         try:
-          object_folders = self.clip.find_object_folders("data/cameras")
+          object_folders = self.object_finder.find_object_folders("data/cameras")
           for folder in object_folders:
             name = folder.split("/")[2]
             vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            embeddings, batch_paths = self.clip.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
+            embeddings, batch_paths = self.object_finder.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
             alerts = database.run_get("alerts", name)
             if userID:
               for path, embedding in zip(batch_paths, embeddings):
@@ -1312,12 +1313,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             # todo, move to own loop
             for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.clip, alert.desc)
+                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.object_finder, alert.desc)
                 database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
           print(f"CLIP error: {e}")
-        self.clip_stop_event.wait(timeout=1)
+        self.object_finder_stop_event.wait(timeout=1)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
@@ -1368,9 +1369,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         if hasattr(self, 'cleanup_thread') and self.cleanup_thread:
             self.cleanup_thread.join(timeout=5)
         if hasattr(self, 'clip_stop_event'):
-            self.clip_stop_event.set()
-        if hasattr(self, 'clip_thread') and self.clip_thread:
-            self.clip_thread.join(timeout=5)
+            self.object_finder_stop_event.set()
+        if hasattr(self, 'clip_thread') and self.object_finder_thread:
+            self.object_finder_thread.join(timeout=5)
 
         super().server_close()
 
@@ -1386,6 +1387,8 @@ if __name__ == "__main__":
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
   use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
   if use_clip: use_clip = use_clip != "False" # str to bool
+  use_face = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_face=")), None)
+  if use_face: use_face = use_face != "False" # str to bool
   model_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
   yolo_res = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_res=")), 640)
   if not model_variant:
@@ -1393,23 +1396,25 @@ if __name__ == "__main__":
     if model_variant < 6:
       yolo_ress = {"1":320, "2":640, "3":960,"4":1280,"5":1536}
       yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 960):") or "3"]
-    use_clip = input("Would you like to use clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
+    use_clip = input("Would you like to enable clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
     use_clip = use_clip in ["y", "Y"]
+    use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
+    use_face = use_face in ["y", "Y"]
 
   if url is None and userID is None:
     userID = input("enter your Clearcam user id or press Enter to skip: ")
     if len(userID) > 0:
       key = ""
       while len(key) < 1: key = input("enter a password for encryption: ")
-      sys.argv.extend([f"--use_clip={use_clip}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={model_variant}"])
+      sys.argv.extend([f"--use_clip={use_clip}", f"--use_face={use_face}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={model_variant}"])
     else: userID = None
 
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip:
-    from clip import CachedCLIPSearch
+  if use_clip or use_face:
+    from objects import ObjectFinder
 
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
@@ -1434,7 +1439,7 @@ if __name__ == "__main__":
   
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip, HLSRequestHandler)
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
