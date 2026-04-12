@@ -710,6 +710,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.send_200()
           return
         
+        if parsed_path.path == "/get_features":
+          self.send_200({"object_search":use_clip, "face_search":use_face})
+          return
         if parsed_path.path == "/get_max_storage":
           self.send_200(body={"max_gb":self.server.max_gb})
           return

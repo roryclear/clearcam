@@ -1381,7 +1381,7 @@
       <div id="searchSpinner" class="spinner" style="display: none;"></div>
     </button>
 
-    <button onclick="clearSearch()" style="padding: 6px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;">Clear</button>
+    <button onclick="clearSearch()" id="clearButton" style="padding: 6px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;">Clear</button>
   </div>
   <div id="eventImagesContainer">
     <p style="text-align:center; color:#666; width:100%;">No events detected yet.</p>
@@ -2380,6 +2380,36 @@
             isPolygonComplete: false
         };
     }
+
+    async function loadFeatureFlags() {
+      const response = await fetch('/get_features');
+      const features = await response.json();
+      const uploadContainer = document.querySelector('div[style*="position: relative; display: flex"]');
+      const imageUploadLabel = uploadContainer.querySelector('label[for="imageUpload"]');
+      const faceUploadLabel = uploadContainer.querySelector('label[for="faceUpload"]');
+      const searchInput = document.getElementById('imageSearchInput');
+      const tooltip = uploadContainer.querySelector('.tooltip');
+      imageUploadLabel.style.display = features.object_search ? 'flex' : 'none';
+      faceUploadLabel.style.display = features.face_search ? 'flex' : 'none';
+      searchInput.style.display = features.object_search ? 'inline-block' : 'none';
+      const searchButton = document.getElementById('searchButton');
+      searchButton.style.display = (features.object_search || features.face_search) ? 'flex' : 'none';
+      const clearButton = document.getElementById('clearButton');
+      clearButton.style.display = (features.object_search || features.face_search) ? 'flex' : 'none';
+      const tooltipText = tooltip.querySelector('.tooltiptext');
+      if (features.object_search && features.face_search) {
+        tooltipText.textContent = 'Use an image or face to find similar objects in your footage.';
+      } else if (features.object_search) {
+        tooltipText.textContent = 'Use an image to find similar objects in your footage.';
+      } else if (features.face_search) {
+        tooltipText.textContent = 'Use a face image to find matching people in your footage.';
+      }
+      const searchRow = uploadContainer.closest('div[style*="display: flex; align-items: center"]');
+      if (searchRow && !features.object_search && !features.face_search) {
+        searchRow.style.display = 'none';
+      }
+    }
+    document.addEventListener('DOMContentLoaded', loadFeatureFlags);
 
     function isClickOnPoint(point, clickX, clickY) {
         const pointRect = point.getBoundingClientRect();
