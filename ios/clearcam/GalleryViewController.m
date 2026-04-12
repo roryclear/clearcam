@@ -80,7 +80,6 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<NSString *> *> *groupedVideos;
 @property (nonatomic, strong) NSMutableArray<NSString *> *sectionTitles;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
-@property (nonatomic, assign) BOOL isLoadingVideos;
 @property (nonatomic, strong) NSMutableSet<NSString *> *loadedFilenames;
 @property (nonatomic, strong) NSTimer *refreshTimer;
 @property (nonatomic, strong) UIView *headerView;
@@ -220,7 +219,6 @@
     self.videoFiles = [NSMutableArray array];
     self.groupedVideos = [NSMutableDictionary dictionary];
     self.sectionTitles = [NSMutableArray array];
-    self.isLoadingVideos = NO;
     
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 30.0;
@@ -283,9 +281,7 @@
 }
 
 - (void)refreshTimerFired {
-    if (!self.isLoadingVideos) {
-        [self getEvents];
-    }
+    [self getEvents];
 }
 
 
@@ -424,11 +420,7 @@
 }
 
 - (void)handleRefresh {
-    if (!self.isLoadingVideos) {
-        [self getEvents];
-    } else {
-        [self.refreshControl endRefreshing];
-    }
+    [self getEvents];
 }
 
 - (void)setupDownloadDirectory {
@@ -484,10 +476,6 @@
 }
 
 - (void)getEvents {
-    if (self.isLoadingVideos) {
-        return;
-    }
-    self.isLoadingVideos = YES;
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
@@ -510,7 +498,6 @@
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.isLoadingVideos = NO;
                 [self.refreshControl endRefreshing];
             });
             return;
@@ -532,11 +519,9 @@
 
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
-        self.isLoadingVideos = NO;
         [self.refreshControl endRefreshing];
         return;
     }
-    self.isLoadingVideos = YES;
     NSOperationQueue *downloadQueue = [[NSOperationQueue alloc] init];
     downloadQueue.maxConcurrentOperationCount = 1;
     dispatch_group_t downloadGroup = dispatch_group_create();
@@ -557,7 +542,6 @@
         }];
     }
     dispatch_group_notify(downloadGroup, dispatch_get_main_queue(), ^{
-        self.isLoadingVideos = NO;
         [self.refreshControl endRefreshing];
     });
 }
