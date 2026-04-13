@@ -158,7 +158,9 @@ def _get_stream_resolution(src):
     if match:
       width, height = map(int, match.groups())
       return width, height
-  except Exception as e: return 1920, 1080
+    return 1920, 1080
+  except Exception as e:
+    return 1920, 1080
 
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
