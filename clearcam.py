@@ -142,8 +142,24 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 
 def is_vod(cam_name): return Path("data/cameras", cam_name, "streams", "video").is_dir()
 
+def _get_stream_resolution(src):
+    ffprobe_path = find_ffmpeg().replace("ffmpeg", "ffprobe")
+    command = [
+        ffprobe_path,
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0",
+        src
+    ]
+    try:
+      result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+      width, height = map(int, result.stdout.strip().split(","))
+      return width, height
+    except Exception as e: return 1920, 1080
+
 class VideoCapture:
-  def __init__(self, src,cam_name="clearcamPy", vod=False):
+  def __init__(self, src, cam_name="camera", vod=False):
     self.vod = vod
     self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
@@ -155,8 +171,7 @@ class VideoCapture:
 
     self.src = src
     self.max_frame_rate = 10 # for vod only
-    self.width = 1920
-    self.height = 1080
+    self.width, self.height = _get_stream_resolution(src)
     self.proc = None
     self.hls_proc = None
     self.running = True
@@ -568,7 +583,7 @@ def draw_predictions(frame, preds, color_dict):
   return frame
 
 class HLSStreamer:
-    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="clearcampy", vod=False):
+    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="camera", vod=False):
         self.cam_name = cam_name
         self.cam = video_capture
         self.output_dir_det = BASE_DIR / "cameras" / (f"{self.cam_name}_det") / output_dir
@@ -1189,7 +1204,7 @@ def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
 live_link = dict()
 alerts_on = True
 is_live_lock = threading.Lock()
-def check_upload_link(cam_name="clearcampy"):
+def check_upload_link(cam_name="camera"):
     global live_link
     global alerts_on
     query_params = urllib.parse.urlencode({
