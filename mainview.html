@@ -2190,6 +2190,8 @@
       const container = document.getElementById("cameraList");
 
       populateCameraFilter(cams);
+
+      const previousCameras = window.currentCameras || [];
       window.currentCameras = cams;
 
       const existingCards = new Map();
@@ -2204,12 +2206,13 @@
 
       cams.forEach(cam => {
         let card = existingCards.get(cam);
-        const camData = camsObj[cam]["proc_prog"];
+        const camData = camsObj[cam];
 
         if (card) {
           const nameSpan = card.querySelector('.camera-name');
 
           if (nameSpan) {
+            // If value is an object, print its keys and % values
             if (camData && typeof camData === "object") {
               const parts = Object.entries(camData).map(([key, value]) => {
                 if (typeof value === "number") {
@@ -2241,13 +2244,18 @@
         container.innerHTML = '';
         newCards.forEach(card => container.appendChild(card));
       }
-      
-      for (const cam in camsObj) {
+
+      cams.forEach(cam => {
         if (!activeVideoStreams.has(cam)) {
           startCameraStream(cam);
         }
-      }
+      });
 
+      previousCameras.forEach(cameraName => {
+        if (!cams.includes(cameraName)) {
+          cleanupCameraStream(cameraName);
+        }
+      });
     }
 
     document.addEventListener('DOMContentLoaded', function() {
