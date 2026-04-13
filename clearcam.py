@@ -143,20 +143,22 @@ def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
 def is_vod(cam_name): return Path("data/cameras", cam_name, "streams", "video").is_dir()
 
 def _get_stream_resolution(src):
-    ffprobe_path = find_ffmpeg().replace("ffmpeg", "ffprobe")
-    command = [
-        ffprobe_path,
-        "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-of", "csv=p=0",
-        src
-    ]
-    try:
-      result = subprocess.run(command, capture_output=True, text=True, timeout=10)
-      width, height = map(int, result.stdout.strip().split(","))
+  ffmpeg_path = find_ffmpeg()
+  command = [ffmpeg_path, "-i", src]
+  try:
+    result = subprocess.run(
+        command,
+        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        text=True,
+        timeout=10
+    )
+    output = result.stderr
+    match = re.search(r"Video:.*?(\d{2,5})x(\d{2,5})", output)
+    if match:
+      width, height = map(int, match.groups())
       return width, height
-    except Exception as e: return 1920, 1080
+  except Exception as e: return 1920, 1080
 
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
