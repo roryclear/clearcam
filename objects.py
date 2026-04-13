@@ -278,6 +278,7 @@ class ObjectFinder:
       return img
 
     def img_to_face(self, orig):
+        orig_full = orig.copy()
         h, w = orig.shape[:2]
         scale = 640 / max(h, w)
         resized = cv2.resize(orig, (int(w*scale), int(h*scale)))
@@ -292,7 +293,15 @@ class ObjectFinder:
             y1, x1, y2, x2 = detections[0][:4]
             left_eye = np.array([detections[0][4], detections[0][5]])
             right_eye = np.array([detections[0][6], detections[0][7]])
-            
+            x1 -= left; x2 -= left
+            y1 -= top; y2 -= top
+            left_eye -= np.array([left, top])
+            right_eye -= np.array([left, top])
+            x1 /= scale; x2 /= scale
+            y1 /= scale; y2 /= scale
+            left_eye /= scale
+            right_eye /= scale
+
             if (x2 - x1) < 50: return None
             TARGET_LEFT_EYE = np.array([38, 51])
             TARGET_RIGHT_EYE = np.array([73, 51])
@@ -313,7 +322,8 @@ class ObjectFinder:
             x2_crop = int(eye_center[0] + crop_size / 2)
             y2_crop = int(eye_center[1] + crop_size / 2)
 
-            H, W = orig.shape[:2]
+            orig = orig_full
+            H, W = orig_full.shape[:2]
             x1_crop = max(0, x1_crop)
             y1_crop = max(0, y1_crop)
             x2_crop = min(W, x2_crop)
