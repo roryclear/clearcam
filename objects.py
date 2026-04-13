@@ -410,8 +410,8 @@ class ObjectFinder:
                 continue
             similarity = (img_embedding @ text_embedding.T).item()
             filename = os.path.basename(path)
-            if filename.lower().endswith((".jpg", ".jpeg", ".png")):
-                object_id = event_img_info(filename.split(".")[0])["object_id"] if "_" in filename else None
+            if filename.lower().endswith((".jpg")):
+                object_id = event_img_info(filename.split(".jpg")[0])["object_id"] if "_" in filename else None
                 all_similarities.append((path, similarity, object_id))
         
         if any(item[2] for item in all_similarities):
