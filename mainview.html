@@ -2241,12 +2241,13 @@
         container.innerHTML = '';
         newCards.forEach(card => container.appendChild(card));
       }
-
-      cams.forEach(cam => {
+      
+      for (const cam in camsObj) {
         if (!activeVideoStreams.has(cam)) {
           startCameraStream(cam);
         }
-      });
+      }
+
     }
 
     document.addEventListener('DOMContentLoaded', function() {
