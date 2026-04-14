@@ -526,7 +526,7 @@ class VideoCapture:
       if x.track_id not in self.pred_occs: self.pred_occs[x.track_id] = [time.time()]
       if (len(self.pred_occs[x.track_id]) < 20 and (time.time() - self.pred_occs[x.track_id][-1]) > 1) or (time.time() - self.pred_occs[x.track_id][-1]) > 10:
         self. pred_occs[x.track_id].append(time.time())
-        ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+        ts = round((self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
         self.save_object(x, ts)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
@@ -1183,7 +1183,7 @@ def get_lan_ip():
 
 def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, "frozen", False) else ([sys.executable, sys.argv[0]], sys.argv[1:])
 
-def event_img_info(image): return {"ts": int(image.split('_')[0]), "object_id":int(image.split('_')[1]), "class_id":int(image.split('_')[2])}
+def event_img_info(image): return {"ts": int(float(image.split('_')[0])), "object_id":int(image.split('_')[1]), "class_id":int(image.split('_')[2])}
 
 def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
     if not rtsp or not cam_name: return
@@ -1327,7 +1327,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                             send_notif(userID, f"Event Detected ({name}: {v.desc})")
                             alerts[k].last_det = time.time()
                             database.run_put("alerts", name, alerts[k], k)
-                            seen_time = event_img_info(path.split("/")[-1].split(".")[0])["ts"]
+                            seen_time = event_img_info(path.split("/")[-1].split(".jpg")[0])["ts"]
                             export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
                             break
 
