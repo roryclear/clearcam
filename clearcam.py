@@ -524,7 +524,7 @@ class VideoCapture:
       if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives.  
       # add to objects, regarless of speed
       if x.track_id not in self.pred_occs: self.pred_occs[x.track_id] = [time.time()]
-      if (len(self.pred_occs[x.track_id]) < 20 and (time.time() - self.pred_occs[x.track_id][-1]) > 1) or (time.time() - self.pred_occs[x.track_id][-1]) > 10:
+      if (len(self.pred_occs[x.track_id]) < 200 and (time.time() - self.pred_occs[x.track_id][-1]) > 1) or (time.time() - self.pred_occs[x.track_id][-1]) > 10:
         self. pred_occs[x.track_id].append(time.time())
         ts = round((self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
         self.save_object(x, ts)

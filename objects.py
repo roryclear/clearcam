@@ -215,12 +215,12 @@ class ObjectFinder:
         if not new_images: return [], []
         new_image_list = list(new_images)
         if self.face:
-            face_paths, face_embeddings = self.process_faces(new_image_list_face)
+            face_paths, face_embeddings = self.process_faces(new_image_list_face, cam_name=cam_name)
             for path, emb in zip(face_paths, face_embeddings):
                 folder_embeddings_face[path] = emb
                 folder_paths_face[path] = path
             save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
-        if not self.clip: return [], []
+        if not self.clip or cam_name == "face_cam": return [], []
         emb_ret = []
         path_ret = []
         for i in range(0, len(new_image_list), batch_size):
@@ -373,7 +373,7 @@ class ObjectFinder:
         
         return None
 
-    def process_faces(self, paths):
+    def process_faces(self, paths, cam_name=None):
       ret_paths = []
       ret_embeddings = []
       for path in paths:
@@ -382,7 +382,7 @@ class ObjectFinder:
           orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
           face_img = self.img_to_face(orig)
           if face_img is None:
-            if not self.clip: os.remove(path)
+            if not self.clip or cam_name == "face_cam": os.remove(path)
             ret_embeddings.append(None) # todo hack for now
             ret_paths.append(path)
             continue
