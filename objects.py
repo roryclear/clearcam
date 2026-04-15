@@ -382,6 +382,7 @@ class ObjectFinder:
           orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
           face_img = self.img_to_face(orig)
           if face_img is None:
+            if not self.clip: os.remove(path)
             ret_embeddings.append(None) # todo hack for now
             ret_paths.append(path)
             continue
