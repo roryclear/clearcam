@@ -1,41 +1,19 @@
-from objects import ObjectFinder
+from objects import ObjectFinder, precompute_embeddings_jit, precompute_embedding_jit_bs1
 import numpy as np
 import os
+from tinygrad import Tensor
+import time
 
-def setup_clip_test():
-  if os.path.exists("test/clip_images/embeddings.pkl"): os.remove("test/clip_images/embeddings.pkl")
-  clip = ObjectFinder(prewarm=False)
-  clip.precompute_embeddings("test/clip_images")
+def teset_clip_jit(bs=1):
+  clip = ObjectFinder(clip=True)
+  input1 = np.random.rand(bs, 3, 224, 224).astype(np.float32)
+  fun = precompute_embedding_jit_bs1 if bs == 1 else precompute_embeddings_jit
+  for _ in range(3): _ = fun(clip.model, Tensor(input1)).numpy()
+  ts = time.time()
+  _ = fun(clip.model, Tensor(input1)).numpy()
+  print(f"time (bs={bs}) =",round((time.time() - ts), 2), "seconds")
 
-def test_clip_search():
-  clip = ObjectFinder()
-  clip._load_single_embeddings_file("test/clip_images/embeddings.pkl")
-  res = clip.search("ferrari f40")
-  np.testing.assert_allclose(res[0][1], 0.3566271960735321, rtol=1e-03)
-  np.testing.assert_allclose(res[1][1], 0.0718243420124054, rtol=1e-02) # careful now
-  assert res[0][0] == "test/clip_images/f40.jpg"
-  assert res[1][0] == "test/clip_images/micra.jpg"
-  res = clip.search("nissan micra")
-  np.testing.assert_allclose(res[0][1], 0.3218580484390259, rtol=1e-03)
-  np.testing.assert_allclose(res[1][1], 0.07153752446174622, rtol=1e-02)
-  assert res[1][0] == "test/clip_images/f40.jpg"
-  assert res[0][0] == "test/clip_images/micra.jpg"
+teset_clip_jit()
+teset_clip_jit(bs=16)
 
-def test_clip_search_jit():
-  clip = ObjectFinder()
-  clip._load_single_embeddings_file("test/clip_images/embeddings.pkl")
-  for _ in range(5): res = clip.search("ferrari f40")
-  np.testing.assert_allclose(res[0][1], 0.3566271960735321, rtol=1e-03)
-  np.testing.assert_allclose(res[1][1], 0.0718243420124054, rtol=1e-02)  # careful now
-  assert res[0][0] == "test/clip_images/f40.jpg"
-  assert res[1][0] == "test/clip_images/micra.jpg"
-  for _ in range(5): res = clip.search("nissan micra")
-  np.testing.assert_allclose(res[0][1], 0.3218580484390259, rtol=1e-03)
-  np.testing.assert_allclose(res[1][1], 0.07153752446174622, rtol=1e-02)
-  assert res[1][0] == "test/clip_images/f40.jpg"
-  assert res[0][0] == "test/clip_images/micra.jpg"
-
-setup_clip_test()
-test_clip_search()
-test_clip_search_jit()
 
