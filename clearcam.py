@@ -1254,7 +1254,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, face, RequestHandlerClass):
+    def __init__(self, server_address, use_clip, face, RequestHandlerClass, clip=None):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
@@ -1264,7 +1264,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=face) if (use_clip or face) else None
+        self.object_finder = clip
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
@@ -1435,8 +1435,7 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip or use_face:
-    from objects import ObjectFinder
+  from objects import ObjectFinder
 
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
@@ -1453,10 +1452,11 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
 
   for _ in range(100): print(url, model_variant, yolo_res, cam_name)
-
+  clip = None
   if url:
     model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-    cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
+    clip = ObjectFinder(prewarm=False, clip=True) # todo, prewarm breaks it
+    cam = VideoCapture(url, cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
     cam.streamer = hls_streamer
@@ -1464,7 +1464,7 @@ if __name__ == "__main__":
   
   try:
     try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler, clip=clip)
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
