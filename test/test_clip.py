@@ -4,8 +4,6 @@ from tinygrad import Tensor
 import time
 import cv2
 
-clip = ObjectFinder(clip=True)
-
 def teset_clip_jit(bs=1):
   input1 = np.random.rand(bs, 3, 224, 224).astype(np.float32)
   fun = precompute_embedding_jit_bs1 if bs == 1 else precompute_embeddings_jit
@@ -23,6 +21,7 @@ def test_clip_outputs():
   np.testing.assert_allclose(0.330654, sim, rtol=1e-6, atol=1e-6)
 
 if __name__ == "__main__":
+  clip = ObjectFinder(clip=True)
   test_clip_outputs()
   teset_clip_jit()
   teset_clip_jit(bs=16)
