@@ -22,8 +22,9 @@ def test_clip_outputs():
   sim = (emb1_text @ emb1.T).numpy()[0]
   np.testing.assert_allclose(0.330654, sim, rtol=1e-6, atol=1e-6)
 
-test_clip_outputs()
-teset_clip_jit()
-teset_clip_jit(bs=16)
+if __name__ == "__main__":
+  test_clip_outputs()
+  teset_clip_jit()
+  teset_clip_jit(bs=16)
 
 
