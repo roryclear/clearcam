@@ -1445,19 +1445,22 @@ if __name__ == "__main__":
   tracker = ocsort.OCSort(max_age=100)
   live_link = dict()
   
-  if url is None:
-    for cam_name in cams.keys():
-      start_cam(rtsp=cams[cam_name],cam_name=cam_name,model_variant=model_variant, yolo_res=yolo_res)
+  #if url is None:
+  #  for cam_name in cams.keys():
+  #    start_cam(rtsp=cams[cam_name],cam_name=cam_name,model_variant=model_variant, yolo_res=yolo_res)
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
+
+  for _ in range(100): print(url, model_variant, yolo_res, cam_name)
+
   if url:
     model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-    #model = RFDETR("small")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
     cam.streamer = hls_streamer
+    database.run_put("links", cam_name, url)
   
   try:
     try:
