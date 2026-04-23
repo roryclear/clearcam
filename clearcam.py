@@ -256,6 +256,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                  "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", self.src,
@@ -1101,17 +1103,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if (uploaded_image or similar_img) and (use_clip or use_face): self.object_finder._load_all_embeddings(face=is_face)
             
             if uploaded_image and (use_clip or is_face):
-              results = self.server.process_with_clip_lock(run_clip, self.object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
+              results = process_with_clip_lock(run_clip, self.object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
             if similar_img and (use_clip or is_face):
-              results = self.server.process_with_clip_lock(run_clip, self.object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+              results = process_with_clip_lock(run_clip, self.object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = self.server.process_with_clip_lock(run_search, self.object_finder, image_text, start+count, cam_name, selected_dir)
+              results = process_with_clip_lock(run_search, self.object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1250,6 +1252,19 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         print(f"Error uploading to R2: {e}")
         return False
 
+object_finder_lock = threading.Lock()
+def process_with_clip_lock(func, *args):
+    if not object_finder_lock.acquire(timeout=30): return None
+    try:
+      return_q = multiprocessing.Queue()
+      p = multiprocessing.Process(target=func, args=(return_q, *args))
+      p.start()
+      results = return_q.get(timeout=300)
+      p.join()
+      return results
+    finally:
+      object_finder_lock.release()
+
 cams = dict()
 active_subprocesses = []
 import socket
@@ -1268,21 +1283,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
-        self.object_finder_lock = threading.Lock()
-
-    def process_with_clip_lock(self, func, *args):
-        if not self.object_finder_lock.acquire(timeout=30):
-          self.send_error(429, "CLIP processor busy, try again later")
-          return None
-        try:
-          return_q = multiprocessing.Queue()
-          p = multiprocessing.Process(target=func, args=(return_q, *args))
-          p.start()
-          results = return_q.get(timeout=300)
-          p.join()
-          return results
-        finally:
-          self.object_finder_lock.release()
 
     def finish_request(self, request, client_address):
       self.RequestHandlerClass(request, client_address, self, clip_instance=self.object_finder)
@@ -1335,7 +1335,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             # todo, move to own loop
             for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = self.process_with_clip_lock(run_encode_text, self.object_finder, alert.desc)
+                alert.desc_emb = process_with_clip_lock(run_encode_text, self.object_finder, alert.desc)
                 database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
