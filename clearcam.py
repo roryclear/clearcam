@@ -197,9 +197,10 @@ class VideoCapture:
 
     self.lock = threading.Lock()
 
+  def start(self):
     if not self.vod or not self.output_dir_raw.exists():
       self._open_ffmpeg()
-      threading.Thread(target=self.capture_loop, daemon=True).start()
+      self.capture_loop()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -1457,7 +1458,7 @@ if __name__ == "__main__":
         args=(hls_streamer, cam, restart_time),
         daemon=True
       ).start()
-
+      cam.start()
     if server:
       server.serve_forever()
     else:
