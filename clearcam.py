@@ -355,7 +355,7 @@ class VideoCapture:
           self.src = link
           self._open_ffmpeg()
       try:
-        if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
+        if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): return
         if self.vod:
           for _ in range(self.frame_step - 1):
             self.cap.grab()  # skip for max fps
