@@ -1431,13 +1431,6 @@ if __name__ == "__main__":
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
-  if url:
-    model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-    #model = RFDETR("small")
-    cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
-    vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
-    hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
-    cam.streamer = hls_streamer
   
   try:
     try:
@@ -1451,6 +1444,12 @@ if __name__ == "__main__":
           raise
     
     if url:
+      model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
+      #model = RFDETR("small")
+      cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
+      vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+      hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
+      cam.streamer = hls_streamer
       hls_streamer.start()
       restart_time = (0, 0)
       threading.Thread(
