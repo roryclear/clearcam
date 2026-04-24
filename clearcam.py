@@ -165,7 +165,6 @@ def _get_stream_resolution(src):
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
     self.vod = vod
-    self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
@@ -243,8 +242,8 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      proc = None
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.proc = None
         
     else:  # Live streams
       # Original live stream pipeline
@@ -266,7 +265,7 @@ class VideoCapture:
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8")
       ]
-      hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.start_time = time.time()
       time.sleep(15)
       
@@ -292,9 +291,7 @@ class VideoCapture:
           "-threads", "1",
           "-"
       ]
-      proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-      return proc, hls_proc
+      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p, ts=0):
     p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
@@ -353,7 +350,7 @@ class VideoCapture:
         if type(link) == list: link = link[0] # todo, flakey?
         if link != self.src and type(link) == str:
           self.src = link
-          self.proc, self.hls_proc = self._open_ffmpeg()
+          self._open_ffmpeg()
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
@@ -373,7 +370,7 @@ class VideoCapture:
             fail_count += 1
             if fail_count > 5:
               print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-              self.proc, self.hls_proc = self._open_ffmpeg()
+              self._open_ffmpeg()
               fail_count = 0
             time.sleep(0.5)
             continue
@@ -483,7 +480,7 @@ class VideoCapture:
 
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
-        self.proc, self.hls_proc = self._open_ffmpeg()
+        self._open_ffmpeg()
         time.sleep(1)
   
   def reset_vod(self):
