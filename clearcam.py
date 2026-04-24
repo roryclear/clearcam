@@ -205,8 +205,6 @@ class VideoCapture:
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw / timestamp
-      stream_dir = self.output_dir_det / timestamp
-      stream_dir.mkdir(parents=True, exist_ok=True)
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
@@ -245,8 +243,8 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      self.proc = None
+      hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      proc = None
         
     else:  # Live streams
       # Original live stream pipeline
@@ -268,7 +266,7 @@ class VideoCapture:
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8")
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.start_time = time.time()
       time.sleep(15)
       
@@ -294,7 +292,9 @@ class VideoCapture:
           "-threads", "1",
           "-"
       ]
-      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+      return proc, hls_proc
 
   def save_object(self, p, ts=0):
     p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
@@ -353,7 +353,7 @@ class VideoCapture:
         if type(link) == list: link = link[0] # todo, flakey?
         if link != self.src and type(link) == str:
           self.src = link
-          self._open_ffmpeg()
+          self.proc, self.hls_proc = self._open_ffmpeg()
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
@@ -373,7 +373,7 @@ class VideoCapture:
             fail_count += 1
             if fail_count > 5:
               print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-              self._open_ffmpeg()
+              self.proc, self.hls_proc = self._open_ffmpeg()
               fail_count = 0
             time.sleep(0.5)
             continue
@@ -483,7 +483,7 @@ class VideoCapture:
 
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
-        self._open_ffmpeg()
+        self.proc, self.hls_proc = self._open_ffmpeg()
         time.sleep(1)
   
   def reset_vod(self):
@@ -572,28 +572,24 @@ class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="camera", vod=False):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir_det = BASE_DIR / "cameras" / (f"{self.cam_name}_det") / output_dir
         self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.start_time = time.time()
         self.feeding_frames = False
         self._stop_event = threading.Event()
-        self.output_dir_det.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
         self.vod = vod
     
     def _get_new_stream_dir(self):
         timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-        stream_dir_det = self.output_dir_det / timestamp
         stream_dir_raw = self.output_dir_raw / timestamp
-        stream_dir_det.mkdir(exist_ok=True)
         stream_dir_raw.mkdir(exist_ok=True)
-        return stream_dir_det, stream_dir_raw
+        return stream_dir_raw
         
     def start(self):
         self.running = True
-        self.current_stream_dir_det, self.current_stream_dir_raw = self._get_new_stream_dir()
+        self.current_stream_dir_raw = self._get_new_stream_dir()
         self.start_time = time.time()
 
     def _safe_restart(self):
@@ -884,7 +880,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             try:
-              shutil.rmtree(BASE_DIR / "cameras" / (cam_name + "_det"), ignore_errors=True)
               shutil.rmtree(BASE_DIR / "cameras" / cam_name, ignore_errors=True)
               if os.path.isfile(database.run_get("links", None)[cam_name]): os.remove(database.run_get("links", None)[cam_name])
               # todo clean
@@ -1338,8 +1333,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       if not camera_dirs: return
           
       largest_cam_raw = max(camera_dirs, key=lambda x: x[1])[0]
-      largest_cam_det = largest_cam_raw.with_stem(largest_cam_raw.stem + "_det")
-      for largest_cam in [largest_cam_raw, largest_cam_det]:
+      for largest_cam in [largest_cam_raw]:
         streams_dir = largest_cam / "streams"
         if not streams_dir.exists():
           shutil.rmtree(largest_cam)
