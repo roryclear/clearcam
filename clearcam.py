@@ -747,7 +747,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name or not src:
                 self.send_error(400, "Missing cam_name or src")
                 return
-            
+
             start_cam(rtsp=src,cam_name=cam_name,model_variant=model_variant)
             database.run_put("links", cam_name, src)
             self.send_response(302)
@@ -1433,16 +1433,6 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   
   try:
-    try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
-      print(f"Serving at http://{get_lan_ip()}:8080")
-    except OSError as e:
-      if e.errno == socket.errno.EADDRINUSE:
-        print("Port in use, server not started.")
-        server = None
-      else:
-          raise
-    
     if url:
       model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
       #model = RFDETR("small")
@@ -1458,6 +1448,16 @@ if __name__ == "__main__":
         daemon=True
       ).start()
       cam.start()
+
+    try:
+      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+      print(f"Serving at http://{get_lan_ip()}:8080")
+    except OSError as e:
+      if e.errno == socket.errno.EADDRINUSE:
+        print("Port in use, server not started.")
+        server = None
+      else:
+          raise
     if server:
       server.serve_forever()
     else:
