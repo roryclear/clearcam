@@ -222,7 +222,6 @@ class VideoCapture:
 
   def _open_ffmpeg(self):
     path = self._get_new_stream_dir()
-       
     self._safe_kill_process(self.proc)
     self._safe_kill_process(self.hls_proc)
 
@@ -322,7 +321,6 @@ class VideoCapture:
      
 
   def capture_loop(self):
-    self.shape_seg = 0
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -342,6 +340,7 @@ class VideoCapture:
       self.cap = cv2.VideoCapture(self.src)
       self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
+    
     while self.running:
       if time.time() - last_live_check > 5:
         last_live_check = time.time()
