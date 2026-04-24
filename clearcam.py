@@ -202,7 +202,6 @@ class VideoCapture:
     if not self.vod or not self.output_dir_raw.exists():
       self._open_ffmpeg()
       threading.Thread(target=self.capture_loop, daemon=True).start()
-    if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -457,7 +456,29 @@ class VideoCapture:
         with self.lock:
             self.raw_frame = frame.copy()
         self.new_frame_event.set()
-        if not self.vod: time.sleep(1 / 30)
+
+        if not self.vod:
+          time.sleep(1 / 30)
+          prev_time = time.time()
+          self.new_frame_event.wait()
+          self.new_frame_event.clear()
+          if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+            time.sleep(1)
+            with self.lock: self.last_preds = [] # to remove annotation when no alerts active
+            continue
+          with self.lock:
+            frame = self.raw_frame.copy() if self.raw_frame is not None else None
+          if frame is not None:
+            preds, frame = self.run_inference(frame)
+            with self.lock:
+              self.last_preds = preds.copy()
+              self.last_frame = frame.numpy().copy()
+
+            curr_time = time.time()
+            fps = 1 / (curr_time - prev_time)
+            prev_time = curr_time
+            print(f"\rFPS: {fps:.2f}", end="", flush=True)
+
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
         self._open_ffmpeg()
@@ -468,45 +489,6 @@ class VideoCapture:
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
-
-  def inference_loop(self):
-    prev_time = time.time()
-    while self.running:
-      self.new_frame_event.wait()
-      self.new_frame_event.clear()
-      if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
-        time.sleep(1)
-        with self.lock: self.last_preds = [] # to remove annotation when no alerts active
-        continue
-      with self.lock:
-        frame = self.raw_frame.copy() if self.raw_frame is not None else None
-      if frame is not None:
-        preds, frame = self.run_inference(frame)
-        with self.lock:
-          self.last_preds = preds.copy()
-          self.last_frame = frame.numpy().copy()
-
-        '''
-        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
-          h, w = frame.shape[:2]
-          preds[:, [0, 2]] /= w
-          preds[:, [1, 3]] /= h
-          t = time.time() - self.start_time
-          self.det_shapes.append({t: preds.tolist()})
-          if len(self.det_shapes) == 1:
-            with open(self.det_manifest, 'a') as f:
-                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
-        if time.time() - self.last_shapes_time >= 4:
-          print("4 secs")
-          self.last_shapes_time = time.time()
-          json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
-          self.shape_seg += 1
-          self.det_shapes = []
-        '''
-        curr_time = time.time()
-        fps = 1 / (curr_time - prev_time)
-        prev_time = curr_time
-        print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
   def run_inference(self, frame):
     frame = Tensor(frame)
