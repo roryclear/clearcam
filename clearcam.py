@@ -165,7 +165,6 @@ def _get_stream_resolution(src):
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
     self.vod = vod
-    self.output_dir_det = BASE_DIR / "cameras" / f'{cam_name}_det' / "streams"
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     # objects in scene count
     self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
@@ -208,8 +207,6 @@ class VideoCapture:
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw / timestamp
-      stream_dir = self.output_dir_det / timestamp
-      stream_dir.mkdir(parents=True, exist_ok=True)
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
@@ -590,28 +587,24 @@ class HLSStreamer:
     def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="camera", vod=False):
         self.cam_name = cam_name
         self.cam = video_capture
-        self.output_dir_det = BASE_DIR / "cameras" / (f"{self.cam_name}_det") / output_dir
         self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
         self.segment_time = segment_time
         self.running = False
         self.start_time = time.time()
         self.feeding_frames = False
         self._stop_event = threading.Event()
-        self.output_dir_det.mkdir(parents=True, exist_ok=True)
         self.output_dir_raw.mkdir(parents=True, exist_ok=True)
         self.vod = vod
     
     def _get_new_stream_dir(self):
         timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-        stream_dir_det = self.output_dir_det / timestamp
         stream_dir_raw = self.output_dir_raw / timestamp
-        stream_dir_det.mkdir(exist_ok=True)
         stream_dir_raw.mkdir(exist_ok=True)
-        return stream_dir_det, stream_dir_raw
+        return stream_dir_raw
         
     def start(self):
         self.running = True
-        self.current_stream_dir_det, self.current_stream_dir_raw = self._get_new_stream_dir()
+        self.current_stream_dir_raw = self._get_new_stream_dir()
         self.start_time = time.time()
 
     def _safe_restart(self):
@@ -902,7 +895,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 return
             
             try:
-              shutil.rmtree(BASE_DIR / "cameras" / (cam_name + "_det"), ignore_errors=True)
               shutil.rmtree(BASE_DIR / "cameras" / cam_name, ignore_errors=True)
               if os.path.isfile(database.run_get("links", None)[cam_name]): os.remove(database.run_get("links", None)[cam_name])
               # todo clean
@@ -1356,8 +1348,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       if not camera_dirs: return
           
       largest_cam_raw = max(camera_dirs, key=lambda x: x[1])[0]
-      largest_cam_det = largest_cam_raw.with_stem(largest_cam_raw.stem + "_det")
-      for largest_cam in [largest_cam_raw, largest_cam_det]:
+      for largest_cam in [largest_cam_raw]:
         streams_dir = largest_cam / "streams"
         if not streams_dir.exists():
           shutil.rmtree(largest_cam)
