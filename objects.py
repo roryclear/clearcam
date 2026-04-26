@@ -228,16 +228,13 @@ class ObjectFinder:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = preprocess(img)
 
-            embeddings = []
             emb = precompute_embedding_jit_bs1(self.model, Tensor([img])).numpy()
-            embeddings.append(emb)
-            for path, embedding in zip([img_path], embeddings):
-                folder_embeddings[path] = embedding
-                folder_paths[path] = path
+            folder_embeddings[img_path] = emb
+            folder_paths[img_path] = img_path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
-        return embeddings, [path]
+        return [emb], [img_path]
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
