@@ -221,7 +221,6 @@ class ObjectFinder:
             save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
         if not self.clip: return [], []
         emb_ret = []
-        path_ret = []
         for i in range(0, len(new_image_list)):
             img_path = new_image_list[i]
 
@@ -239,14 +238,13 @@ class ObjectFinder:
                 emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
                 embeddings.append(emb)
             emb_ret.extend(embeddings)
-            path_ret.extend(img_path)
             for path, embedding in zip([img_path], embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
-        return emb_ret, path_ret
+        return emb_ret, [path]
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
