@@ -167,7 +167,6 @@ class ObjectFinder:
                 adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
             if self.clip:
                 precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
-                precompute_embeddings_jit(self.model, Tensor.rand((16, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -223,30 +222,25 @@ class ObjectFinder:
         if not self.clip: return [], []
         emb_ret = []
         path_ret = []
-        for i in range(0, len(new_image_list), batch_size):
-            batch_paths = new_image_list[i:i + batch_size]
-            batch_np = []
+        for i in range(0, len(new_image_list)):
+            img_path = new_image_list[i]
 
-            for img_path in batch_paths:
-                img = cv2.imread(img_path)
-                if img is None: continue
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = preprocess(img)
-                batch_np.append(img)
+            img = cv2.imread(img_path)
+            if img is None: continue
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = preprocess(img)
+            batch_np = [img]
 
             if not batch_np: continue
             batch_np = np.stack(batch_np)
 
-            if len(batch_np) == batch_size:
-                embeddings = precompute_embeddings_jit(self.model, Tensor(batch_np)).numpy()
-            else:
-                embeddings = []
-                for j in range(len(batch_np)):
-                  emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
-                  embeddings.append(emb)
+            embeddings = []
+            for j in range(len(batch_np)):
+                emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
+                embeddings.append(emb)
             emb_ret.extend(embeddings)
-            path_ret.extend(batch_paths)
-            for path, embedding in zip(batch_paths, embeddings):
+            path_ret.extend(img_path)
+            for path, embedding in zip([img_path], embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
