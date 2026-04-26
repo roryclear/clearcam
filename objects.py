@@ -227,15 +227,10 @@ class ObjectFinder:
             if img is None: continue
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = preprocess(img)
-            batch_np = [img]
-
-            if not batch_np: continue
-            batch_np = np.stack(batch_np)
 
             embeddings = []
-            for j in range(len(batch_np)):
-                emb = precompute_embedding_jit_bs1(self.model, Tensor(batch_np[j:j+1])).numpy()
-                embeddings.append(emb)
+            emb = precompute_embedding_jit_bs1(self.model, Tensor([img])).numpy()
+            embeddings.append(emb)
             for path, embedding in zip([img_path], embeddings):
                 folder_embeddings[path] = embedding
                 folder_paths[path] = path
