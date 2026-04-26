@@ -242,7 +242,7 @@ class ObjectFinder:
             print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
-        return embedding, [path]
+        return embeddings, [path]
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
