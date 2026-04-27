@@ -167,28 +167,31 @@ class VideoCapture:
     self.vod = vod
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     # objects in scene count
-    self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
+    self.counter = {}
     self.cam_name = cam_name
     self.object_set = set()
     self.object_set_zone = set()
 
-    self.src = src
+    self.src = {}
     self.max_frame_rate = 10 # for vod only
     self.width, self.height = _get_stream_resolution(src)
-    self.proc = None
-    self.hls_proc = None
+    self.proc = {}
+    self.hls_proc = {}
     self.running = True
 
     self.raw_frame = None
     self.annotated_frame = None
     self.last_preds = []
-    self.last_frame = None
+    self.last_frame = {}
 
     self.settings = None
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
-    self.new_frame_event = threading.Event()
+
+    self.counter[self.cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
+    self.src[self.cam_name] = src # todo
+    self.last_frame[self.cam_name] = None
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
     if not self.alert_counters:
@@ -199,9 +202,8 @@ class VideoCapture:
 
     self.lock = threading.Lock()
 
-    if not self.vod or not self.output_dir_raw.exists():
-      self._open_ffmpeg()
-      threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -220,18 +222,19 @@ class VideoCapture:
       except Exception:
         pass
 
-  def _open_ffmpeg(self):
+  def _open_ffmpeg(self, cam_name):
     path = self._get_new_stream_dir()
-    self._safe_kill_process(self.proc)
-    self._safe_kill_process(self.hls_proc)
+    if self.cam_name in self.proc: self._safe_kill_process(self.proc[self.cam_name])
+    if self.cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[self.cam_name])
+    src = self.src[cam_name]
 
     ffmpeg_path = find_ffmpeg()
     
-    is_rtsp = self.src.startswith("rtsp")
+    is_rtsp = src.startswith("rtsp")
     if self.vod:
       command = [
         ffmpeg_path,
-        "-i", self.src,
+        "-i", src,
         "-c:v", "copy",
         "-an",
         "-f", "hls",
@@ -243,8 +246,7 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      self.proc = None
+      return subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL), None
         
     else:  # Live streams
       # Original live stream pipeline
@@ -253,7 +255,7 @@ class VideoCapture:
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
-          "-i", self.src,
+          "-i", src,
           "-c", "copy",
           "-an",
           "-f", "hls",
@@ -264,7 +266,7 @@ class VideoCapture:
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8")
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.start_time = time.time()
       time.sleep(15)
       
@@ -290,9 +292,9 @@ class VideoCapture:
           "-threads", "1",
           "-"
       ]
-      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      return hls_proc, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-  def save_object(self, p, ts=0):
+  def save_object(self, p, ts=0, cam_name=None):
     p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
@@ -310,13 +312,13 @@ class VideoCapture:
     x2_new = cx + hw
     y1_new = cy - hh
     y2_new = cy + hh
-    H, W = self.last_frame.shape[:2]
+    H, W = self.last_frame[cam_name].shape[:2]
     x1_new = max(0, min(x1_new, W))
     x2_new = max(0, min(x2_new, W))
     y1_new = max(0, min(y1_new, H))
     y2_new = max(0, min(y2_new, H))
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
-    crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
+    crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
      
 
@@ -332,44 +334,46 @@ class VideoCapture:
     self.pred_occs = {}
     self.last_link_check = time.time()
     count = 0
-    self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
-    Path(self.det_path).mkdir(parents=True, exist_ok=True)
-    self.det_manifest = str(self.det_path / "det_manifest.txt")
 
-    if self.vod:
-      self.cap = cv2.VideoCapture(self.src)
-      self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
-      self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
+    self.cap = {}
+    self.src_fps = {}
     
+    cam_name = self.cam_name
+    self.pred_occs[cam_name] = {}
+    self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+
     while self.running:
-      if time.time() - last_live_check > 5:
+      if time.time() - last_live_check > 5: # todo, for all cams
         last_live_check = time.time()
-        link = database.run_get("links", self.cam_name)
+        link = database.run_get("links", cam_name)
         if type(link) == list: link = link[0] # todo, flakey?
-        if link != self.src:
-          self.src = link
-          self._open_ffmpeg()
+        if link != self.src[cam_name]:
+          self.src[cam_name] = link
+          self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
       try:
-        if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
+        if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
-          for _ in range(self.frame_step - 1):
-            self.cap.grab()  # skip for max fps
-          ret, frame = self.cap.read()
-          self.last_frame = frame #todo
-          if not ret or self.cam_name not in database.run_get("links", None):
+          if cam_name not in self.cap:
+            self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name])
+            self.src_fps[cam_name] = self.cap[cam_name].get(cv2.CAP_PROP_FPS) or 30
+
+          self.cap[cam_name].grab()  # skip for max fps
+          ret, frame = self.cap[cam_name].read()
+          self.last_frame[self.cam_name] = frame #todo
+          if not ret or cam_name not in database.run_get("links", None):
             self.running = False
             database.run_put("analysis_prog", cam_name, {"Tracking":100})
             os._exit(0)
           else:
-            self.last_preds, _ = self.run_inference(frame)
-            database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
+            self.last_preds, _ = self.run_inference(frame, cam_name=cam_name)
+            database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
-          raw_bytes = self.proc.stdout.read(frame_size)
+          raw_bytes = self.proc[cam_name].stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
             fail_count += 1
             if fail_count > 5:
-              print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-              self._open_ffmpeg()
+              print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
+              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
               fail_count = 0
             time.sleep(0.5)
             continue
@@ -396,9 +400,9 @@ class VideoCapture:
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, color_dict)
+                    annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                     if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
@@ -420,9 +424,9 @@ class VideoCapture:
             counters = database.run_get("counters", self.cam_name)
             if counters not in [None, {}]:
               if counters.reset:
-                self.counter.reset_counts()
-                self.counter.reset = False
-            database.run_put("counters", cam_name, self.counter)
+                self.counter[self.cam_name].reset_counts()
+                self.counter[self.cam_name].reset = False
+            database.run_put("counters", cam_name, self.counter[self.cam_name])
             
             alerts = database.run_get("alerts", self.cam_name)
             for id,a in alerts.items():
@@ -446,7 +450,7 @@ class VideoCapture:
           if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
-              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), live=True)
+              export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
               Path(mp4_filename).unlink()
               threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
@@ -454,42 +458,58 @@ class VideoCapture:
             count+=1
         with self.lock:
             self.raw_frame = frame.copy()
-        self.new_frame_event.set()
-
-        if not self.vod:
-          time.sleep(1 / 30)
-          prev_time = time.time()
-          self.new_frame_event.wait()
-          self.new_frame_event.clear()
-          if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
-            time.sleep(1)
-            with self.lock: self.last_preds = [] # to remove annotation when no alerts active
-            continue
-          with self.lock:
-            frame = self.raw_frame.copy() if self.raw_frame is not None else None
-          if frame is not None:
-            preds, frame = self.run_inference(frame)
-            with self.lock:
-              self.last_preds = preds.copy()
-              self.last_frame = frame.numpy().copy()
-
-            curr_time = time.time()
-            fps = 1 / (curr_time - prev_time)
-            prev_time = curr_time
-            print(f"\rFPS: {fps:.2f}", end="", flush=True)
+        if not self.vod: time.sleep(1 / 30)
 
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
-        self._open_ffmpeg()
+        self._open_ffmpeg(self.cam_name)
         time.sleep(1)
   
+  def inference_loop(self):
+    prev_time = time.time()
+    while self.running:
+      time.sleep(1/30) # todo
+      if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+        time.sleep(1)
+        with self.lock: self.last_preds = [] # to remove annotation when no alerts active
+        continue
+      with self.lock:
+        frame = self.raw_frame.copy() if self.raw_frame is not None else None
+      if frame is not None:
+        preds, frame = self.run_inference(frame, cam_name=self.cam_name)
+        with self.lock:
+          self.last_preds = preds.copy()
+          self.last_frame[self.cam_name] = frame.numpy().copy()
+
+        '''
+        if len(preds) > 0 and time.time() - self.last_shapes_time >= 1 / 24:
+          h, w = frame.shape[:2]
+          preds[:, [0, 2]] /= w
+          preds[:, [1, 3]] /= h
+          t = time.time() - self.start_time
+          self.det_shapes.append({t: preds.tolist()})
+          if len(self.det_shapes) == 1:
+            with open(self.det_manifest, 'a') as f:
+                f.write(f"{t:.3f}: {self.shape_seg}.json\n")
+        if time.time() - self.last_shapes_time >= 4:
+          print("4 secs")
+          self.last_shapes_time = time.time()
+          json.dump(self.det_shapes, open(self.det_path / f"{self.shape_seg}.json", "w"))
+          self.shape_seg += 1
+          self.det_shapes = []
+        '''
+        curr_time = time.time()
+        fps = 1 / (curr_time - prev_time)
+        prev_time = curr_time
+        print(f"\rFPS: {fps:.2f}", end="", flush=True)
+
   def reset_vod(self):
-    self.cap = cv2.VideoCapture(self.src) # reset video on settings change
+    self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name]) # reset video on settings change
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
 
-  def run_inference(self, frame):
+  def run_inference(self, frame, cam_name):
     frame = Tensor(frame)
     preds = model(frame).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
@@ -501,11 +521,11 @@ class VideoCapture:
     for x in online_targets:
       if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives.  
       # add to objects, regarless of speed
-      if x.track_id not in self.pred_occs: self.pred_occs[x.track_id] = [time.time()]
-      if (len(self.pred_occs[x.track_id]) < 20 and (time.time() - self.pred_occs[x.track_id][-1]) > 1) or (time.time() - self.pred_occs[x.track_id][-1]) > 10:
-        self. pred_occs[x.track_id].append(time.time())
-        ts = round((self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
-        self.save_object(x, ts)
+      if x.track_id not in self.pred_occs[cam_name]: self.pred_occs[cam_name][x.track_id] = [time.time()]
+      if (len(self.pred_occs[cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 10:
+        self. pred_occs[cam_name][x.track_id].append(time.time())
+        ts = round((self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5,1) if self.vod else round((time.time() - self.start_time - 5),1)
+        self.save_object(x, ts, cam_name=cam_name)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
       outside = False
@@ -527,7 +547,7 @@ class VideoCapture:
         new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
         if new:
           self.object_set.add(int(x.track_id))
-          self.counter.add(int(x.class_id))
+          self.counter[self.cam_name].add(int(x.class_id))
         if new_in_zone: self.object_set_zone.add(int(x.track_id))
         for _, alert in self.alert_counters.items():
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
@@ -542,10 +562,8 @@ class VideoCapture:
 
   def release(self):
       self.running = False
-      if self.proc:
-          self.proc.kill()
-      if self.hls_proc:
-         self.hls_proc.kill()    
+      if self.cam_name in self.proc: self.proc[self.cam_name].kill()
+      if self.cam_name in self.hls_proc: self.hls_proc[self.cam_name].kill()    
 
 def is_bright_color(color):
   r, g, b = color
@@ -563,51 +581,6 @@ def draw_predictions(frame, preds, color_dict):
     frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
   return frame
-
-class HLSStreamer:
-    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="camera", vod=False):
-        self.cam_name = cam_name
-        self.cam = video_capture
-        self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
-        self.segment_time = segment_time
-        self.running = False
-        self.start_time = time.time()
-        self.feeding_frames = False
-        self._stop_event = threading.Event()
-        self.output_dir_raw.mkdir(parents=True, exist_ok=True)
-        self.vod = vod
-    
-    def _get_new_stream_dir(self):
-        timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-        stream_dir_raw = self.output_dir_raw / timestamp
-        stream_dir_raw.mkdir(exist_ok=True)
-        return stream_dir_raw
-        
-    def start(self):
-        self.running = True
-        self.current_stream_dir_raw = self._get_new_stream_dir()
-        self.start_time = time.time()
-
-    def _safe_restart(self):
-        try:
-            self.stop()
-        except Exception as e:
-            print(f"Error during stop: {e}")
-        time.sleep(2)
-        while True:  # 3 second timeout
-            if self.cam.get_frame() is not None:
-                break
-            time.sleep(1)    
-        try:
-            self.start()
-            print("HLS streamer restarted successfully")
-        except Exception as e:
-            print(f"Failed to restart HLS: {e}")
-
-    
-    def stop(self):
-        self.running = False
-
 
 def point_not_in_polygon(coords, poly):
     n = len(poly)
@@ -1128,7 +1101,7 @@ def image_sort_key(item):
   try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
   except ValueError: return -1
 
-def schedule_daily_restart(hls_streamer, videocapture, restart_time):
+def schedule_daily_restart(videocapture, restart_time):
     while True:
         now = datetime.now().time()
         target = time_obj(restart_time[0], restart_time[1])
@@ -1426,8 +1399,6 @@ if __name__ == "__main__":
     #model = RFDETR("small")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
-    hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
-    cam.streamer = hls_streamer
   
   try:
     try:
@@ -1441,11 +1412,10 @@ if __name__ == "__main__":
           raise
     
     if url:
-      hls_streamer.start()
       restart_time = (0, 0)
       threading.Thread(
         target=schedule_daily_restart,
-        args=(hls_streamer, cam, restart_time),
+        args=(cam, restart_time),
         daemon=True
       ).start()
 
@@ -1456,7 +1426,6 @@ if __name__ == "__main__":
 
   except KeyboardInterrupt:
     if url:
-      hls_streamer.stop()
       cam.release()
       server.shutdown()
 
