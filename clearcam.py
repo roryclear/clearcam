@@ -167,7 +167,7 @@ class VideoCapture:
     self.vod = vod
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     # objects in scene count
-    self.counter = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
+    self.counter = {}
     self.cam_name = cam_name
     self.object_set = set()
     self.object_set_zone = set()
@@ -175,8 +175,8 @@ class VideoCapture:
     self.src = src
     self.max_frame_rate = 10 # for vod only
     self.width, self.height = _get_stream_resolution(src)
-    self.proc = None
-    self.hls_proc = None
+    self.proc = {}
+    self.hls_proc = {}
     self.running = True
 
     self.raw_frame = None
@@ -188,7 +188,8 @@ class VideoCapture:
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
-    self.new_frame_event = threading.Event()
+
+    self.counter[self.cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
     if not self.alert_counters:
@@ -222,8 +223,8 @@ class VideoCapture:
 
   def _open_ffmpeg(self):
     path = self._get_new_stream_dir()
-    self._safe_kill_process(self.proc)
-    self._safe_kill_process(self.hls_proc)
+    if self.cam_name in self.proc: self._safe_kill_process(self.proc[self.cam_name])
+    if self.cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[self.cam_name])
 
     ffmpeg_path = find_ffmpeg()
     
@@ -243,8 +244,8 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      self.proc = None
+      self.hls_proc[self.cam_name] = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.proc[self.cam_name] = None
         
     else:  # Live streams
       # Original live stream pipeline
@@ -264,7 +265,7 @@ class VideoCapture:
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8")
       ]
-      self.hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.hls_proc[self.cam_name] = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.start_time = time.time()
       time.sleep(15)
       
@@ -290,7 +291,7 @@ class VideoCapture:
           "-threads", "1",
           "-"
       ]
-      self.proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      self.proc[self.cam_name] = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p, ts=0):
     p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
@@ -364,7 +365,7 @@ class VideoCapture:
             self.last_preds, _ = self.run_inference(frame)
             database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
-          raw_bytes = self.proc.stdout.read(frame_size)
+          raw_bytes = self.proc[self.cam_name].stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
             fail_count += 1
             if fail_count > 5:
@@ -420,9 +421,9 @@ class VideoCapture:
             counters = database.run_get("counters", self.cam_name)
             if counters not in [None, {}]:
               if counters.reset:
-                self.counter.reset_counts()
-                self.counter.reset = False
-            database.run_put("counters", cam_name, self.counter)
+                self.counter[self.cam_name].reset_counts()
+                self.counter[self.cam_name].reset = False
+            database.run_put("counters", cam_name, self.counter[self.cam_name])
             
             alerts = database.run_get("alerts", self.cam_name)
             for id,a in alerts.items():
@@ -454,13 +455,10 @@ class VideoCapture:
             count+=1
         with self.lock:
             self.raw_frame = frame.copy()
-        self.new_frame_event.set()
 
         if not self.vod:
           time.sleep(1 / 30)
           prev_time = time.time()
-          self.new_frame_event.wait()
-          self.new_frame_event.clear()
           if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
             time.sleep(1)
             with self.lock: self.last_preds = [] # to remove annotation when no alerts active
@@ -527,7 +525,7 @@ class VideoCapture:
         new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
         if new:
           self.object_set.add(int(x.track_id))
-          self.counter.add(int(x.class_id))
+          self.counter[self.cam_name].add(int(x.class_id))
         if new_in_zone: self.object_set_zone.add(int(x.track_id))
         for _, alert in self.alert_counters.items():
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
@@ -542,10 +540,8 @@ class VideoCapture:
 
   def release(self):
       self.running = False
-      if self.proc:
-          self.proc.kill()
-      if self.hls_proc:
-         self.hls_proc.kill()    
+      if self.cam_name in self.proc: self.proc[self.cam_name].kill()
+      if self.cam_name in self.hls_proc: self.hls_proc[self.cam_name].kill()    
 
 def is_bright_color(color):
   r, g, b = color
@@ -607,7 +603,6 @@ class HLSStreamer:
     
     def stop(self):
         self.running = False
-
 
 def point_not_in_polygon(coords, poly):
     n = len(poly)
