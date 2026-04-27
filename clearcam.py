@@ -182,7 +182,7 @@ class VideoCapture:
     self.raw_frame = None
     self.annotated_frame = None
     self.last_preds = []
-    self.last_frame = None
+    self.last_frame = {}
 
     self.settings = None
 
@@ -191,6 +191,7 @@ class VideoCapture:
 
     self.counter[self.cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.src[self.cam_name] = src # todo
+    self.last_frame[self.cam_name] = None
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
     if not self.alert_counters:
@@ -292,7 +293,7 @@ class VideoCapture:
       ]
       return hls_proc, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-  def save_object(self, p, ts=0):
+  def save_object(self, p, ts=0, cam_name=None):
     p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/objects/{timestamp}"
@@ -310,18 +311,17 @@ class VideoCapture:
     x2_new = cx + hw
     y1_new = cy - hh
     y2_new = cy + hh
-    H, W = self.last_frame.shape[:2]
+    H, W = self.last_frame[cam_name].shape[:2]
     x1_new = max(0, min(x1_new, W))
     x2_new = max(0, min(x2_new, W))
     y1_new = max(0, min(y1_new, H))
     y2_new = max(0, min(y2_new, H))
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
-    crop = self.last_frame[y1_new:y2_new, x1_new:x2_new]
+    crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
      
 
   def capture_loop(self):
-    self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.cam_name)
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -336,40 +336,43 @@ class VideoCapture:
 
     self.cap = {}
     self.src_fps = {}
-    self.pred_occs[self.cam_name] = {}
     
+    cam_name = self.cam_name
+    self.pred_occs[cam_name] = {}
+    self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+
     while self.running:
       if time.time() - last_live_check > 5: # todo, for all cams
         last_live_check = time.time()
-        link = database.run_get("links", self.cam_name)
+        link = database.run_get("links", cam_name)
         if type(link) == list: link = link[0] # todo, flakey?
-        if link != self.src[self.cam_name]:
-          self.src[self.cam_name] = link
-          self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.cam_name)
+        if link != self.src[cam_name]:
+          self.src[cam_name] = link
+          self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
       try:
-        if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
+        if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
-          if self.cam_name not in self.cap:
-            self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name])
-            self.src_fps[self.cam_name] = self.cap[self.cam_name].get(cv2.CAP_PROP_FPS) or 30
+          if cam_name not in self.cap:
+            self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name])
+            self.src_fps[cam_name] = self.cap[cam_name].get(cv2.CAP_PROP_FPS) or 30
 
-          self.cap[self.cam_name].grab()  # skip for max fps
-          ret, frame = self.cap[self.cam_name].read()
-          self.last_frame = frame #todo
-          if not ret or self.cam_name not in database.run_get("links", None):
+          self.cap[cam_name].grab()  # skip for max fps
+          ret, frame = self.cap[cam_name].read()
+          self.last_frame[self.cam_name] = frame #todo
+          if not ret or cam_name not in database.run_get("links", None):
             self.running = False
             database.run_put("analysis_prog", cam_name, {"Tracking":100})
             os._exit(0)
           else:
-            self.last_preds, _ = self.run_inference(frame)
-            database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[self.cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
+            self.last_preds, _ = self.run_inference(frame, cam_name=cam_name)
+            database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
-          raw_bytes = self.proc[self.cam_name].stdout.read(frame_size)
+          raw_bytes = self.proc[cam_name].stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
             fail_count += 1
             if fail_count > 5:
-              print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[self.cam_name]}")
-              self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.cam_name)
+              print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
+              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
               fail_count = 0
             time.sleep(0.5)
             continue
@@ -396,7 +399,7 @@ class VideoCapture:
                     timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, color_dict)
+                    annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                     ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
@@ -465,10 +468,10 @@ class VideoCapture:
           with self.lock:
             frame = self.raw_frame.copy() if self.raw_frame is not None else None
           if frame is not None:
-            preds, frame = self.run_inference(frame)
+            preds, frame = self.run_inference(frame, cam_name=cam_name)
             with self.lock:
               self.last_preds = preds.copy()
-              self.last_frame = frame.numpy().copy()
+              self.last_frame[cam_name] = frame.numpy().copy()
 
             curr_time = time.time()
             fps = 1 / (curr_time - prev_time)
@@ -486,7 +489,7 @@ class VideoCapture:
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
 
-  def run_inference(self, frame):
+  def run_inference(self, frame, cam_name):
     frame = Tensor(frame)
     preds = model(frame).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
@@ -498,11 +501,11 @@ class VideoCapture:
     for x in online_targets:
       if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives.  
       # add to objects, regarless of speed
-      if x.track_id not in self.pred_occs[self.cam_name]: self.pred_occs[self.cam_name][x.track_id] = [time.time()]
-      if (len(self.pred_occs[self.cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[self.cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[self.cam_name][x.track_id][-1]) > 10:
-        self. pred_occs[self.cam_name][x.track_id].append(time.time())
-        ts = round((self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
-        self.save_object(x, ts)
+      if x.track_id not in self.pred_occs[cam_name]: self.pred_occs[cam_name][x.track_id] = [time.time()]
+      if (len(self.pred_occs[cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 10:
+        self. pred_occs[cam_name][x.track_id].append(time.time())
+        ts = round((self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
+        self.save_object(x, ts, cam_name=cam_name)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
       outside = False
