@@ -200,9 +200,7 @@ class VideoCapture:
 
     self.lock = threading.Lock()
 
-    if not self.vod or not self.output_dir_raw.exists():
-      self._open_ffmpeg()
-      threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -221,14 +219,14 @@ class VideoCapture:
       except Exception:
         pass
 
-  def _open_ffmpeg(self):
+  def _open_ffmpeg(self, src):
     path = self._get_new_stream_dir()
     if self.cam_name in self.proc: self._safe_kill_process(self.proc[self.cam_name])
     if self.cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[self.cam_name])
 
     ffmpeg_path = find_ffmpeg()
     
-    is_rtsp = self.src.startswith("rtsp")
+    is_rtsp = src.startswith("rtsp")
     if self.vod:
       command = [
         ffmpeg_path,
@@ -244,8 +242,7 @@ class VideoCapture:
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
         str(path / "stream.m3u8"),
       ]
-      self.hls_proc[self.cam_name] = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      self.proc[self.cam_name] = None
+      return subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL), None
         
     else:  # Live streams
       # Original live stream pipeline
@@ -254,7 +251,7 @@ class VideoCapture:
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
-          "-i", self.src,
+          "-i", src,
           "-c", "copy",
           "-an",
           "-f", "hls",
@@ -265,7 +262,7 @@ class VideoCapture:
           "-hls_segment_filename", str(path / "stream_%06d.ts"),
           str(path / "stream.m3u8")
       ]
-      self.hls_proc[self.cam_name] = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       self.start_time = time.time()
       time.sleep(15)
       
@@ -291,7 +288,7 @@ class VideoCapture:
           "-threads", "1",
           "-"
       ]
-      self.proc[self.cam_name] = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+      return hls_proc, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
   def save_object(self, p, ts=0):
     p = np.array([p.tlwh[0],p.tlwh[1],(p.tlwh[0]+p.tlwh[2]),(p.tlwh[1]+p.tlwh[3]),p.score,p.class_id,p.track_id])
@@ -322,6 +319,8 @@ class VideoCapture:
      
 
   def capture_loop(self):
+    self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.src)
+
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -349,7 +348,7 @@ class VideoCapture:
         if type(link) == list: link = link[0] # todo, flakey?
         if link != self.src:
           self.src = link
-          self._open_ffmpeg()
+          self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.src)
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
@@ -370,7 +369,7 @@ class VideoCapture:
             fail_count += 1
             if fail_count > 5:
               print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-              self._open_ffmpeg()
+              self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.src)
               fail_count = 0
             time.sleep(0.5)
             continue
@@ -478,7 +477,7 @@ class VideoCapture:
 
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
-        self._open_ffmpeg()
+        self._open_ffmpeg(self.src)
         time.sleep(1)
   
   def reset_vod(self):
