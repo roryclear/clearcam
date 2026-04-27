@@ -220,7 +220,7 @@ class ObjectFinder:
                 folder_paths_face[path] = path
             save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
         if not self.clip: return [], []
-        for i in range(0, len(new_image_list)):
+        for i in range(len(new_image_list)):
             img_path = new_image_list[i]
 
             img = cv2.imread(img_path)
@@ -231,8 +231,8 @@ class ObjectFinder:
             emb = precompute_embedding_jit_bs1(self.model, Tensor([img])).numpy()
             folder_embeddings[img_path] = emb
             folder_paths[img_path] = img_path
-            print(f"Processed {min(i + batch_size, len(new_image_list))}/{len(new_image_list)} new images...")
-            if vod: database.run_put("analysis_prog", cam_name, {"Processing":(min(i + batch_size, len(new_image_list))/len(new_image_list))*100})
+            if vod: database.run_put("analysis_prog", cam_name, {"Processing":((i + 1)/len(new_image_list))*100})
+        print(f"Processed {len(new_image_list)} new images...")
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
         return [emb], [img_path]
 
