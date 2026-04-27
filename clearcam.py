@@ -333,17 +333,17 @@ class VideoCapture:
     self.pred_occs = {}
     self.last_link_check = time.time()
     count = 0
-    self.det_path = BASE_DIR / "cameras" / self.cam_name / "dets" / datetime.now().strftime("%Y-%m-%d")
-    Path(self.det_path).mkdir(parents=True, exist_ok=True)
-    self.det_manifest = str(self.det_path / "det_manifest.txt")
+
+    self.cap = {}
+    self.pred_occs[self.cam_name] = {}
 
     if self.vod:
-      self.cap = cv2.VideoCapture(self.src)
-      self.src_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
+      self.cap[self.cam_name] = cv2.VideoCapture(self.src)
+      self.src_fps = self.cap[self.cam_name].get(cv2.CAP_PROP_FPS) or 30
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     
     while self.running:
-      if time.time() - last_live_check > 5:
+      if time.time() - last_live_check > 5: # todo, for all cams
         last_live_check = time.time()
         link = database.run_get("links", self.cam_name)
         if type(link) == list: link = link[0] # todo, flakey?
@@ -354,8 +354,8 @@ class VideoCapture:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
           for _ in range(self.frame_step - 1):
-            self.cap.grab()  # skip for max fps
-          ret, frame = self.cap.read()
+            self.cap[self.cam_name].grab()  # skip for max fps
+          ret, frame = self.cap[self.cam_name].read()
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
             self.running = False
@@ -363,7 +363,7 @@ class VideoCapture:
             os._exit(0)
           else:
             self.last_preds, _ = self.run_inference(frame)
-            database.run_put("analysis_prog", cam_name, {"Tracking":self.cap.get(cv2.CAP_PROP_POS_FRAMES)/self.cap.get(cv2.CAP_PROP_FRAME_COUNT)*100})
+            database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[self.cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           raw_bytes = self.proc[self.cam_name].stdout.read(frame_size)
           if len(raw_bytes) != frame_size:
@@ -399,7 +399,7 @@ class VideoCapture:
                     filepath.mkdir(parents=True, exist_ok=True)
                     annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                     if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
@@ -482,7 +482,7 @@ class VideoCapture:
         time.sleep(1)
   
   def reset_vod(self):
-    self.cap = cv2.VideoCapture(self.src) # reset video on settings change
+    self.cap[self.cam_name] = cv2.VideoCapture(self.src) # reset video on settings change
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
@@ -499,10 +499,10 @@ class VideoCapture:
     for x in online_targets:
       if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives.  
       # add to objects, regarless of speed
-      if x.track_id not in self.pred_occs: self.pred_occs[x.track_id] = [time.time()]
-      if (len(self.pred_occs[x.track_id]) < 20 and (time.time() - self.pred_occs[x.track_id][-1]) > 1) or (time.time() - self.pred_occs[x.track_id][-1]) > 10:
-        self. pred_occs[x.track_id].append(time.time())
-        ts = round((self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
+      if x.track_id not in self.pred_occs[self.cam_name]: self.pred_occs[self.cam_name][x.track_id] = [time.time()]
+      if (len(self.pred_occs[self.cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[self.cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[self.cam_name][x.track_id][-1]) > 10:
+        self. pred_occs[self.cam_name][x.track_id].append(time.time())
+        ts = round((self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
         self.save_object(x, ts)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
