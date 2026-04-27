@@ -232,7 +232,7 @@ class VideoCapture:
     if self.vod:
       command = [
         ffmpeg_path,
-        "-i", self.src,
+        "-i", src,
         "-c:v", "copy",
         "-an",
         "-f", "hls",
@@ -335,12 +335,8 @@ class VideoCapture:
     count = 0
 
     self.cap = {}
+    self.src_fps = {}
     self.pred_occs[self.cam_name] = {}
-
-    if self.vod:
-      self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name])
-      self.src_fps = self.cap[self.cam_name].get(cv2.CAP_PROP_FPS) or 30
-      self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     
     while self.running:
       if time.time() - last_live_check > 5: # todo, for all cams
@@ -353,8 +349,11 @@ class VideoCapture:
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
-          for _ in range(self.frame_step - 1):
-            self.cap[self.cam_name].grab()  # skip for max fps
+          if self.cam_name not in self.cap:
+            self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name])
+            self.src_fps[self.cam_name] = self.cap[self.cam_name].get(cv2.CAP_PROP_FPS) or 30
+
+          self.cap[self.cam_name].grab()  # skip for max fps
           ret, frame = self.cap[self.cam_name].read()
           self.last_frame = frame #todo
           if not ret or self.cam_name not in database.run_get("links", None):
@@ -399,7 +398,7 @@ class VideoCapture:
                     filepath.mkdir(parents=True, exist_ok=True)
                     annotated_frame = draw_predictions(self.last_frame.copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                     if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
@@ -502,7 +501,7 @@ class VideoCapture:
       if x.track_id not in self.pred_occs[self.cam_name]: self.pred_occs[self.cam_name][x.track_id] = [time.time()]
       if (len(self.pred_occs[self.cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[self.cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[self.cam_name][x.track_id][-1]) > 10:
         self. pred_occs[self.cam_name][x.track_id].append(time.time())
-        ts = round((self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
+        ts = round((self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
         self.save_object(x, ts)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
