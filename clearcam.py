@@ -166,6 +166,7 @@ class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
     self.vod = vod
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
+    self.current_stream_dir_raw = self._get_new_stream_dir()
     # objects in scene count
     self.counter = {}
     self.cam_name = cam_name
@@ -1088,7 +1089,7 @@ def schedule_daily_restart(videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
-        videocapture.hls_proc.kill()
+        videocapture.hls_proc[videocapture.cam_name].kill()
         sys.stdout.flush()
         python = sys.executable
         os.execv(python, [python] + sys.argv)
@@ -1403,6 +1404,7 @@ if __name__ == "__main__":
 
   except KeyboardInterrupt:
     if url:
+      hls_streamer.stop()
       cam.release()
       server.shutdown()
 
