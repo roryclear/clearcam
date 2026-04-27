@@ -172,7 +172,7 @@ class VideoCapture:
     self.object_set = set()
     self.object_set_zone = set()
 
-    self.src = src
+    self.src = {}
     self.max_frame_rate = 10 # for vod only
     self.width, self.height = _get_stream_resolution(src)
     self.proc = {}
@@ -190,6 +190,7 @@ class VideoCapture:
     #self.det_shapes = []
 
     self.counter[self.cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
+    self.src[self.cam_name] = src # todo
     
     self.alert_counters = database.run_get("alerts",self.cam_name)
     if not self.alert_counters:
@@ -219,10 +220,11 @@ class VideoCapture:
       except Exception:
         pass
 
-  def _open_ffmpeg(self, src):
+  def _open_ffmpeg(self, cam_name):
     path = self._get_new_stream_dir()
     if self.cam_name in self.proc: self._safe_kill_process(self.proc[self.cam_name])
     if self.cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[self.cam_name])
+    src = self.src[cam_name]
 
     ffmpeg_path = find_ffmpeg()
     
@@ -319,8 +321,7 @@ class VideoCapture:
      
 
   def capture_loop(self):
-    self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.src)
-
+    self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.cam_name)
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -337,7 +338,7 @@ class VideoCapture:
     self.pred_occs[self.cam_name] = {}
 
     if self.vod:
-      self.cap[self.cam_name] = cv2.VideoCapture(self.src)
+      self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name])
       self.src_fps = self.cap[self.cam_name].get(cv2.CAP_PROP_FPS) or 30
       self.frame_step = max(1, int(round(self.src_fps / self.max_frame_rate)))
     
@@ -346,9 +347,9 @@ class VideoCapture:
         last_live_check = time.time()
         link = database.run_get("links", self.cam_name)
         if type(link) == list: link = link[0] # todo, flakey?
-        if link != self.src:
-          self.src = link
-          self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.src)
+        if link != self.src[self.cam_name]:
+          self.src[self.cam_name] = link
+          self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.cam_name)
       try:
         if not (BASE_DIR / "cameras" / self.cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
@@ -368,8 +369,8 @@ class VideoCapture:
           if len(raw_bytes) != frame_size:
             fail_count += 1
             if fail_count > 5:
-              print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src}")
-              self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.src)
+              print(f"{self.cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[self.cam_name]}")
+              self.hls_proc[self.cam_name], self.proc[self.cam_name] = self._open_ffmpeg(self.cam_name)
               fail_count = 0
             time.sleep(0.5)
             continue
@@ -477,11 +478,11 @@ class VideoCapture:
 
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
-        self._open_ffmpeg(self.src)
+        self._open_ffmpeg(self.cam_name)
         time.sleep(1)
   
   def reset_vod(self):
-    self.cap[self.cam_name] = cv2.VideoCapture(self.src) # reset video on settings change
+    self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name]) # reset video on settings change
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "objects", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "faces", ignore_errors=True)
     shutil.rmtree(BASE_DIR / "cameras" / self.cam_name / "event_images", ignore_errors=True)
