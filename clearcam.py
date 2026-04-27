@@ -401,7 +401,7 @@ class VideoCapture:
                     filepath.mkdir(parents=True, exist_ok=True)
                     annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
                     # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.streamer.start_time - 5)
+                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.start_time - 5)
                     filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                     if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
@@ -449,7 +449,7 @@ class VideoCapture:
           if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
               last_live_seg = time.time()
               mp4_filename = f"segment.mp4"
-              export_clip(self.streamer.current_stream_dir_raw, Path(mp4_filename), live=True)
+              export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
               Path(mp4_filename).unlink()
               threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
@@ -504,7 +504,7 @@ class VideoCapture:
       if x.track_id not in self.pred_occs[cam_name]: self.pred_occs[cam_name][x.track_id] = [time.time()]
       if (len(self.pred_occs[cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 10:
         self. pred_occs[cam_name][x.track_id].append(time.time())
-        ts = round((self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5,1) if self.vod else round((time.time() - self.streamer.start_time - 5),1)
+        ts = round((self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5,1) if self.vod else round((time.time() - self.start_time - 5),1)
         self.save_object(x, ts, cam_name=cam_name)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
@@ -561,50 +561,6 @@ def draw_predictions(frame, preds, color_dict):
     frame = draw_rectangle_numpy(frame, (x1, y1 - text_height - 10), (x1 + text_width + 2, y1), color, -1)
     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, font_color, 1, cv2.LINE_AA)
   return frame
-
-class HLSStreamer:
-    def __init__(self, video_capture, output_dir="streams", segment_time=4, cam_name="camera", vod=False):
-        self.cam_name = cam_name
-        self.cam = video_capture
-        self.output_dir_raw = BASE_DIR / "cameras" / self.cam_name / output_dir
-        self.segment_time = segment_time
-        self.running = False
-        self.start_time = time.time()
-        self.feeding_frames = False
-        self._stop_event = threading.Event()
-        self.output_dir_raw.mkdir(parents=True, exist_ok=True)
-        self.vod = vod
-    
-    def _get_new_stream_dir(self):
-        timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-        stream_dir_raw = self.output_dir_raw / timestamp
-        stream_dir_raw.mkdir(exist_ok=True)
-        return stream_dir_raw
-        
-    def start(self):
-        self.running = True
-        self.current_stream_dir_raw = self._get_new_stream_dir()
-        self.start_time = time.time()
-
-    def _safe_restart(self):
-        try:
-            self.stop()
-        except Exception as e:
-            print(f"Error during stop: {e}")
-        time.sleep(2)
-        while True:  # 3 second timeout
-            if self.cam.get_frame() is not None:
-                break
-            time.sleep(1)    
-        try:
-            self.start()
-            print("HLS streamer restarted successfully")
-        except Exception as e:
-            print(f"Failed to restart HLS: {e}")
-
-    
-    def stop(self):
-        self.running = False
 
 def point_not_in_polygon(coords, poly):
     n = len(poly)
@@ -1125,7 +1081,7 @@ def image_sort_key(item):
   try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
   except ValueError: return -1
 
-def schedule_daily_restart(hls_streamer, videocapture, restart_time):
+def schedule_daily_restart(videocapture, restart_time):
     while True:
         now = datetime.now().time()
         target = time_obj(restart_time[0], restart_time[1])
@@ -1423,8 +1379,6 @@ if __name__ == "__main__":
     #model = RFDETR("small")
     cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
     vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
-    hls_streamer = HLSStreamer(cam,cam_name=cam_name, vod=vod)
-    cam.streamer = hls_streamer
   
   try:
     try:
@@ -1438,11 +1392,10 @@ if __name__ == "__main__":
           raise
     
     if url:
-      hls_streamer.start()
       restart_time = (0, 0)
       threading.Thread(
         target=schedule_daily_restart,
-        args=(hls_streamer, cam, restart_time),
+        args=(cam, restart_time),
         daemon=True
       ).start()
 
@@ -1453,7 +1406,6 @@ if __name__ == "__main__":
 
   except KeyboardInterrupt:
     if url:
-      hls_streamer.stop()
       cam.release()
       server.shutdown()
 
