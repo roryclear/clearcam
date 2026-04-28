@@ -467,22 +467,25 @@ class VideoCapture:
   
   # todo, capture loop has to run fast, cannot be slown down by inference, it needs to "catch up" with latest frames
   def inference_loop(self):
+    prev_time = time.time()
     while self.running:
-      prev_time = time.time()
+      time.sleep(1/30) # todo
       if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+        time.sleep(1)
         with self.lock: self.last_preds = [] # to remove annotation when no alerts active
-      else:
+        continue
+      with self.lock:
+        frame = self.raw_frame.copy() if self.raw_frame is not None else None
+      if frame is not None:
+        preds, frame = self.run_inference(frame, cam_name=self.cam_name)
         with self.lock:
-          frame = self.raw_frame.copy() if self.raw_frame is not None else None
-        if frame is not None:
-          preds, frame = self.run_inference(frame, cam_name=cam_name)
-          with self.lock:
-            self.last_preds = preds.copy()
-            self.last_frame[self.cam_name] = frame.numpy().copy()
-          curr_time = time.time()
-          fps = 1 / (curr_time - prev_time)
-          prev_time = curr_time
-          print(f"\rFPS: {fps:.2f}", end="", flush=True)
+          self.last_preds = preds.copy()
+          self.last_frame[self.cam_name] = frame.numpy().copy()
+
+        curr_time = time.time()
+        fps = 1 / (curr_time - prev_time)
+        prev_time = curr_time
+        print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
   def reset_vod(self):
     self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name]) # reset video on settings change
