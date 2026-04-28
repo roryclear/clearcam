@@ -204,6 +204,7 @@ class VideoCapture:
     self.lock = threading.Lock()
 
     if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -459,27 +460,29 @@ class VideoCapture:
             self.raw_frame = frame.copy()
         if not self.vod: time.sleep(1 / 30)
 
-        prev_time = time.time()
-        if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
-          with self.lock: self.last_preds = [] # to remove annotation when no alerts active
-        else:
-          with self.lock:
-            frame = self.raw_frame.copy() if self.raw_frame is not None else None
-          if frame is not None:
-            preds, frame = self.run_inference(frame, cam_name=cam_name)
-            with self.lock:
-              self.last_preds = preds.copy()
-              self.last_frame[self.cam_name] = frame.numpy().copy()
-            curr_time = time.time()
-            fps = 1 / (curr_time - prev_time)
-            prev_time = curr_time
-            print(f"\rFPS: {fps:.2f}", end="", flush=True)
-
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
         self._open_ffmpeg(self.cam_name)
         time.sleep(1)
   
+  # todo, capture loop has to run fast, cannot be slown down by inference, it needs to "catch up" with latest frames
+  def inference_loop(self):
+    while self.running:
+      prev_time = time.time()
+      if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+        with self.lock: self.last_preds = [] # to remove annotation when no alerts active
+      else:
+        with self.lock:
+          frame = self.raw_frame.copy() if self.raw_frame is not None else None
+        if frame is not None:
+          preds, frame = self.run_inference(frame, cam_name=cam_name)
+          with self.lock:
+            self.last_preds = preds.copy()
+            self.last_frame[self.cam_name] = frame.numpy().copy()
+          curr_time = time.time()
+          fps = 1 / (curr_time - prev_time)
+          prev_time = curr_time
+          print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
   def reset_vod(self):
     self.cap[self.cam_name] = cv2.VideoCapture(self.src[self.cam_name]) # reset video on settings change
