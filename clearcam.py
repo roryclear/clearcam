@@ -321,7 +321,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-     
+  
 
   def capture_loop(self):
     frame_size = self.width * self.height * 3
@@ -373,7 +373,7 @@ class VideoCapture:
             continue
           else:
             fail_count = 0
-          frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          with self.lock: self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
         filtered_preds = self.last_preds
 
         if count > 10:
@@ -456,8 +456,6 @@ class VideoCapture:
               threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
         else:
             count+=1
-        with self.lock:
-            self.raw_frame = frame.copy()
         if not self.vod: time.sleep(1 / 30)
 
       except Exception as e:
