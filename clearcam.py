@@ -1415,7 +1415,6 @@ if __name__ == "__main__":
 
   except KeyboardInterrupt:
     if url:
-      hls_streamer.stop()
       cam.release()
       server.shutdown()
 
