@@ -324,6 +324,8 @@ class VideoCapture:
   
 
   def capture_loop(self):
+    self.frame_num = -1
+    self.last_frame_num = -1
     frame_size = self.width * self.height * 3
     fail_count = 0
     last_det = -1
@@ -373,7 +375,9 @@ class VideoCapture:
             continue
           else:
             fail_count = 0
-          with self.lock: self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          with self.lock:
+            self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+            self.frame_num += 1
         filtered_preds = self.last_preds
 
         if count > 10:
@@ -474,11 +478,14 @@ class VideoCapture:
         continue
       with self.lock:
         frame = self.raw_frame.copy() if self.raw_frame is not None else None
-      if frame is not None:
+        frame_num = self.frame_num
+        last_frame_num = self.last_frame_num
+      if frame is not None and frame_num != last_frame_num:
         preds, frame = self.run_inference(frame, cam_name=self.cam_name)
         with self.lock:
           self.last_preds = preds.copy()
           self.last_frame[self.cam_name] = frame.numpy().copy()
+          self.last_frame_num = self.frame_num
 
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time)
