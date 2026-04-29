@@ -164,6 +164,8 @@ def _get_stream_resolution(src):
 
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
+    self.frame_num = -1
+    self.last_frame_num = -1
     self.vod = vod
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     self.current_stream_dir_raw = self._get_new_stream_dir()
@@ -204,6 +206,7 @@ class VideoCapture:
     self.lock = threading.Lock()
 
     if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
+    if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.frame_loop, daemon=True).start()
     if not self.vod: threading.Thread(target=self.inference_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
@@ -323,11 +326,30 @@ class VideoCapture:
     cv2.imwrite(str(object_filename), crop)
   
 
-  def capture_loop(self):
-    self.frame_num = -1
-    self.last_frame_num = -1
+  def frame_loop(self):
     frame_size = self.width * self.height * 3
     fail_count = 0
+    while self.running:
+      try:
+        raw_bytes = self.proc[cam_name].stdout.read(frame_size)
+        if len(raw_bytes) != frame_size:
+          fail_count += 1
+          if fail_count > 5:
+            print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
+            self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+            fail_count = 0
+          time.sleep(0.5)
+        else:
+          fail_count = 0
+        with self.lock:
+          self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          self.frame_num += 1
+        time.sleep(1 / 30)
+      except Exception as e:
+        print("Error in frame_loop:", e, self.cam_name)
+        time.sleep(1)
+
+  def capture_loop(self):
     last_det = -1
     send_det = False
     last_live_check = time.time()
@@ -363,21 +385,13 @@ class VideoCapture:
           else:
             self.last_preds, _ = self.run_inference(frame, cam_name=cam_name)
             database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
-        else:
-          raw_bytes = self.proc[cam_name].stdout.read(frame_size)
-          if len(raw_bytes) != frame_size:
-            fail_count += 1
-            if fail_count > 5:
-              print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
-              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-              fail_count = 0
-            time.sleep(0.5)
-            continue
-          else:
-            fail_count = 0
-          with self.lock:
-            self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-            self.frame_num += 1
+
+        with self.lock:
+          frame_num = self.frame_num
+          last_frame_num = self.last_frame_num
+        if frame_num == last_frame_num:
+          time.sleep(1 / 30)
+          continue
         filtered_preds = self.last_preds
 
         if count > 10:
@@ -1417,4 +1431,3 @@ if __name__ == "__main__":
     if url:
       cam.release()
       server.shutdown()
-
