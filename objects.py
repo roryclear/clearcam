@@ -236,6 +236,7 @@ class ObjectFinder:
             emb_ret.append(emb)
             path_ret.append(img_path)
             if vod: database.run_put("analysis_prog", cam_name, {"Processing":((i + 1)/len(new_image_list))*100})
+            if (i+1) % 10 == 0 and i > 0: print(f"Processed {(i+1)} / {len(new_image_list)} new images...")
         print(f"Processed {len(new_image_list)} new images...")
         save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
         return emb_ret, path_ret
