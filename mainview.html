@@ -2111,16 +2111,7 @@
           dropdown.appendChild(option);
         });
         
-        const today = new Date().toISOString().split('T')[0];
-        if (dates.includes(today)) {
-          if (isEventFilter) {
-            dropdown.value = today;
-            currentEventDateFilter = today;
-          } else {
-            dropdown.value = today;
-            currentStreamDate = today;
-          }
-        } else if (dates.length > 0) {
+        if (dates.length > 0) {
           if (isEventFilter) {
             dropdown.value = dates[0];
             currentEventDateFilter = dates[0];
