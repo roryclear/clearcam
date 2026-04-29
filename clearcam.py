@@ -164,11 +164,10 @@ def _get_stream_resolution(src):
 
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
+    self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     self.frame_num = -1
     self.last_frame_num = -1
     self.vod = vod
-    self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
-    self.current_stream_dir_raw = self._get_new_stream_dir()
     # objects in scene count
     self.counter = {}
     self.cam_name = cam_name
@@ -207,7 +206,7 @@ class VideoCapture:
     self.lock[self.cam_name] = threading.Lock()
 
     if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
-    if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.frame_loop, daemon=True).start()
+    if not self.vod: threading.Thread(target=self.frame_loop, daemon=True).start()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -350,6 +349,7 @@ class VideoCapture:
         time.sleep(1)
 
   def capture_loop(self):
+    self.current_stream_dir_raw = self._get_new_stream_dir()
     prev_time = time.time()
     last_det = -1
     send_det = False
@@ -364,12 +364,12 @@ class VideoCapture:
     self.cap = {}
     self.src_fps = {}
     
-    cam_name = self.cam_name
     self.pred_occs[cam_name] = {}
     self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
 
     while self.running:
       try:
+      #if 1==1:
         if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod:
           if cam_name not in self.cap:
@@ -386,113 +386,113 @@ class VideoCapture:
           else:
             self.last_preds, _ = self.run_inference(frame, cam_name=cam_name)
             database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
-
-        with self.lock[cam_name]:
-          frame_num = self.frame_num
-          last_frame_num = self.last_frame_num
-          frame = self.raw_frame.copy()
-        if frame_num == last_frame_num:
-          time.sleep(1 / 30)
-          continue
-
-        if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
-          time.sleep(1 / 30)
-          with self.lock[cam_name]: self.last_preds = [] # to remove annotation when no alerts active
         else:
-          preds, frame = self.run_inference(frame, cam_name=self.cam_name)
-          with self.lock[self.cam_name]:
-            self.last_preds = preds.copy()
-            self.last_frame[self.cam_name] = frame.numpy().copy()
-            self.last_frame_num = self.frame_num
+          with self.lock[cam_name]:
+            frame_num = self.frame_num
+            last_frame_num = self.last_frame_num
+            frame = self.raw_frame.copy()
+          if frame_num == last_frame_num:
+            time.sleep(1 / 30)
+            continue
 
-          curr_time = time.time()
-          fps = 1 / (curr_time - prev_time)
-          prev_time = curr_time
-          print(f"\rFPS: {fps:.2f}", end="", flush=True)
+          if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+            time.sleep(1 / 30)
+            with self.lock[cam_name]: self.last_preds = [] # to remove annotation when no alerts active
+          else:
+            preds, frame = self.run_inference(frame, cam_name=self.cam_name)
+            with self.lock[self.cam_name]:
+              self.last_preds = preds.copy()
+              self.last_frame[self.cam_name] = frame.numpy().copy()
+              self.last_frame_num = self.frame_num
 
-        filtered_preds = self.last_preds
+            curr_time = time.time()
+            fps = 1 / (curr_time - prev_time)
+            prev_time = curr_time
+            print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
-        if count > 10:
-          if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
-            last_preview_time = time.time()
-            filename = BASE_DIR / "cameras" / f"{self.cam_name}/preview.png"
-            write_png(filename, self.raw_frame)
-          for _,alert in self.alert_counters.items():
-              if alert.desc is not None: continue
-              if not alert.is_active():
-                alert.reset_counts()
-                continue
-              window = alert.window if alert.window else (60 if alert.is_notif else 1)
-              if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
-              if alert.get_counts()[1]:
-                  if time.time() - alert.last_det >= window:
-                    if alert.is_notif and alert.desc is None: send_det = True
-                    timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
-                    filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
-                    filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
-                    # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.start_time - 5)
-                    filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                    if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
-                    if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
-                      plain.unlink() # only one image per event
-                      filename = filepath / f"{ts}_notif.jpg"
-                    text = f"Event Detected ({self.cam_name})"
-                    if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                    last_det = time.time()
-                    alert.last_det = time.time()
-          if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
-              export_and_upload(cam_name=self.cam_name, thumbnail=filename, userID=userID, key=key)
-              send_det = False
+          filtered_preds = self.last_preds
+
+          if count > 10:
+            if last_preview_time is None or time.time() - last_preview_time >= 3600: # preview every hour
+              last_preview_time = time.time()
+              filename = BASE_DIR / "cameras" / f"{self.cam_name}/preview.png"
+              write_png(filename, self.raw_frame)
+            for _,alert in self.alert_counters.items():
+                if alert.desc is not None: continue
+                if not alert.is_active():
+                  alert.reset_counts()
+                  continue
+                window = alert.window if alert.window else (60 if alert.is_notif else 1)
+                if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
+                if alert.get_counts()[1]:
+                    if time.time() - alert.last_det >= window:
+                      if alert.is_notif and alert.desc is None: send_det = True
+                      timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
+                      filepath = BASE_DIR / "cameras" / f"{self.cam_name}/event_images/{timestamp}"
+                      filepath.mkdir(parents=True, exist_ok=True)
+                      annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
+                      # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                      ts = int(self.cap[self.cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[self.cam_name]) - 5 if self.vod else int(time.time() - self.start_time - 5)
+                      filename = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
+                      if not self.vod: cv2.imwrite(str(filename), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                      if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                        plain.unlink() # only one image per event
+                        filename = filepath / f"{ts}_notif.jpg"
+                      text = f"Event Detected ({self.cam_name})"
+                      if userID is not None and not self.vod and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                      last_det = time.time()
+                      alert.last_det = time.time()
+            if (send_det and userID is not None and not self.vod) and time.time() - last_det >= 6: #send 15ish second clip after
+                export_and_upload(cam_name=self.cam_name, thumbnail=filename, userID=userID, key=key)
+                send_det = False
+                
+            if (time.time() - last_live_check) >= 5:
+              last_live_check = time.time()
+              link = database.run_get("links", cam_name)
+              if type(link) == list: link = link[0] # todo, flakey?
+              if link != self.src[cam_name]:
+                self.src[cam_name] = link
+                self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+              if userID and not self.vod: threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
+            if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
+              last_counter_update = time.time()
+
+              counters = database.run_get("counters", self.cam_name)
+              if counters not in [None, {}]:
+                if counters.reset:
+                  self.counter[self.cam_name].reset_counts()
+                  self.counter[self.cam_name].reset = False
+              database.run_put("counters", cam_name, self.counter[self.cam_name])
               
-          if (time.time() - last_live_check) >= 5:
-            last_live_check = time.time()
-            link = database.run_get("links", cam_name)
-            if type(link) == list: link = link[0] # todo, flakey?
-            if link != self.src[cam_name]:
-              self.src[cam_name] = link
-              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-            if userID and not self.vod: threading.Thread(target=check_upload_link, args=(self.cam_name,), daemon=True).start()
-          if (time.time() - last_counter_update) >= 5: #update counter every 5 secs
-            last_counter_update = time.time()
-
-            counters = database.run_get("counters", self.cam_name)
-            if counters not in [None, {}]:
-              if counters.reset:
-                self.counter[self.cam_name].reset_counts()
-                self.counter[self.cam_name].reset = False
-            database.run_put("counters", cam_name, self.counter[self.cam_name])
-            
-            alerts = database.run_get("alerts", self.cam_name)
-            for id,a in alerts.items():
-              if not a.new: continue
-              a.new = False
-              database.run_put("alerts", self.cam_name, a, id=id)
-              if a is None:
-                del self.alert_counters[id]
-                continue
-              self.alert_counters[id] = a
-              for c in a.classes: classes.add(str(c))
-            
-            new_settings = database.run_get("settings", self.cam_name)
-            if self.settings is not None and new_settings != self.settings and is_vod(self.cam_name):
-              self.reset_vod()
-              if "reset" in new_settings: del new_settings["reset"]
-            self.settings = new_settings
-          
-          self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+              alerts = database.run_get("alerts", self.cam_name)
+              for id,a in alerts.items():
+                if not a.new: continue
+                a.new = False
+                database.run_put("alerts", self.cam_name, a, id=id)
+                if a is None:
+                  del self.alert_counters[id]
+                  continue
+                self.alert_counters[id] = a
+                for c in a.classes: classes.add(str(c))
               
-          if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
-              last_live_seg = time.time()
-              mp4_filename = f"segment.mp4"
-              export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
-              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-              Path(mp4_filename).unlink()
-              threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
-        else:
-            count+=1
-        if not self.vod: time.sleep(1 / 30)
+              new_settings = database.run_get("settings", self.cam_name)
+              if self.settings is not None and new_settings != self.settings and is_vod(self.cam_name):
+                self.reset_vod()
+                if "reset" in new_settings: del new_settings["reset"]
+              self.settings = new_settings
+            
+            self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+                
+            if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
+                last_live_seg = time.time()
+                mp4_filename = f"segment.mp4"
+                export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
+                encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+                Path(mp4_filename).unlink()
+                threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
+          else:
+              count+=1
+          if not self.vod: time.sleep(1 / 30)
 
       except Exception as e:
         print("Error in capture_loop:", e, self.cam_name)
