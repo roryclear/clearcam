@@ -205,8 +205,9 @@ class VideoCapture:
 
     self.lock[self.cam_name] = threading.Lock()
 
-    if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
+  def start(self):
     if not self.vod: threading.Thread(target=self.frame_loop, daemon=True).start()
+    if not self.vod or not self.output_dir_raw.exists(): self.capture_loop()
 
   def _get_new_stream_dir(self):
       timestamp = "video" if self.vod else datetime.now().strftime("%Y-%m-%d")
@@ -484,14 +485,14 @@ class VideoCapture:
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
                 
             if userID and not self.vod and self.cam_name in live_link and live_link[self.cam_name] and (time.time() - last_live_seg) >= 4:
-                last_live_seg = time.time()
-                mp4_filename = f"segment.mp4"
-                export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
-                encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-                Path(mp4_filename).unlink()
-                threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
+              last_live_seg = time.time()
+              mp4_filename = f"segment.mp4"
+              export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
+              encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+              Path(mp4_filename).unlink()
+              threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[self.cam_name]), daemon=True).start()
           else:
-              count+=1
+            count+=1
           if not self.vod: time.sleep(1 / 30)
 
       except Exception as e:
@@ -1385,6 +1386,7 @@ if __name__ == "__main__":
 
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
+  cam = None
   if url:
     model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
     #model = RFDETR("small")
@@ -1411,7 +1413,9 @@ if __name__ == "__main__":
       ).start()
 
     if server:
-      server.serve_forever()
+      threading.Thread(target=server.serve_forever(), daemon=True).start()
+    if cam is not None:
+      cam.start()      
     else:
       while True: time.sleep(3600)
 
