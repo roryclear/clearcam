@@ -186,6 +186,7 @@ class VideoCapture:
     self.annotated_frame = None
     self.last_preds = []
     self.last_frame = {}
+    self.lock = {}
 
     self.settings = None
 
@@ -203,7 +204,7 @@ class VideoCapture:
       self.alert_counters[id] = alert_counter
       database.run_put("alerts", self.cam_name, alert_counter, id=id)
 
-    self.lock = threading.Lock()
+    self.lock[self.cam_name] = threading.Lock()
 
     if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.capture_loop, daemon=True).start()
     if not self.vod or not self.output_dir_raw.exists(): threading.Thread(target=self.frame_loop, daemon=True).start()
@@ -340,7 +341,7 @@ class VideoCapture:
           time.sleep(0.5)
         else:
           fail_count = 0
-        with self.lock:
+        with self.lock[self.cam_name]:
           self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
           self.frame_num += 1
         time.sleep(1 / 30)
@@ -386,32 +387,28 @@ class VideoCapture:
             self.last_preds, _ = self.run_inference(frame, cam_name=cam_name)
             database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
 
-        with self.lock:
+        with self.lock[cam_name]:
           frame_num = self.frame_num
           last_frame_num = self.last_frame_num
+          frame = self.raw_frame.copy()
         if frame_num == last_frame_num:
           time.sleep(1 / 30)
           continue
 
         if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
           time.sleep(1 / 30)
-          with self.lock: self.last_preds = [] # to remove annotation when no alerts active
+          with self.lock[cam_name]: self.last_preds = [] # to remove annotation when no alerts active
         else:
-          with self.lock:
-            frame = self.raw_frame.copy() if self.raw_frame is not None else None
-            frame_num = self.frame_num
-            last_frame_num = self.last_frame_num
-          if frame is not None and frame_num != last_frame_num:
-            preds, frame = self.run_inference(frame, cam_name=self.cam_name)
-            with self.lock:
-              self.last_preds = preds.copy()
-              self.last_frame[self.cam_name] = frame.numpy().copy()
-              self.last_frame_num = self.frame_num
+          preds, frame = self.run_inference(frame, cam_name=self.cam_name)
+          with self.lock[self.cam_name]:
+            self.last_preds = preds.copy()
+            self.last_frame[self.cam_name] = frame.numpy().copy()
+            self.last_frame_num = self.frame_num
 
-            curr_time = time.time()
-            fps = 1 / (curr_time - prev_time)
-            prev_time = curr_time
-            print(f"\rFPS: {fps:.2f}", end="", flush=True)
+          curr_time = time.time()
+          fps = 1 / (curr_time - prev_time)
+          prev_time = curr_time
+          print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
         filtered_preds = self.last_preds
 
@@ -553,11 +550,6 @@ class VideoCapture:
   
     preds = np.array(preds)
     return preds, frame
-
-  def get_frame(self):
-      with self.lock:
-          if self.annotated_frame is not None: return self.annotated_frame.copy()
-      return None, None
 
   def release(self):
       self.running = False
