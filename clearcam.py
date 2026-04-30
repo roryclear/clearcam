@@ -179,7 +179,7 @@ class VideoCapture:
     self.width, self.height = _get_stream_resolution(src)
     self.proc = {}
     self.hls_proc = {}
-    self.running = True
+    self.running = {}
 
     self.raw_frame = None
     self.annotated_frame = None
@@ -200,6 +200,7 @@ class VideoCapture:
     self.last_frame_num[cam_name] = -1
     self.object_set[cam_name] = set()
     self.object_set_zone[cam_name] = set()
+    self.running[cam_name] = True
     
     self.alert_counters = database.run_get("alerts",cam_name)
     if not self.alert_counters:
@@ -335,7 +336,7 @@ class VideoCapture:
     frame_size = self.width * self.height * 3
     fail_count = 0
     cam_name = self.cam_name
-    while self.running:
+    while self.running[cam_name]:
       try:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
@@ -379,7 +380,7 @@ class VideoCapture:
     self.pred_occs[cam_name] = {}
     self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
 
-    while self.running:
+    while self.running[cam_name]:
       try:
         if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
         if self.vod[cam_name]:
@@ -391,7 +392,7 @@ class VideoCapture:
           ret, frame = self.cap[cam_name].read()
           self.last_frame[cam_name] = frame #todo
           if not ret or cam_name not in database.run_get("links", None):
-            self.running = False
+            self.running[cam_name] = False
             database.run_put("analysis_prog", cam_name, {"Tracking":100})
             os._exit(0)
           else:
@@ -563,10 +564,10 @@ class VideoCapture:
     preds = np.array(preds)
     return preds, frame
 
-  def release(self):
-      self.running = False
-      if self.cam_name in self.proc: self.proc[self.cam_name].kill()
-      if self.cam_name in self.hls_proc: self.hls_proc[self.cam_name].kill()    
+  def release(self, cam_name):
+      self.running[cam_name] = False
+      if cam_name in self.proc: self.proc[cam_name].kill()
+      if cam_name in self.hls_proc: self.hls_proc[cam_name].kill()    
 
 def is_bright_color(color):
   r, g, b = color
