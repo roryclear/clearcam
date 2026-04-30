@@ -40,6 +40,7 @@ from datetime import datetime
 import os
 import threading
 from utils.helpers import BASE_DIR
+from ocsort_tracker import ocsort
 
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 models = {1: "t", 2: "s", 3: "m", 4: "c", 5: "e", 6: "nano", 7: "small", 8:"medium", 9:"large"}
@@ -366,6 +367,7 @@ class VideoCapture:
     last_preview_time = {}
     last_counter_update = {}
     self.pred_occs = {}
+    self.tracker = {}
     count = 0
 
     self.cap = {}
@@ -379,6 +381,8 @@ class VideoCapture:
     last_counter_update[cam_name] = time.time()
     self.pred_occs[cam_name] = {}
     self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+    self.tracker[cam_name] = ocsort.OCSort(max_age=100)
+    
 
     while self.running[cam_name]:
       try:
@@ -522,7 +526,7 @@ class VideoCapture:
     frame = Tensor(frame)
     preds = model(frame).numpy()
     thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
-    online_targets = tracker.update(preds, thresh)
+    online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
     if type(model) == RFDETR: # RF-DETR has different class_ids
       for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
@@ -1387,9 +1391,6 @@ if __name__ == "__main__":
 
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
-
-  from ocsort_tracker import ocsort
-  tracker = ocsort.OCSort(max_age=100)
   live_link = dict()
   
   if url is None:
