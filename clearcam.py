@@ -358,8 +358,8 @@ class VideoCapture:
         time.sleep(1)
 
   def capture_loop(self):
-    self.current_stream_dir_raw = self._get_new_stream_dir(self.cam_name)
-    prev_time = time.time()
+    self.current_stream_dir_raw = {}
+    prev_time = {}
     last_det = {}
     send_det = {}
     last_live_check = {}
@@ -368,7 +368,7 @@ class VideoCapture:
     last_counter_update = {}
     self.pred_occs = {}
     self.tracker = {}
-    count = 0
+    count = {}
 
     self.cap = {}
     self.src_fps = {}
@@ -382,8 +382,10 @@ class VideoCapture:
     self.pred_occs[cam_name] = {}
     self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
     self.tracker[cam_name] = ocsort.OCSort(max_age=100)
+    count[cam_name] = 0
+    prev_time[cam_name] = time.time()
+    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(self.cam_name)
     
-
     while self.running[cam_name]:
       try:
         if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
@@ -423,13 +425,13 @@ class VideoCapture:
               self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
             curr_time = time.time()
-            fps = 1 / (curr_time - prev_time)
-            prev_time = curr_time
+            fps = 1 / (curr_time - prev_time[cam_name])
+            prev_time[cam_name] = curr_time
             print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
           filtered_preds = self.last_preds
 
-          if count > 10:
+          if count[cam_name] > 10:
             if last_preview_time[cam_name] is None or time.time() - last_preview_time[cam_name] >= 3600: # preview every hour
               last_preview_time[cam_name] = time.time()
               filename = BASE_DIR / "cameras" / f"{cam_name}/preview.png"
@@ -503,12 +505,12 @@ class VideoCapture:
             if userID and not self.vod[cam_name] and cam_name in live_link and live_link[cam_name] and (time.time() - last_live_seg[cam_name]) >= 4:
               last_live_seg[cam_name] = time.time()
               mp4_filename = f"segment.mp4"
-              export_clip(self.current_stream_dir_raw, Path(mp4_filename), live=True)
+              export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
               Path(mp4_filename).unlink()
               threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[cam_name]), daemon=True).start()
           else:
-            count+=1
+            count[cam_name]+=1
           if not self.vod[cam_name]: time.sleep(1 / 30)
 
       except Exception as e:
