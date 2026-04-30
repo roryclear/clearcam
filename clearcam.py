@@ -165,7 +165,7 @@ def _get_stream_resolution(src):
 
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
-    self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
+    self.output_dir_raw = {}
     self.frame_num = {}
     self.last_frame_num = {}
     self.vod = {}
@@ -176,15 +176,14 @@ class VideoCapture:
     self.object_set_zone = {}
 
     self.src = {}
-    self.max_frame_rate = 10 # for vod only
     self.width, self.height = _get_stream_resolution(src)
     self.proc = {}
     self.hls_proc = {}
     self.running = {}
 
-    self.raw_frame = None
+    self.raw_frame = {}
     self.annotated_frame = None
-    self.last_preds = []
+    self.last_preds = {}
     self.last_frame = {}
     self.lock = {}
 
@@ -202,6 +201,9 @@ class VideoCapture:
     self.object_set[cam_name] = set()
     self.object_set_zone[cam_name] = set()
     self.running[cam_name] = True
+    self.output_dir_raw[cam_name] = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
+    self.last_preds[cam_name] = []
+    self.raw_frame[cam_name] = None
     
     self.alert_counters = database.run_get("alerts",cam_name)
     if not self.alert_counters:
@@ -214,11 +216,11 @@ class VideoCapture:
 
   def start(self, cam_name):
     if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, daemon=True).start()
-    if not self.vod[cam_name] or not self.output_dir_raw.exists(): self.capture_loop()
+    if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.capture_loop()
 
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
-      stream_dir_raw = self.output_dir_raw / timestamp
+      stream_dir_raw = self.output_dir_raw[cam_name] / timestamp
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
@@ -350,7 +352,7 @@ class VideoCapture:
         else:
           fail_count = 0
         with self.lock[cam_name]:
-          self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
           self.frame_num[cam_name] += 1
         time.sleep(1 / 30)
       except Exception as e:
@@ -402,25 +404,25 @@ class VideoCapture:
             database.run_put("analysis_prog", cam_name, {"Tracking":100})
             os._exit(0)
           else:
-            self.last_preds, _ = self.run_inference(frame, cam_name=cam_name)
+            self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
             database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           with self.lock[cam_name]:
             frame_num = self.frame_num[cam_name]
             last_frame_num = self.last_frame_num[cam_name]
-            if self.raw_frame is None: continue
-            frame = self.raw_frame.copy()
+            if self.raw_frame[cam_name] is None: continue
+            frame = self.raw_frame[cam_name].copy()
           if frame_num == last_frame_num:
             time.sleep(1 / 30)
             continue
 
           if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
             time.sleep(1 / 30)
-            with self.lock[cam_name]: self.last_preds = [] # to remove annotation when no alerts active
+            with self.lock[cam_name]: self.last_pred[cam_name] = [] # to remove annotation when no alerts active
           else:
             preds, frame = self.run_inference(frame, cam_name=cam_name)
             with self.lock[cam_name]:
-              self.last_preds = preds.copy()
+              self.last_preds[cam_name] = preds.copy()
               self.last_frame[cam_name] = frame.numpy().copy()
               self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
@@ -429,13 +431,13 @@ class VideoCapture:
             prev_time[cam_name] = curr_time
             print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
-          filtered_preds = self.last_preds
+          filtered_preds = self.last_preds[cam_name]
 
           if count[cam_name] > 10:
             if last_preview_time[cam_name] is None or time.time() - last_preview_time[cam_name] >= 3600: # preview every hour
               last_preview_time[cam_name] = time.time()
               filename = BASE_DIR / "cameras" / f"{cam_name}/preview.png"
-              write_png(filename, self.raw_frame)
+              write_png(filename, self.raw_frame[cam_name])
             for _,alert in self.alert_counters.items():
                 if alert.desc is not None: continue
                 if not alert.is_active():
