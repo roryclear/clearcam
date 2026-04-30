@@ -186,7 +186,7 @@ class VideoCapture:
     self.last_frame = {}
     self.lock = {}
 
-    self.settings = None
+    self.settings = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -204,6 +204,7 @@ class VideoCapture:
     self.last_preds[cam_name] = []
     self.raw_frame[cam_name] = None
     self.width[cam_name], self.height[cam_name] = _get_stream_resolution(src)
+    self.settings[cam_name] = None
     
     self.alert_counters = database.run_get("alerts",cam_name)
     if not self.alert_counters:
@@ -497,10 +498,10 @@ class VideoCapture:
                 for c in a.classes: classes.add(str(c))
               
               new_settings = database.run_get("settings", cam_name)
-              if self.settings is not None and new_settings != self.settings and is_vod(cam_name):
+              if self.settings[cam_name] is not None and new_settings != self.settings[cam_name] and is_vod(cam_name):
                 self.reset_vod(cam_name)
                 if "reset" in new_settings: del new_settings["reset"]
-              self.settings = new_settings
+              self.settings[cam_name] = new_settings
             
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
                 
@@ -529,7 +530,7 @@ class VideoCapture:
   def run_inference(self, frame, cam_name):
     frame = Tensor(frame)
     preds = model(frame).numpy()
-    thresh = (self.settings.get("threshold") if self.settings else 0.5) or 0.5 #todo clean!
+    thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
     if type(model) == RFDETR: # RF-DETR has different class_ids
@@ -546,11 +547,11 @@ class VideoCapture:
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
       outside = False
-      if hasattr(self, "settings") and self.settings is not None and self.settings.get("coords"):
-        scaled_coors = np.array(self.settings["coords"])
+      if hasattr(self, "settings") and self.settings[cam_name] is not None and self.settings[cam_name].get("coords"):
+        scaled_coors = np.array(self.settings[cam_name]["coords"])
         scaled_coors[:,] *= [frame.shape[1], frame.shape[0]] # decimal to full
         outside = point_not_in_polygon([[x.tlwh[0], x.tlwh[1]],[(x.tlwh[0]+x.tlwh[2]), x.tlwh[1]],[(x.tlwh[0]), (x.tlwh[1]+x.tlwh[3])],[(x.tlwh[0]+x.tlwh[2]), (x.tlwh[1]+x.tlwh[3])]], scaled_coors)
-        outside = outside ^ self.settings["outside"]
+        outside = outside ^ self.settings[cam_name]["outside"]
       non_zone_alert = False
       if outside: # check if any alerts don't use zone
         for _, alert in self.alert_counters.items():
