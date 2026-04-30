@@ -165,14 +165,14 @@ def _get_stream_resolution(src):
 class VideoCapture:
   def __init__(self, src, cam_name="camera", vod=False):
     self.output_dir_raw = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
-    self.frame_num = -1
-    self.last_frame_num = -1
+    self.frame_num = {}
+    self.last_frame_num = {}
     self.vod = {}
     # objects in scene count
     self.counter = {}
     self.cam_name = cam_name
-    self.object_set = set()
-    self.object_set_zone = set()
+    self.object_set = {}
+    self.object_set_zone = {}
 
     self.src = {}
     self.max_frame_rate = 10 # for vod only
@@ -196,6 +196,10 @@ class VideoCapture:
     self.src[cam_name] = src # todo
     self.last_frame[cam_name] = None
     self.vod[cam_name] = vod
+    self.frame_num[cam_name] = -1
+    self.last_frame_num[cam_name] = -1
+    self.object_set[cam_name] = set()
+    self.object_set_zone[cam_name] = set()
     
     self.alert_counters = database.run_get("alerts",cam_name)
     if not self.alert_counters:
@@ -345,7 +349,7 @@ class VideoCapture:
           fail_count = 0
         with self.lock[cam_name]:
           self.raw_frame = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
-          self.frame_num += 1
+          self.frame_num[cam_name] += 1
         time.sleep(1 / 30)
       except Exception as e:
         print("Error in frame_loop:", e, cam_name)
@@ -390,8 +394,8 @@ class VideoCapture:
             database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
         else:
           with self.lock[cam_name]:
-            frame_num = self.frame_num
-            last_frame_num = self.last_frame_num
+            frame_num = self.frame_num[cam_name]
+            last_frame_num = self.last_frame_num[cam_name]
             frame = self.raw_frame.copy()
           if frame_num == last_frame_num:
             time.sleep(1 / 30)
@@ -405,7 +409,7 @@ class VideoCapture:
             with self.lock[cam_name]:
               self.last_preds = preds.copy()
               self.last_frame[cam_name] = frame.numpy().copy()
-              self.last_frame_num = self.frame_num
+              self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
             curr_time = time.time()
             fps = 1 / (curr_time - prev_time)
@@ -541,12 +545,12 @@ class VideoCapture:
         if not non_zone_alert and outside: continue
       preds.append(np.array([x.tlwh[0],x.tlwh[1],(x.tlwh[0]+x.tlwh[2]),(x.tlwh[1]+x.tlwh[3]),x.score,x.class_id,x.track_id]))
       if (classes is None or str(int(x.class_id)) in classes):
-        new = int(x.track_id) not in self.object_set
-        new_in_zone = int(x.track_id) not in self.object_set_zone and not outside
+        new = int(x.track_id) not in self.object_set[cam_name]
+        new_in_zone = int(x.track_id) not in self.object_set_zone[cam_name] and not outside
         if new:
-          self.object_set.add(int(x.track_id))
+          self.object_set[cam_name].add(int(x.track_id))
           self.counter[cam_name].add(int(x.class_id))
-        if new_in_zone: self.object_set_zone.add(int(x.track_id))
+        if new_in_zone: self.object_set_zone[cam_name].add(int(x.track_id))
         for _, alert in self.alert_counters.items():
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
   
