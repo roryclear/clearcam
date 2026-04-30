@@ -176,13 +176,12 @@ class VideoCapture:
     self.object_set_zone = {}
 
     self.src = {}
-    self.width, self.height = _get_stream_resolution(src)
+    self.width, self.height = {}, {}
     self.proc = {}
     self.hls_proc = {}
     self.running = {}
 
     self.raw_frame = {}
-    self.annotated_frame = None
     self.last_preds = {}
     self.last_frame = {}
     self.lock = {}
@@ -204,6 +203,7 @@ class VideoCapture:
     self.output_dir_raw[cam_name] = BASE_DIR / "cameras" / f'{cam_name}' / "streams"
     self.last_preds[cam_name] = []
     self.raw_frame[cam_name] = None
+    self.width[cam_name], self.height[cam_name] = _get_stream_resolution(src)
     
     self.alert_counters = database.run_get("alerts",cam_name)
     if not self.alert_counters:
@@ -294,7 +294,7 @@ class VideoCapture:
           "-an",
           "-f", "rawvideo",
           "-pix_fmt", "bgr24",
-          "-vf", f"scale={self.width}:{self.height}",
+          "-vf", f"scale={self.width[cam_name]}:{self.height[cam_name]}",
           "-timeout", "5000000",
           "-rw_timeout", "15000000",
           "-vsync", "2",
@@ -336,9 +336,9 @@ class VideoCapture:
   
 
   def frame_loop(self):
-    frame_size = self.width * self.height * 3
     fail_count = 0
     cam_name = self.cam_name
+    frame_size = self.width[cam_name] * self.height[cam_name] * 3
     while self.running[cam_name]:
       try:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
@@ -352,7 +352,7 @@ class VideoCapture:
         else:
           fail_count = 0
         with self.lock[cam_name]:
-          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height, self.width, 3))
+          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
           self.frame_num[cam_name] += 1
         time.sleep(1 / 30)
       except Exception as e:
