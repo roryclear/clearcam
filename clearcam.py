@@ -187,6 +187,19 @@ class VideoCapture:
     self.lock = {}
 
     self.settings = {}
+    self.count = {}
+    self.prev_time = {}
+    self.current_stream_dir_raw = {}
+    self.pred_occs = {}
+    self.tracker = {}
+    self.cap = {}
+    self.src_fps = {}
+    self.last_det = {}
+    self.send_det = {}
+    self.last_live_check = {}
+    self.last_counter_update = {}
+    self.last_preview_time = {}
+    self.last_live_seg = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -361,32 +374,18 @@ class VideoCapture:
         time.sleep(1)
 
   def capture_loop(self):
-    self.current_stream_dir_raw = {}
-    prev_time = {}
-    last_det = {}
-    send_det = {}
-    last_live_check = {}
-    last_live_seg = {}
-    last_preview_time = {}
-    last_counter_update = {}
-    self.pred_occs = {}
-    self.tracker = {}
-    count = {}
-
-    self.cap = {}
-    self.src_fps = {}
     cam_name = self.cam_name
-    last_det[cam_name] = -1
-    send_det[cam_name] = False
-    last_live_check[cam_name] = time.time()
-    last_live_seg[cam_name] = time.time()
-    last_preview_time[cam_name] = None
-    last_counter_update[cam_name] = time.time()
+    self.last_det[cam_name] = -1
+    self.send_det[cam_name] = False
+    self.last_live_check[cam_name] = time.time()
+    self.last_live_seg[cam_name] = time.time()
+    self.last_preview_time[cam_name] = None
+    self.last_counter_update[cam_name] = time.time()
     self.pred_occs[cam_name] = {}
     self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
     self.tracker[cam_name] = ocsort.OCSort(max_age=100)
-    count[cam_name] = 0
-    prev_time[cam_name] = time.time()
+    self.count[cam_name] = 0
+    self.prev_time[cam_name] = time.time()
     self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(self.cam_name)
     
     while self.running[cam_name]:
@@ -428,15 +427,15 @@ class VideoCapture:
               self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
             curr_time = time.time()
-            fps = 1 / (curr_time - prev_time[cam_name])
-            prev_time[cam_name] = curr_time
+            fps = 1 / (curr_time - self.prev_time[cam_name])
+            self.prev_time[cam_name] = curr_time
             print(f"\rFPS: {fps:.2f}", end="", flush=True)
 
           filtered_preds = self.last_preds[cam_name]
 
-          if count[cam_name] > 10:
-            if last_preview_time[cam_name] is None or time.time() - last_preview_time[cam_name] >= 3600: # preview every hour
-              last_preview_time[cam_name] = time.time()
+          if self.count[cam_name] > 10:
+            if self.last_preview_time[cam_name] is None or time.time() - self.last_preview_time[cam_name] >= 3600: # preview every hour
+              self.last_preview_time[cam_name] = time.time()
               filename = BASE_DIR / "cameras" / f"{cam_name}/preview.png"
               write_png(filename, self.raw_frame[cam_name])
             for _,alert in self.alert_counters.items():
@@ -448,7 +447,7 @@ class VideoCapture:
                 if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
                 if alert.get_counts()[1]:
                     if time.time() - alert.last_det >= window:
-                      if alert.is_notif and alert.desc is None: send_det[cam_name] = True
+                      if alert.is_notif and alert.desc is None: self.send_det[cam_name] = True
                       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
                       filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
                       filepath.mkdir(parents=True, exist_ok=True)
@@ -462,22 +461,22 @@ class VideoCapture:
                         filename = filepath / f"{ts}_notif.jpg"
                       text = f"Event Detected ({cam_name})"
                       if userID is not None and not self.vod[cam_name] and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
-                      last_det[cam_name] = time.time()
+                      self.last_det[cam_name] = time.time()
                       alert.last_det = time.time()
-            if (send_det[cam_name] and userID is not None and not self.vod[cam_name]) and time.time() - last_det[cam_name] >= 6: #send 15ish second clip after
+            if (self.send_det[cam_name] and userID is not None and not self.vod[cam_name]) and time.time() - self.last_det[cam_name] >= 6: #send 15ish second clip after
                 export_and_upload(cam_name=cam_name, thumbnail=filename, userID=userID, key=key)
-                send_det[cam_name] = False
+                self.send_det[cam_name] = False
                 
-            if (time.time() - last_live_check[cam_name]) >= 5:
-              last_live_check[cam_name] = time.time()
+            if (time.time() - self.last_live_check[cam_name]) >= 5:
+              self.last_live_check[cam_name] = time.time()
               link = database.run_get("links", cam_name)
               if type(link) == list: link = link[0] # todo, flakey?
               if link != self.src[cam_name]:
                 self.src[cam_name] = link
                 self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
               if userID and not self.vod[cam_name]: threading.Thread(target=check_upload_link, args=(cam_name,), daemon=True).start()
-            if (time.time() - last_counter_update[cam_name]) >= 5: #update counter every 5 secs
-              last_counter_update[cam_name] = time.time()
+            if (time.time() - self.last_counter_update[cam_name]) >= 5: #update counter every 5 secs
+              self.last_counter_update[cam_name] = time.time()
 
               counters = database.run_get("counters", cam_name)
               if counters not in [None, {}]:
@@ -505,15 +504,15 @@ class VideoCapture:
             
             self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
                 
-            if userID and not self.vod[cam_name] and cam_name in live_link and live_link[cam_name] and (time.time() - last_live_seg[cam_name]) >= 4:
-              last_live_seg[cam_name] = time.time()
+            if userID and not self.vod[cam_name] and cam_name in live_link and live_link[cam_name] and (time.time() - self.last_live_seg[cam_name]) >= 4:
+              self.last_live_seg[cam_name] = time.time()
               mp4_filename = f"segment.mp4"
               export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
               encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
               Path(mp4_filename).unlink()
               threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[cam_name]), daemon=True).start()
           else:
-            count[cam_name]+=1
+            self.count[cam_name]+=1
           if not self.vod[cam_name]: time.sleep(1 / 30)
 
       except Exception as e:
