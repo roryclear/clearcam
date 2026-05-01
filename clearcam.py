@@ -230,9 +230,22 @@ class VideoCapture:
 
     self.lock[cam_name] = threading.Lock()
 
+    self.last_det[cam_name] = -1
+    self.send_det[cam_name] = False
+    self.last_live_check[cam_name] = time.time()
+    self.last_live_seg[cam_name] = time.time()
+    self.last_preview_time[cam_name] = None
+    self.last_counter_update[cam_name] = time.time()
+    self.pred_occs[cam_name] = {}
+    self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+    self.tracker[cam_name] = ocsort.OCSort(max_age=100)
+    self.count[cam_name] = 0
+    self.prev_time[cam_name] = time.time()
+    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(self.cam_name)
+
   def start(self, cam_name):
     if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, daemon=True).start()
-    if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.capture_loop()
+    if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.capture_loop(cam_name=cam_name)
 
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
@@ -375,21 +388,7 @@ class VideoCapture:
         print("Error in frame_loop:", e, cam_name)
         time.sleep(1)
 
-  def capture_loop(self):
-    cam_name = self.cam_name
-    self.last_det[cam_name] = -1
-    self.send_det[cam_name] = False
-    self.last_live_check[cam_name] = time.time()
-    self.last_live_seg[cam_name] = time.time()
-    self.last_preview_time[cam_name] = None
-    self.last_counter_update[cam_name] = time.time()
-    self.pred_occs[cam_name] = {}
-    self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-    self.tracker[cam_name] = ocsort.OCSort(max_age=100)
-    self.count[cam_name] = 0
-    self.prev_time[cam_name] = time.time()
-    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(self.cam_name)
-    
+  def capture_loop(self, cam_name):
     while self.running[cam_name]:
       try:
         if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
