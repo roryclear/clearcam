@@ -261,6 +261,7 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.process_frame(cam_name=cam_name)
+      process_clip_queue()
 
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
@@ -630,23 +631,18 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
-def run_encode_text(return_q, clip, text):
-  res = clip.model._encode_text(text, realize=True)
-  return_q.put(res)
-  return res
+def run_encode_text(clip, text): return clip.model._encode_text(text, realize=True)
 
-def run_search(return_q, clip, image_text, top_k, cam_name, selected_dir):
-  res = clip.search(image_text, top_k, cam_name, selected_dir)
-  return_q.put(res)
+def run_search(clip, image_text, top_k, cam_name, selected_dir): return clip.search(image_text, top_k, cam_name, selected_dir)
 
-def run_clip(return_q, clip, im, top_k, cam_name, selected_dir, is_face):
+def run_clip(clip, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   if im is not None:
     embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
     res = clip.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   else:
     res = []
-  return_q.put(res)
+  return res
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -1205,17 +1201,19 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         return False
 
 object_finder_lock = threading.Lock()
-def process_with_clip_lock(func, *args):
-    if not object_finder_lock.acquire(timeout=30): return None
+import queue
+clip_queue = queue.Queue()
+def process_with_clip_lock(fn, *args):
+    result_queue = queue.Queue(maxsize=1)
+    clip_queue.put((fn, args, result_queue))
+    return result_queue.get()
+
+def process_clip_queue():
     try:
-      return_q = multiprocessing.Queue()
-      p = multiprocessing.Process(target=func, args=(return_q, *args))
-      p.start()
-      results = return_q.get(timeout=300)
-      p.join()
-      return results
-    finally:
-      object_finder_lock.release()
+      fn, args, result_queue = clip_queue.get_nowait()
+    except queue.Empty: return
+    result = fn(*args)
+    result_queue.put(result)
 
 cams = dict()
 active_subprocesses = []
