@@ -248,11 +248,17 @@ class VideoCapture:
     self.filename[cam_name] = None
 
   def start(self):
+    cam_check = time.time()
     cams = database.run_get("links", None)
     for cam_name in cams.keys():
       self.init_cam(cam_name=cam_name, src=cams[cam_name])
     threading.Thread(target=self.frame_loop, daemon=True).start() # todo non vod only!
     while True:
+      if time.time() - cam_check >= 5:
+        new_cams = database.run_get("links", None)
+        for cam_name in new_cams.keys():
+          if cam_name not in cams: self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
+        cams = new_cams
       for cam_name in cams.keys():
         if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.process_frame(cam_name=cam_name)
 
@@ -376,9 +382,11 @@ class VideoCapture:
   
 
   def frame_loop(self):
+    cam_check = time.time()
     cams = database.run_get("links", None)
     fail_count = 0
     while True:
+      if time.time() - cam_check > 5: cams = database.run_get("links", None)
       for cam_name in cams.keys():
         try:
           frame_size = self.width[cam_name] * self.height[cam_name] * 3
