@@ -297,7 +297,7 @@ class VideoCapture:
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
       time.sleep(15)
-      self.start_time[cam_name] = time.time()
+      if self.start_time[cam_name] is None: self.start_time[cam_name] = time.time()
       
       command = [
           ffmpeg_path,
