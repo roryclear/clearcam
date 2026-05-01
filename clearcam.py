@@ -410,7 +410,6 @@ class VideoCapture:
 
   def process_frame(self, cam_name):
     try:
-      if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
       if self.vod[cam_name]:
         if cam_name not in self.cap:
           self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name])
@@ -1121,7 +1120,7 @@ def image_sort_key(item):
   try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
   except ValueError: return -1
 
-def schedule_daily_restart(videocapture, restart_time):
+def schedule_daily_restart(cam, restart_time):
     while True:
         now = datetime.now().time()
         target = time_obj(restart_time[0], restart_time[1])
@@ -1131,10 +1130,12 @@ def schedule_daily_restart(videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
-        videocapture.hls_proc[videocapture.cam_name].kill()
-        sys.stdout.flush()
-        python = sys.executable
-        os.execv(python, [python] + sys.argv)
+        cams = database.run_get("links", None)
+        for cam_name in cams.keys():
+          cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
+          cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
+
+
 
 def get_lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
