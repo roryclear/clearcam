@@ -368,11 +368,19 @@ class YOLOv9():
       self.model[39] = ADown(ch0=256)
       self.model[40] = Concat(f=[-1, 29])
       self.model[41] = RepNCSPELAN4(1024, 256, 512, n=2)
-      self.model[42] = DDetect(a=256, b=512, c=512, d=256, f=[35, 38, 41]) 
+      self.model[42] = DDetect(a=256, b=512, c=512, d=256, f=[35, 38, 41])
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     load_state_dict(self, state_dict)
+    self.jit_cache = {}
 
-  @TinyJit
+  def jit_infer(self, frame):
+    shape = tuple(frame.shape)
+    if shape not in self.jit_cache:
+      @TinyJit
+      def fn(im, model): return model(im)
+      self.jit_cache[shape] = fn
+    return self.jit_cache[shape](frame, self)
+
   def __call__(self, frame):
     pre = self.preprocess(frame)
     x = pre.unsqueeze(0)
