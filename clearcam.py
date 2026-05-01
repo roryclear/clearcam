@@ -646,7 +646,6 @@ def run_clip(clip, im, top_k, cam_name, selected_dir, is_face):
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.object_finder = kwargs.pop('clip_instance', None)
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args): pass # don't print stuff
@@ -1066,21 +1065,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: self.object_finder._load_all_embeddings()
-            if (uploaded_image or similar_img) and (use_clip or use_face): self.object_finder._load_all_embeddings(face=is_face)
+            if image_text and use_clip: object_finder._load_all_embeddings()
+            if (uploaded_image or similar_img) and (use_clip or use_face): object_finder._load_all_embeddings(face=is_face)
             
             if uploaded_image and (use_clip or is_face):
-              results = process_with_clip_lock(run_clip, self.object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
+              results = process_with_clip_lock(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
             if similar_img and (use_clip or is_face):
-              results = process_with_clip_lock(run_clip, self.object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+              results = process_with_clip_lock(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = process_with_clip_lock(run_search, self.object_finder, image_text, start+count, cam_name, selected_dir)
+              results = process_with_clip_lock(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1229,13 +1228,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=face) if (use_clip or face) else None
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
-
-    def finish_request(self, request, client_address):
-      self.RequestHandlerClass(request, client_address, self, clip_instance=self.object_finder)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
@@ -1259,12 +1254,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def _objects_task(self):
       while not self.object_finder_stop_event.is_set():
         try:
-          object_folders = self.object_finder.find_object_folders("data/cameras")
+          object_folders = object_finder.find_object_folders("data/cameras")
           for folder in object_folders:
             name = folder.split("/")[2]
             vod = is_vod(name)
             if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            embeddings, batch_paths = self.object_finder.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
+            embeddings, batch_paths = object_finder.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
             alerts = database.run_get("alerts", name)
             if userID:
               for path, embedding in zip(batch_paths, embeddings):
@@ -1285,7 +1280,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             # todo, move to own loop
             for k, alert in alerts.items():
               if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = process_with_clip_lock(run_encode_text, self.object_finder, alert.desc)
+                alert.desc_emb = process_with_clip_lock(run_encode_text, object_finder, alert.desc)
                 database.run_put("alerts", name, alert, id=k)
 
         except Exception as e:
@@ -1396,6 +1391,7 @@ if __name__ == "__main__":
   cam = None
 
   model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
+  object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=use_face) if (use_clip or use_face) else None
   #model = RFDETR("small")
   cam = VideoCapture()
   
