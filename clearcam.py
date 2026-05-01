@@ -164,14 +164,13 @@ def _get_stream_resolution(src):
     return 1920, 1080
 
 class VideoCapture:
-  def __init__(self, src, cam_name="camera", vod=False):
+  def __init__(self):
     self.output_dir_raw = {}
     self.frame_num = {}
     self.last_frame_num = {}
     self.vod = {}
     # objects in scene count
     self.counter = {}
-    self.cam_name = cam_name
     self.object_set = {}
     self.object_set_zone = {}
 
@@ -207,6 +206,8 @@ class VideoCapture:
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
 
+  def init_cam(self, cam_name, src):
+    vod = False # todo
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.src[cam_name] = src # todo
     self.last_frame[cam_name] = None
@@ -243,13 +244,17 @@ class VideoCapture:
     self.tracker[cam_name] = ocsort.OCSort(max_age=100)
     self.count[cam_name] = 0
     self.prev_time[cam_name] = time.time()
-    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(self.cam_name)
+    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(cam_name)
     self.filename[cam_name] = None
 
-  def start(self, cam_name):
-    if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, daemon=True).start()
-    if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists():
-      while True: self.process_frame(cam_name=cam_name)
+  def start(self):
+    cams = database.run_get("links", None)
+    for cam_name in cams.keys():
+      self.init_cam(cam_name=cam_name, src=cams[cam_name])
+    threading.Thread(target=self.frame_loop, daemon=True).start() # todo non vod only!
+    while True:
+      for cam_name in cams.keys():
+        if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.process_frame(cam_name=cam_name)
 
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
@@ -299,6 +304,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                  "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
@@ -369,28 +376,29 @@ class VideoCapture:
   
 
   def frame_loop(self):
+    cams = database.run_get("links", None)
     fail_count = 0
-    cam_name = self.cam_name
-    frame_size = self.width[cam_name] * self.height[cam_name] * 3
-    while self.running[cam_name]:
-      try:
-        raw_bytes = self.proc[cam_name].stdout.read(frame_size)
-        if len(raw_bytes) != frame_size:
-          fail_count += 1
-          if fail_count > 5:
-            print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
-            self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+    while True:
+      for cam_name in cams.keys():
+        try:
+          frame_size = self.width[cam_name] * self.height[cam_name] * 3
+          raw_bytes = self.proc[cam_name].stdout.read(frame_size)
+          if len(raw_bytes) != frame_size:
+            fail_count += 1
+            if fail_count > 5:
+              print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
+              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+              fail_count = 0
+            time.sleep(0.5)
+          else:
             fail_count = 0
-          time.sleep(0.5)
-        else:
-          fail_count = 0
-        with self.lock[cam_name]:
-          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
-          self.frame_num[cam_name] += 1
-        time.sleep(1 / 30)
-      except Exception as e:
-        print("Error in frame_loop:", e, cam_name)
-        time.sleep(1)
+          with self.lock[cam_name]:
+            self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
+            self.frame_num[cam_name] += 1
+        except Exception as e:
+          print("Error in frame_loop:", e, cam_name)
+          time.sleep(1)
+      time.sleep(1 / 30) # todo, remove?
 
   def process_frame(self, cam_name):
     try:
@@ -517,7 +525,6 @@ class VideoCapture:
             threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[cam_name]), daemon=True).start()
         else:
           self.count[cam_name]+=1
-        if not self.vod[cam_name]: time.sleep(1 / 30)
 
     except Exception as e:
       print("Error in process_frame:", e, cam_name)
@@ -729,7 +736,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name or src")
                 return
             
-            start_cam(rtsp=src,cam_name=cam_name,model_variant=model_variant)
             database.run_put("links", cam_name, src)
             self.send_response(302)
             self.send_header('Location', '/')
@@ -1147,25 +1153,6 @@ def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, 
 
 def event_img_info(image): return {"ts": int(float(image.split('_')[0])), "object_id":int(image.split('_')[1]), "class_id":int(image.split('_')[2])}
 
-def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
-    if not rtsp or not cam_name: return
-    def upsert_arg(args, key, value):
-        prefix = f"--{key}="
-        for i, arg in enumerate(args):
-            if arg.startswith(prefix):
-                args[i] = f"{prefix}{value}"
-                return args
-        return args + [f"{prefix}{value}"]
-
-    executable, base_args = get_executable_args()
-    new_args = upsert_arg(base_args, "cam_name", cam_name)
-    new_args = upsert_arg(new_args, "rtsp", rtsp)
-    new_args = upsert_arg(new_args, "yolo_size", model_variant)
-    new_args = upsert_arg(new_args, "yolo_res", yolo_res)
-    new_args = upsert_arg(new_args, "use_clip", use_clip)
-    proc = subprocess.Popen(executable + new_args, close_fds=True)
-    active_subprocesses.append(proc)
-
 
 live_link = dict()
 alerts_on = True
@@ -1401,22 +1388,18 @@ if __name__ == "__main__":
 
   live_link = dict()
   
-  if url is None:
-    for cam_name in cams.keys():
-      start_cam(rtsp=cams[cam_name],cam_name=cam_name,model_variant=model_variant, yolo_res=yolo_res)
-
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   cam = None
-  if url:
-    model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-    #model = RFDETR("small")
-    cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
-    vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+
+  model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
+  #model = RFDETR("small")
+  cam = VideoCapture()
   
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+      threading.Thread(target=server.serve_forever, daemon=True).start()
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
@@ -1425,22 +1408,19 @@ if __name__ == "__main__":
       else:
           raise
     
-    if url:
-      restart_time = (0, 0)
-      threading.Thread(
-        target=schedule_daily_restart,
-        args=(cam, restart_time),
-        daemon=True
-      ).start()
 
-    if server:
-      threading.Thread(target=server.serve_forever(), daemon=True).start()
-    if cam is not None:
-      cam.start(cam.cam_name)      
-    else:
-      while True: time.sleep(3600)
+    restart_time = (0, 0)
+    threading.Thread(
+      target=schedule_daily_restart,
+      args=(cam, restart_time),
+      daemon=True
+    ).start()
+
+    cam.start()  
+    while True: time.sleep(3600)
 
   except KeyboardInterrupt:
     if url:
       cam.release(cam.cam_name) # todo, needed?
       server.shutdown()
+
