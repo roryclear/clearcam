@@ -201,6 +201,8 @@ class VideoCapture:
     self.last_preview_time = {}
     self.last_live_seg = {}
     self.start_time = {}
+    self.filename = {}
+    self.alert_counters = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -220,13 +222,12 @@ class VideoCapture:
     self.width[cam_name], self.height[cam_name] = _get_stream_resolution(src)
     self.settings[cam_name] = None
     self.start_time[cam_name] = None
-    self.filename = {}
     
-    self.alert_counters = database.run_get("alerts",cam_name)
-    if not self.alert_counters:
-      self.alert_counters = dict()
+    self.alert_counters[cam_name] = database.run_get("alerts",cam_name)
+    if not self.alert_counters[cam_name]:
+      self.alert_counters[cam_name] = dict()
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
-      self.alert_counters[id] = alert_counter
+      self.alert_counters[cam_name][id] = alert_counter
       database.run_put("alerts", cam_name, alert_counter, id=id)
 
     self.lock[cam_name] = threading.Lock()
@@ -419,7 +420,7 @@ class VideoCapture:
           time.sleep(1 / 30)
           return
 
-        if not any(counter.is_active() for _, counter in self.alert_counters.items()): # don't run inference when no active scheds
+        if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): # don't run inference when no active scheds
           time.sleep(1 / 30)
           with self.lock[cam_name]: self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
@@ -441,7 +442,7 @@ class VideoCapture:
             self.last_preview_time[cam_name] = time.time()
             self.filename[cam_name] = BASE_DIR / "cameras" / f"{cam_name}/preview.png"
             write_png(self.filename[cam_name], self.raw_frame[cam_name])
-          for _,alert in self.alert_counters.items():
+          for _,alert in self.alert_counters[cam_name].items():
               if alert.desc is not None: continue
               if not alert.is_active():
                 alert.reset_counts()
@@ -494,12 +495,12 @@ class VideoCapture:
               a.new = False
               database.run_put("alerts", cam_name, a, id=id)
               if a is None:
-                del self.alert_counters[id]
+                del self.alert_counters[cam_name][id]
                 continue
-              self.alert_counters[id] = a
+              self.alert_counters[cam_name][id] = a
               for c in a.classes: classes.add(str(c))
 
-            self.alert_counters = {i:a for i,a in self.alert_counters.items() if i in alerts}
+            self.alert_counters[cam_name] = {i:a for i,a in self.alert_counters[cam_name].items() if i in alerts}
             
             new_settings = database.run_get("settings", cam_name)
             if self.settings[cam_name] is not None and new_settings != self.settings[cam_name] and is_vod(cam_name):
@@ -556,7 +557,7 @@ class VideoCapture:
         outside = outside ^ self.settings[cam_name]["outside"]
       non_zone_alert = False
       if outside: # check if any alerts don't use zone
-        for _, alert in self.alert_counters.items():
+        for _, alert in self.alert_counters[cam_name].items():
           if not alert.zone:
             non_zone_alert = True
             break
@@ -569,7 +570,7 @@ class VideoCapture:
           self.object_set[cam_name].add(int(x.track_id))
           self.counter[cam_name].add(int(x.class_id))
         if new_in_zone: self.object_set_zone[cam_name].add(int(x.track_id))
-        for _, alert in self.alert_counters.items():
+        for _, alert in self.alert_counters[cam_name].items():
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
   
     preds = np.array(preds)
