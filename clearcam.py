@@ -432,12 +432,9 @@ class VideoCapture:
           last_frame_num = self.last_frame_num[cam_name]
           if self.raw_frame[cam_name] is None: return
           frame = self.raw_frame[cam_name].copy()
-        if frame_num == last_frame_num:
-          time.sleep(1 / 30)
-          return
+        if frame_num == last_frame_num: return
 
         if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): # don't run inference when no active scheds
-          time.sleep(1 / 30)
           with self.lock[cam_name]: self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
           preds, frame = self.run_inference(frame, cam_name=cam_name)
