@@ -309,8 +309,6 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
-                  "-headers", "Referer: https://www,earthcam.com\r\n",
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
@@ -383,7 +381,6 @@ class VideoCapture:
   def frame_loop(self):
     cam_check = time.time()
     cams = database.run_get("links", None)
-    fail_count = 0
     while True:
       if time.time() - cam_check > 5: cams = database.run_get("links", None)
       for cam_name in cams.keys():
@@ -391,22 +388,11 @@ class VideoCapture:
         try:
           frame_size = self.width[cam_name] * self.height[cam_name] * 3
           raw_bytes = self.proc[cam_name].stdout.read(frame_size)
-          if len(raw_bytes) != frame_size:
-            fail_count += 1
-            if fail_count > 5:
-              print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
-              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-              fail_count = 0
-            time.sleep(0.5)
-          else:
-            fail_count = 0
           with self.lock[cam_name]:
             self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
             self.frame_num[cam_name] += 1
-        except Exception as e:
-          print("Error in frame_loop:", e, cam_name)
-          time.sleep(1)
-      time.sleep(1 / 30) # todo, remove?
+        except Exception as e: continue
+      time.sleep(1 / 30) # todo, not needed in vod?
 
   def process_frame(self, cam_name):
     try:
