@@ -462,7 +462,7 @@ class VideoCapture:
                     self.last_det[cam_name] = time.time()
                     alert.last_det = time.time()
           if (self.send_det[cam_name] and userID is not None and not self.vod[cam_name]) and time.time() - self.last_det[cam_name] >= 6: #send 15ish second clip after
-              export_and_upload(cam_name=cam_name, thumbnail=self.filename[cam_name], userID=userID, key=key)
+              threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key}, daemon=True).start()
               self.send_det[cam_name] = False
               
           if (time.time() - self.last_live_check[cam_name]) >= 5:
@@ -1255,7 +1255,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                             alerts[k].last_det = time.time()
                             database.run_put("alerts", name, alerts[k], k)
                             seen_time = event_img_info(path.split("/")[-1].split(".jpg")[0])["ts"]
-                            export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
+                            #export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
+                            threading.Thread(target=export_and_upload, kwargs={"cam_name": name, "thumbnail": path, "userID": userID, "key": key, "start": seen_time, "length": 20}, daemon=True).start()
                             break
 
             if vod: database.run_delete("analysis_prog", folder.split("/")[2])
