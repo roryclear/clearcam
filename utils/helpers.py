@@ -200,7 +200,7 @@ def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, lengt
     subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(thumbnail), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
     os.replace(temp_output, mp4_filename)
     encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-    threading.Thread(target=upload_file, args=(Path(f"""{mp4_filename}.aes"""), userID), daemon=True).start()
+    upload_file(Path(f"{mp4_filename}.aes"), userID)
     os.unlink(mp4_filename)
 
 def find_ffmpeg():
