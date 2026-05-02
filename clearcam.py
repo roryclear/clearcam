@@ -258,7 +258,7 @@ class VideoCapture:
         for cam_name in new_cams.keys():
           if cam_name not in cams:
             self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
-            threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
+            if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
         cams = new_cams
       for cam_name in cams.keys(): self.process_frame(cam_name=cam_name)
       process_clip_queue()
