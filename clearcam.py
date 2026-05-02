@@ -251,12 +251,14 @@ class VideoCapture:
     cams = database.run_get("links", None)
     for cam_name in cams.keys():
       self.init_cam(cam_name=cam_name, src=cams[cam_name])
-    threading.Thread(target=self.frame_loop, daemon=True).start() # todo non vod only!
+      threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only!
     while True:
       if time.time() - cam_check >= 5:
         new_cams = database.run_get("links", None)
         for cam_name in new_cams.keys():
-          if cam_name not in cams: self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
+          if cam_name not in cams:
+            self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
+            threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
         cams = new_cams
       for cam_name in cams.keys(): self.process_frame(cam_name=cam_name)
       process_clip_queue()
@@ -378,21 +380,16 @@ class VideoCapture:
     cv2.imwrite(str(object_filename), crop)
   
 
-  def frame_loop(self):
-    cam_check = time.time()
-    cams = database.run_get("links", None)
+  def frame_loop(self, cam_name):
     while True:
-      if time.time() - cam_check > 5: cams = database.run_get("links", None)
-      for cam_name in cams.keys():
-        if cam_name not in self.vod or self.vod[cam_name] is True: continue
-        try:
-          frame_size = self.width[cam_name] * self.height[cam_name] * 3
-          raw_bytes = self.proc[cam_name].stdout.read(frame_size)
-          with self.lock[cam_name]:
-            self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
-            self.frame_num[cam_name] += 1
-        except Exception as e: continue
-      time.sleep(1 / 30) # todo, not needed in vod?
+      time.sleep(1 / 100)
+      try:
+        frame_size = self.width[cam_name] * self.height[cam_name] * 3
+        raw_bytes = self.proc[cam_name].stdout.read(frame_size)
+        with self.lock[cam_name]:
+          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
+          self.frame_num[cam_name] += 1
+      except Exception as e: continue
 
   def process_frame(self, cam_name):
     try:
