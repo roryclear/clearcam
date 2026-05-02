@@ -207,11 +207,10 @@ class VideoCapture:
     #self.det_shapes = []
 
   def init_cam(self, cam_name, src):
-    vod = False # todo
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.src[cam_name] = src # todo
     self.last_frame[cam_name] = None
-    self.vod[cam_name] = vod
+    self.vod[cam_name] = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     self.frame_num[cam_name] = -1
     self.last_frame_num[cam_name] = -1
     self.object_set[cam_name] = set()
@@ -259,8 +258,7 @@ class VideoCapture:
         for cam_name in new_cams.keys():
           if cam_name not in cams: self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
         cams = new_cams
-      for cam_name in cams.keys():
-        if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists(): self.process_frame(cam_name=cam_name)
+      for cam_name in cams.keys(): self.process_frame(cam_name=cam_name)
       process_clip_queue()
 
   def _get_new_stream_dir(self, cam_name):
@@ -389,6 +387,7 @@ class VideoCapture:
     while True:
       if time.time() - cam_check > 5: cams = database.run_get("links", None)
       for cam_name in cams.keys():
+        if cam_name not in self.vod or self.vod[cam_name] is True: continue
         try:
           frame_size = self.width[cam_name] * self.height[cam_name] * 3
           raw_bytes = self.proc[cam_name].stdout.read(frame_size)
@@ -422,8 +421,7 @@ class VideoCapture:
         self.last_frame[cam_name] = frame #todo
         if not ret or cam_name not in database.run_get("links", None):
           self.running[cam_name] = False
-          database.run_put("analysis_prog", cam_name, {"Tracking":100})
-          os._exit(0)
+          database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
         else:
           self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
           database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
