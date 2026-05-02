@@ -421,7 +421,7 @@ class VideoCapture:
         self.last_frame[cam_name] = frame #todo
         if not ret or cam_name not in database.run_get("links", None):
           self.running[cam_name] = False
-          database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
+          if "Processing" not in database.run_get("analysis_prog", cam_name): database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
         else:
           self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
           database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
