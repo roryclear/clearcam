@@ -260,7 +260,8 @@ class VideoCapture:
             self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
             if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
         cams = new_cams
-      for cam_name in cams.keys(): self.process_frame(cam_name=cam_name)
+      for cam_name in cams.keys():
+        self.process_frame(cam_name=cam_name)
       process_clip_queue()
 
   def _get_new_stream_dir(self, cam_name):
@@ -381,15 +382,27 @@ class VideoCapture:
   
 
   def frame_loop(self, cam_name):
+    fail_count = 0
+    frame_size = self.width[cam_name] * self.height[cam_name] * 3
     while True:
-      time.sleep(1 / 100)
       try:
-        frame_size = self.width[cam_name] * self.height[cam_name] * 3
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
+        if len(raw_bytes) != frame_size:
+          fail_count += 1
+          if fail_count > 5:
+            print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
+            self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+            fail_count = 0
+          time.sleep(0.5)
+        else:
+          fail_count = 0
         with self.lock[cam_name]:
           self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
           self.frame_num[cam_name] += 1
-      except Exception as e: continue
+        time.sleep(1 / 30)
+      except Exception as e:
+        print("Error in frame_loop:", e, cam_name)
+        time.sleep(1)
 
   def process_frame(self, cam_name):
     try:
@@ -464,7 +477,7 @@ class VideoCapture:
           if (self.send_det[cam_name] and userID is not None and not self.vod[cam_name]) and time.time() - self.last_det[cam_name] >= 6: #send 15ish second clip after
               threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key}, daemon=True).start()
               self.send_det[cam_name] = False
-              
+          
           if (time.time() - self.last_live_check[cam_name]) >= 5:
             self.last_live_check[cam_name] = time.time()
             link = database.run_get("links", cam_name)
@@ -509,8 +522,7 @@ class VideoCapture:
             encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
             Path(mp4_filename).unlink()
             threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[cam_name]), daemon=True).start()
-        else:
-          self.count[cam_name]+=1
+        else: self.count[cam_name]+=1
 
     except Exception as e:
       print("Error in process_frame:", e, cam_name)
