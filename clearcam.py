@@ -263,7 +263,7 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name)
-      if use_clip:process_clip_queue()
+      if use_clip:process_queue()
       if len(object_queue) > 0:
         img = cv2.imread(object_queue[0])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -1068,21 +1068,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: process_with_clip_lock(object_finder._load_all_embeddings)
-            if (uploaded_image or similar_img) and (use_clip or use_face): process_with_clip_lock(object_finder._load_all_embeddings, is_face)
+            if image_text and use_clip: add_to_queue(object_finder._load_all_embeddings)
+            if (uploaded_image or similar_img) and (use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
             
             if uploaded_image and (use_clip or is_face):
-              results = process_with_clip_lock(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
+              results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
             if similar_img and (use_clip or is_face):
-              results = process_with_clip_lock(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+              results = add_to_queue(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = process_with_clip_lock(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
+              results = add_to_queue(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1206,15 +1206,15 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
 
 object_finder_lock = threading.Lock()
 import queue
-clip_queue = queue.Queue()
-def process_with_clip_lock(fn, *args):
+task_queue = queue.Queue()
+def add_to_queue(fn, *args):
     result_queue = queue.Queue(maxsize=1)
-    clip_queue.put((fn, args, result_queue))
+    task_queue.put((fn, args, result_queue))
     return result_queue.get()
 
-def process_clip_queue():
+def process_queue():
     try:
-      fn, args, result_queue = clip_queue.get_nowait()
+      fn, args, result_queue = task_queue.get_nowait()
     except queue.Empty: return
     result = fn(*args)
     result_queue.put(result)
