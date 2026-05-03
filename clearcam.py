@@ -263,56 +263,15 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name)
-      if use_clip: process_clip_queue()
-
-      # new clip thing
+      if use_clip:process_clip_queue()
       if len(object_queue) > 0:
-        # todo this two dicts thing is so dumb, do notif thing too
-        # todo, deleting mid this crashes whole program
-
         img = cv2.imread(object_queue[0])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        if use_face and str(object_queue[0]).endswith("_0.jpg"):
-          face_img = object_finder.img_to_face(img)
-          if face_img is not None:
-            date = object_queue[0].parent.name
-            pkl_path = object_queue[0].parent.parent.parent / "faces" / date /  "embeddings.pkl"
-            face_emb = adaface_jit(object_finder.adaface, Tensor(face_img).contiguous()).numpy()
-            data = pickle.load(open(pkl_path, "rb")) if pkl_path.exists() else {}
-            if "embeddings" not in data: data["embeddings"] = {}
-            data["embeddings"][str(object_queue[0])] = face_emb
-            pkl_path.parent.mkdir(parents=True, exist_ok=True)
-            pickle.dump(data, open(pkl_path, "wb"))   
+        clip_latest_img(img)
+        process_latest_face(img)
+        del object_queue[0] 
            
-        img = object_finder.preprocess(img)
-        data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
-        if "embeddings" not in data: data["embeddings"] = {}
-        emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
-        data["embeddings"][str(object_queue[0])] = emb
-        with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
-        
-        if userID:
-          alerts = database.run_get("alerts", cam_name)
-          for k, v in alerts.items():
-            if time.time() - v.last_det < 60 or not v.is_active(): continue
-            if v.desc is None: continue
-            if not hasattr(v, "desc_emb") or v.desc_emb is None:
-              print("rory getting emb")
-              v.desc_emb = run_encode_text(object_finder, v.desc)
-              database.run_put("alerts", cam_name, v, id=k)
 
-            similarity = (v.desc_emb @ emb.T).item()
-            print("sim =",similarity,v.desc,object_queue[0])
-            if similarity > v.threshold:
-              send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
-              alerts[k].last_det = time.time()
-              database.run_put("alerts", cam_name, alerts[k], k)
-              seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
-              threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": userID, "key": key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
-              break
-        
-        del object_queue[0]
 
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
@@ -431,7 +390,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-    object_queue.append(object_filename)
+    if use_clip or use_face: object_queue.append(object_filename)
 
   def frame_loop(self, cam_name):
     fail_count = 0
@@ -1259,6 +1218,49 @@ def process_clip_queue():
     except queue.Empty: return
     result = fn(*args)
     result_queue.put(result)
+
+def process_latest_face(img):
+  if use_face and str(object_queue[0]).endswith("_0.jpg"):
+    face_img = object_finder.img_to_face(img)
+    if face_img is not None:
+      date = object_queue[0].parent.name
+      pkl_path = object_queue[0].parent.parent.parent / "faces" / date /  "embeddings.pkl"
+      face_emb = adaface_jit(object_finder.adaface, Tensor(face_img).contiguous()).numpy()
+      data = pickle.load(open(pkl_path, "rb")) if pkl_path.exists() else {}
+      if "embeddings" not in data: data["embeddings"] = {}
+      data["embeddings"][str(object_queue[0])] = face_emb
+      pkl_path.parent.mkdir(parents=True, exist_ok=True)
+      pickle.dump(data, open(pkl_path, "wb"))  
+
+def clip_latest_img(img):
+  if use_clip:
+    img = object_finder.preprocess(img)
+    data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
+    if "embeddings" not in data: data["embeddings"] = {}
+    emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
+    data["embeddings"][str(object_queue[0])] = emb
+    with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
+  
+    if userID:
+      cam_name = object_queue[0].parts[object_queue[0].parts.index("cameras")+1:object_queue[0].parts.index("objects")][0]
+      alerts = database.run_get("alerts", cam_name) # todo, get cam_name from file path!
+      for k, v in alerts.items():
+        if time.time() - v.last_det < 60 or not v.is_active(): continue
+        if v.desc is None: continue
+        if not hasattr(v, "desc_emb") or v.desc_emb is None:
+          print("rory getting emb")
+          v.desc_emb = run_encode_text(object_finder, v.desc)
+          database.run_put("alerts", cam_name, v, id=k)
+
+        similarity = (v.desc_emb @ emb.T).item()
+        print("sim =",similarity,v.desc,object_queue[0])
+        if similarity > v.threshold:
+          send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
+          alerts[k].last_det = time.time()
+          database.run_put("alerts", cam_name, alerts[k], k)
+          seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
+          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": userID, "key": key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
+          break
 
 cams = dict()
 active_subprocesses = []
