@@ -280,14 +280,14 @@ class VideoCapture:
             pkl_path = object_queue[0].parent.parent.parent / "faces" / date /  "embeddings.pkl"
             face_emb = adaface_jit(object_finder.adaface, Tensor(face_img).contiguous()).numpy()
             data = pickle.load(open(pkl_path, "rb")) if pkl_path.exists() else {}
-            if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
+            if "embeddings" not in data: data["embeddings"] = {}
             data["embeddings"][str(object_queue[0])] = face_emb
             pkl_path.parent.mkdir(parents=True, exist_ok=True)
             pickle.dump(data, open(pkl_path, "wb"))   
            
         img = object_finder.preprocess(img)
         data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
-        if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
+        if "embeddings" not in data: data["embeddings"] = {}
         emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
         data["embeddings"][str(object_queue[0])] = emb
         with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
@@ -1284,11 +1284,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
           self.cleanup_thread.start()
 
-        #if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
-        #  self.object_finder_stop_event.clear()
-        #  self.object_finder_thread = threading.Thread(target=self._objects_task, daemon=True, name="CLIPMaintenance")
-        #  self.object_finder_thread.start()
-
     def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
             try:
@@ -1296,43 +1291,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             except Exception as e:
                 print(f"Cleanup error: {e}")
             self.cleanup_stop_event.wait(timeout=600)
-
-    def _objects_task(self):
-      while not self.object_finder_stop_event.is_set():
-        try:
-          object_folders = object_finder.find_object_folders("data/cameras")
-          for folder in object_folders:
-            name = folder.split("/")[2]
-            vod = is_vod(name)
-            if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            embeddings, batch_paths = object_finder.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
-            alerts = database.run_get("alerts", name)
-            if userID:
-              for path, embedding in zip(batch_paths, embeddings):
-                for k, v in alerts.items():
-                    if time.time() - v.last_det < 60 or not v.is_active(): continue
-                    if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
-                        similarity = (v.desc_emb @ embedding.T).item()
-                        print("sim =",similarity,v.desc,path)
-                        if similarity > v.threshold:
-                            send_notif(userID, f"Event Detected ({name}: {v.desc})")
-                            alerts[k].last_det = time.time()
-                            database.run_put("alerts", name, alerts[k], k)
-                            seen_time = event_img_info(path.split("/")[-1].split(".jpg")[0])["ts"]
-                            #export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
-                            threading.Thread(target=export_and_upload, kwargs={"cam_name": name, "thumbnail": path, "userID": userID, "key": key, "start": seen_time, "length": 20}, daemon=True).start()
-                            break
-
-            if vod: database.run_delete("analysis_prog", folder.split("/")[2])
-            # todo, move to own loop
-            for k, alert in alerts.items():
-              if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = process_with_clip_lock(run_encode_text, object_finder, alert.desc)
-                database.run_put("alerts", name, alert, id=k)
-
-        except Exception as e:
-          print(f"CLIP error: {e}")
-        self.object_finder_stop_event.wait(timeout=1)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())

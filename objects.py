@@ -181,65 +181,6 @@ class ObjectFinder:
                         if os.path.isdir(date_path):
                             object_folders.append(date_path)
         return object_folders
-    # db for progress
-    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
-        folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
-
-        current_images = {
-            os.path.join(folder_path, f)
-            for f in os.listdir(folder_path)
-            if f.lower().endswith((".png", ".jpg", ".jpeg"))
-        }
-
-        if self.face:
-            folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
-            cached_images_face = set(folder_embeddings_face.keys())
-            new_images_face = current_images - cached_images_face
-            deleted_images_face = cached_images_face - current_images
-
-            for img in deleted_images_face:
-                folder_embeddings_face.pop(img, None)
-                folder_embeddings_face.pop(img, None)
-            new_image_list_face = list(new_images_face)
-
-
-        cached_images = set(folder_embeddings.keys())
-        new_images = current_images - cached_images
-        deleted_images = cached_images - current_images
-        
-        for img in deleted_images:
-            folder_embeddings.pop(img, None)
-            folder_paths.pop(img, None)
-
-        if not new_images: return [], []
-        new_image_list = list(new_images)
-        if self.face:
-            face_paths, face_embeddings = self.process_faces(new_image_list_face)
-            for path, emb in zip(face_paths, face_embeddings):
-                folder_embeddings_face[path] = emb
-                folder_paths_face[path] = path
-            save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
-        if not self.clip: return [], []
-        emb_ret = []
-        path_ret = []
-        for i in range(len(new_image_list)):
-            img_path = new_image_list[i]
-
-            img = cv2.imread(img_path)
-            if img is None: continue
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = self.preprocess(img)
-
-            emb = precompute_embedding_jit_bs1(self.model, Tensor([img])).numpy()
-            folder_embeddings[img_path] = emb
-            folder_paths[img_path] = img_path
-            emb_ret.append(emb)
-            path_ret.append(img_path)
-            if vod: database.run_put("analysis_prog", cam_name, {"Processing":((i + 1)/len(new_image_list))*100})
-            if (i+1) % 10 == 0 and i > 0: print(f"Processed {(i+1)} / {len(new_image_list)} new images...")
-        print(f"Processed {len(new_image_list)} new images...")
-        save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
-        return emb_ret, path_ret
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
@@ -454,22 +395,6 @@ class ObjectFinder:
             self.image_embeddings = target_embeddings
 
         print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
-
-def get_embeddings(path, filename):
-  cache_file = os.path.join(path, filename)
-  folder_embeddings = {}
-  folder_paths = {}
-  if os.path.exists(cache_file):
-      with open(cache_file, "rb") as f:
-          cache = pickle.load(f)
-          folder_embeddings = cache.get("embeddings", {})
-          folder_paths = cache.get("paths", {})
-  return folder_embeddings, folder_paths
-
-def save_embeddings(folder_path, file_name, folder_embeddings, folder_paths):
-    cache_file = os.path.join(folder_path, file_name)
-    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-    with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
