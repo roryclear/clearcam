@@ -1237,7 +1237,7 @@ def clip_latest_img(img):
     img = object_finder.preprocess(img)
     data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
     if "embeddings" not in data: data["embeddings"] = {}
-    emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
+    emb = precompute_embedding_jit_bs1(object_finder.model, Tensor(img).unsqueeze(0)).numpy()
     data["embeddings"][str(object_queue[0])] = emb
     with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
   
@@ -1248,7 +1248,6 @@ def clip_latest_img(img):
         if time.time() - v.last_det < 60 or not v.is_active(): continue
         if v.desc is None: continue
         if not hasattr(v, "desc_emb") or v.desc_emb is None:
-          print("rory getting emb")
           v.desc_emb = run_encode_text(object_finder, v.desc)
           database.run_put("alerts", cam_name, v, id=k)
 
