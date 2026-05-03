@@ -282,7 +282,6 @@ class VideoCapture:
             data = pickle.load(open(pkl_path, "rb")) if pkl_path.exists() else {}
             if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
             data["embeddings"][str(object_queue[0])] = face_emb
-            data["paths"][str(object_queue[0])] = str(object_queue[0])
             pkl_path.parent.mkdir(parents=True, exist_ok=True)
             pickle.dump(data, open(pkl_path, "wb"))   
            
@@ -291,7 +290,6 @@ class VideoCapture:
         if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
         emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
         data["embeddings"][str(object_queue[0])] = emb
-        data["paths"][str(object_queue[0])] = str(object_queue[0])
         with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
         
         if userID:
