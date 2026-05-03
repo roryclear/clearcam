@@ -423,32 +423,11 @@ class ObjectFinder:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
-
-    def _load_single_embeddings_file(self, cache_file):
-        try:
-            with open(cache_file, "rb") as f:
-                cache = pickle.load(f)
-
-            folder_embeddings = cache.get("embeddings", {})
-            folder_paths = cache.get("paths", {})
-
-            self.image_embeddings.update(folder_embeddings)
-            self.image_paths.update(folder_paths)
-
-            loaded_count = len(folder_embeddings)
-            print(f"Loaded {loaded_count} embeddings from {cache_file}")
-            return loaded_count
-            
-        except Exception as e:
-            print(f"Error loading {cache_file}: {e}")
-            return 0
-
     def _load_all_embeddings(self, face=False):
         total_loaded = 0
         valid_paths = set()
         cache_filename = "embeddings.pkl"
         target_embeddings = self.face_embeddings if face else self.image_embeddings
-        target_paths = self.face_paths if face else self.image_paths
 
         for camera_folder in os.listdir(self.base_path):
             camera_path = os.path.join(self.base_path, camera_folder)
@@ -463,15 +442,11 @@ class ObjectFinder:
                 with open(cache_file, "rb") as f:
                     cache = pickle.load(f)
                 folder_embeddings = cache.get("embeddings", {})
-                folder_paths = cache.get("paths", {})
                 valid_paths.update(folder_embeddings.keys())
                 target_embeddings.update(folder_embeddings)
-                target_paths.update(folder_paths)
                 total_loaded += len(folder_embeddings)
         stale_keys = set(target_embeddings.keys()) - valid_paths
-        for k in stale_keys:
-            del target_embeddings[k]
-            target_paths.pop(k, None)
+        for k in stale_keys: del target_embeddings[k]
 
         if face:
             self.face_embeddings = target_embeddings
