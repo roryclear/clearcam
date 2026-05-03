@@ -1068,8 +1068,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: object_finder._load_all_embeddings()
-            if (uploaded_image or similar_img) and (use_clip or use_face): object_finder._load_all_embeddings(face=is_face)
+            if image_text and use_clip: process_with_clip_lock(object_finder._load_all_embeddings)
+            if (uploaded_image or similar_img) and (use_clip or use_face): process_with_clip_lock(object_finder._load_all_embeddings, is_face)
             
             if uploaded_image and (use_clip or is_face):
               results = process_with_clip_lock(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
