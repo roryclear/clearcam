@@ -1,5 +1,5 @@
 from tinygrad import Tensor, TinyJit
-from objects import ObjectFinder, precompute_embeddings_jit, precompute_embedding_jit_bs1, preprocess
+from objects import ObjectFinder, precompute_embeddings_jit, precompute_embedding_jit_bs1
 import time
 import numpy as np
 import sys
