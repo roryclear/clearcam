@@ -228,7 +228,7 @@ class ObjectFinder:
             img = cv2.imread(img_path)
             if img is None: continue
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = preprocess(img)
+            img = self.preprocess(img)
 
             emb = precompute_embedding_jit_bs1(self.model, Tensor([img])).numpy()
             folder_embeddings[img_path] = emb
@@ -245,6 +245,13 @@ class ObjectFinder:
 
     def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img)).numpy() # todo remove
 
+    def preprocess(self, img):
+        img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
+        img = img.astype(np.float32) / 255.0
+        img = (img - 0.5) / 0.5
+        img = np.transpose(img, (2, 0, 1))
+        return img
+
     def preprocess_clip(self, img):
       if type(img) == bytes:
         img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
@@ -252,7 +259,7 @@ class ObjectFinder:
         img = f"data/cameras{img}"
         img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-      return [preprocess(img)]
+      return [self.preprocess(img)]
     
     def preprocess_face(self, img):
       if type(img) == bytes: # todo dup of above
@@ -541,10 +548,3 @@ def precompute_embedding(model, x):
     embeddings = image_embeds @ model.proj
     embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
     return embeddings
-
-def preprocess(img):
-    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
-    img = img.astype(np.float32) / 255.0
-    img = (img - 0.5) / 0.5
-    img = np.transpose(img, (2, 0, 1))
-    return img

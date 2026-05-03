@@ -28,6 +28,7 @@ import multiprocessing
 import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
+import pickle
 
 # RTSP URL
 # Video capture thread
@@ -264,6 +265,42 @@ class VideoCapture:
         self.process_frame(cam_name=cam_name)
       process_clip_queue()
 
+      # new clip thing
+      if len(object_queue) > 0:
+        # todo this two dicts thing is so dumb, do notif thing too
+        # todo, deleting mid this crashes whole program
+        data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
+        if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
+        img = cv2.imread(object_queue[0])
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = object_finder.preprocess(img)
+        emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
+        data["embeddings"][str(object_queue[0])] = emb
+        data["paths"][str(object_queue[0])] = emb
+        with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
+        
+        if userID:
+          alerts = database.run_get("alerts", cam_name)
+          for k, v in alerts.items():
+            if time.time() - v.last_det < 60 or not v.is_active(): continue
+            if v.desc is None: continue
+            if not hasattr(v, "desc_emb") or v.desc_emb is None:
+              print("rory getting emb")
+              v.desc_emb = run_encode_text(object_finder, v.desc)
+              database.run_put("alerts", cam_name, v, id=k)
+
+            similarity = (v.desc_emb @ emb.T).item()
+            print("sim =",similarity,v.desc,object_queue[0])
+            if similarity > v.threshold:
+              send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
+              alerts[k].last_det = time.time()
+              database.run_put("alerts", cam_name, alerts[k], k)
+              seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
+              threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": userID, "key": key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
+              break
+        
+        del object_queue[0]
+
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw[cam_name] / timestamp
@@ -312,6 +349,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                  "-headers", "Referer: https://www,earthcam.com\r\n",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
@@ -379,7 +418,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-  
+    object_queue.append(object_filename)
 
   def frame_loop(self, cam_name):
     fail_count = 0
@@ -1232,10 +1271,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
           self.cleanup_thread.start()
 
-        if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
-          self.object_finder_stop_event.clear()
-          self.object_finder_thread = threading.Thread(target=self._objects_task, daemon=True, name="CLIPMaintenance")
-          self.object_finder_thread.start()
+        #if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
+        #  self.object_finder_stop_event.clear()
+        #  self.object_finder_thread = threading.Thread(target=self._objects_task, daemon=True, name="CLIPMaintenance")
+        #  self.object_finder_thread.start()
 
     def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
@@ -1375,8 +1414,9 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip or use_face:
-    from objects import ObjectFinder
+    from objects import ObjectFinder, precompute_embedding_jit_bs1
 
+  object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
   live_link = dict()
