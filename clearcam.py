@@ -397,7 +397,7 @@ class VideoCapture:
   def frame_loop(self, cam_name):
     fail_count = 0
     frame_size = self.width[cam_name] * self.height[cam_name] * 3
-    while True:
+    while (BASE_DIR / "cameras" / cam_name).exists():
       try:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
