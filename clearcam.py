@@ -263,20 +263,35 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name)
-      process_clip_queue()
+      if use_clip: process_clip_queue()
 
       # new clip thing
       if len(object_queue) > 0:
         # todo this two dicts thing is so dumb, do notif thing too
         # todo, deleting mid this crashes whole program
-        data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
-        if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
+
         img = cv2.imread(object_queue[0])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        if use_face and str(object_queue[0]).endswith("_0.jpg"):
+          face_img = object_finder.img_to_face(img)
+          if face_img is not None:
+            date = object_queue[0].parent.name
+            pkl_path = object_queue[0].parent.parent.parent / "faces" / date /  "embeddings.pkl"
+            face_emb = adaface_jit(object_finder.adaface, Tensor(face_img).contiguous()).numpy()
+            data = pickle.load(open(pkl_path, "rb")) if pkl_path.exists() else {}
+            if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
+            data["embeddings"][str(object_queue[0])] = face_emb
+            data["paths"][str(object_queue[0])] = str(object_queue[0])
+            pkl_path.parent.mkdir(parents=True, exist_ok=True)
+            pickle.dump(data, open(pkl_path, "wb"))   
+           
         img = object_finder.preprocess(img)
+        data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
+        if "embeddings" not in data: data["embeddings"], data["paths"] = {}, {}
         emb = precompute_embedding_jit_bs1(object_finder.model, Tensor([img])).numpy()
         data["embeddings"][str(object_queue[0])] = emb
-        data["paths"][str(object_queue[0])] = emb
+        data["paths"][str(object_queue[0])] = str(object_queue[0])
         with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
         
         if userID:
@@ -1414,7 +1429,7 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip or use_face:
-    from objects import ObjectFinder, precompute_embedding_jit_bs1
+    from objects import ObjectFinder, precompute_embedding_jit_bs1, adaface_jit
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
@@ -1457,4 +1472,5 @@ if __name__ == "__main__":
     if url:
       cam.release(cam.cam_name) # todo, needed?
       server.shutdown()
+
 
