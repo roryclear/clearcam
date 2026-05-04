@@ -95,7 +95,7 @@ class RollingClassCounter:
     return counts, max_reached
   
   def is_active(self, offset=0):
-    if not alerts_on: return False
+    if not alerts_on[self.cam_name]: return False
     if not getattr(self, "is_on", False): return False
     if not self.sched: return True
     now = time.localtime()
@@ -203,6 +203,7 @@ class VideoCapture:
     self.start_time = {}
     self.filename = {}
     self.alert_counters = {}
+    self.live_link = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -246,6 +247,7 @@ class VideoCapture:
     self.prev_time[cam_name] = time.time()
     self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(cam_name)
     self.filename[cam_name] = None
+    alerts_on[cam_name] = True
 
   def start(self):
     cam_check = time.time()
@@ -262,7 +264,7 @@ class VideoCapture:
             if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
         cams = new_cams
       for cam_name in cams.keys():
-        self.process_frame(cam_name=cam_name)
+        self.process_frame(cam_name=cam_name) # todo rename alerts_on?
       if use_clip:process_queue()
       if len(object_queue) > 0:
         try:
@@ -442,16 +444,21 @@ class VideoCapture:
         if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): # don't run inference when no active scheds
           with self.lock[cam_name]: self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
-          preds, frame = self.run_inference(frame, cam_name=cam_name)
-          with self.lock[cam_name]:
-            self.last_preds[cam_name] = preds.copy()
-            self.last_frame[cam_name] = frame.numpy().copy()
-            self.last_frame_num[cam_name] = self.frame_num[cam_name]
+          if not userID or alerts_on[cam_name]:
+            preds, frame = self.run_inference(frame, cam_name=cam_name)
+            with self.lock[cam_name]:
+              self.last_preds[cam_name] = preds.copy()
+              self.last_frame[cam_name] = frame.numpy().copy()
+              self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
-          curr_time = time.time()
-          fps = 1 / (curr_time - self.prev_time[cam_name])
-          self.prev_time[cam_name] = curr_time
-          print(f"\rFPS: {fps:.2f}", end="", flush=True)
+            curr_time = time.time()
+            fps = 1 / (curr_time - self.prev_time[cam_name])
+            self.prev_time[cam_name] = curr_time
+            print(f"\rFPS: {fps:.2f}", end="", flush=True)
+          else:
+            with self.lock[cam_name]:
+              self.last_frame_num[cam_name] = self.frame_num[cam_name]
+              self.last_preds = []
 
         filtered_preds = self.last_preds[cam_name]
 
@@ -496,7 +503,7 @@ class VideoCapture:
             if link != self.src[cam_name]:
               self.src[cam_name] = link
               self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-            if userID and not self.vod[cam_name]: threading.Thread(target=check_upload_link, args=(cam_name,), daemon=True).start()
+            if userID and not self.vod[cam_name]: threading.Thread(target=self.check_upload_link, args=(cam_name,), daemon=True).start()
           if (time.time() - self.last_counter_update[cam_name]) >= 5: #update counter every 5 secs
             self.last_counter_update[cam_name] = time.time()
 
@@ -526,19 +533,38 @@ class VideoCapture:
               if "reset" in new_settings: del new_settings["reset"]
             self.settings[cam_name] = new_settings
               
-          if userID and not self.vod[cam_name] and cam_name in live_link and live_link[cam_name] and (time.time() - self.last_live_seg[cam_name]) >= 4:
+          if userID and not self.vod[cam_name] and cam_name in self.live_link and self.live_link[cam_name] and (time.time() - self.last_live_seg[cam_name]) >= 4:
             self.last_live_seg[cam_name] = time.time()
             mp4_filename = f"segment.mp4"
             export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
             encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
             Path(mp4_filename).unlink()
-            threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[cam_name]), daemon=True).start()
+            threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), self.live_link[cam_name]), daemon=True).start()
         else: self.count[cam_name]+=1
 
     except Exception as e:
       print("Error in process_frame:", e, cam_name)
       self._open_ffmpeg(cam_name)
       time.sleep(1)
+
+
+  def check_upload_link(self, cam_name="camera"):
+      query_params = urllib.parse.urlencode({
+          "name": quote(cam_name),
+          "session_token": userID
+      })
+      url = f"https://clearcam.org/get_stream_upload_link?{query_params}"
+      
+      req = urllib.request.Request(url)
+      with urllib.request.urlopen(req) as response:
+          if response.status == 200:
+              response_data = json.loads(response.read().decode('utf-8'))
+              upload_link = response_data.get("upload_link")
+              alerts_on_res = response_data.get("alerts_on")
+              self.live_link[cam_name] = upload_link
+              alerts_on[cam_name] = (alerts_on_res == 1)
+          else:
+              if cam_name in self.live_link: self.live_link[cam_name] = None
 
   def reset_vod(self, cam_name):
     self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name]) # reset video on settings change
@@ -1158,33 +1184,6 @@ def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, 
 
 def event_img_info(image): return {"ts": int(float(image.split('_')[0])), "object_id":int(image.split('_')[1]), "class_id":int(image.split('_')[2])}
 
-
-live_link = dict()
-alerts_on = True
-is_live_lock = threading.Lock()
-def check_upload_link(cam_name="camera"):
-    global live_link
-    global alerts_on
-    query_params = urllib.parse.urlencode({
-        "name": quote(cam_name),
-        "session_token": userID
-    })
-    url = f"https://clearcam.org/get_stream_upload_link?{query_params}"
-    
-    req = urllib.request.Request(url)
-    with urllib.request.urlopen(req) as response:
-        if response.status == 200:
-            response_data = json.loads(response.read().decode('utf-8'))
-            upload_link = response_data.get("upload_link")
-            alerts_on_res = response_data.get("alerts_on")
-            with is_live_lock:
-               live_link[cam_name] = upload_link
-               alerts_on = (alerts_on_res == 1)
-        else:
-            with is_live_lock:
-                if cam_name in live_link: 
-                    live_link[cam_name] = None
-
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
     try:
         url_parts = urllib.parse.urlparse(signed_url)
@@ -1350,6 +1349,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 if __name__ == "__main__":
+  alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
@@ -1392,8 +1392,6 @@ if __name__ == "__main__":
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
-
-  live_link = dict()
   
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
