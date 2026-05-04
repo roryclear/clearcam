@@ -265,9 +265,9 @@ class VideoCapture:
         self.process_frame(cam_name=cam_name)
       if use_clip:process_queue()
       if len(object_queue) > 0:
-        img = cv2.imread(object_queue[0])
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         try:
+          img = cv2.imread(object_queue[0])
+          img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
           clip_latest_img(img)
           process_latest_face(img)
         except Exception: print("error in object processing", object_queue[0])
