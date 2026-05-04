@@ -28,6 +28,7 @@ import multiprocessing
 import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload
+import pickle
 
 # RTSP URL
 # Video capture thread
@@ -164,14 +165,13 @@ def _get_stream_resolution(src):
     return 1920, 1080
 
 class VideoCapture:
-  def __init__(self, src, cam_name="camera", vod=False):
+  def __init__(self):
     self.output_dir_raw = {}
     self.frame_num = {}
     self.last_frame_num = {}
     self.vod = {}
     # objects in scene count
     self.counter = {}
-    self.cam_name = cam_name
     self.object_set = {}
     self.object_set_zone = {}
 
@@ -207,10 +207,11 @@ class VideoCapture:
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
 
+  def init_cam(self, cam_name, src):
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.src[cam_name] = src # todo
     self.last_frame[cam_name] = None
-    self.vod[cam_name] = vod
+    self.vod[cam_name] = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     self.frame_num[cam_name] = -1
     self.last_frame_num[cam_name] = -1
     self.object_set[cam_name] = set()
@@ -243,13 +244,36 @@ class VideoCapture:
     self.tracker[cam_name] = ocsort.OCSort(max_age=100)
     self.count[cam_name] = 0
     self.prev_time[cam_name] = time.time()
-    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(self.cam_name)
+    self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(cam_name)
     self.filename[cam_name] = None
 
-  def start(self, cam_name):
-    if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, daemon=True).start()
-    if not self.vod[cam_name] or not self.output_dir_raw[cam_name].exists():
-      while True: self.process_frame(cam_name=cam_name)
+  def start(self):
+    cam_check = time.time()
+    cams = database.run_get("links", None)
+    for cam_name in cams.keys():
+      self.init_cam(cam_name=cam_name, src=cams[cam_name])
+      threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only!
+    while True:
+      if time.time() - cam_check >= 5:
+        new_cams = database.run_get("links", None)
+        for cam_name in new_cams.keys():
+          if cam_name not in cams:
+            self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
+            if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
+        cams = new_cams
+      for cam_name in cams.keys():
+        self.process_frame(cam_name=cam_name)
+      if use_clip:process_queue()
+      if len(object_queue) > 0:
+        try:
+          img = cv2.imread(object_queue[0])
+          img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+          clip_latest_img(img)
+          process_latest_face(img)
+        except Exception: print("error in object processing", object_queue[0])
+        del object_queue[0] 
+           
+
 
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
@@ -366,13 +390,12 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-  
+    if use_clip or use_face: object_queue.append(object_filename)
 
-  def frame_loop(self):
+  def frame_loop(self, cam_name):
     fail_count = 0
-    cam_name = self.cam_name
     frame_size = self.width[cam_name] * self.height[cam_name] * 3
-    while self.running[cam_name]:
+    while (BASE_DIR / "cameras" / cam_name).exists():
       try:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
@@ -394,7 +417,6 @@ class VideoCapture:
 
   def process_frame(self, cam_name):
     try:
-      if not (BASE_DIR / "cameras" / cam_name).is_dir(): os._exit(1) # deleted cam
       if self.vod[cam_name]:
         if cam_name not in self.cap:
           self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name])
@@ -405,8 +427,7 @@ class VideoCapture:
         self.last_frame[cam_name] = frame #todo
         if not ret or cam_name not in database.run_get("links", None):
           self.running[cam_name] = False
-          database.run_put("analysis_prog", cam_name, {"Tracking":100})
-          os._exit(0)
+          if "Processing" not in database.run_get("analysis_prog", cam_name): database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
         else:
           self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
           database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
@@ -416,12 +437,9 @@ class VideoCapture:
           last_frame_num = self.last_frame_num[cam_name]
           if self.raw_frame[cam_name] is None: return
           frame = self.raw_frame[cam_name].copy()
-        if frame_num == last_frame_num:
-          time.sleep(1 / 30)
-          return
+        if frame_num == last_frame_num: return
 
         if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): # don't run inference when no active scheds
-          time.sleep(1 / 30)
           with self.lock[cam_name]: self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
           preds, frame = self.run_inference(frame, cam_name=cam_name)
@@ -468,9 +486,9 @@ class VideoCapture:
                     self.last_det[cam_name] = time.time()
                     alert.last_det = time.time()
           if (self.send_det[cam_name] and userID is not None and not self.vod[cam_name]) and time.time() - self.last_det[cam_name] >= 6: #send 15ish second clip after
-              export_and_upload(cam_name=cam_name, thumbnail=self.filename[cam_name], userID=userID, key=key)
+              threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key}, daemon=True).start()
               self.send_det[cam_name] = False
-              
+          
           if (time.time() - self.last_live_check[cam_name]) >= 5:
             self.last_live_check[cam_name] = time.time()
             link = database.run_get("links", cam_name)
@@ -515,9 +533,7 @@ class VideoCapture:
             encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
             Path(mp4_filename).unlink()
             threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), live_link[cam_name]), daemon=True).start()
-        else:
-          self.count[cam_name]+=1
-        if not self.vod[cam_name]: time.sleep(1 / 30)
+        else: self.count[cam_name]+=1
 
     except Exception as e:
       print("Error in process_frame:", e, cam_name)
@@ -532,7 +548,7 @@ class VideoCapture:
 
   def run_inference(self, frame, cam_name):
     frame = Tensor(frame)
-    preds = model(frame).numpy()
+    preds = model.jit_infer(frame).numpy()
     thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
@@ -618,27 +634,21 @@ def point_not_in_polygon(coords, poly):
         return False
     return True
 
-def run_encode_text(return_q, clip, text):
-  res = clip.model._encode_text(text, realize=True)
-  return_q.put(res)
-  return res
+def run_encode_text(clip, text): return clip.model._encode_text(text, realize=True)
 
-def run_search(return_q, clip, image_text, top_k, cam_name, selected_dir):
-  res = clip.search(image_text, top_k, cam_name, selected_dir)
-  return_q.put(res)
+def run_search(clip, image_text, top_k, cam_name, selected_dir): return clip.search(image_text, top_k, cam_name, selected_dir)
 
-def run_clip(return_q, clip, im, top_k, cam_name, selected_dir, is_face):
+def run_clip(clip, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   if im is not None:
     embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
     res = clip.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   else:
     res = []
-  return_q.put(res)
+  return res
 
 class HLSRequestHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self.object_finder = kwargs.pop('clip_instance', None)
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args): pass # don't print stuff
@@ -729,7 +739,6 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name or src")
                 return
             
-            start_cam(rtsp=src,cam_name=cam_name,model_variant=model_variant)
             database.run_put("links", cam_name, src)
             self.send_response(302)
             self.send_header('Location', '/')
@@ -1059,21 +1068,21 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: self.object_finder._load_all_embeddings()
-            if (uploaded_image or similar_img) and (use_clip or use_face): self.object_finder._load_all_embeddings(face=is_face)
+            if image_text and use_clip: add_to_queue(object_finder._load_all_embeddings)
+            if (uploaded_image or similar_img) and (use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
             
             if uploaded_image and (use_clip or is_face):
-              results = process_with_clip_lock(run_clip, self.object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
+              results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
             if similar_img and (use_clip or is_face):
-              results = process_with_clip_lock(run_clip, self.object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+              results = add_to_queue(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
             if image_text and use_clip:
-              results = process_with_clip_lock(run_search, self.object_finder, image_text, start+count, cam_name, selected_dir)
+              results = add_to_queue(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
 
@@ -1117,7 +1126,7 @@ def image_sort_key(item):
   try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
   except ValueError: return -1
 
-def schedule_daily_restart(videocapture, restart_time):
+def schedule_daily_restart(cam, restart_time):
     while True:
         now = datetime.now().time()
         target = time_obj(restart_time[0], restart_time[1])
@@ -1127,10 +1136,12 @@ def schedule_daily_restart(videocapture, restart_time):
             delta = ((target.hour * 3600 + target.minute * 60) - 
                     (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
-        videocapture.hls_proc[videocapture.cam_name].kill()
-        sys.stdout.flush()
-        python = sys.executable
-        os.execv(python, [python] + sys.argv)
+        cams = database.run_get("links", None)
+        for cam_name in cams.keys():
+          cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
+          cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
+
+
 
 def get_lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1146,25 +1157,6 @@ def get_lan_ip():
 def get_executable_args(): return ([sys.argv[0]], sys.argv[1:]) if getattr(sys, "frozen", False) else ([sys.executable, sys.argv[0]], sys.argv[1:])
 
 def event_img_info(image): return {"ts": int(float(image.split('_')[0])), "object_id":int(image.split('_')[1]), "class_id":int(image.split('_')[2])}
-
-def start_cam(rtsp, cam_name, model_variant='t', yolo_res=960):
-    if not rtsp or not cam_name: return
-    def upsert_arg(args, key, value):
-        prefix = f"--{key}="
-        for i, arg in enumerate(args):
-            if arg.startswith(prefix):
-                args[i] = f"{prefix}{value}"
-                return args
-        return args + [f"{prefix}{value}"]
-
-    executable, base_args = get_executable_args()
-    new_args = upsert_arg(base_args, "cam_name", cam_name)
-    new_args = upsert_arg(new_args, "rtsp", rtsp)
-    new_args = upsert_arg(new_args, "yolo_size", model_variant)
-    new_args = upsert_arg(new_args, "yolo_res", yolo_res)
-    new_args = upsert_arg(new_args, "use_clip", use_clip)
-    proc = subprocess.Popen(executable + new_args, close_fds=True)
-    active_subprocesses.append(proc)
 
 
 live_link = dict()
@@ -1213,17 +1205,63 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         return False
 
 object_finder_lock = threading.Lock()
-def process_with_clip_lock(func, *args):
-    if not object_finder_lock.acquire(timeout=30): return None
+import queue
+task_queue = queue.Queue()
+def add_to_queue(fn, *args):
+    result_queue = queue.Queue(maxsize=1)
+    task_queue.put((fn, args, result_queue))
+    return result_queue.get()
+
+def process_queue():
     try:
-      return_q = multiprocessing.Queue()
-      p = multiprocessing.Process(target=func, args=(return_q, *args))
-      p.start()
-      results = return_q.get(timeout=300)
-      p.join()
-      return results
-    finally:
-      object_finder_lock.release()
+      fn, args, result_queue = task_queue.get_nowait()
+    except queue.Empty: return
+    result = fn(*args)
+    result_queue.put(result)
+
+def process_latest_face(img):
+  if use_face and str(object_queue[0]).endswith("_0.jpg"):
+    face_img = object_finder.img_to_face(img)
+    
+    if face_img is not None:
+      cv2.imwrite(str(object_queue[0]).replace("/objects/", "/faces/"), face_img)
+      date = object_queue[0].parent.name
+      pkl_path = object_queue[0].parent.parent.parent / "faces" / date /  "embeddings.pkl"
+      face_emb = adaface_jit(object_finder.adaface, Tensor(face_img).contiguous()).numpy()
+      data = pickle.load(open(pkl_path, "rb")) if pkl_path.exists() else {}
+      if "embeddings" not in data: data["embeddings"] = {}
+      data["embeddings"][str(object_queue[0])] = face_emb
+      pkl_path.parent.mkdir(parents=True, exist_ok=True)
+      pickle.dump(data, open(pkl_path, "wb"))  
+
+def clip_latest_img(img):
+  if use_clip:
+    img = object_finder.preprocess(img)
+    data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
+    if "embeddings" not in data: data["embeddings"] = {}
+    emb = precompute_embedding_jit_bs1(object_finder.model, Tensor(img).unsqueeze(0)).numpy()
+    data["embeddings"][str(object_queue[0])] = emb
+    with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
+  
+    if userID:
+      cam_name = object_queue[0].parts[object_queue[0].parts.index("cameras")+1:object_queue[0].parts.index("objects")][0]
+      alerts = database.run_get("alerts", cam_name) # todo, get cam_name from file path!
+      for k, v in alerts.items():
+        if time.time() - v.last_det < 60 or not v.is_active(): continue
+        if v.desc is None: continue
+        if not hasattr(v, "desc_emb") or v.desc_emb is None:
+          v.desc_emb = run_encode_text(object_finder, v.desc)
+          database.run_put("alerts", cam_name, v, id=k)
+
+        similarity = (v.desc_emb @ emb.T).item()
+        print("sim =",similarity,v.desc,object_queue[0])
+        if similarity > v.threshold:
+          send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
+          alerts[k].last_det = time.time()
+          database.run_put("alerts", cam_name, alerts[k], k)
+          seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
+          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": userID, "key": key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
+          break
 
 cams = dict()
 active_subprocesses = []
@@ -1239,24 +1277,15 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
           database.run_put("max_storage", "all", 256)
           max_gb = database.run_get("max_storage", None)
         self.max_gb = max_gb["all"]
-        self.object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=face) if (use_clip or face) else None
         self.object_finder_stop_event = threading.Event()
         self.object_finder_thread = None
         self._setup_cleanup_and_clip_thread()
-
-    def finish_request(self, request, client_address):
-      self.RequestHandlerClass(request, client_address, self, clip_instance=self.object_finder)
 
     def _setup_cleanup_and_clip_thread(self):
         if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
           self.cleanup_stop_event.clear()
           self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
           self.cleanup_thread.start()
-
-        if (use_clip or use_face) and (self.object_finder_thread is None or not self.object_finder_thread.is_alive()):
-          self.object_finder_stop_event.clear()
-          self.object_finder_thread = threading.Thread(target=self._objects_task, daemon=True, name="CLIPMaintenance")
-          self.object_finder_thread.start()
 
     def _cleanup_task(self):
         while not self.cleanup_stop_event.is_set():
@@ -1265,42 +1294,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
             except Exception as e:
                 print(f"Cleanup error: {e}")
             self.cleanup_stop_event.wait(timeout=600)
-
-    def _objects_task(self):
-      while not self.object_finder_stop_event.is_set():
-        try:
-          object_folders = self.object_finder.find_object_folders("data/cameras")
-          for folder in object_folders:
-            name = folder.split("/")[2]
-            vod = is_vod(name)
-            if vod and name in database.run_get("analysis_prog", None) and database.run_get("analysis_prog", None)[name]["Tracking"] < 100: continue
-            embeddings, batch_paths = self.object_finder.precompute_embeddings(folder, vod=vod, database=database, cam_name=name, userID=userID, key=key)
-            alerts = database.run_get("alerts", name)
-            if userID:
-              for path, embedding in zip(batch_paths, embeddings):
-                for k, v in alerts.items():
-                    if time.time() - v.last_det < 60 or not v.is_active(): continue
-                    if v.desc is not None and hasattr(v, "desc_emb") and v.desc_emb is not None:
-                        similarity = (v.desc_emb @ embedding.T).item()
-                        print("sim =",similarity,v.desc,path)
-                        if similarity > v.threshold:
-                            send_notif(userID, f"Event Detected ({name}: {v.desc})")
-                            alerts[k].last_det = time.time()
-                            database.run_put("alerts", name, alerts[k], k)
-                            seen_time = event_img_info(path.split("/")[-1].split(".jpg")[0])["ts"]
-                            export_and_upload(cam_name=name, thumbnail=path, userID=userID, start=seen_time, length=20, key=key)
-                            break
-
-            if vod: database.run_delete("analysis_prog", folder.split("/")[2])
-            # todo, move to own loop
-            for k, alert in alerts.items():
-              if alert.desc is not None and alert.desc_emb is None:
-                alert.desc_emb = process_with_clip_lock(run_encode_text, self.object_finder, alert.desc)
-                database.run_put("alerts", name, alert, id=k)
-
-        except Exception as e:
-          print(f"CLIP error: {e}")
-        self.object_finder_stop_event.wait(timeout=1)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
@@ -1336,7 +1329,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         shutil.rmtree(oldest_recording)
         event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
         object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
-        face_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        face_images_dir = largest_cam.with_name(largest_cam.name) / Path("faces") / Path(oldest_recording.name)
         #dets_dir = largest_cam.with_name(largest_cam.name) / Path("dets") / Path(oldest_recording.name)
         if event_images_dir.exists(): shutil.rmtree(event_images_dir)
         if object_images_dir.exists(): shutil.rmtree(object_images_dir)
@@ -1395,28 +1388,26 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip or use_face:
-    from objects import ObjectFinder
+    from objects import ObjectFinder, precompute_embedding_jit_bs1, adaface_jit
 
+  object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
 
   live_link = dict()
   
-  if url is None:
-    for cam_name in cams.keys():
-      start_cam(rtsp=cams[cam_name],cam_name=cam_name,model_variant=model_variant, yolo_res=yolo_res)
-
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   cam = None
-  if url:
-    model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-    #model = RFDETR("small")
-    cam = VideoCapture(url,cam_name=cam_name, vod=is_file)
-    vod = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+
+  model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
+  object_finder = ObjectFinder(clip=use_clip, face=use_face) if (use_clip or use_face) else None
+  #model = RFDETR("small")
+  cam = VideoCapture()
   
   try:
     try:
       server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+      threading.Thread(target=server.serve_forever, daemon=True).start()
       print(f"Serving at http://{get_lan_ip()}:8080")
     except OSError as e:
       if e.errno == socket.errno.EADDRINUSE:
@@ -1425,22 +1416,20 @@ if __name__ == "__main__":
       else:
           raise
     
-    if url:
-      restart_time = (0, 0)
-      threading.Thread(
-        target=schedule_daily_restart,
-        args=(cam, restart_time),
-        daemon=True
-      ).start()
 
-    if server:
-      threading.Thread(target=server.serve_forever(), daemon=True).start()
-    if cam is not None:
-      cam.start(cam.cam_name)      
-    else:
-      while True: time.sleep(3600)
+    restart_time = (0, 0)
+    threading.Thread(
+      target=schedule_daily_restart,
+      args=(cam, restart_time),
+      daemon=True
+    ).start()
+
+    cam.start()  
+    while True: time.sleep(3600)
 
   except KeyboardInterrupt:
     if url:
       cam.release(cam.cam_name) # todo, needed?
       server.shutdown()
+
+

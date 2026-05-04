@@ -145,7 +145,7 @@ def encode_text(model, text):
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class ObjectFinder:
-    def __init__(self, prewarm=False, base_path="data/cameras", clip=False, face=False):
+    def __init__(self, base_path="data/cameras", clip=False, face=False):
         self.base_path = base_path
         self.image_embeddings = {}
         self.face_embeddings = {}
@@ -159,14 +159,6 @@ class ObjectFinder:
         if self.face:
             self.blazeface = BlazeFace()
             self.adaface = ADAFACE()
-        
-        # prewarm
-        if prewarm:
-            if self.face:
-                blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
-                adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
-            if self.clip:
-                precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
@@ -181,69 +173,17 @@ class ObjectFinder:
                         if os.path.isdir(date_path):
                             object_folders.append(date_path)
         return object_folders
-    # db for progress
-    def precompute_embeddings(self, folder_path, batch_size=16, vod=False, database=None, cam_name=None, userID=None, key=None):
-        folder_embeddings, folder_paths = get_embeddings(folder_path, "embeddings.pkl")
-
-        current_images = {
-            os.path.join(folder_path, f)
-            for f in os.listdir(folder_path)
-            if f.lower().endswith((".png", ".jpg", ".jpeg"))
-        }
-
-        if self.face:
-            folder_embeddings_face, folder_paths_face = get_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl")
-            cached_images_face = set(folder_embeddings_face.keys())
-            new_images_face = current_images - cached_images_face
-            deleted_images_face = cached_images_face - current_images
-
-            for img in deleted_images_face:
-                folder_embeddings_face.pop(img, None)
-                folder_embeddings_face.pop(img, None)
-            new_image_list_face = list(new_images_face)
-
-
-        cached_images = set(folder_embeddings.keys())
-        new_images = current_images - cached_images
-        deleted_images = cached_images - current_images
-        
-        for img in deleted_images:
-            folder_embeddings.pop(img, None)
-            folder_paths.pop(img, None)
-
-        if not new_images: return [], []
-        new_image_list = list(new_images)
-        if self.face:
-            face_paths, face_embeddings = self.process_faces(new_image_list_face)
-            for path, emb in zip(face_paths, face_embeddings):
-                folder_embeddings_face[path] = emb
-                folder_paths_face[path] = path
-            save_embeddings(folder_path.replace("objects", "faces"), "embeddings.pkl", folder_embeddings_face, folder_paths_face)
-        if not self.clip: return [], []
-        emb_ret = []
-        path_ret = []
-        for i in range(len(new_image_list)):
-            img_path = new_image_list[i]
-
-            img = cv2.imread(img_path)
-            if img is None: continue
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = preprocess(img)
-
-            emb = precompute_embedding_jit_bs1(self.model, Tensor([img])).numpy()
-            folder_embeddings[img_path] = emb
-            folder_paths[img_path] = img_path
-            emb_ret.append(emb)
-            path_ret.append(img_path)
-            if vod: database.run_put("analysis_prog", cam_name, {"Processing":((i + 1)/len(new_image_list))*100})
-            if (i+1) % 10 == 0 and i > 0: print(f"Processed {(i+1)} / {len(new_image_list)} new images...")
-        print(f"Processed {len(new_image_list)} new images...")
-        save_embeddings(folder_path, "embeddings.pkl", folder_embeddings, folder_paths)
-        return emb_ret, path_ret
 
     def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
     def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img)).numpy() # todo remove
+
+    def preprocess(self, img):
+        img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
+        img = img.astype(np.float32) / 255.0
+        img = (img - 0.5) / 0.5
+        img = np.transpose(img, (2, 0, 1))
+        return img
 
     def preprocess_clip(self, img):
       if type(img) == bytes:
@@ -252,7 +192,7 @@ class ObjectFinder:
         img = f"data/cameras{img}"
         img = cv2.imread(img) 
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-      return [preprocess(img)]
+      return [self.preprocess(img)]
     
     def preprocess_face(self, img):
       if type(img) == bytes: # todo dup of above
@@ -352,33 +292,10 @@ class ObjectFinder:
             face_img = cv2.warpAffine(rotated, transform_mat, (112, 112))
             
             face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
-            # Debug draw dots for the eyes at target positions
-            #cv2.circle(face_img, (38, 51), 2, (0, 255, 0), -1)
-            #cv2.circle(face_img, (73, 51), 2, (0, 255, 0), -1)
             
             return face_img
         
         return None
-
-    def process_faces(self, paths):
-      ret_paths = []
-      ret_embeddings = []
-      for path in paths:
-        if path.endswith("_0.jpg"): # person
-          orig = cv2.imread(path)
-          orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
-          face_img = self.img_to_face(orig)
-          if face_img is None:
-            if not self.clip: os.remove(path)
-            ret_embeddings.append(None) # todo hack for now
-            ret_paths.append(path)
-            continue
-          cv2.imwrite(path.replace("objects","faces"), face_img)
-          embeddings = adaface_jit(self.adaface, Tensor(face_img)).numpy()
-          ret_embeddings.append(embeddings)
-          ret_paths.append(path)
-
-      return ret_paths, ret_embeddings
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
         embeddings = self.face_embeddings if is_face else self.image_embeddings
@@ -416,32 +333,11 @@ class ObjectFinder:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
-
-    def _load_single_embeddings_file(self, cache_file):
-        try:
-            with open(cache_file, "rb") as f:
-                cache = pickle.load(f)
-
-            folder_embeddings = cache.get("embeddings", {})
-            folder_paths = cache.get("paths", {})
-
-            self.image_embeddings.update(folder_embeddings)
-            self.image_paths.update(folder_paths)
-
-            loaded_count = len(folder_embeddings)
-            print(f"Loaded {loaded_count} embeddings from {cache_file}")
-            return loaded_count
-            
-        except Exception as e:
-            print(f"Error loading {cache_file}: {e}")
-            return 0
-
     def _load_all_embeddings(self, face=False):
         total_loaded = 0
         valid_paths = set()
         cache_filename = "embeddings.pkl"
         target_embeddings = self.face_embeddings if face else self.image_embeddings
-        target_paths = self.face_paths if face else self.image_paths
 
         for camera_folder in os.listdir(self.base_path):
             camera_path = os.path.join(self.base_path, camera_folder)
@@ -456,15 +352,11 @@ class ObjectFinder:
                 with open(cache_file, "rb") as f:
                     cache = pickle.load(f)
                 folder_embeddings = cache.get("embeddings", {})
-                folder_paths = cache.get("paths", {})
                 valid_paths.update(folder_embeddings.keys())
                 target_embeddings.update(folder_embeddings)
-                target_paths.update(folder_paths)
                 total_loaded += len(folder_embeddings)
         stale_keys = set(target_embeddings.keys()) - valid_paths
-        for k in stale_keys:
-            del target_embeddings[k]
-            target_paths.pop(k, None)
+        for k in stale_keys: del target_embeddings[k]
 
         if face:
             self.face_embeddings = target_embeddings
@@ -472,22 +364,6 @@ class ObjectFinder:
             self.image_embeddings = target_embeddings
 
         print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
-
-def get_embeddings(path, filename):
-  cache_file = os.path.join(path, filename)
-  folder_embeddings = {}
-  folder_paths = {}
-  if os.path.exists(cache_file):
-      with open(cache_file, "rb") as f:
-          cache = pickle.load(f)
-          folder_embeddings = cache.get("embeddings", {})
-          folder_paths = cache.get("paths", {})
-  return folder_embeddings, folder_paths
-
-def save_embeddings(folder_path, file_name, folder_embeddings, folder_paths):
-    cache_file = os.path.join(folder_path, file_name)
-    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-    with open(cache_file, "wb") as f: pickle.dump({"embeddings": folder_embeddings, "paths": folder_paths}, f)
 
 @TinyJit
 def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
@@ -541,10 +417,3 @@ def precompute_embedding(model, x):
     embeddings = image_embeds @ model.proj
     embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
     return embeddings
-
-def preprocess(img):
-    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
-    img = img.astype(np.float32) / 255.0
-    img = (img - 0.5) / 0.5
-    img = np.transpose(img, (2, 0, 1))
-    return img
