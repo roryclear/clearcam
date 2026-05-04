@@ -1222,7 +1222,9 @@ def process_queue():
 def process_latest_face(img):
   if use_face and str(object_queue[0]).endswith("_0.jpg"):
     face_img = object_finder.img_to_face(img)
+    
     if face_img is not None:
+      cv2.imwrite(str(object_queue[0]).replace("/objects/", "/faces/"), face_img)
       date = object_queue[0].parent.name
       pkl_path = object_queue[0].parent.parent.parent / "faces" / date /  "embeddings.pkl"
       face_emb = adaface_jit(object_finder.adaface, Tensor(face_img).contiguous()).numpy()
@@ -1327,7 +1329,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         shutil.rmtree(oldest_recording)
         event_images_dir = largest_cam.with_name(largest_cam.name) / Path("event_images") / Path(oldest_recording.name)
         object_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
-        face_images_dir = largest_cam.with_name(largest_cam.name) / Path("objects") / Path(oldest_recording.name)
+        face_images_dir = largest_cam.with_name(largest_cam.name) / Path("faces") / Path(oldest_recording.name)
         #dets_dir = largest_cam.with_name(largest_cam.name) / Path("dets") / Path(oldest_recording.name)
         if event_images_dir.exists(): shutil.rmtree(event_images_dir)
         if object_images_dir.exists(): shutil.rmtree(object_images_dir)

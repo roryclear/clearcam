@@ -300,33 +300,10 @@ class ObjectFinder:
             face_img = cv2.warpAffine(rotated, transform_mat, (112, 112))
             
             face_img = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
-            # Debug draw dots for the eyes at target positions
-            #cv2.circle(face_img, (38, 51), 2, (0, 255, 0), -1)
-            #cv2.circle(face_img, (73, 51), 2, (0, 255, 0), -1)
             
             return face_img
         
         return None
-
-    def process_faces(self, paths):
-      ret_paths = []
-      ret_embeddings = []
-      for path in paths:
-        if path.endswith("_0.jpg"): # person
-          orig = cv2.imread(path)
-          orig = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
-          face_img = self.img_to_face(orig)
-          if face_img is None:
-            if not self.clip: os.remove(path)
-            ret_embeddings.append(None) # todo hack for now
-            ret_paths.append(path)
-            continue
-          cv2.imwrite(path.replace("objects","faces"), face_img)
-          embeddings = adaface_jit(self.adaface, Tensor(face_img)).numpy()
-          ret_embeddings.append(embeddings)
-          ret_paths.append(path)
-
-      return ret_paths, ret_embeddings
 
     def search(self, query=None, top_k=10, cam_name=None, timestamp=None, text_embedding=None, is_face=False):
         embeddings = self.face_embeddings if is_face else self.image_embeddings
