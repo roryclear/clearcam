@@ -1400,7 +1400,7 @@ if __name__ == "__main__":
   cam = None
 
   model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-  object_finder = ObjectFinder(prewarm=True, clip=use_clip, face=use_face) if (use_clip or use_face) else None
+  object_finder = ObjectFinder(clip=use_clip, face=use_face) if (use_clip or use_face) else None
   #model = RFDETR("small")
   cam = VideoCapture()
   

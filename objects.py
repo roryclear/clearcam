@@ -145,7 +145,7 @@ def encode_text(model, text):
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class ObjectFinder:
-    def __init__(self, prewarm=False, base_path="data/cameras", clip=False, face=False):
+    def __init__(self, base_path="data/cameras", clip=False, face=False):
         self.base_path = base_path
         self.image_embeddings = {}
         self.face_embeddings = {}
@@ -159,14 +159,6 @@ class ObjectFinder:
         if self.face:
             self.blazeface = BlazeFace()
             self.adaface = ADAFACE()
-        
-        # prewarm
-        if prewarm:
-            if self.face:
-                blazeface_jit(self.blazeface, Tensor.rand((640, 640, 3)).cast(dtype=dtypes.uchar))
-                adaface_jit(self.adaface, Tensor.rand((112, 112, 3)).cast(dtype=dtypes.uchar))
-            if self.clip:
-                precompute_embeddings_jit(self.model, Tensor.rand((1, 3, 224, 224), dtype=dtypes.float32))
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
