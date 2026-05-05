@@ -1164,6 +1164,7 @@ def schedule_daily_restart(cam, restart_time):
         time.sleep(delta)
         cams = database.run_get("links", None)
         for cam_name in cams.keys():
+          cam.start_time[cam_name] = None
           cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
           cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
 
