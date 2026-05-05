@@ -195,7 +195,6 @@ class VideoCapture:
     self.cap = {}
     self.src_fps = {}
     self.last_det = {}
-    self.send_det = {}
     self.last_live_check = {}
     self.last_counter_update = {}
     self.last_preview_time = {}
@@ -235,7 +234,6 @@ class VideoCapture:
     self.lock[cam_name] = threading.Lock()
 
     self.last_det[cam_name] = -1
-    self.send_det[cam_name] = False
     self.last_live_check[cam_name] = time.time()
     self.last_live_seg[cam_name] = time.time()
     self.last_preview_time[cam_name] = None
@@ -473,10 +471,8 @@ class VideoCapture:
                 alert.reset_counts()
                 continue
               window = alert.window if alert.window else (60 if alert.is_notif else 1)
-              if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
-                  if time.time() - alert.last_det >= window:
-                    if alert.is_notif and alert.desc is None: self.send_det[cam_name] = True
+                  if time.time() - alert.last_det >= window and (time.time() - self.last_det[cam_name] >= window):
                     timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
                     filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
                     filepath.mkdir(parents=True, exist_ok=True)
@@ -489,12 +485,11 @@ class VideoCapture:
                       plain.unlink() # only one image per event
                       self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
                     text = f"Event Detected ({cam_name})"
-                    if userID is not None and not self.vod[cam_name] and alert.is_notif: threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                    if userID is not None and not self.vod[cam_name] and alert.is_notif:
+                      threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                      threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                     self.last_det[cam_name] = time.time()
                     alert.last_det = time.time()
-          if (self.send_det[cam_name] and userID is not None and not self.vod[cam_name]) and time.time() - self.last_det[cam_name] >= 6: #send 15ish second clip after
-              threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key}, daemon=True).start()
-              self.send_det[cam_name] = False
           
           if (time.time() - self.last_live_check[cam_name]) >= 5:
             self.last_live_check[cam_name] = time.time()
@@ -1430,5 +1425,3 @@ if __name__ == "__main__":
     if url:
       cam.release(cam.cam_name) # todo, needed?
       server.shutdown()
-
-
