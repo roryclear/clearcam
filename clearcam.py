@@ -473,7 +473,6 @@ class VideoCapture:
                 alert.reset_counts()
                 continue
               window = alert.window if alert.window else (60 if alert.is_notif else 1)
-              if not alert.is_active(offset=4): alert.last_det = time.time() # don't send alert when just active
               if alert.get_counts()[1]:
                   if time.time() - alert.last_det >= window:
                     if alert.is_notif and alert.desc is None: self.send_det[cam_name] = True
