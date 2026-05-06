@@ -90,8 +90,7 @@ class OpenCLIP:
 
         state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
         load_state_dict(self, state_dict)
-
-    @TinyJit
+        
     def precompute_embedding(self, x):
         x = self.visual_conv1(x)
         x = x.reshape(x.shape[0], x.shape[1], -1)
