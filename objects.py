@@ -216,8 +216,6 @@ class ObjectFinder:
                             object_folders.append(date_path)
         return object_folders
 
-    def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img)).numpy() # todo remove
-
     def preprocess(self, img):
         img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_CUBIC)
         img = img.astype(np.float32) / 255.0
@@ -407,6 +405,3 @@ class ObjectFinder:
 
 @TinyJit
 def blazeface_jit(model, x): return model(x)
-
-@TinyJit
-def adaface_jit(model, x): return model(x)

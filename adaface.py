@@ -1,4 +1,4 @@
-from tinygrad import Tensor, nn
+from tinygrad import Tensor, nn, TinyJit
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 from tinygrad.helpers import fetch
 class MaxPool2d:
@@ -76,7 +76,7 @@ class ADAFACE():
         state_dict = safe_load(fetch("https://huggingface.co/roryclear/AdaFace/resolve/main/adaface_ir50_ms1mv2.safetensors"))
         load_state_dict(self, state_dict)
 
-
+    @TinyJit
     def __call__(self, x):
         x = ((x[:,:,::-1] / 255.) - 0.5) / 0.5
         x = x.permute(2,0,1).unsqueeze(0)
