@@ -1,4 +1,4 @@
-from tinygrad import Tensor, nn
+from tinygrad import Tensor, nn, TinyJit
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 from utils.helpers import resize
 
@@ -164,6 +164,7 @@ class BlazeFace():
         r = Tensor.cat(r1, r2, dim=1)
         return [r, c]
 
+    @TinyJit
     def __call__(self, img):
         h0, w0 = img.shape[:2]
 

@@ -251,7 +251,7 @@ class ObjectFinder:
         top, bottom = delta_h // 2, delta_h - (delta_h // 2)
         left, right = delta_w // 2, delta_w - (delta_w // 2)
         orig = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0,0,0])
-        detections = blazeface_jit(self.blazeface, Tensor(orig)).numpy()
+        detections = self.blazeface(Tensor(orig)).numpy()
         detections = detections[detections[:, 0] != 0]
         # one face per person for now
         if detections.shape[0] > 0:
@@ -402,6 +402,3 @@ class ObjectFinder:
             self.image_embeddings = target_embeddings
 
         print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
-
-@TinyJit
-def blazeface_jit(model, x): return model(x)
