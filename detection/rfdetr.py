@@ -603,15 +603,6 @@ class RFDETR():
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/rf-detr/resolve/main/{name}.safetensors'))
     load_state_dict(self, state_dict)
 
-  # todo, this should be more generic and not in both here and yolo
-  def jit_infer(self, frame):
-    shape = tuple(frame.shape)
-    if shape not in self.jit_cache:
-      @TinyJit
-      def fn(im, model): return model(im)
-      self.jit_cache[shape] = fn
-    return self.jit_cache[shape](frame, self)
-
   def __call__(self, frame):
     pre = self.preprocess(frame)
     predictions = self.predict(pre)
