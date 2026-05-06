@@ -91,6 +91,48 @@ class OpenCLIP:
         state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
         load_state_dict(self, state_dict)
 
+    @TinyJit
+    def precompute_embedding(self, x):
+        x = self.visual_conv1(x)
+        x = x.reshape(x.shape[0], x.shape[1], -1)
+        x = x.permute(0, 2, 1)
+        cls_emb = self.class_embedding
+        cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
+        x = Tensor.cat(cls_emb, x, dim=1)
+        x = x + self.positional_embedding
+        x = self.ln_pre(x)
+        # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
+        for i in range(len(self.resblocks_img)):
+            x_ln1 = self.resblocks_img[i].ln_1(x)
+            B, L, D = x_ln1.shape
+            H = 16 #block.attn.num_heads
+            d_head = D // H
+            qkv = x_ln1 @ self.resblocks_img[i].in_proj_weight.T + self.resblocks_img[i].in_proj_bias           
+            q, k, v = qkv.split(D, dim=-1)
+            def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
+            q = shape(q)
+            k = shape(k)
+            v = shape(v)
+            scale = 1.0 / (d_head ** 0.5)
+            attn_scores = q.matmul(k.transpose(-2, -1)) * scale
+            attn_probs = Tensor.softmax(attn_scores)
+            context = attn_probs.matmul(v)
+            context = context.transpose(1, 2).contiguous().view(B, L, D)
+            attn_out = context @ self.resblocks_img[i].out_proj_weight.T + self.resblocks_img[i].out_proj_bias      
+            attn_scaled = attn_out
+            x = x + attn_scaled
+            x_ln2 = self.resblocks_img[i].ln_2(x)
+            ff = self.resblocks_img[i].mlp_c_fc(x_ln2)
+            ff = ff.gelu()
+            ff = self.resblocks_img[i].mlp_c_proj(ff)
+            x = x + ff
+
+        x = self.ln_post(x)
+        image_embeds = x[:, 0, :]
+        embeddings = image_embeds @ self.proj
+        embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
+        return embeddings
+
     def _encode_text(self, query, realize=False):
         tokens = [49406]
         tokens += self.tokenizer.encode(query)
@@ -173,8 +215,6 @@ class ObjectFinder:
                         if os.path.isdir(date_path):
                             object_folders.append(date_path)
         return object_folders
-
-    def precompute_embedding_bs1_np(self, img): return precompute_embedding_jit_bs1(self.model, Tensor(img)).numpy() # todo remove
 
     def precompute_face_embedding_bs1_np(self, img): return adaface_jit(self.adaface, Tensor(img)).numpy() # todo remove
 
@@ -366,54 +406,7 @@ class ObjectFinder:
         print(f"\nTotal {'face' if face else 'image'} embeddings loaded: {total_loaded}")
 
 @TinyJit
-def precompute_embeddings_jit(model, x): return precompute_embedding(model, x)
-
-@TinyJit
-def precompute_embedding_jit_bs1(model, x): return precompute_embedding(model, x)
-
-@TinyJit
 def blazeface_jit(model, x): return model(x)
 
 @TinyJit
 def adaface_jit(model, x): return model(x)
-
-def precompute_embedding(model, x):
-    x = model.visual_conv1(x)
-    x = x.reshape(x.shape[0], x.shape[1], -1)
-    x = x.permute(0, 2, 1)
-    cls_emb = model.class_embedding
-    cls_emb = cls_emb.unsqueeze(0).expand(x.shape[0], -1, -1)
-    x = Tensor.cat(cls_emb, x, dim=1)
-    x = x + model.positional_embedding
-    x = model.ln_pre(x)
-    # https://github.com/pytorch/pytorch/blob/v2.9.1/torch/nn/modules/activation.py#L1252
-    for i in range(len(model.resblocks_img)):
-        x_ln1 = model.resblocks_img[i].ln_1(x)
-        B, L, D = x_ln1.shape
-        H = 16 #block.attn.num_heads
-        d_head = D // H
-        qkv = x_ln1 @ model.resblocks_img[i].in_proj_weight.T + model.resblocks_img[i].in_proj_bias           
-        q, k, v = qkv.split(D, dim=-1)
-        def shape(x): return x.view(B, L, H, d_head).transpose(1, 2)
-        q = shape(q)
-        k = shape(k)
-        v = shape(v)
-        scale = 1.0 / (d_head ** 0.5)
-        attn_scores = q.matmul(k.transpose(-2, -1)) * scale
-        attn_probs = Tensor.softmax(attn_scores)
-        context = attn_probs.matmul(v)
-        context = context.transpose(1, 2).contiguous().view(B, L, D)
-        attn_out = context @ model.resblocks_img[i].out_proj_weight.T + model.resblocks_img[i].out_proj_bias      
-        attn_scaled = attn_out
-        x = x + attn_scaled
-        x_ln2 = model.resblocks_img[i].ln_2(x)
-        ff = model.resblocks_img[i].mlp_c_fc(x_ln2)
-        ff = ff.gelu()
-        ff = model.resblocks_img[i].mlp_c_proj(ff)
-        x = x + ff
-
-    x = model.ln_post(x)
-    image_embeds = x[:, 0, :]
-    embeddings = image_embeds @ model.proj
-    embeddings = embeddings / (embeddings.pow(2).sum(axis=-1, keepdim=True).sqrt() + 1e-8)
-    return embeddings

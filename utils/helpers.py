@@ -204,13 +204,14 @@ def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, lengt
     upload_file(Path(f"{mp4_filename}.aes"), userID)
     os.unlink(mp4_filename)
 
-def jit_infer(model, x, jit_cache):
+def jit_infer(fn, x, jit_cache):
     shape = tuple(x.shape)
     if shape not in jit_cache:
         @TinyJit
-        def fn(x, model): return model(x)
-        jit_cache[shape] = fn
-    return jit_cache[shape](x, model)
+        def compiled(x, fn):
+            return fn(x)
+        jit_cache[shape] = compiled
+    return jit_cache[shape](x, fn)
 
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')

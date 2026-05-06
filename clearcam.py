@@ -662,7 +662,7 @@ def run_search(clip, image_text, top_k, cam_name, selected_dir): return clip.sea
 def run_clip(clip, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   if im is not None:
-    embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.precompute_embedding_bs1_np(im)
+    embedding = clip.precompute_face_embedding_bs1_np(im) if is_face else clip.model.precompute_embedding(Tensor(im)).numpy()
     res = clip.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   else:
     res = []
@@ -1234,7 +1234,7 @@ def clip_latest_img(img):
     img = object_finder.preprocess(img)
     data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
     if "embeddings" not in data: data["embeddings"] = {}
-    emb = precompute_embedding_jit_bs1(object_finder.model, Tensor(img).unsqueeze(0)).numpy()
+    emb = object_finder.model.precompute_embedding(Tensor(img).unsqueeze(0)).numpy()
     data["embeddings"][str(object_queue[0])] = emb
     with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
   
@@ -1385,7 +1385,7 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip or use_face:
-    from objects import ObjectFinder, precompute_embedding_jit_bs1, adaface_jit
+    from objects import ObjectFinder, adaface_jit
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
