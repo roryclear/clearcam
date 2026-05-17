@@ -162,21 +162,24 @@ class db:
 
     def run_get(self, table, key=None, id=None, timeout=5):
         with self._lock:
-          self._req_q.put(("get", table, key, id))
-          status, result = self._resp_q.get(timeout=timeout)
-          if status == "err": raise Exception(result)
-          return result
+          try:
+            self._req_q.put(("get", table, key, id))
+            _, result = self._resp_q.get(timeout=timeout)
+            return result
+          except Exception: return {}
 
     def run_put(self, table, key, val=None, id=None, replace=True, timeout=5):
         with self._lock:
-          self._req_q.put(("put", table, key, (val, id, replace)))
-          status, result = self._resp_q.get(timeout=timeout)
-          if status == "err": raise Exception(result)
-          return result
+          try:
+            self._req_q.put(("put", table, key, (val, id, replace)))
+            _, result = self._resp_q.get(timeout=timeout)
+            return result
+          except Exception: return {}
 
     def run_delete(self, table, key, id=None, timeout=5):
         with self._lock:
-          self._req_q.put(("delete", table, key, id))
-          status, result = self._resp_q.get(timeout=timeout)
-          if status == "err": raise Exception(result)
-          return result
+          try:
+            self._req_q.put(("delete", table, key, id))
+            _, result = self._resp_q.get(timeout=timeout)
+            return result
+          except Exception: return {}
