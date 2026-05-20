@@ -209,6 +209,7 @@ class VideoCapture:
 
   def init_cam(self, cam_name, src):
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
+    if type(src) == list: src = src[0] # todo fix cause, from editing url?
     self.src[cam_name] = src # todo
     self.last_frame[cam_name] = None
     self.vod[cam_name] = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
@@ -251,6 +252,7 @@ class VideoCapture:
     cam_check = time.time()
     cams = database.run_get("links", None)
     for cam_name in cams.keys():
+      print("starting",cam_name,"src:",cams[cam_name])
       self.init_cam(cam_name=cam_name, src=cams[cam_name])
       threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only!
     while True:
