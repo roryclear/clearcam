@@ -209,7 +209,6 @@ class VideoCapture:
 
   def init_cam(self, cam_name, src):
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
-    if type(src) == list: src = src[0] # todo fix cause, from editing url?
     self.src[cam_name] = src # todo
     self.last_frame[cam_name] = None
     self.vod[cam_name] = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
@@ -257,11 +256,17 @@ class VideoCapture:
       threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only!
     while True:
       if time.time() - cam_check >= 5:
+        cam_check = time.time()
         new_cams = database.run_get("links", None)
         for cam_name in new_cams.keys():
           if cam_name not in cams:
             self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
             if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
+          else:
+            if new_cams[cam_name] != cams[cam_name]:
+              cams[cam_name] = new_cams[cam_name]
+              self.src[cam_name] = new_cams[cam_name]
+              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name) # todo rename alerts_on?
@@ -786,7 +791,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
             database.run_put("settings", cam_name, zone) # todo, key for each
-            if (url := query.get("url")) is not None: database.run_put("links", cam_name, url)
+            if (url := query.get("url")) is not None: database.run_put("links", cam_name, url[0])
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
