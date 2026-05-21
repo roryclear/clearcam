@@ -330,7 +330,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
-          "-fflags", "+genpts",
+          "-use_wallclock_as_timestamps", "1",
+          "-fflags", "+genpts+igndts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
           "-c", "copy",
