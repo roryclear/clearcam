@@ -16,7 +16,7 @@ import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
 from tinygrad import Tensor, TinyJit
 
-def send_notif(session_token: str, text=None):
+def send_notif(session_token: str, text=None, body_text=None):
     host = "www.clearcam.org"
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"
@@ -36,6 +36,14 @@ def send_notif(session_token: str, text=None):
       "",
       text,
     ])
+    if body_text is not None:
+      lines.extend([
+      f"--{boundary}",
+      'Content-Disposition: form-data; name="body_text"',
+      "",
+      body_text,
+    ])
+
     body = "\r\n".join(lines).encode("utf-8")
     conn = http.client.HTTPSConnection(host)
     headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
