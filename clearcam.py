@@ -1388,6 +1388,7 @@ if __name__ == "__main__":
 
   qwen = Qwen3VL()
   qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence, only info about the object(s) detected.<|im_end|>\n<|im_start|>assistant\n"
+  qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? What is it doing? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
   qwen.prewarm(res=(960, 540, 3), prompt=qwen_prompt)
 
   object_queue = []
