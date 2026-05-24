@@ -2,6 +2,7 @@ from tinygrad.tensor import Tensor
 from tinygrad import TinyJit
 from tinygrad.helpers import fetch
 from detection.yolov9 import safe_load, load_state_dict, YOLOv9
+from qwen3vl import Qwen3VL
 from detection.rfdetr import RFDETR, detr_to_yolo
 import numpy as np
 from pathlib import Path
@@ -491,9 +492,12 @@ class VideoCapture:
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                       plain.unlink() # only one image per event
                       self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
-                    text = f"Event Detected ({cam_name})"
                     if userID is not None and not self.vod[cam_name] and alert.is_notif:
-                      threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                      title = f"Event Detected ({cam_name})"
+                      text = None
+                      threading.Thread(target=send_notif, args=(userID,title,text), daemon=True).start() # blank notif then text?
+                      text = qwen.forward(prompt=qwen_prompt, image=cv2.resize(cv2.imread(self.filename[cam_name]), (960, 540)))
+                      threading.Thread(target=send_notif, args=(userID,title,text), daemon=True).start()
                       threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                     self.last_det[cam_name] = time.time()
                     alert.last_det = time.time()
@@ -1381,6 +1385,10 @@ if __name__ == "__main__":
   
   if use_clip or use_face:
     from objects import ObjectFinder
+
+  qwen = Qwen3VL()
+  qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence, only info about the object(s) detected.<|im_end|>\n<|im_start|>assistant\n"
+  qwen.prewarm(res=(960, 540, 3), prompt=qwen_prompt)
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
