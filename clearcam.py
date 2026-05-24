@@ -417,7 +417,7 @@ class VideoCapture:
         with self.lock[cam_name]:
           self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
           self.frame_num[cam_name] += 1
-        time.sleep(1 / 30)
+        time.sleep(1 / 100)
       except Exception as e:
         print("Error in frame_loop:", e, cam_name)
         time.sleep(1)
