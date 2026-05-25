@@ -1376,7 +1376,7 @@ if __name__ == "__main__":
     while len(key) < 1: key = input("enter a password for encryption: ")
     qwen_size = input("Select a Qwen3VL model for AI Summaries from \n2: 2B\n4: 4B\nor press enter to skip:") or False
     if qwen_size in ["2", "4"]:
-      print("prewarming Qwen3VL ....")
+      print("prewarming Qwen3VL....")
       qwen = Qwen3VL(size=f"{qwen_size}B")
       qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
       qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
