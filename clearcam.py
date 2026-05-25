@@ -331,6 +331,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+              "-headers", "Origin: https://earthcam.com\r\n",
+    "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:117.0) Gecko/20100101 Firefox/117.0",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
@@ -494,10 +496,10 @@ class VideoCapture:
                       self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
                     if userID is not None and not self.vod[cam_name] and alert.is_notif:
                       title = f"Event Detected ({cam_name})"
-                      text = None
-                      threading.Thread(target=send_notif, args=(userID,title,text), daemon=True).start() # blank notif then text?
-                      text = qwen.forward(prompt=qwen_prompt, image=cv2.resize(cv2.imread(self.filename[cam_name]), (960, 540)))
-                      threading.Thread(target=send_notif, args=(userID,title,text), daemon=True).start()
+                      threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
+                      if use_qwen: # extra notif if qwen
+                        text = qwen.forward(prompt=qwen_prompt, image=cv2.resize(cv2.imread(self.filename[cam_name]), (960, 540)))
+                        threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
                       threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                     self.last_det[cam_name] = time.time()
                     alert.last_det = time.time()
@@ -1349,8 +1351,6 @@ if __name__ == "__main__":
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
-  url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
-  is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
@@ -1371,25 +1371,26 @@ if __name__ == "__main__":
     use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
     use_face = use_face in ["y", "Y"]
 
-  if url is None and userID is None:
-    userID = input("enter your Clearcam user id or press Enter to skip: ")
-    if len(userID) > 0:
-      key = ""
-      while len(key) < 1: key = input("enter a password for encryption: ")
-      sys.argv.extend([f"--use_clip={use_clip}", f"--use_face={use_face}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={model_variant}"])
-    else: userID = None
+  userID = input("enter your Clearcam user id or press Enter to skip: ")
+  use_qwen = False
+  if len(userID) > 0:
+    key = ""
+    while len(key) < 1: key = input("enter a password for encryption: ")
+    use_qwen = input("Would you like to enable (experimental) Qwen AI Summaries? (y/n), or press enter to skip:") or False
+    use_qwen = use_qwen in ["y", "Y"]
+  else: userID = None
 
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip or use_face:
-    from objects import ObjectFinder
+  if use_clip or use_face: from objects import ObjectFinder
 
-  qwen = Qwen3VL()
-  qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence, only info about the object(s) detected.<|im_end|>\n<|im_start|>assistant\n"
-  qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? What is it doing? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
-  qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
+  if use_qwen:
+    qwen = Qwen3VL()
+    qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence, only info about the object(s) detected.<|im_end|>\n<|im_start|>assistant\n"
+    qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? What is it doing? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
+    qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
