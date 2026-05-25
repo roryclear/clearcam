@@ -498,7 +498,7 @@ class VideoCapture:
                       title = f"Event Detected ({cam_name})"
                       threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
                       if use_qwen: # extra notif if qwen
-                        text = qwen.forward(prompt=qwen_prompt, image=cv2.resize(cv2.imread(self.filename[cam_name]), (960, 540)))
+                        text = qwen.forward(prompt=qwen_prompt, image=cv2.resize(cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), (960, 540)))
                         threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
                       threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                     self.last_det[cam_name] = time.time()
