@@ -1376,8 +1376,14 @@ if __name__ == "__main__":
   if len(userID) > 0:
     key = ""
     while len(key) < 1: key = input("enter a password for encryption: ")
-    use_qwen = input("Would you like to enable (experimental) Qwen AI Summaries? (y/n), or press enter to skip:") or False
-    use_qwen = use_qwen in ["y", "Y"]
+    qwen_size = input("Select a Qwen3VL model for AI Summaries from \n2: 2B\n4: 4B\nor press enter to skip:") or False
+    if qwen_size in ["2", "4"]:
+      print("prewarming Qwen3VL ....")
+      qwen = Qwen3VL(size=f"{qwen_size}B")
+      qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
+      qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
+      print("DONE")
+      use_qwen = True
   else: userID = None
 
   if userID is not None and key is None:
@@ -1386,11 +1392,6 @@ if __name__ == "__main__":
   
   if use_clip or use_face: from objects import ObjectFinder
 
-  if use_qwen:
-    qwen = Qwen3VL()
-    qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence, only info about the object(s) detected.<|im_end|>\n<|im_start|>assistant\n"
-    qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? What is it doing? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
-    qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
