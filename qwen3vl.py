@@ -147,33 +147,41 @@ def sample(logits, temp: float, k: int, p: float, af: float, ap: float):
 
   return output_token
 
+def smart_resize(height, width, factor, min_pixels, max_pixels):
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
+
+@TinyJit
 def preprocess_img(image):
+  image = image.permute(2, 0, 1)
   patch_size = 16
   merge_size = 2
-  rescale_factor = 0.00392156862745098
   temporal_patch_size = 2
   height, width = image.shape[-2:]
-  factor = patch_size * merge_size
-  h_bar = round(height / factor) * factor
-  w_bar = round(width / factor) * factor
-  pixels = h_bar * w_bar
-  beta = math.sqrt(max(1.0, pixels / 16777216, 65536 / pixels))
-  h_bar = max(factor, round((h_bar / beta) / factor) * factor)
-  w_bar = max(factor, round((w_bar / beta) / factor) * factor)
-
-  resized_height, resized_width = h_bar, w_bar
-  image_np = image.transpose(1, 2, 0)
-  image_np = cv2.resize(image_np, (resized_width, resized_height), interpolation=cv2.INTER_LANCZOS4)
-  image = image_np.transpose(2, 0, 1)
-  image = image.astype(np.float32)
-  image_mean = np.array([0.5, 0.5, 0.5]) / rescale_factor
-  image_std = np.array([0.5, 0.5, 0.5]) / rescale_factor
-  image = (image - image_mean[:, None, None]) / image_std[:, None, None]
-
-  channel = image.shape[0]
+  resized_height, resized_width = smart_resize(
+      height,
+      width,
+      factor=patch_size * merge_size,
+      min_pixels=65536,
+      max_pixels=16777216,
+  )
+  image = image.unsqueeze(0).float()
+  image = image.interpolate(size=(resized_height, resized_width))
+  resized_height, resized_width = image.shape[-2:]
+  patches = (image - 127.5) / 127.5
+  batch_size, channel = patches.shape[:2]
   grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-  
-  patches = image.reshape(
+  patches = patches.reshape(
+      batch_size,
       channel,
       grid_h // merge_size,
       merge_size,
@@ -182,28 +190,28 @@ def preprocess_img(image):
       merge_size,
       patch_size,
   )
-  patches = patches.transpose(1, 4, 2, 5, 0, 3, 6)
-  patches = np.expand_dims(patches, axis=4)
-  patches = np.broadcast_to(patches, (*patches.shape[:4], temporal_patch_size, *patches.shape[5:]))
-  flatten_patches = patches.reshape(
-      grid_h * grid_w,
-      channel * temporal_patch_size * patch_size * patch_size,
-  )
-  pixel_values = flatten_patches
-  image_grid_thw = [1, grid_h, grid_w]
-  return pixel_values.astype(np.float32), image_grid_thw
+  patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+  pixel_values = (
+      patches.unsqueeze(6)
+      .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+      .reshape(
+          batch_size,
+          grid_h * grid_w,
+          channel * temporal_patch_size * patch_size * patch_size,
+      )
+  )[0]
+  return pixel_values, Tensor([1, grid_h, grid_w])
 
 class Qwen3VL():
-  def __init__(self):
-    self.vis = qwen3vl_vis()
-    self.lang, kv = Transformer.from_gguf(fetch("https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/Qwen3VL-2B-Instruct-F16.gguf"), 3000) # max context
+  def __init__(self, size="2B"):
+    self.vis = qwen3vl_vis(size=size)
+    self.lang, kv = Transformer.from_gguf(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/Qwen3VL-{size}-Instruct-F16.gguf"), 2000) # max context
     self.tok = SimpleTokenizer.from_gguf_kv(kv)
     self.prewarmed = False
 
   def preprocess(self, image, prompt):
-    image = image.transpose(2, 0, 1)
-    pixel_values, image_grid_thw = preprocess_img(image=image)
-    pixel_values = Tensor(pixel_values)
+    pixel_values, image_grid_thw = preprocess_img(image=Tensor(image))
+    image_grid_thw = image_grid_thw.numpy().tolist()
     text_inputs = self.tok.encode(prompt)
     image_token_id = 151655
     image_token_positions = [i for i, tid in enumerate(text_inputs) if tid == image_token_id]
@@ -215,8 +223,9 @@ class Qwen3VL():
 
   def prewarm(self, res, prompt):
     pixel_values, input_ids, seq_len, image_grid_thw = self.preprocess(image=np.random.randint(0, 256, size=res, dtype=np.uint8), prompt=prompt)
+    for _ in range(3): preprocess_img(image=Tensor.rand(res).cast(dtypes.uint8))
     for _ in range(3): self.prefill(pixel_values=pixel_values, input_ids=input_ids, image_grid_thw=image_grid_thw)
-    for _ in range(3):  self.fwd(token=Tensor([[42]]), seq_len=Variable("pos",1,3000).bind(seq_len))
+    for _ in range(3):  self.fwd(token=Tensor([[42]]), seq_len=Variable("pos",1,2000).bind(seq_len))
     self.prewarmed = True
 
   def forward(self, prompt, image):
@@ -230,7 +239,7 @@ class Qwen3VL():
     while True:
         if prefill_done:
           ts = time.time()
-          token = self.fwd(token=next_token_tensor, seq_len=Variable("pos",1,3000).bind(seq_len))
+          token = self.fwd(token=next_token_tensor, seq_len=Variable("pos",1,2000).bind(seq_len))
           seq_len+=1
         else:
           prefill_done = True
@@ -402,10 +411,11 @@ class Qwen3VL():
       return token
 
 class qwen3vl_vis():
-  def __init__(self):
-    _, state_dict_visual = gguf_load(fetch("https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-2B-Instruct-F16.gguf"))
+  def __init__(self, size="2B"):
+    _, state_dict_visual = gguf_load(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-{size}-Instruct-F16.gguf"))
     self.v = qwen3_vis_v()
-    self.mm = [nn.Linear(4096, 4096, bias=True), None, nn.Linear(4096, 2048, bias=True)]
+    sizes = {"2B": 2048, "4B":2560}
+    self.mm = [nn.Linear(4096, 4096, bias=True), None, nn.Linear(4096, sizes[size], bias=True)]
     state_dict_visual["v.patch_embd.weight2"] = state_dict_visual["v.patch_embd.weight.1"] # todo
     load_state_dict(self, state_dict_visual)
     self.inv_freq = 1.0 / (10000.0 ** (Tensor.arange(0, 32, 2, dtype=dtypes.float) / 32))
@@ -433,5 +443,3 @@ class qwen3_vis_block():
     self.ln2 = nn.LayerNorm(1024, eps=1e-6, elementwise_affine=True)
     self.attn_out = nn.Linear(1024, 1024)
     self.attn_qkv = nn.Linear(1024, 3072)
-    
-
