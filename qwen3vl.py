@@ -146,23 +146,9 @@ def sample(logits, temp: float, k: int, p: float, af: float, ap: float):
 
   return output_token
 
-# https://github.com/huggingface/transformers/blob/90e3c4fa7200a9c8bb9756bf7bf43381d10850c0/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py#L62
-def smart_resize(height, width, factor, min_pixels, max_pixels):
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-    return h_bar, w_bar
-
 class Qwen3VL():
   def __init__(self, size="2B"):
-    self.vis = qwen3vl_vis(size=size)
+    self.vis = Qwen3VLVis(size=size)
     self.lang, kv = Transformer.from_gguf(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/Qwen3VL-{size}-Instruct-F16.gguf"), 2000) # max context
     self.tok = SimpleTokenizer.from_gguf_kv(kv)
     self.prewarmed = False
@@ -211,8 +197,6 @@ class Qwen3VL():
 
     return self.tok.decode(toks_out)
 
-  def fwd(self, token, seq_len): return self.lang.rollout_jit(token.clone(), seq_len, temperature=Tensor(0.7).clone())[0]
-
   @TinyJit
   def prefill(self, pixel_values, input_ids, image_grid_thw):
     image_embeds, hidden_states, deepstack_feature_lists = self.vis(pixel_values, image_grid_thw)
@@ -235,8 +219,7 @@ class Qwen3VL():
       hidden_states = self.lang.blk[i](hidden_states, start_pos=0)
       # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L692
       if i in self.vis.v.deepstack_idx:
-        hs2_torch = deepstack_process(hidden_states=hidden_states, visual_pos_masks=image_mask.squeeze(0), visual_embeds=(deepstack_feature_lists[self.vis.v.deepstack_idx.index(i)]))
-        hidden_states = (hs2_torch).unsqueeze(0)
+        hidden_states = deepstack_process(hidden_states=hidden_states, visual_pos_masks=image_mask.squeeze(0), visual_embeds=(deepstack_feature_lists[self.vis.v.deepstack_idx.index(i)])).unsqueeze(0)
 
     hidden_states = self.lang.output_norm(hidden_states)
     outputs = hidden_states[:, -1:, :] @ self.lang.token_embd.weight.T
@@ -246,12 +229,20 @@ class Qwen3VL():
     token = sample(scores[0], temp=temp, k=top_k, p=top_p, af=None, ap=None)
     return token
 
-class qwen3vl_vis():
+def deepstack_process(hidden_states, visual_pos_masks, visual_embeds):
+  mask_float = visual_pos_masks.any(axis=1)
+  positions = mask_float.cumsum(axis=0) - 1
+  positions = positions.clamp(0)
+  expanded = visual_embeds[positions]
+  expanded = expanded * mask_float.unsqueeze(-1)
+  return hidden_states[0] + expanded
+
+class Qwen3VLVis():
   def __init__(self, size="2B"):
     kv, state_dict = gguf_load(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-{size}-Instruct-F16.gguf"))
     self.merge_size = kv["clip.vision.spatial_merge_size"]
     self.patch_size = kv["clip.vision.patch_size"]
-    self.v = qwen3_vis_v(size=size, kv=kv, weights=state_dict)
+    self.v = Qwen3VisBlocks(kv=kv, weights=state_dict)
     self.mm = [nn.Linear(*state_dict["mm.0.weight"].shape[::-1], bias=True), None, nn.Linear(*state_dict["mm.2.weight"].shape[::-1], bias=True)]
     state_dict["v.patch_embd.weight1"] = state_dict["v.patch_embd.weight.1"]
     load_state_dict(self, state_dict)
@@ -390,17 +381,31 @@ class qwen3vl_vis():
     )[0]
     return pixel_values, Tensor([1, grid_h, grid_w])
 
-class qwen3_patch_embd():
+# https://github.com/huggingface/transformers/blob/90e3c4fa7200a9c8bb9756bf7bf43381d10850c0/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py#L62
+def smart_resize(height, width, factor, min_pixels, max_pixels):
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
+
+class Qwen3PatchEmbed():
   def __init__(self, kv=None):
     self.weight = Tensor.zeros(kv["clip.vision.embedding_length"], 3, 16, 16)
     self.weight1 = Tensor.zeros(kv["clip.vision.embedding_length"], 3, 16, 16)
     self.bias = Tensor.zeros(kv["clip.vision.embedding_length"])
     
-class qwen3_vis_v():
-  def __init__(self, size="2B", kv=None, weights=None):
+class Qwen3VisBlocks():
+  def __init__(self, kv=None, weights=None):
     self.blk = []
-    for _ in range(kv["clip.vision.block_count"]): self.blk.append(qwen3_vis_block(kv, weights=weights))
-    self.patch_embd = qwen3_patch_embd(kv=kv)
+    for _ in range(kv["clip.vision.block_count"]): self.blk.append(Qwen3VisBlock(kv, weights=weights))
+    self.patch_embd = Qwen3PatchEmbed(kv=kv)
     self.num_grid_per_side = 48
     self.deepstack_layers = kv["clip.vision.is_deepstack_layers"]
     self.deepstack_idx = [i for i, val in enumerate(self.deepstack_layers) if val]
@@ -425,16 +430,7 @@ class DeepstackLayer:
       deepstack_feature = (hidden_states.view(-1, self.hidden_size)).view(-1, self.hidden_size)
       return self.fc2(Tensor.gelu(self.fc1(deepstack_feature)))
 
-# todo can this be a where?
-def deepstack_process(hidden_states, visual_pos_masks, visual_embeds):
-  mask_float = visual_pos_masks.any(axis=1)
-  positions = mask_float.cumsum(axis=0) - 1
-  positions = positions.clamp(0)
-  expanded = visual_embeds[positions]
-  expanded = expanded * mask_float.unsqueeze(-1)
-  return hidden_states[0] + expanded
-
-class qwen3_vis_block():
+class Qwen3VisBlock():
   def __init__(self, kv=None, weights=None):
     self.ffn_up = nn.Linear(kv["clip.vision.embedding_length"], kv["clip.vision.feed_forward_length"])
     self.ffn_down = nn.Linear(kv["clip.vision.feed_forward_length"], kv["clip.vision.embedding_length"])
