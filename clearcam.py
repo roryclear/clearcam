@@ -1,15 +1,13 @@
 from tinygrad.tensor import Tensor
-from tinygrad import TinyJit
 from tinygrad.helpers import fetch
-from detection.yolov9 import safe_load, load_state_dict, YOLOv9
-from qwen3vl import Qwen3VL
+from detection.yolov9 import YOLOv9
+from llm.qwen3vl import Qwen3VL
 from detection.rfdetr import RFDETR, detr_to_yolo
 import numpy as np
 from pathlib import Path
 import cv2
 from collections import defaultdict, deque
 import time, sys
-from tinygrad.nn.state import safe_load, load_state_dict
 import json
 import http
 from http.server import BaseHTTPRequestHandler, HTTPServer
