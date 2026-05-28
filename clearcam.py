@@ -1,14 +1,13 @@
 from tinygrad.tensor import Tensor
-from tinygrad import TinyJit
 from tinygrad.helpers import fetch
-from detection.yolov9 import safe_load, load_state_dict, YOLOv9
+from detection.yolov9 import YOLOv9
+from llm.qwen3vl import Qwen3VL
 from detection.rfdetr import RFDETR, detr_to_yolo
 import numpy as np
 from pathlib import Path
 import cv2
 from collections import defaultdict, deque
 import time, sys
-from tinygrad.nn.state import safe_load, load_state_dict
 import json
 import http
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -491,9 +490,12 @@ class VideoCapture:
                     if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                       plain.unlink() # only one image per event
                       self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
-                    text = f"Event Detected ({cam_name})"
                     if userID is not None and not self.vod[cam_name] and alert.is_notif:
-                      threading.Thread(target=send_notif, args=(userID,text,), daemon=True).start()
+                      title = f"Event Detected ({cam_name})"
+                      threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
+                      if use_qwen: # extra notif if qwen
+                        text = qwen.generate(prompt=qwen_prompt, image=cv2.resize(cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), (960, 540)))
+                        threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
                       threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                     self.last_det[cam_name] = time.time()
                     alert.last_det = time.time()
@@ -1345,8 +1347,6 @@ if __name__ == "__main__":
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
-  url = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--rtsp=")), None)
-  is_file = url.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')) if url is not None else False
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
@@ -1367,20 +1367,27 @@ if __name__ == "__main__":
     use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
     use_face = use_face in ["y", "Y"]
 
-  if url is None and userID is None:
-    userID = input("enter your Clearcam user id or press Enter to skip: ")
-    if len(userID) > 0:
-      key = ""
-      while len(key) < 1: key = input("enter a password for encryption: ")
-      sys.argv.extend([f"--use_clip={use_clip}", f"--use_face={use_face}" ,f"--userid={userID}", f"--key={key}", f"--yolo_size={model_variant}"])
-    else: userID = None
+  userID = input("enter your Clearcam user id or press Enter to skip: ")
+  use_qwen = False
+  if len(userID) > 0:
+    key = ""
+    while len(key) < 1: key = input("enter a password for encryption: ")
+    qwen_size = input("Select a Qwen3VL model for AI Summaries from \n2: 2B\n4: 4B\nor press enter to skip:") or False
+    if qwen_size in ["2", "4"]:
+      print("prewarming Qwen3VL....")
+      qwen = Qwen3VL(size=f"{qwen_size}B")
+      qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
+      qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
+      print("DONE")
+      use_qwen = True
+  else: userID = None
 
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip or use_face:
-    from objects import ObjectFinder
+  if use_clip or use_face: from objects import ObjectFinder
+
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
