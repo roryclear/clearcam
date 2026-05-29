@@ -26,6 +26,11 @@
     <img src="images/notif.jpg" alt="Notification" width="400" />
   </td>
 </tr>
+<tr>
+  <td colspan="2" align="center">
+    <img src="images/hood.jpg" alt="Hood" width="300" />
+  </td>
+</tr>
 
 <tr>
 <td>
