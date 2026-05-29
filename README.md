@@ -20,7 +20,7 @@
     <img src="images/sonata.PNG" alt="Sonata" style="width:100%; max-width:1000px;" />
   </td>
 </tr>
-
+### *NEW* AI Event Summaries with Qwen3 VL
 <tr>
   <td colspan="2" align="center" style="padding: 20px 0;">
     <img src="images/notif.jpg" alt="Notification" width="400" />
