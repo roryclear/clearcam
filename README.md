@@ -2,7 +2,7 @@
   <img src="images/logo.png" alt="logo" width="100" />
 </p>
 
-# clearcam: Add object detection, tracking, mobile notifications, and search to any security camera.
+# clearcam: Add object detection, tracking, mobile notifications, AI Summaries, and search to any security camera.
 
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
 <tr valign="top">
