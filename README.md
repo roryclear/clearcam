@@ -22,6 +22,9 @@
 </tr>
 <tr>
   <td colspan="2" align="center" style="padding: 20px 0;">
+    <div style="margin-bottom: 8px; font-weight: bold;">
+      *NEW* AI Notification Summaries with Qwen3 VL
+    </div>
     <img src="images/notif.jpg" alt="Notification" width="400" />
   </td>
 </tr>
