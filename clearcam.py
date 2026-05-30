@@ -1377,7 +1377,7 @@ if __name__ == "__main__":
       print("prewarming Qwen3VL....")
       qwen = Qwen3VL(size=f"{qwen_size}B")
       qwen_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\nWhat has been detected on my CCTV camera? Write in one short sentence<|im_end|>\n<|im_start|>assistant\n"
-      qwen.prewarm(res=(540, 960, 3), prompt=qwen_prompt)
+      qwen.prewarm(res=(540, 960, 3))
       print("DONE")
       use_qwen = True
   else: userID = None
