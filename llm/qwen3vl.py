@@ -97,55 +97,6 @@ def rotate_half(x):
     ret = Tensor.cat(-x2, x1, dim=-1)
     return ret
 
-
-def sample(logits, temp: float, k: int, p: float, af: float, ap: float):
-  assert logits.ndim == 1, "only works on 1d tensors"
-  assert 0 <= p <= 1, "p must be between 0 and 1"
-  assert 0 <= k <= logits.numel(), "k must be between 0 and numel"
-
-  # if temperature is very low just use argmax
-  if temp < 1e-6: return logits.argmax()
-
-  # alpha sampling
-  if af or ap:
-    if not hasattr(sample, "alpha_counter"):
-      setattr(sample, "alpha_counter", Tensor.zeros_like(logits, dtype=dtypes.int32).contiguous())
-    logits = logits - (sample.alpha_counter * af + (sample.alpha_counter > 0) * ap)
-
-  # replace NaNs with -inf
-  logits = (logits != logits).where(-float("inf"), logits)
-
-  # softmax
-  t = (logits / temp).softmax()
-
-  counter, counter2 = Tensor.arange(t.numel(), device=logits.device).contiguous(), Tensor.arange(t.numel() - 1, -1, -1, device=logits.device).contiguous()
-  # top k
-  if k:
-    output, output_indices = Tensor.zeros(k, device=logits.device).contiguous(), Tensor.zeros(k, device=logits.device, dtype=dtypes.int32).contiguous()
-    for i in range(k):
-      t_argmax = (t.numel() - ((t == (t_max := t.max())) * counter2).max() - 1).cast(dtypes.default_int)
-      output = output + t_max.unsqueeze(0).pad(((i, k - i - 1),))
-      output_indices = output_indices + t_argmax.unsqueeze(0).pad(((i, k - i - 1),))
-      t = (counter == t_argmax).where(0, t)
-
-    # approximate top p
-    # because we are already limited to top k elements we can do top p "without sorting"
-    output_cumsum = output[::-1].cumsum()[::-1] + t.sum()
-    output = (output_cumsum >= (1 - p)) * output
-    output_indices = (output_cumsum >= (1 - p)) * output_indices
-
-    # sample
-    output_idx = output.multinomial()
-    output_token = output_indices[output_idx]
-  else:
-    output_token = t.multinomial()
-
-  # increase alpha counter
-  if af or ap:
-    sample.alpha_counter = (counter == output_token).where(sample.alpha_counter + 1, sample.alpha_counter)
-
-  return output_token
-
 class Qwen3VL():
   def __init__(self, size="2B"):
     self.max_context = 2000
@@ -153,41 +104,24 @@ class Qwen3VL():
     self.lang, kv = Transformer.from_gguf(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/Qwen3VL-{size}-Instruct-F16.gguf"), self.max_context) # max context
     self.tok = SimpleTokenizer.from_gguf_kv(kv)
     self.start_pos = 0
-    self.img_done = False # todo, different format for first text after img, is it needed?
-
-  def preprocess(self, image, prompt):
-    pixel_values, image_grid_thw = self.vis.preprocess_img(image=Tensor(image))
-    image_grid_thw = image_grid_thw.numpy().tolist()
-    text_inputs = self.tok.encode(prompt)
-    image_token_id = 151655
-    image_token_positions = [i for i, tid in enumerate(text_inputs) if tid == image_token_id]
-    num_image_tokens = ((image_grid_thw[0]*image_grid_thw[1]*image_grid_thw[2]) / 4)
-    for pos in reversed(image_token_positions): text_inputs[pos:pos+1] = [image_token_id] * int(num_image_tokens)
-    seq_len=len(text_inputs)
-    input_ids = Tensor([text_inputs])
-    return pixel_values, input_ids, seq_len, image_grid_thw
+    self.first = True # todo, different format for first text after img, is it needed?
 
   def prewarm(self, res):
-    prompt = f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n"
-    pixel_values, input_ids, seq_len, image_grid_thw = self.preprocess(image=np.random.randint(0, 256, size=res, dtype=np.uint8), prompt=prompt)
     for _ in range(2):
-      self.vis.preprocess_img(image=Tensor.rand(res).cast(dtypes.uint8))
-      self.prefill(pixel_values=pixel_values, input_ids=input_ids, image_grid_thw=image_grid_thw)
-      self.lang(tokens=Tensor([[42]]).clone(), start_pos=Variable("pos",1,self.max_context).bind(seq_len), temperature=Tensor(0.7).clone())
+      self.prefill_img(image=Tensor.rand(res).cast(dtypes.uint8))
+      self.lang(tokens=Tensor([[42]]).clone(), start_pos=Variable("pos",1,self.max_context).bind(42), temperature=Tensor(0.7).clone())
       self.lang.prefill_jit(tokens=Tensor([[42]*self.max_context]).clone()[:, :Variable("len",1,self.max_context).bind(42)], \
       start_pos=Variable("pos",1,self.max_context).bind(42), temperature=Tensor(0.7).clone())
 
   def generate(self, prompt=None, image=None):
     if image is not None:
-      img_prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n"
-      pixel_values, input_ids, seq_len, image_grid_thw = self.preprocess(image=image, prompt=img_prompt)
-      self.start_pos = seq_len
-      token = self.prefill(pixel_values=pixel_values, input_ids=input_ids, image_grid_thw=image_grid_thw)
-      self.img_done = False
+      self.start_pos = self.get_size(image)
+      self.prefill_img(image=Tensor(image))
+      self.first = True
     if prompt is None: return
     prompt = f"{prompt}<|im_end|>\n<|im_start|>assistant\n"
-    if self.img_done: prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n" + prompt
-    self.img_done = True
+    if not self.first: prompt = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n" + prompt
+    self.first = False
     prompt = self.tok.encode(prompt)
     prompt_len = len(prompt)
     prompt = prompt + [0] * (self.max_context - prompt_len)
@@ -214,20 +148,67 @@ class Qwen3VL():
     print("\n")
     return self.tok.decode(toks_out)
 
-  @TinyJit
-  def prefill(self, pixel_values, input_ids, image_grid_thw):
-    image_embeds, hidden_states, deepstack_feature_lists = self.vis(pixel_values, image_grid_thw)
-    image_mask = input_ids == 151655
+  def get_size(self, image):
+    height, width = image.shape[:2]
+    resized_height, resized_width = smart_resize(
+        height,
+        width,
+        factor=self.vis.patch_size * self.vis.merge_size,
+        min_pixels=65536,
+        max_pixels=16777216,
+    )
+    return int((resized_height // self.vis.patch_size) * (resized_width // self.vis.patch_size) // 4) + 6
 
-    inputs_embeds = self.lang.token_embd(input_ids)
-    image_mask = image_mask.unsqueeze(-1).expand(inputs_embeds.shape)
-    image_embeds = image_embeds.view(-1)
-    flat_mask = image_mask.view(-1)
-    idx = (flat_mask.cumsum(0) - 1).clamp(0)
-    expanded = image_embeds[idx] * flat_mask
-    flat_inputs = inputs_embeds.view(-1)
-    flat_inputs = flat_inputs * (~flat_mask) + expanded
-    hidden_states = flat_inputs.view(inputs_embeds.shape)
+  @TinyJit
+  def prefill_img(self, image):
+    image = image.permute(2, 0, 1)
+    height, width = image.shape[-2:]
+    resized_height, resized_width = smart_resize(
+        height,
+        width,
+        factor=self.vis.patch_size * self.vis.merge_size,
+        min_pixels=65536,
+        max_pixels=16777216,
+    )
+    image = image.unsqueeze(0).float()
+    image = image.interpolate(size=(resized_height, resized_width))
+    resized_height, resized_width = image.shape[-2:]
+    patches = (image - 127.5) / 127.5
+    batch_size, channel = 1, 3
+    grid_h, grid_w = resized_height // self.vis.patch_size, resized_width // self.vis.patch_size
+    patches = patches.reshape(
+        batch_size,
+        channel,
+        grid_h // self.vis.merge_size,
+        self.vis.merge_size,
+        self.vis.patch_size,
+        grid_w // self.vis.merge_size,
+        self.vis.merge_size,
+        self.vis.patch_size,
+    )
+    patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+    pixel_values = (
+        patches.unsqueeze(6)
+        .expand(-1, -1, -1, -1, -1, -1, self.vis.temporal_patch_size, -1, -1)
+        .reshape(
+            batch_size,
+            grid_h * grid_w,
+            channel * self.vis.temporal_patch_size * self.vis.patch_size * self.vis.patch_size, # 1536
+        )
+    )[0]
+    pixel_values = pixel_values.cast(dtypes.bfloat16)
+
+    # f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n" fill size of img with image token
+    image_token_id = 151655
+    num_image_tokens = int((grid_h*grid_w) / 4)
+    input_ids = Tensor.cat(Tensor([151644, 872, 198, 151652]), Tensor.ones(num_image_tokens) * image_token_id, Tensor([151653, 198])).unsqueeze(0).cast(dtypes.int)
+
+
+    # todo, just return hidden states?
+    image_embeds, hidden_states, deepstack_feature_lists = self.vis(pixel_values, [1, grid_h, grid_w])
+    hidden_states = self.lang.token_embd(input_ids).cast(dtypes.float)
+    # 4 to -2 because of <|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n tokens before and after image_pad
+    hidden_states[:, 4:-2, :] = image_embeds.unsqueeze(0)
     
     # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modular_qwen3_vl.py#L626
     # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modular_qwen3_vl.py#L543
@@ -236,21 +217,9 @@ class Qwen3VL():
       hidden_states = self.lang.blk[i](hidden_states, start_pos=0)
       # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L692
       if i in self.vis.v.deepstack_idx:
-        hidden_states = deepstack_process(hidden_states=hidden_states, visual_pos_masks=image_mask.squeeze(0), visual_embeds=(deepstack_feature_lists[self.vis.v.deepstack_idx.index(i)])).unsqueeze(0)
-
-    hidden_states = self.lang.output_norm(hidden_states[:, -1, :])
-    next_token_logits = hidden_states @ self.lang.token_embd.weight.T
-    scores = next_token_logits / TEMP
-    token = sample(scores[0], temp=TEMP, k=TOP_K, p=TOP_P, af=None, ap=None)
-    return token
-
-def deepstack_process(hidden_states, visual_pos_masks, visual_embeds):
-  mask_float = visual_pos_masks.any(axis=1)
-  positions = mask_float.cumsum(axis=0) - 1
-  positions = positions.clamp(0)
-  expanded = visual_embeds[positions]
-  expanded = expanded * mask_float.unsqueeze(-1)
-  return hidden_states[0] + expanded
+        # 4 to -2 because of <|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n tokens before and after image_pad
+        hidden_states[:, 4:-2, :] += deepstack_feature_lists[self.vis.v.deepstack_idx.index(i)]
+    hidden_states.realize()
 
 class Qwen3VLVis():
   def __init__(self, size="2B"):
@@ -353,45 +322,6 @@ class Qwen3VLVis():
     image_embeds = Tensor.gelu(image_embeds)
     image_embeds = self.mm[2](image_embeds)
     return image_embeds, hidden_states, deepstack_feature_lists
-
-  @TinyJit
-  def preprocess_img(self, image):
-    image = image.permute(2, 0, 1)
-    height, width = image.shape[-2:]
-    resized_height, resized_width = smart_resize(
-        height,
-        width,
-        factor=self.patch_size * self.merge_size,
-        min_pixels=65536,
-        max_pixels=16777216,
-    )
-    image = image.unsqueeze(0).float()
-    image = image.interpolate(size=(resized_height, resized_width))
-    resized_height, resized_width = image.shape[-2:]
-    patches = (image - 127.5) / 127.5
-    batch_size, channel = 1, 3
-    grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-    patches = patches.reshape(
-        batch_size,
-        channel,
-        grid_h // self.merge_size,
-        self.merge_size,
-        self.patch_size,
-        grid_w // self.merge_size,
-        self.merge_size,
-        self.patch_size,
-    )
-    patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
-    pixel_values = (
-        patches.unsqueeze(6)
-        .expand(-1, -1, -1, -1, -1, -1, self.temporal_patch_size, -1, -1)
-        .reshape(
-            batch_size,
-            grid_h * grid_w,
-            channel * self.temporal_patch_size * self.patch_size * self.patch_size, # 1536
-        )
-    )[0]
-    return pixel_values.cast(dtypes.bfloat16), Tensor([1, grid_h, grid_w])
 
 # https://github.com/huggingface/transformers/blob/90e3c4fa7200a9c8bb9756bf7bf43381d10850c0/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py#L62
 def smart_resize(height, width, factor, min_pixels, max_pixels):
