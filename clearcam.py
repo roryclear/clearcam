@@ -494,7 +494,7 @@ class VideoCapture:
                       title = f"Event Detected ({cam_name})"
                       threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
                       if use_qwen: # extra notif if qwen
-                        text = qwen.generate(prompt=qwen_prompt, image=cv2.resize(cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), (960, 544)), reset=True) # must reset or run out of context, res must be multiple of 32...so 544 not 540
+                        text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=True) # must reset or run out of context
                         threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
                       threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                     self.last_det[cam_name] = time.time()
@@ -1375,9 +1375,9 @@ if __name__ == "__main__":
     qwen_size = input("Select a Qwen3VL model for AI Summaries from \n2: 2B\n4: 4B\nor press enter to skip:") or False
     if qwen_size in ["2", "4"]:
       print("prewarming Qwen3VL....")
-      qwen = Qwen3VL(size=f"{qwen_size}B")
+      qwen = Qwen3VL(size=f"{qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
       qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
-      qwen.prewarm(res=(544, 960, 3)) # multiple of 32 only
+      qwen.prewarm() # multiple of 32 only
       print("DONE")
       use_qwen = True
   else: userID = None

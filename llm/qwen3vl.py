@@ -98,25 +98,26 @@ def rotate_half(x):
     return ret
 
 class Qwen3VL():
-  def __init__(self, size="2B"):
+  def __init__(self, size="2B", res=(640, 640)):
+    self.res = res
     self.max_context = 2000
     self.vis = Qwen3VLVis(size=size)
     self.lang, kv = Transformer.from_gguf(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/Qwen3VL-{size}-Instruct-F16.gguf"), self.max_context) # max context
     self.tok = SimpleTokenizer.from_gguf_kv(kv)
     self.start_pos = 0
 
-  def prewarm(self, res):
+  def prewarm(self):
     for _ in range(2):
-      prefill_img(vis=self.vis, lang=self.lang, image=Tensor.rand(res).cast(dtypes.uint8), start_pos=Variable("pos",0,self.max_context).bind(42))
+      prefill(vis=self.vis, lang=self.lang, image=Tensor.rand(*self.res, 3).cast(dtypes.uint8), start_pos=Variable("pos",0,self.max_context).bind(42))
       self.lang(tokens=Tensor([[42]]).clone(), start_pos=Variable("pos",1,self.max_context).bind(42), temperature=Tensor(0.7).clone())
       self.lang.prefill_jit(tokens=Tensor([[42]*self.max_context]).clone()[:, :Variable("len",1,self.max_context).bind(42)], \
       start_pos=Variable("pos",1,self.max_context).bind(42), temperature=Tensor(0.7).clone())
 
-  def generate(self, prompt=None, image=None, reset=False): #todo, set start_pos to zero in clearcam
+  def generate(self, prompt=None, image=None, reset=False):
     if reset: self.start_pos = 0
     if image is not None:
-      prefill_img(vis=self.vis, lang=self.lang, image=Tensor(image), start_pos=Variable("pos",0,self.max_context).bind(self.start_pos))
-      self.start_pos += ((image.shape[0] * image.shape[1]) // (32*32)) + 8
+      prefill_img(vis=self.vis, lang=self.lang, image=image, start_pos=Variable("pos",0,self.max_context).bind(self.start_pos), res=self.res)
+      self.start_pos += ((self.res[0] * self.res[1]) // (32*32)) + 8
     if prompt is None: return
     prompt = "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n"
     prompt = self.tok.encode(prompt)
@@ -145,8 +146,16 @@ class Qwen3VL():
     print("\n")
     return self.tok.decode(toks_out)
   
+def prefill_img(vis, lang, image, start_pos, res=(640, 640)):
+  if image.shape[:2] != res:
+    target_h, target_w = res[:2]
+    s = min(target_w / image.shape[1], target_h / image.shape[0])
+    r = cv2.resize(image, (int(image.shape[1] * s), int(image.shape[0] * s)))
+    image = cv2.copyMakeBorder(r, (target_h - r.shape[0]) // 2, target_h - r.shape[0] - (target_h - r.shape[0]) // 2, (target_w - r.shape[1]) // 2, target_w - r.shape[1] - (target_w - r.shape[1]) // 2, cv2.BORDER_CONSTANT, value=0)
+  prefill(vis=vis, lang=lang, image=Tensor(image), start_pos=start_pos)
+
 @TinyJit
-def prefill_img(vis, lang, image, start_pos):
+def prefill(vis, lang, image, start_pos):
   image = image.permute(2, 0, 1)
   height, width = image.shape[-2:]
   image = image.unsqueeze(0).float()
