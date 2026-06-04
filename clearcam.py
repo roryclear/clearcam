@@ -478,27 +478,27 @@ class VideoCapture:
                 continue
               window = alert.window if alert.window else (60 if alert.is_notif else 1)
               if alert.get_counts()[1]:
-                  if time.time() - alert.last_det >= window and (time.time() - alert.last_det >= window):
-                    timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
-                    filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
-                    filepath.mkdir(parents=True, exist_ok=True)
-                    annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
-                    # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                    ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 5)
-                    self.filename[cam_name] = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
-                    if not self.vod[cam_name]: cv2.imwrite(str(self.filename[cam_name]), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
-                    if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
-                      plain.unlink() # only one image per event
-                      self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
-                    if userID is not None and not self.vod[cam_name] and alert.is_notif:
-                      title = f"Event Detected ({cam_name})"
-                      threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
-                      if use_qwen: # extra notif if qwen
-                        text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=True) # must reset or run out of context
-                        threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
-                      threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
-                    self.last_det[cam_name] = time.time()
-                    alert.last_det = time.time()
+                if time.time() - alert.last_det >= window and (time.time() - alert.last_det >= window):
+                  timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
+                  filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
+                  filepath.mkdir(parents=True, exist_ok=True)
+                  annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
+                  # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
+                  ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 5)
+                  self.filename[cam_name] = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
+                  if not self.vod[cam_name]: cv2.imwrite(str(self.filename[cam_name]), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
+                  if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
+                    plain.unlink() # only one image per event
+                    self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
+                  if userID is not None and not self.vod[cam_name] and alert.is_notif:
+                    title = f"Event Detected ({cam_name})"
+                    threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
+                    if use_qwen: # extra notif if qwen
+                      text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=True) # must reset or run out of context
+                      threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
+                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
+                  self.last_det[cam_name] = time.time()
+                  alert.last_det = time.time()
           
           if (time.time() - self.last_live_check[cam_name]) >= 5:
             self.last_live_check[cam_name] = time.time()
