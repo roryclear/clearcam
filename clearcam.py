@@ -182,8 +182,7 @@ class VideoCapture:
 
     self.raw_frame = {}
     self.last_preds = {}
-    self.last_frame = {}
-    self.lock = {}
+    self.last_frames = {}
 
     self.settings = {}
     self.count = {}
@@ -209,7 +208,7 @@ class VideoCapture:
   def init_cam(self, cam_name, src):
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.src[cam_name] = src # todo
-    self.last_frame[cam_name] = None
+    self.last_frames[cam_name] = deque(maxlen=2)
     self.vod[cam_name] = src.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
     self.frame_num[cam_name] = -1
     self.last_frame_num[cam_name] = -1
@@ -229,8 +228,6 @@ class VideoCapture:
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
       self.alert_counters[cam_name][id] = alert_counter
       database.run_put("alerts", cam_name, alert_counter, id=id)
-
-    self.lock[cam_name] = threading.Lock()
 
     self.last_det[cam_name] = -1
     self.last_live_check[cam_name] = time.time()
@@ -388,13 +385,13 @@ class VideoCapture:
     x2_new = cx + hw
     y1_new = cy - hh
     y2_new = cy + hh
-    H, W = self.last_frame[cam_name].shape[:2]
+    H, W = self.last_frames[cam_name][-1].shape[:2]
     x1_new = max(0, min(x1_new, W))
     x2_new = max(0, min(x2_new, W))
     y1_new = max(0, min(y1_new, H))
     y2_new = max(0, min(y2_new, H))
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
-    crop = self.last_frame[cam_name][y1_new:y2_new, x1_new:x2_new]
+    crop = self.last_frames[cam_name][-1][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
     if use_clip or use_face: object_queue.append(object_filename)
 
@@ -413,9 +410,8 @@ class VideoCapture:
           time.sleep(0.5)
         else:
           fail_count = 0
-        with self.lock[cam_name]:
-          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
-          self.frame_num[cam_name] += 1
+        self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
+        self.frame_num[cam_name] += 1
         time.sleep(1 / 100)
       except Exception as e:
         print("Error in frame_loop:", e, cam_name)
@@ -430,7 +426,6 @@ class VideoCapture:
 
         self.cap[cam_name].grab()  # skip for max fps
         ret, frame = self.cap[cam_name].read()
-        self.last_frame[cam_name] = frame #todo
         if not ret or cam_name not in database.run_get("links", None):
           self.running[cam_name] = False
           if "Processing" not in database.run_get("analysis_prog", cam_name): database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
@@ -438,31 +433,28 @@ class VideoCapture:
           self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
           database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
       else:
-        with self.lock[cam_name]:
-          frame_num = self.frame_num[cam_name]
-          last_frame_num = self.last_frame_num[cam_name]
-          if self.raw_frame[cam_name] is None: return
-          frame = self.raw_frame[cam_name].copy()
+        frame_num = self.frame_num[cam_name]
+        last_frame_num = self.last_frame_num[cam_name]
+        if self.raw_frame[cam_name] is None: return
+        frame = self.raw_frame[cam_name].copy()
         if frame_num == last_frame_num: return
 
-        if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): # don't run inference when no active scheds
-          with self.lock[cam_name]: self.last_preds[cam_name] = [] # to remove annotation when no alerts active
+        # don't run inference when no active scheds
+        if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
           if not userID or alerts_on[cam_name]:
             preds, frame = self.run_inference(frame, cam_name=cam_name)
-            with self.lock[cam_name]:
-              self.last_preds[cam_name] = preds.copy()
-              self.last_frame[cam_name] = frame.numpy().copy()
-              self.last_frame_num[cam_name] = self.frame_num[cam_name]
+            self.last_frames[cam_name].append(frame.numpy().copy())
+            self.last_preds[cam_name] = preds.copy()
+            self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
             curr_time = time.time()
             fps = 1 / (curr_time - self.prev_time[cam_name])
             self.prev_time[cam_name] = curr_time
             print(f"\rFPS: {fps:.2f}", end="", flush=True)
           else:
-            with self.lock[cam_name]:
-              self.last_frame_num[cam_name] = self.frame_num[cam_name]
-              self.last_preds = []
+            self.last_frame_num[cam_name] = self.frame_num[cam_name]
+            self.last_preds = []
 
         filtered_preds = self.last_preds[cam_name]
 
@@ -482,7 +474,7 @@ class VideoCapture:
                   timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
                   filepath = BASE_DIR / "cameras" / f"{cam_name}/event_images/{timestamp}"
                   filepath.mkdir(parents=True, exist_ok=True)
-                  annotated_frame = draw_predictions(self.last_frame[cam_name].copy(), filtered_preds, color_dict)
+                  annotated_frame = draw_predictions(self.last_frames[cam_name][-1].copy(), filtered_preds, color_dict)
                   # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
                   ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 5)
                   self.filename[cam_name] = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
