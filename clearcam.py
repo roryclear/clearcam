@@ -426,6 +426,7 @@ class VideoCapture:
 
         self.cap[cam_name].grab()  # skip for max fps
         ret, frame = self.cap[cam_name].read()
+        self.last_frames[cam_name].append(frame)
         if not ret or cam_name not in database.run_get("links", None):
           self.running[cam_name] = False
           if "Processing" not in database.run_get("analysis_prog", cam_name): database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
