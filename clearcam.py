@@ -486,7 +486,9 @@ class VideoCapture:
                     title = f"Event Detected ({cam_name})"
                     threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
                     if use_qwen: # extra notif if qwen
-                      text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=True) # must reset or run out of context
+                      # use frames before last, only one reset needed, must convert to RGB
+                      for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
+                      text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
                       threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
                     threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
