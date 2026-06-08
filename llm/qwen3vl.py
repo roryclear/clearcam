@@ -89,20 +89,11 @@ class SimpleTokenizer:
     return ([] if self.bos_id is None else [self.bos_id]) + (self.encode("<sop>") if self.preset == 'glm4' else [])
   def is_end(self, token_id:int) -> bool: return token_id in (self.eos_id, self.eot_id)
 
-#https://github.com/huggingface/transformers/blob/1316cd76c0ce328228e08d55dc257484961b074c/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L129
-def rotate_half(x):
-  x1 = x[..., : x.shape[-1] // 2]
-  x2 = x[..., x.shape[-1] // 2 :]
-  ret = Tensor.cat(-x2, x1, dim=-1)
-  return ret
-
-def apply_rotary_pos_emb_vision(query, key, cos, sin): return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
-
 class Qwen3VL():
   def __init__(self, size="2B", res=(640, 640)): # (height, width) res
     self.res = res
     self.max_context = 2000
-    self.vis = Qwen3VLVis(size=size)
+    self.vis = Qwen3VLVis(size=size, res=res)
     self.lang, kv = Transformer.from_gguf(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/Qwen3VL-{size}-Instruct-F16.gguf"), self.max_context) # max context
     self.tok = SimpleTokenizer.from_gguf_kv(kv)
     self.start_pos = 0
@@ -117,7 +108,7 @@ class Qwen3VL():
   def generate(self, prompt=None, image=None, reset=False):
     if reset: self.start_pos = 0
     if image is not None:
-      prefill_img(vis=self.vis, lang=self.lang, image=image, start_pos=Variable("pos",0,self.max_context).bind(self.start_pos), res=self.res)
+      prefill_img(vis=self.vis, lang=self.lang, image=image, start_pos=Variable("pos",0,self.max_context).bind(self.start_pos))
       self.start_pos += ((self.res[0] * self.res[1]) // (32*32)) + 8 # todo unhardcode
     if prompt is None: return
     prompt = "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n"
@@ -146,10 +137,18 @@ class Qwen3VL():
       print("\b" * len(tok_s), end="", flush=True)
     print("\n")
     return self.tok.decode(toks_out)
+#https://github.com/huggingface/transformers/blob/1316cd76c0ce328228e08d55dc257484961b074c/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L129
+def rotate_half(x):
+  x1 = x[..., : x.shape[-1] // 2]
+  x2 = x[..., x.shape[-1] // 2 :]
+  ret = Tensor.cat(-x2, x1, dim=-1)
+  return ret
+
+def apply_rotary_pos_emb_vision(query, key, cos, sin): return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
   
-def prefill_img(vis, lang, image, start_pos, res=(640, 640)):
-  if image.shape[:2] != res:
-    target_h, target_w = res[:2]
+def prefill_img(vis, lang, image, start_pos):
+  if image.shape[:2] != vis.res:
+    target_h, target_w = vis.res[:2]
     s = min(target_w / image.shape[1], target_h / image.shape[0])
     r = cv2.resize(image, (int(image.shape[1] * s), int(image.shape[0] * s)))
     image = cv2.copyMakeBorder(r, (target_h - r.shape[0]) // 2, target_h - r.shape[0] - (target_h - r.shape[0]) // 2, (target_w - r.shape[1]) // 2, target_w - r.shape[1] - (target_w - r.shape[1]) // 2, cv2.BORDER_CONSTANT, value=0)
@@ -163,12 +162,11 @@ def prefill(vis, lang, image, start_pos):
   image = image.interpolate(size=(height, width))
   resized_height, resized_width = image.shape[-2:]
   patches = (image - 127.5) / 127.5 # todo use mean and std
-  batch_size, channel = 1, 3
+  channels = 3
   # https://github.com/huggingface/transformers/blob/4ae05b0fba41860adaaeb708774fc1f48c92c049/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py#L195
   grid_h, grid_w = resized_height // vis.patch_size, resized_width // vis.patch_size
   patches = patches.reshape(
-      batch_size,
-      channel,
+      channels,
       grid_h // vis.merge_size,
       vis.merge_size,
       vis.patch_size,
@@ -176,21 +174,20 @@ def prefill(vis, lang, image, start_pos):
       vis.merge_size,
       vis.patch_size,
   )
-  patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+  patches = patches.permute(1, 4, 2, 5, 0, 3, 6)
   pixel_values = (
-      patches.unsqueeze(6)
-      .expand(-1, -1, -1, -1, -1, -1, vis.merge_size, -1, -1)
+      patches.unsqueeze(5)
+      .expand(-1, -1, -1, -1, -1, vis.merge_size, -1, -1)
       .reshape(
-          batch_size,
           grid_h * grid_w,
-          channel * vis.merge_size * vis.patch_size * vis.patch_size,
+          channels * vis.merge_size * vis.patch_size * vis.patch_size,
       )
-  )[0]
+  )
   pixel_values = pixel_values.cast(dtypes.bfloat16)
 
   # f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n<|im_end|>\n" fill size of img with image token
   # <|im_end|>\n<|im_start|>assistant\n
-  num_image_tokens = int((grid_h*grid_w) / 4)
+  num_image_tokens = int((grid_h*grid_w) / 4) # todo clean
   input_ids = Tensor.cat(Tensor([151644, 872, 198, 151652]), Tensor.zeros(num_image_tokens), Tensor([151653, 198, 151645, 198])).unsqueeze(0).cast(dtypes.int)
 
   image_embeds, hidden_states, deepstack_feature_lists = vis(pixel_values, [grid_h, grid_w])
@@ -259,10 +256,13 @@ def get_vision_position_ids(h: int, w:int, merge_size: int):
   return pos_ids
 
 class Qwen3VLVis():
-  def __init__(self, size="2B"):
+  def __init__(self, size="2B", res=[640, 640]):
+    self.res = res
+    self.toks_per_img = (self.res[0] * self.res[1]) // (32*32) # 32x32 tokens per pixel https://www.alibabacloud.com/help/en/model-studio/vision
     kv, state_dict = gguf_load(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-{size}-Instruct-F16.gguf"))
     self.merge_size = kv["clip.vision.spatial_merge_size"]
     self.patch_size = kv["clip.vision.patch_size"]
+    self.feed_forward_length = kv["clip.vision.feed_forward_length"]
     self.v = Qwen3VisBlocks(kv=kv, weights=state_dict)
     self.mm = [nn.Linear(*state_dict["mm.0.weight"].shape[::-1], bias=True), None, nn.Linear(*state_dict["mm.2.weight"].shape[::-1], bias=True)]
     state_dict["v.patch_embd.weight1"] = state_dict["v.patch_embd.weight.1"]
@@ -296,7 +296,7 @@ class Qwen3VLVis():
       if i in self.v.deepstack_idx: deepstack_feature_lists.append(self.v.deepstack[i](hidden_states))
 
     image_embeds = self.v.post_ln(hidden_states)
-    image_embeds = image_embeds.view(-1, 4096)
+    image_embeds = image_embeds.view(-1, self.feed_forward_length)
     image_embeds = self.mm[0](image_embeds)
     image_embeds = Tensor.gelu(image_embeds)
     image_embeds = self.mm[2](image_embeds)
