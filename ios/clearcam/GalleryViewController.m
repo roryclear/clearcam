@@ -507,8 +507,6 @@
         [downloadQueue addOperationWithBlock:^{
             [self downloadSingleFile:fileURL completion:^(BOOL success) {
                 if (success) {
-                    NSURL *url = [NSURL URLWithString:fileURL];
-                    NSString *fileName = url.lastPathComponent;
                     dispatch_async(dispatch_get_main_queue(), ^{
                         [self loadExistingVideos];
                     });
