@@ -509,7 +509,6 @@
                 if (success) {
                     NSURL *url = [NSURL URLWithString:fileURL];
                     NSString *fileName = url.lastPathComponent;
-                    NSString *fullPath = [self.downloadDirectory stringByAppendingPathComponent:fileName];
                     dispatch_async(dispatch_get_main_queue(), ^{
                         [self loadExistingVideos];
                     });
@@ -522,8 +521,6 @@
         [self.refreshControl endRefreshing];
     });
 }
-
-
 
 
 - (void)downloadSingleFile:(NSString *)fileURL completion:(void(^)(BOOL success))completion {
