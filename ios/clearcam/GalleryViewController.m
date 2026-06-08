@@ -81,7 +81,6 @@
 @property (nonatomic, strong) NSMutableArray<NSString *> *sectionTitles;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @property (nonatomic, strong) NSMutableSet<NSString *> *loadedFilenames;
-@property (nonatomic, strong) NSTimer *refreshTimer;
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) FileServer *fileServer;
 @property (nonatomic, strong) NSURL *previewItemURL;
@@ -228,7 +227,6 @@
     [self setupDownloadDirectory];
     [self loadExistingVideos];
     [self updateTableViewBackground];
-    [self setupRefreshTimer];
     
     self.statusTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
                                                         target:self
@@ -266,24 +264,9 @@
 }
 
 - (void)dealloc {
-    [self.refreshTimer invalidate];
-    self.refreshTimer = nil;
     [self.statusTimer invalidate];
     self.statusTimer = nil;
 }
-
-- (void)setupRefreshTimer {
-    self.refreshTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
-                                                        target:self
-                                                      selector:@selector(refreshTimerFired)
-                                                      userInfo:nil
-                                                       repeats:YES];
-}
-
-- (void)refreshTimerFired {
-    [self getEvents];
-}
-
 
 - (void)updateTableViewBackground {
     if (self.videoFiles.count == 0) {
@@ -366,8 +349,6 @@
         self.previewItemURL = [NSURL fileURLWithPath:tempPath];
 
         QLPreviewController *previewController = [[QLPreviewController alloc] init];
-        previewController.dataSource = self;
-        previewController.delegate = self;
 
         [self presentViewController:previewController animated:YES completion:nil];
     }
@@ -401,7 +382,7 @@
     
     // Setup refresh control for events
     self.refreshControl = [[UIRefreshControl alloc] init];
-    [self.refreshControl addTarget:self action:@selector(handleRefresh) forControlEvents:UIControlEventValueChanged];
+    [self.refreshControl addTarget:self action:@selector(getEvents) forControlEvents:UIControlEventValueChanged];
     if (@available(iOS 10.0, *)) {
         self.tableView.refreshControl = self.refreshControl;
     } else {
@@ -411,16 +392,12 @@
 
 - (void)setupRefreshControl {
     self.refreshControl = [[UIRefreshControl alloc] init];
-    [self.refreshControl addTarget:self action:@selector(handleRefresh) forControlEvents:UIControlEventValueChanged];
+    [self.refreshControl addTarget:self action:@selector(getEvents) forControlEvents:UIControlEventValueChanged];
     if (@available(iOS 10.0, *)) {
         self.tableView.refreshControl = self.refreshControl;
     } else {
         [self.tableView addSubview:self.refreshControl];
     }
-}
-
-- (void)handleRefresh {
-    [self getEvents];
 }
 
 - (void)setupDownloadDirectory {
