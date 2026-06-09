@@ -349,7 +349,7 @@
         self.previewItemURL = [NSURL fileURLWithPath:tempPath];
 
         QLPreviewController *previewController = [[QLPreviewController alloc] init];
-
+        previewController.dataSource = self;
         [self presentViewController:previewController animated:YES completion:nil];
     }
 }
