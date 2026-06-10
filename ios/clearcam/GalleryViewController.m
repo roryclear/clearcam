@@ -234,7 +234,7 @@
                                                       userInfo:nil
                                                        repeats:YES];
     [self updateInternetStatus];
-    [self getEvents];
+    [self getEventsWithRetryCount:10];
 }
 
 - (void)updateInternetStatus {
@@ -453,6 +453,11 @@
 }
 
 - (void)getEvents {
+[self getEventsWithRetryCount:0];
+}
+
+- (void)getEventsWithRetryCount:(int)retryCount {
+    NSLog(@"rory here %d",retryCount);
     NSURLComponents *components = [NSURLComponents componentsWithString:@"https://clearcam.org/events"];
     NSString *sessionToken = [[StoreManager sharedInstance] retrieveSessionTokenFromKeychain];
     
@@ -474,8 +479,14 @@
     
     [[self.downloadSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.refreshControl endRefreshing];
+            if (retryCount >= 4) {
+                dispatch_async(dispatch_get_main_queue(), ^{ //todo dup of below
+                    [self.refreshControl endRefreshing];
+                });
+                return;
+            }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self getEventsWithRetryCount:retryCount+1];
             });
             return;
         }
@@ -486,6 +497,18 @@
             NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
             
             if (!jsonError && json[@"files"]) {
+                if([json[@"files"] count] == 0) {
+                    if (retryCount >= 4) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [self.refreshControl endRefreshing];
+                        });
+                        return;
+                    }
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self getEventsWithRetryCount:retryCount+1];
+                    });
+                    return;
+                }
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self downloadFiles:json[@"files"]];
                 });
@@ -493,6 +516,8 @@
         }
     }] resume];
 }
+
+
 
 - (void)downloadFiles:(NSArray<NSString *> *)fileURLs {
     if (fileURLs.count == 0) {
