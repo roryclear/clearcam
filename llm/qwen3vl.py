@@ -93,14 +93,14 @@ class Qwen3VL():
   def __init__(self, size="2B", res=(640, 640)): # (height, width) res
     self.res = res
     self.max_context = 2000
-    self.vis = Qwen3VLVis(size=size, res=res)
     self.lang, kv = Transformer.from_gguf(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/Qwen3VL-{size}-Instruct-F16.gguf"), self.max_context) # max context
     self.tok = SimpleTokenizer.from_gguf_kv(kv)
+    self.vis = Qwen3VLVis(size=size, res=res, tok=self.tok)
     self.start_pos = 0
 
   def prewarm(self):
     for _ in range(2):
-      prefill(vis=self.vis, lang=self.lang, image=Tensor.rand(*self.res, 3).cast(dtypes.uint8), start_pos=Variable("pos",0,self.max_context).bind(42))
+      self.vis.prefill(lang=self.lang, image=Tensor.rand(*self.res, 3).cast(dtypes.uint8), start_pos=Variable("pos",0,self.max_context).bind(42))
       self.lang(tokens=Tensor([[42]]).clone(), start_pos=Variable("pos",1,self.max_context).bind(42), temperature=Tensor(TEMP).clone())
       self.lang.prefill_jit(tokens=Tensor([[42]*self.max_context]).clone()[:, :Variable("len",1,self.max_context).bind(42)], \
       start_pos=Variable("pos",1,self.max_context).bind(42), temperature=Tensor(TEMP).clone())
@@ -108,7 +108,7 @@ class Qwen3VL():
   def generate(self, prompt=None, image=None, reset=False):
     if reset: self.start_pos = 0
     if image is not None:
-      prefill_img(vis=self.vis, lang=self.lang, image=image, start_pos=Variable("pos",0,self.max_context).bind(self.start_pos))
+      self.vis(lang=self.lang, image=image, start_pos=Variable("pos",0,self.max_context).bind(self.start_pos))
       self.start_pos += ((self.res[0] * self.res[1]) // (32*32)) + 8 # todo unhardcode
     if prompt is None: return
     prompt = "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n"
@@ -137,6 +137,7 @@ class Qwen3VL():
       print("\b" * len(tok_s), end="", flush=True)
     print("\n")
     return self.tok.decode(toks_out)
+  
 #https://github.com/huggingface/transformers/blob/1316cd76c0ce328228e08d55dc257484961b074c/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L129
 def rotate_half(x):
   x1 = x[..., : x.shape[-1] // 2]
@@ -145,65 +146,6 @@ def rotate_half(x):
   return ret
 
 def apply_rotary_pos_emb_vision(query, key, cos, sin): return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
-  
-def prefill_img(vis, lang, image, start_pos):
-  if image.shape[:2] != vis.res:
-    target_h, target_w = vis.res[:2]
-    s = min(target_w / image.shape[1], target_h / image.shape[0])
-    r = cv2.resize(image, (int(image.shape[1] * s), int(image.shape[0] * s)))
-    image = cv2.copyMakeBorder(r, (target_h - r.shape[0]) // 2, target_h - r.shape[0] - (target_h - r.shape[0]) // 2, (target_w - r.shape[1]) // 2, target_w - r.shape[1] - (target_w - r.shape[1]) // 2, cv2.BORDER_CONSTANT, value=0)
-  prefill(vis=vis, lang=lang, image=Tensor(image), start_pos=start_pos)
-
-@TinyJit
-def prefill(vis, lang, image, start_pos):
-  image = image.permute(2, 0, 1)
-  height, width = image.shape[-2:]
-  image = image.unsqueeze(0).float()
-  image = image.interpolate(size=(height, width))
-  resized_height, resized_width = image.shape[-2:]
-  patches = (image - 127.5) / 127.5 # todo use mean and std
-  channels = 3
-  # https://github.com/huggingface/transformers/blob/4ae05b0fba41860adaaeb708774fc1f48c92c049/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py#L195
-  grid_h, grid_w = resized_height // vis.patch_size, resized_width // vis.patch_size
-  patches = patches.reshape(
-      channels,
-      grid_h // vis.merge_size,
-      vis.merge_size,
-      vis.patch_size,
-      grid_w // vis.merge_size,
-      vis.merge_size,
-      vis.patch_size,
-  )
-  patches = patches.permute(1, 4, 2, 5, 0, 3, 6)
-  pixel_values = (
-      patches.unsqueeze(5)
-      .expand(-1, -1, -1, -1, -1, vis.merge_size, -1, -1)
-      .reshape(
-          grid_h * grid_w,
-          channels * vis.merge_size * vis.patch_size * vis.patch_size,
-      )
-  )
-  pixel_values = pixel_values.cast(dtypes.bfloat16)
-
-  # f"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n<|im_end|>\n" fill size of img with image token
-  # <|im_end|>\n<|im_start|>assistant\n
-  num_image_tokens = int((grid_h*grid_w) / 4) # todo clean
-  input_ids = Tensor.cat(Tensor([151644, 872, 198, 151652]), Tensor.zeros(num_image_tokens), Tensor([151653, 198, 151645, 198])).unsqueeze(0).cast(dtypes.int)
-
-  image_embeds, hidden_states, deepstack_feature_lists = vis(pixel_values, [grid_h, grid_w])
-  hidden_states = lang.token_embd(input_ids).cast(dtypes.float)
-  # 4 to -4 because of <|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n<|im_end|>\n tokens before and after image_pad
-  hidden_states[:, 4:-4, :] = image_embeds.unsqueeze(0)
-  
-  # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modular_qwen3_vl.py#L626
-  # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modular_qwen3_vl.py#L543
-  for i in range(len(lang.blk)):
-    hidden_states = lang.blk[i](hidden_states, start_pos=start_pos)
-    # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L692
-    if i in vis.v.deepstack_idx:
-      # 4 to -4 because of <|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>\n<|im_end|>\n tokens before and after image_pad
-      hidden_states[:, 4:-4, :] += deepstack_feature_lists[vis.v.deepstack_idx.index(i)]
-  hidden_states.realize()
 
 def meshgrid(x, y):
   grid_x = Tensor.cat(*[x[idx:idx+1].expand(y.shape).unsqueeze(0) for idx in range(x.shape[0])])
@@ -256,12 +198,14 @@ def get_vision_position_ids(h: int, w:int, merge_size: int):
   return pos_ids
 
 class Qwen3VLVis():
-  def __init__(self, size="2B", res=[640, 640]):
+  def __init__(self, tok:SimpleTokenizer, size="2B", res=[640, 640]):
     self.res = res
     self.toks_per_img = (self.res[0] * self.res[1]) // (32*32) # 32x32 tokens per pixel https://www.alibabacloud.com/help/en/model-studio/vision
     kv, state_dict = gguf_load(fetch(f"https://huggingface.co/Qwen/Qwen3-VL-{size}-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-{size}-Instruct-F16.gguf"))
     self.merge_size = kv["clip.vision.spatial_merge_size"]
     self.patch_size = kv["clip.vision.patch_size"]
+    self.image_mean = kv["clip.vision.image_mean"]
+    self.image_std = kv["clip.vision.image_std"]
     self.feed_forward_length = kv["clip.vision.feed_forward_length"]
     self.v = Qwen3VisBlocks(kv=kv, weights=state_dict)
     self.mm = [nn.Linear(*state_dict["mm.0.weight"].shape[::-1], bias=True), None, nn.Linear(*state_dict["mm.2.weight"].shape[::-1], bias=True)]
@@ -269,9 +213,12 @@ class Qwen3VLVis():
     load_state_dict(self, state_dict)
     #https://github.com/huggingface/transformers/blob/15bb519bd4277f4ab5309154aedf3c231e8b4ca8/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L98
     self.inv_freq = 1.0 / (10000.0 ** (Tensor.arange(0, 32, 2, dtype=dtypes.float) / 32))
+    # format for images: #https://arxiv.org/pdf/2409.12191
+    self.prefix = Tensor(tok.encode("<|im_start|>user\n<|vision_start|>"))
+    self.suffix = Tensor(tok.encode("<|vision_end|>\n<|im_end|>\n"))
 
   # https://github.com/huggingface/transformers/blob/15bb519bd4277f4ab5309154aedf3c231e8b4ca8/src/transformers/models/qwen3_vl/modeling_qwen3_vl.py#L679
-  def __call__(self, pixel_values, image_grid_size):
+  def forward(self, pixel_values, image_grid_size):
     grid_hs, grid_ws = image_grid_size    
     idx_tensor, weight_tensor = get_vision_bilinear_indices_and_weights(h=grid_hs, w=grid_ws, num_grid_per_side=self.v.num_grid_per_side, merge_size=self.merge_size)
     pos_ids = get_vision_position_ids(h=grid_hs, w=grid_ws, merge_size=self.merge_size)
@@ -301,6 +248,56 @@ class Qwen3VLVis():
     image_embeds = Tensor.gelu(image_embeds)
     image_embeds = self.mm[2](image_embeds)
     return image_embeds, hidden_states, deepstack_feature_lists
+
+  def __call__(self, lang, image, start_pos):
+    if type(image) == bytes: image = cv2.cvtColor(cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    if image.shape[:2] != self.res:
+      target_h, target_w = self.res[:2]
+      s = min(target_w / image.shape[1], target_h / image.shape[0])
+      r = cv2.resize(image, (int(image.shape[1] * s), int(image.shape[0] * s)))
+      image = cv2.copyMakeBorder(r, (target_h - r.shape[0]) // 2, target_h - r.shape[0] - (target_h - r.shape[0]) // 2, (target_w - r.shape[1]) // 2, target_w - r.shape[1] - (target_w - r.shape[1]) // 2, cv2.BORDER_CONSTANT, value=0)
+    self.prefill(lang=lang, image=Tensor(image), start_pos=start_pos)
+
+  @TinyJit
+  def prefill(self, lang, image, start_pos):
+    image = image.permute(2, 0, 1)
+    image = image.unsqueeze(0).float()
+    image = ((image / 255) - Tensor(self.image_mean).view(1, 3, 1, 1)) / Tensor(self.image_std).view(1, 3, 1, 1)
+    channels = 3
+    height, width = image.shape[-2:]
+    # https://github.com/huggingface/transformers/blob/4ae05b0fba41860adaaeb708774fc1f48c92c049/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py#L195
+    grid_h, grid_w = height // self.patch_size, width // self.patch_size
+    image = image.reshape(
+        channels,
+        grid_h // self.merge_size,
+        self.merge_size,
+        self.patch_size,
+        grid_w // self.merge_size,
+        self.merge_size,
+        self.patch_size,
+    )
+    image = image.permute(1, 4, 2, 5, 0, 3, 6)
+    pixel_values = (
+        image.unsqueeze(5)
+        .expand(-1, -1, -1, -1, -1, self.merge_size, -1, -1)
+        .reshape(
+            grid_h * grid_w,
+            channels * self.merge_size * self.patch_size * self.patch_size,
+        )
+    )
+    pixel_values = pixel_values.cast(dtypes.bfloat16)
+
+    input_ids = Tensor.cat(self.prefix, Tensor.zeros(self.toks_per_img), self.suffix).unsqueeze(0).cast(dtypes.int)
+    image_embeds, hidden_states, deepstack_feature_lists = self.forward(pixel_values, [grid_h, grid_w])
+    hidden_states = lang.token_embd(input_ids).cast(dtypes.float)
+    hidden_states[:, self.prefix.shape[0]:-self.suffix.shape[0], :] = image_embeds.unsqueeze(0)
+    
+    # https://github.com/huggingface/transformers/blob/08692e3c31654e4825b4c078a3c70b86efa70a46/src/transformers/models/qwen3_vl/modular_qwen3_vl.py#L543
+    for i in range(len(lang.blk)):
+      hidden_states = lang.blk[i](hidden_states, start_pos=start_pos)
+      if i in self.v.deepstack_idx:
+        hidden_states[:, self.prefix.shape[0]:-self.suffix.shape[0], :] += deepstack_feature_lists[self.v.deepstack_idx.index(i)]
+    hidden_states.realize()
 
 class Qwen3PatchEmbed:
   def __init__(self, kv=None, weights=None):
