@@ -1144,10 +1144,10 @@ def schedule_daily_restart(cam, restart_time):
         now = datetime.now().time()
         target = time_obj(restart_time[0], restart_time[1])
         if now >= target:
-            delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
+          delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
         else:
-            delta = ((target.hour * 3600 + target.minute * 60) - 
-                    (now.hour * 3600 + now.minute * 60 + now.second))
+          delta = ((target.hour * 3600 + target.minute * 60) - 
+            (now.hour * 3600 + now.minute * 60 + now.second))
         time.sleep(delta)
         cams = database.run_get("links", None)
         for cam_name in cams.keys():
@@ -1395,32 +1395,24 @@ if __name__ == "__main__":
   object_finder = ObjectFinder(clip=use_clip, face=use_face) if (use_clip or use_face) else None
   #model = RFDETR("small")
   cam = VideoCapture()
-  
+
   try:
-    try:
-      server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
-      threading.Thread(target=server.serve_forever, daemon=True).start()
-      print(f"Serving at http://{get_lan_ip()}:8080")
-    except OSError as e:
-      if e.errno == socket.errno.EADDRINUSE:
-        print("Port in use, server not started.")
-        server = None
-      else:
-          raise
-    
+    server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"Serving at http://{get_lan_ip()}:8080")
+  except OSError as e:
+    if e.errno == socket.errno.EADDRINUSE:
+      print("Port in use, server not started.")
+      server = None
+    else:
+        raise
+  
 
-    restart_time = (0, 0)
-    threading.Thread(
-      target=schedule_daily_restart,
-      args=(cam, restart_time),
-      daemon=True
-    ).start()
-
-    cam.start()  
-    while True: time.sleep(3600)
-
-  except KeyboardInterrupt:
-    if url:
-      cam.release(cam.cam_name) # todo, needed?
-      server.shutdown()
+  restart_time = (0, 0)
+  threading.Thread(
+    target=schedule_daily_restart,
+    args=(cam, restart_time),
+    daemon=True
+  ).start()
+  cam.start()
 
