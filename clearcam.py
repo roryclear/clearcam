@@ -300,6 +300,7 @@ class VideoCapture:
     if cam_name in self.proc: self._safe_kill_process(self.proc[cam_name])
     if cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[cam_name])
     src = self.src[cam_name]
+    if type(src) != str: return # todo, fixes a crash, fix cause
 
     ffmpeg_path = find_ffmpeg()
     
