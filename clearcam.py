@@ -1372,7 +1372,7 @@ if __name__ == "__main__":
       print("prewarming Qwen3VL....")
       qwen = Qwen3VL(size=f"{qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
       qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
-      qwen.prewarm() # multiple of 32 only
+      qwen.prewarm()
       print("DONE")
       use_qwen = True
   else: userID = None
