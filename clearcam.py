@@ -1192,7 +1192,6 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         print(f"Error uploading to R2: {e}")
         return False
 
-object_finder_lock = threading.Lock()
 import queue
 task_queue = queue.Queue()
 def add_to_queue(fn, *args):
