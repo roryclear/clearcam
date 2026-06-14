@@ -201,6 +201,7 @@ class VideoCapture:
     self.filename = {}
     self.alert_counters = {}
     self.live_link = {}
+    self.live_link_lock = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -241,6 +242,7 @@ class VideoCapture:
     self.prev_time[cam_name] = time.time()
     self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(cam_name)
     self.filename[cam_name] = None
+    self.live_link_lock[cam_name] = threading.Lock()
     alerts_on[cam_name] = True
 
   def start(self):
@@ -533,13 +535,9 @@ class VideoCapture:
               if "reset" in new_settings: del new_settings["reset"]
             self.settings[cam_name] = new_settings
               
-          if userID and not self.vod[cam_name] and cam_name in self.live_link and self.live_link[cam_name] and (time.time() - self.last_live_seg[cam_name]) >= 4:
+          if userID and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
             self.last_live_seg[cam_name] = time.time()
-            mp4_filename = f"segment.mp4"
-            export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
-            encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-            Path(mp4_filename).unlink()
-            threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), self.live_link[cam_name]), daemon=True).start()
+            threading.Thread(target=self.upload_live_segment, args=(link, cam_name,), daemon=True).start()
         else: self.count[cam_name]+=1
 
     except Exception as e:
@@ -547,6 +545,13 @@ class VideoCapture:
       self._open_ffmpeg(cam_name)
       time.sleep(1)
 
+  def upload_live_segment(self, link, cam_name):
+    self.last_live_seg[cam_name] = time.time()
+    mp4_filename = f"segment.mp4"
+    export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
+    encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+    Path(mp4_filename).unlink()
+    upload_to_r2(file_path=Path(f"""{mp4_filename}.aes"""), signed_url=link)
 
   def check_upload_link(self, cam_name="camera"):
       query_params = urllib.parse.urlencode({
@@ -561,7 +566,7 @@ class VideoCapture:
               response_data = json.loads(response.read().decode('utf-8'))
               upload_link = response_data.get("upload_link")
               alerts_on_res = response_data.get("alerts_on")
-              self.live_link[cam_name] = upload_link
+              with self.live_link_lock[cam_name]: self.live_link[cam_name] = upload_link
               alerts_on[cam_name] = (alerts_on_res == 1)
           else:
               if cam_name in self.live_link: self.live_link[cam_name] = None
