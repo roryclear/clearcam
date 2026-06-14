@@ -201,6 +201,7 @@ class VideoCapture:
     self.filename = {}
     self.alert_counters = {}
     self.live_link = {}
+    self.live_link_lock = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -241,6 +242,7 @@ class VideoCapture:
     self.prev_time[cam_name] = time.time()
     self.current_stream_dir_raw[cam_name] = self._get_new_stream_dir(cam_name)
     self.filename[cam_name] = None
+    self.live_link_lock[cam_name] = threading.Lock()
     alerts_on[cam_name] = True
 
   def start(self):
@@ -561,7 +563,7 @@ class VideoCapture:
               response_data = json.loads(response.read().decode('utf-8'))
               upload_link = response_data.get("upload_link")
               alerts_on_res = response_data.get("alerts_on")
-              self.live_link[cam_name] = upload_link
+              with self.live_link_lock[cam_name]: self.live_link[cam_name] = upload_link
               alerts_on[cam_name] = (alerts_on_res == 1)
           else:
               if cam_name in self.live_link: self.live_link[cam_name] = None
