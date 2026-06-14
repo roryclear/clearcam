@@ -536,10 +536,8 @@ class VideoCapture:
             self.settings[cam_name] = new_settings
               
           if userID and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
-            print("rory live:",link)
             self.last_live_seg[cam_name] = time.time()
-            mp4_filename = f"segment.mp4"
-            threading.Thread(target=self.upload_live_segment, args=(mp4_filename, cam_name,), daemon=True).start()
+            threading.Thread(target=self.upload_live_segment, args=(link, cam_name,), daemon=True).start()
         else: self.count[cam_name]+=1
 
     except Exception as e:
