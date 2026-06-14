@@ -536,12 +536,10 @@ class VideoCapture:
             self.settings[cam_name] = new_settings
               
           if userID and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
+            print("rory live:",link)
             self.last_live_seg[cam_name] = time.time()
             mp4_filename = f"segment.mp4"
-            export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
-            encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-            Path(mp4_filename).unlink()
-            threading.Thread(target=upload_to_r2, args=(Path(f"""{mp4_filename}.aes"""), link), daemon=True).start()
+            threading.Thread(target=self.upload_live_segment, args=(mp4_filename, cam_name,), daemon=True).start()
         else: self.count[cam_name]+=1
 
     except Exception as e:
@@ -549,6 +547,13 @@ class VideoCapture:
       self._open_ffmpeg(cam_name)
       time.sleep(1)
 
+  def upload_live_segment(self, link, cam_name):
+    self.last_live_seg[cam_name] = time.time()
+    mp4_filename = f"segment.mp4"
+    export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
+    encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+    Path(mp4_filename).unlink()
+    upload_to_r2(file_path=Path(f"""{mp4_filename}.aes"""), signed_url=link)
 
   def check_upload_link(self, cam_name="camera"):
       query_params = urllib.parse.urlencode({
