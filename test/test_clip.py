@@ -1,4 +1,4 @@
-from objects import ObjectFinder, precompute_embeddings_jit, precompute_embedding_jit_bs1
+from models.objects import ObjectFinder, precompute_embeddings_jit, precompute_embedding_jit_bs1
 import numpy as np
 from tinygrad import Tensor
 import cv2

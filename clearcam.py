@@ -1386,7 +1386,7 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip or use_face: from objects import ObjectFinder
+  if use_clip or use_face: from models.objects import ObjectFinder
 
 
   object_queue = []
