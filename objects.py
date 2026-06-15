@@ -8,8 +8,8 @@ import numpy as np
 import cv2
 import time
 from utils.helpers import send_notif, export_and_upload, BASE_DIR
-from blazeface import BlazeFace
-from adaface import ADAFACE
+from models.blazeface import BlazeFace
+from models.adaface import ADAFACE
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
 from utils.clip_tokenizer import SimpleTokenizer
 import math

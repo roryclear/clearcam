@@ -134,7 +134,7 @@ class BlazeFace():
         self.min_score_thresh = 0.85
         self.min_suppression_threshold = 0.3
 
-        load_state_dict(self, safe_load("blazeface.safetensors"))
+        load_state_dict(self, safe_load("models/blazeface.safetensors"))
 
 
     def forward(self, x):
