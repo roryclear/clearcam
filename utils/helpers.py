@@ -10,7 +10,6 @@ import urllib
 import json
 import struct
 from datetime import datetime
-import threading
 import cv2
 import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
@@ -307,7 +306,7 @@ def upload_file(file_path: Path, session_token: str):
         print(f"Failed to delete file: {e}")
     return success
 
-import aes
+from utils import aes
 MAGIC_NUMBER = 0x4D41474943
 HEADER_SIZE = 8
 AES_BLOCK_SIZE = 16
