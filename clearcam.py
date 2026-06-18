@@ -343,7 +343,7 @@ class VideoCapture:
           str(path / "stream.m3u8")
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      time.sleep(15)
+      while(os.path.exists(str(path / "stream.m3u8")) == False): time.sleep(0.1)
       if self.start_time[cam_name] is None: self.start_time[cam_name] = time.time()
       
       command = [
@@ -406,18 +406,19 @@ class VideoCapture:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
           fail_count += 1
-          if fail_count > 5:
+          if fail_count > 60:
             print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
             self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
             fail_count = 0
-          time.sleep(0.5)
+          else: time.sleep(1)
         else:
           fail_count = 0
-        self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
-        self.frame_num[cam_name] += 1
-        time.sleep(1 / 100)
+          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
+          self.frame_num[cam_name] += 1
+          time.sleep(1 / 100)
       except Exception as e:
         print("Error in frame_loop:", e, cam_name)
+        fail_count += 1
         time.sleep(1)
 
   def process_frame(self, cam_name):
@@ -480,7 +481,7 @@ class VideoCapture:
                   filepath.mkdir(parents=True, exist_ok=True)
                   annotated_frame = draw_predictions(self.last_frames[cam_name][-1].copy(), filtered_preds, color_dict)
                   # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                  ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 5)
+                  ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 10)
                   self.filename[cam_name] = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                   if not self.vod[cam_name]: cv2.imwrite(str(self.filename[cam_name]), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                   if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
@@ -592,7 +593,7 @@ class VideoCapture:
       if x.track_id not in self.pred_occs[cam_name]: self.pred_occs[cam_name][x.track_id] = [time.time()]
       if (len(self.pred_occs[cam_name][x.track_id]) < 20 and (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 1) or (time.time() - self.pred_occs[cam_name][x.track_id][-1]) > 10:
         self. pred_occs[cam_name][x.track_id].append(time.time())
-        ts = round((self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5,1) if self.vod[cam_name] else round((time.time() - self.start_time[cam_name] - 5),1)
+        ts = round((self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5,1) if self.vod[cam_name] else round((time.time() - self.start_time[cam_name] - 10),1)
         self.save_object(x, ts, cam_name=cam_name)
 
       if x.speed < 2.5: continue #min speed, don't detect still objects, they jitter too. # TODO what's the best min value?
