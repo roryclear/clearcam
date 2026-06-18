@@ -406,18 +406,19 @@ class VideoCapture:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
           fail_count += 1
-          if fail_count > 5:
+          if fail_count > 60:
             print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
             self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
             fail_count = 0
-          time.sleep(0.5)
+          else: time.sleep(1)
         else:
           fail_count = 0
-        self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
-        self.frame_num[cam_name] += 1
-        time.sleep(1 / 100)
+          self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
+          self.frame_num[cam_name] += 1
+          time.sleep(1 / 100)
       except Exception as e:
         print("Error in frame_loop:", e, cam_name)
+        fail_count += 1
         time.sleep(1)
 
   def process_frame(self, cam_name):
