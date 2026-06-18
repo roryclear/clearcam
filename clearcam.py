@@ -343,7 +343,7 @@ class VideoCapture:
           str(path / "stream.m3u8")
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      time.sleep(15)
+      while(os.path.exists(str(path / "stream.m3u8")) == False): time.sleep(0.1)
       if self.start_time[cam_name] is None: self.start_time[cam_name] = time.time()
       
       command = [
