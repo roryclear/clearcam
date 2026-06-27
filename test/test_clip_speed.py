@@ -1,5 +1,5 @@
 from tinygrad import Tensor, TinyJit
-from objects import ObjectFinder
+from models.objects import ObjectFinder
 from utils.helpers import jit_infer
 import time
 import numpy as np
