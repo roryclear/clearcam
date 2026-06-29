@@ -205,7 +205,7 @@ def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, lengt
     mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
     temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
     export_clip(BASE_DIR / "cameras" / f"{cam_name}/streams/{datetime.now().strftime('%Y-%m-%d')}", Path(mp4_filename), length=length, start=start, end=end)
-    subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(thumbnail), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
+    subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(thumbnail), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output], timeout=30)
     os.replace(temp_output, mp4_filename)
     encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
     upload_file(Path(f"{mp4_filename}.aes"), userID)
