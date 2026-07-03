@@ -257,6 +257,7 @@ class VideoCapture:
         cam_check = time.time()
         new_cams = database.run_get("links", None)
         for cam_name in new_cams.keys():
+          if type(new_cams[cam_name]) != str: continue # todo find cause
           if cam_name not in cams:
             self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
             if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
