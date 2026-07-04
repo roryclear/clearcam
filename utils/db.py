@@ -1,7 +1,6 @@
 import os, sqlite3, contextlib, pickle
 from typing import Any
-from tinygrad.helpers import diskcache_get
-import threading
+#from tinygrad.helpers import diskcache_get
 
 _db_tables = set()
 cache_dir: str = "data/"
@@ -105,81 +104,8 @@ def diskcache_get(table: str, key: str|None, id: str|None = None) -> Any:
       return {row_id: pickle.loads(val) for row_id, val in rows}
   finally: cur.close()
 
-
-import multiprocessing
-import queue
-import atexit
-
 class db:
-    def __init__(self):
-      self._req_q = multiprocessing.Queue()
-      self._resp_q = multiprocessing.Queue()
-      self._stop = multiprocessing.Event()
-      self._lock = threading.Lock()
-
-      self._proc = multiprocessing.Process(
-        target=self._worker_loop,
-        args=(self._req_q, self._resp_q, self._stop),
-        daemon=True
-      )
-      self._proc.start()
-
-      atexit.register(self._cleanup)
-
-    @staticmethod
-    def _worker_loop(req_q, resp_q, stop_event):
-      db_connection()
-      while not stop_event.is_set():
-        try:
-          action, table, key, value = req_q.get(timeout=0.2)
-          if action == "exit": break
-          try:
-            if action == "get":
-              if value is not None: result = diskcache_get(table, key, value)
-              else: result = diskcache_get(table, key)
-              resp_q.put(("ok", result))
-            elif action == "put":
-              val, id_val, replace = value if value else (None, None, True)
-              result = diskcache_put(table, key, val, id=id_val, replace=replace)
-              resp_q.put(("ok", result))
-            elif action == "delete":
-              result = diskcache_delete(table, key, value)
-              resp_q.put(("ok", result))
-                  
-          except Exception as e: resp_q.put(("err", str(e)))
-        except queue.Empty: continue
-
-    def _cleanup(self):
-        if hasattr(self, "_stop"):
-            self._stop.set()
-            try: self._req_q.put(("exit", None, None, None))
-            except: pass
-
-        if hasattr(self, "_proc") and self._proc.is_alive():
-            self._proc.join(timeout=1)
-            if self._proc.is_alive():
-                self._proc.kill()
-
-    def run_get(self, table, key=None, id=None, timeout=5):
-        with self._lock:
-          try:
-            self._req_q.put(("get", table, key, id))
-            _, result = self._resp_q.get(timeout=timeout)
-            return result
-          except Exception: return {}
-
-    def run_put(self, table, key, val=None, id=None, replace=True, timeout=5):
-        with self._lock:
-          try:
-            self._req_q.put(("put", table, key, (val, id, replace)))
-            _, result = self._resp_q.get(timeout=timeout)
-            return result
-          except Exception: return {}
-
-    def run_delete(self, table, key, id=None, timeout=5):
-        with self._lock:
-          try:
-            self._req_q.put(("delete", table, key, id))
-            _, result = self._resp_q.get(timeout=timeout)
-            return result
-          except Exception: return {}
+  def __init__(self): pass
+  def run_get(self, table, key=None, id=None): return diskcache_get(table=table, key=key, id=id)
+  def run_put(self, table, key, val=None, id=None, replace=True): return diskcache_put(table=table, key=key, id=id,  val=val, replace=replace)
+  def run_delete(self, table, key, id=None): return diskcache_delete(table=table, key=key, id=id)
