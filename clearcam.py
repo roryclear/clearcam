@@ -280,7 +280,6 @@ class VideoCapture:
         del object_queue[0] 
            
 
-
   def _get_new_stream_dir(self, cam_name):
       timestamp = "video" if self.vod[cam_name] else datetime.now().strftime("%Y-%m-%d")
       stream_dir_raw = self.output_dir_raw[cam_name] / timestamp
@@ -1342,6 +1341,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
       super().server_close()
 
+def use_clip(): return database.run_get("global_settings", "all").use_clip
+
+class GlobalSettings:
+  def __init__(self):
+    self.use_clip = True
+
 if __name__ == "__main__":
   jit_cache = {}
   alerts_on = {}
@@ -1349,6 +1354,11 @@ if __name__ == "__main__":
   database = db()
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
+
+  global_settings = database.run_get("global_settings", "all") # todo all?
+  if global_settings == {}:
+    global_settings = GlobalSettings()
+    database.run_put("global_settings", "all", global_settings)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
@@ -1388,7 +1398,6 @@ if __name__ == "__main__":
     sys.exit(1)
   
   if use_clip or use_face: from models.objects import ObjectFinder
-
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
