@@ -1286,6 +1286,7 @@
 <body>
   <div id="cameraList" class="camera-grid"></div>
   <div class="multi-view-wrapper">
+    <button onclick="openSettingsModal()">Settings</button>
     <button onclick="toggleMultiView()">Multi View</button>
     <div class="date-picker-container">
       <select id="streamDateSelect" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
@@ -1457,6 +1458,24 @@
         </div>
       </div>
     </div>
+
+
+  <div id="settingsModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <span class="close" onclick="closeSettingsModal()">&times;</span>
+      </div>
+
+      <div style="padding: 10px;">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
+          <input type="checkbox" id="openclipToggle">
+          OpenCLIP Search
+        </label>
+      </div>
+    </div>
+  </div>
+
     <div id="alertModal" class="modal">
       <div class="modal-content" style="max-width: 400px;">
         <div class="modal-header">
@@ -3416,6 +3435,26 @@
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') {
         closeImagePreview();
+      }
+    });
+
+    function openSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'flex';
+
+      const enabled = localStorage.getItem('openclip_enabled') === 'true';
+      document.getElementById('openclipToggle').checked = enabled;
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const toggle = document.getElementById('openclipToggle');
+      if (toggle) {
+        toggle.addEventListener('change', () => {
+          localStorage.setItem('openclip_enabled', toggle.checked);
+        });
       }
     });
 
