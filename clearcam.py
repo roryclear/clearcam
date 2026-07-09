@@ -1345,7 +1345,11 @@ class GlobalSettings:
   def __init__(self):
     self.use_clip = True
 
-def get_settings(): return database.run_get("global_settings", "all")
+def get_settings():
+  if threading.current_thread().name == "MainThread":
+    return database.run_get("global_settings", "all")
+  else:
+    return add_to_queue(database.run_get, "global_settings", "all")
 
 if __name__ == "__main__":
   jit_cache = {}
