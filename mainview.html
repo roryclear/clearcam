@@ -3452,15 +3452,6 @@
       document.getElementById('settingsModal').style.display = 'none';
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const toggle = document.getElementById('openclipToggle');
-      if (toggle) {
-        toggle.addEventListener('change', () => {
-          localStorage.setItem('openclip_enabled', toggle.checked);
-        });
-      }
-    });
-
     fetchCameras();
     setInterval(fetchCameras, 5000);
   </script>
