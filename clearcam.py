@@ -1260,7 +1260,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, face, RequestHandlerClass):
+    def __init__(self, server_address, RequestHandlerClass):
         ThreadingMixIn.__init__(self)
         HTTPServer.__init__(self, server_address, RequestHandlerClass)
         self.cleanup_stop_event = threading.Event()
@@ -1408,15 +1408,14 @@ if __name__ == "__main__":
   cam = VideoCapture()
 
   try:
-    server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+    server = ThreadedHTTPServer(('0.0.0.0', 8080), RequestHandlerClass=HLSRequestHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"Serving at http://{get_lan_ip()}:8080")
   except OSError as e:
     if e.errno == socket.errno.EADDRINUSE:
       print("Port in use, server not started.")
       server = None
-    else:
-        raise
+      exit()
   
 
   restart_time = (0, 0)
