@@ -865,14 +865,17 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_settings":
-            zone = database.run_get("settings",cam_name)
-            if zone is not None:
-              if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
-            else:
-              zone = {}
-            
-            self.send_200(zone)
+          if not cam_name: # send global_settings
+            self.send_200(get_settings().__dict__)
             return
+          zone = database.run_get("settings",cam_name)
+          if zone is not None:
+            if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
+          else:
+            zone = {}
+          
+          self.send_200(zone)
+          return
 
         if parsed_path.path == "/get_alerts":
             if not cam_name:
