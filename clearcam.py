@@ -1347,6 +1347,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class GlobalSettings:
   def __init__(self):
     self.use_clip = True
+    self.use_face = False
 
 def get_settings():
   if threading.current_thread().name == "MainThread":

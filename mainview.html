@@ -1472,6 +1472,10 @@
           <input type="checkbox" id="openclipToggle">
           OpenCLIP Search
         </label>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 8px;">
+          <input type="checkbox" id="faceToggle">
+          Face Detection
+        </label>
       </div>
     </div>
   </div>
@@ -3440,12 +3444,13 @@
 
     function openSettingsModal() {
       document.getElementById('settingsModal').style.display = 'flex';
+
       fetch('/get_settings')
         .then(res => res.json())
         .then(data => {
-          const enabled = !!data.use_clip;
-          document.getElementById('openclipToggle').checked = enabled;
-        })
+          document.getElementById('openclipToggle').checked = !!data.use_clip;
+          document.getElementById('faceToggle').checked = !!data.use_face;
+        });
     }
 
     function closeSettingsModal() {
