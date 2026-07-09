@@ -44,6 +44,8 @@ from ocsort_tracker import ocsort
 
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 models = {1: "t", 2: "s", 3: "m", 4: "c", 5: "e", 6: "nano", 7: "small", 8:"medium", 9:"large"}
+database = db()
+def get_settings(): return database.run_get("global_settings", "all")
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None, desc=None, threshold=0.28):
@@ -734,7 +736,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
         
         if parsed_path.path == "/get_features":
-          self.send_200({"object_search":use_clip, "face_search":use_face})
+          self.send_200({"object_search":get_settings().use_clip, "face_search":use_face})
           return
         if parsed_path.path == "/get_max_storage":
           self.send_200(body={"max_gb":self.server.max_gb})
@@ -1341,8 +1343,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
       super().server_close()
 
-def use_clip(): return database.run_get("global_settings", "all").use_clip
-
 class GlobalSettings:
   def __init__(self):
     self.use_clip = True
@@ -1351,7 +1351,6 @@ if __name__ == "__main__":
   jit_cache = {}
   alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
-  database = db()
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
