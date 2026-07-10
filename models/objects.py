@@ -15,6 +15,7 @@ from utils.clip_tokenizer import SimpleTokenizer
 import math
 from clearcam import event_img_info
 from utils.clip_tokenizer import SimpleTokenizer
+from utils.helpers import jit_infer
 
 class Blank: pass
 
@@ -186,20 +187,29 @@ def encode_text(model, text):
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class ObjectFinder:
-    def __init__(self, base_path="data/cameras", clip=False, face=False):
+    def __init__(self, base_path="data/cameras", face=False):
         self.base_path = base_path
         self.image_embeddings = {}
         self.face_embeddings = {}
         self.image_paths = {}
         self.face_paths = {}
-        self.clip = clip
+        self.clip = False
         self.face = face
+        self.jit_cache = {}
         
         if self.clip: self.model = OpenCLIP()
 
         if self.face:
             self.blazeface = BlazeFace()
             self.adaface = ADAFACE()
+
+    def init_clip(self):
+      self.clip = True
+      self.model = OpenCLIP()
+      print("prewarming CLIP....")
+      for _ in range(2): _ = self.model._encode_text("text here", realize=True)
+      for _ in range(2): _ = jit_infer(self.model.precompute_embedding, Tensor.rand(1, 3, 224, 224), jit_cache=self.jit_cache).numpy()
+      print("DONE")
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
