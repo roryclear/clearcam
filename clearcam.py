@@ -1373,6 +1373,7 @@ def set_settings(settings):
     add_to_queue(database.run_put, "global_settings", "all", settings)
 
 if __name__ == "__main__":
+  from models.objects import ObjectFinder
   jit_cache = {}
   alerts_on = {}
   running_loop = False
@@ -1422,8 +1423,6 @@ if __name__ == "__main__":
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
-  
-  if use_clip or use_face: from models.objects import ObjectFinder
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
