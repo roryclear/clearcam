@@ -269,7 +269,7 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name) # todo rename alerts_on?
-      if global_settings.use_clip or use_face: process_queue()
+      process_queue()
       if len(object_queue) > 0:
         try:
           img = cv2.imread(object_queue[0])
@@ -1198,19 +1198,21 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         print(f"Error uploading to R2: {e}")
         return False
 
-import queue
-task_queue = queue.Queue()
-def add_to_queue(fn, *args):
-    result_queue = queue.Queue(maxsize=1)
-    task_queue.put((fn, args, result_queue))
-    return result_queue.get()
+import queue, itertools
+task_queue = queue.PriorityQueue()
+counter = itertools.count()
+def add_to_queue(fn, *args, front=False):
+  result_queue = queue.Queue(maxsize=1)
+  priority = 0 if front else 1
+  task_queue.put((priority, next(counter), fn, args, result_queue))
+  return result_queue.get()
 
 def process_queue():
-    try:
-      fn, args, result_queue = task_queue.get_nowait()
-    except queue.Empty: return
-    result = fn(*args)
-    result_queue.put(result)
+  try:
+    _, _, fn, args, result_queue = task_queue.get_nowait()
+  except queue.Empty: return
+  result = fn(*args)
+  result_queue.put(result)
 
 def process_latest_face(img):
   if use_face and str(object_queue[0]).endswith("_0.jpg"):
