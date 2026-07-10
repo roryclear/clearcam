@@ -579,8 +579,9 @@ class VideoCapture:
     shutil.rmtree(BASE_DIR / "cameras" / cam_name / "event_images", ignore_errors=True)
 
   def run_inference(self, frame, cam_name):
+    global model
     frame = Tensor(frame)
-    preds = jit_infer(model, frame, jit_cache).numpy()
+    preds = jit_infer(model, frame, yolo_jit_cache).numpy()
     thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
@@ -1239,12 +1240,20 @@ def process_latest_face(img):
       pkl_path.parent.mkdir(parents=True, exist_ok=True)
       pickle.dump(data, open(pkl_path, "wb"))  
 
-def set_settings(x): # todo, save to db, do logic in GlobalSettings class
+def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanitize inputs so yolo doesn't crash
   global global_settings
+  global model
+  global yolo_res
+  global yolo_jit_cache
   if x.use_clip:
     object_finder.init_clip()
   else:
     object_finder.turn_off_clip()
+
+  if x.model_size != global_settings.model_size:
+    yolo_jit_cache = {}
+    model = YOLOv9(x.model_size, yolo_res)
+
   global_settings = x
 
 def clip_latest_img(img):
@@ -1363,12 +1372,17 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=True):
+  def __init__(self, use_clip=True, model_size="t"):
     self.use_clip = use_clip
+    self.model_size = model_size
 
 if __name__ == "__main__":
   global global_settings # todo
+  global model
+  global yolo_res
+  global yolo_jit_cache
   jit_cache = {}
+  yolo_jit_cache = {}
   alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
@@ -1391,7 +1405,7 @@ if __name__ == "__main__":
     use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
     use_face = use_face in ["y", "Y"]
 
-  global_settings = GlobalSettings(use_clip=use_clip)
+  global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant])
   database.run_put("global_settings", "all", global_settings)
 
   userID = input("enter your Clearcam user id or press Enter to skip: ")
@@ -1425,8 +1439,6 @@ if __name__ == "__main__":
 
   model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
   object_finder = ObjectFinder(clip=global_settings.use_clip, face=use_face)
-
-  #model = RFDETR("small")
   cam = VideoCapture()
 
   try:
