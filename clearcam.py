@@ -1377,7 +1377,6 @@ class GlobalSettings:
     self.model_size = model_size
 
 if __name__ == "__main__":
-  global global_settings # todo
   jit_cache = {}
   yolo_jit_cache = {}
   alerts_on = {}
