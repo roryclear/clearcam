@@ -1378,9 +1378,6 @@ class GlobalSettings:
 
 if __name__ == "__main__":
   global global_settings # todo
-  global model
-  global yolo_res
-  global yolo_jit_cache
   jit_cache = {}
   yolo_jit_cache = {}
   alerts_on = {}
@@ -1429,7 +1426,6 @@ if __name__ == "__main__":
   
   from models.objects import ObjectFinder
 
-
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
   
@@ -1451,8 +1447,7 @@ if __name__ == "__main__":
       server = None
     else:
         raise
-  
-
+    
   restart_time = (0, 0)
   threading.Thread(
     target=schedule_daily_restart,
