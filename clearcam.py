@@ -1201,16 +1201,16 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
 import queue
 task_queue = queue.Queue()
 def add_to_queue(fn, *args):
-    result_queue = queue.Queue(maxsize=1)
-    task_queue.put((fn, args, result_queue))
-    return result_queue.get()
+  result_queue = queue.Queue(maxsize=1)
+  task_queue.put((fn, args, result_queue))
+  return result_queue.get()
 
 def process_queue():
-    try:
-      fn, args, result_queue = task_queue.get_nowait()
-    except queue.Empty: return
-    result = fn(*args)
-    result_queue.put(result)
+  try:
+    fn, args, result_queue = task_queue.get_nowait()
+  except queue.Empty: return
+  result = fn(*args)
+  result_queue.put(result)
 
 def process_latest_face(img):
   if use_face and str(object_queue[0]).endswith("_0.jpg"):
@@ -1261,32 +1261,32 @@ active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def __init__(self, server_address, use_clip, face, RequestHandlerClass):
-        ThreadingMixIn.__init__(self)
-        HTTPServer.__init__(self, server_address, RequestHandlerClass)
-        self.cleanup_stop_event = threading.Event()
-        self.cleanup_thread = None
+      ThreadingMixIn.__init__(self)
+      HTTPServer.__init__(self, server_address, RequestHandlerClass)
+      self.cleanup_stop_event = threading.Event()
+      self.cleanup_thread = None
+      max_gb = database.run_get("max_storage", None)
+      if max_gb == {}:
+        database.run_put("max_storage", "all", 256)
         max_gb = database.run_get("max_storage", None)
-        if max_gb == {}:
-          database.run_put("max_storage", "all", 256)
-          max_gb = database.run_get("max_storage", None)
-        self.max_gb = max_gb["all"]
-        self.object_finder_stop_event = threading.Event()
-        self.object_finder_thread = None
-        self._setup_cleanup_and_clip_thread()
+      self.max_gb = max_gb["all"]
+      self.object_finder_stop_event = threading.Event()
+      self.object_finder_thread = None
+      self._setup_cleanup_and_clip_thread()
 
     def _setup_cleanup_and_clip_thread(self):
-        if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
-          self.cleanup_stop_event.clear()
-          self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
-          self.cleanup_thread.start()
+      if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
+        self.cleanup_stop_event.clear()
+        self.cleanup_thread = threading.Thread(target=self._cleanup_task, daemon=True, name="StorageCleanup")
+        self.cleanup_thread.start()
 
     def _cleanup_task(self):
-        while not self.cleanup_stop_event.is_set():
-            try:
-                self._check_and_cleanup_storage()
-            except Exception as e:
-                print(f"Cleanup error: {e}")
-            self.cleanup_stop_event.wait(timeout=600)
+      while not self.cleanup_stop_event.is_set():
+          try:
+              self._check_and_cleanup_storage()
+          except Exception as e:
+              print(f"Cleanup error: {e}")
+          self.cleanup_stop_event.wait(timeout=600)
 
     def _check_and_cleanup_storage(self):
       total_size = sum(f.stat().st_size for f in (BASE_DIR / "cameras").glob('**/*') if f.is_file())
