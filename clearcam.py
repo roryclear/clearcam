@@ -993,10 +993,12 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if requested_path.startswith("cameras/"):
             requested_path = requested_path[len("cameras/"):]
 
-        cam_name = requested_path[:requested_path.index("/")]
-        vod = is_vod(cam_name)
-        # todo hack
-        if vod and "preview.png" not in requested_path: requested_path = requested_path.rsplit("/", 2)[0] + "/video/" + requested_path.rsplit("/", 1)[1]
+        try: # todo
+          cam_name = requested_path[:requested_path.index("/")]
+          vod = is_vod(cam_name)
+          if vod and "preview.png" not in requested_path: requested_path = requested_path.rsplit("/", 2)[0] + "/video/" + requested_path.rsplit("/", 1)[1]
+        except Exception:
+          pass
 
         file_path = BASE_DIR / "cameras" / requested_path
 
