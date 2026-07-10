@@ -330,6 +330,8 @@ class VideoCapture:
       command = [
           ffmpeg_path,
           *(["-rtsp_transport", "tcp"] if is_rtsp else []),
+                        "-headers", "Origin: https://earthcam.com\r\n",
+    "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:117.0) Gecko/20100101 Firefox/117.0",
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
@@ -1260,9 +1262,9 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
     x.userID = None
     x.use_qwen = False
 
-  if global_settings.use_qwen != x.use_qwen:
+  if global_settings.use_qwen != x.use_qwen or global_settings.qwen_size != x.qwen_size:
     if x.use_qwen:
-      qwen = Qwen3VL(size=f"2B", res=(544, 960)) # h, w. they need to be multiples of 32
+      qwen = Qwen3VL(size=f"{x.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
       qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
       qwen.prewarm()
     else: qwen = None
@@ -1385,13 +1387,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=True, model_size="t", model_res=960, userID=None, key=None, use_qwen=False):
+  def __init__(self, use_clip=True, model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
     self.use_clip = use_clip
     self.model_size = model_size
     self.model_res = model_res
     self.userID = userID
     self.key= key
     self.use_qwen = use_qwen
+    self.qwen_size = qwen_size
 
 if __name__ == "__main__":
   jit_cache = {}
@@ -1420,6 +1423,7 @@ if __name__ == "__main__":
 
   userID = input("enter your Clearcam user id or press Enter to skip: ")
   use_qwen = False
+  qwen_size = 2
   if len(userID) > 0:
     key = ""
     while len(key) < 1: key = input("enter a password for encryption: ")
@@ -1434,7 +1438,7 @@ if __name__ == "__main__":
   else: userID = None
 
   global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant], model_res=yolo_res,
-                                  userID=userID, key=key, use_qwen=use_qwen)
+                                  userID=userID, key=key, use_qwen=use_qwen, qwen_size=qwen_size)
   database.run_put("global_settings", "all", global_settings)
 
   if userID is not None and key is None:
