@@ -1419,11 +1419,7 @@ if __name__ == "__main__":
 
   model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
   object_finder = ObjectFinder(clip=global_settings.use_clip, face=use_face) if (global_settings.use_clip or use_face) else None
-  if global_settings.use_clip:
-    print("prewarming CLIP....")
-    for _ in range(2): _ = object_finder.model._encode_text("text here", realize=True)
-    for _ in range(2): _ = jit_infer(object_finder.model.precompute_embedding, Tensor.rand(1, 3, 224, 224), jit_cache=jit_cache).numpy()
-    print("DONE")
+
   #model = RFDETR("small")
   cam = VideoCapture()
 
