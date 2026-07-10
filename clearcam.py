@@ -490,7 +490,7 @@ class VideoCapture:
                   if global_settings.userID is not None and not self.vod[cam_name] and alert.is_notif:
                     title = f"Event Detected ({cam_name})"
                     threading.Thread(target=send_notif, args=(global_settings.userID,title,None), daemon=True).start()
-                    if use_qwen: # extra notif if qwen
+                    if global_settings.use_qwen: # extra notif if qwen
                       # use frames before last, only one reset needed, must convert to RGB
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
                       text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
@@ -1245,6 +1245,8 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
   global model
   global yolo_res
   global yolo_jit_cache
+  global qwen
+  global qwen_prompt
   if x.use_clip:
     object_finder.init_clip()
   else:
@@ -1253,6 +1255,17 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
   if x.model_size != global_settings.model_size or x.model_res != global_settings.model_res:
     yolo_jit_cache = {}
     model = YOLOv9(x.model_size, x.model_res)
+
+  if x.key == None: # dont use alerts without a key
+    x.userID = None
+    x.use_qwen = False
+
+  if global_settings.use_qwen != x.use_qwen:
+    if x.use_qwen:
+      qwen = Qwen3VL(size=f"2B", res=(544, 960)) # h, w. they need to be multiples of 32
+      qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+      qwen.prewarm()
+    else: qwen = None
 
   global_settings = x
 
@@ -1372,12 +1385,13 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=True, model_size="t", model_res=960, userID=None, key=None):
+  def __init__(self, use_clip=True, model_size="t", model_res=960, userID=None, key=None, use_qwen=False):
     self.use_clip = use_clip
     self.model_size = model_size
     self.model_res = model_res
     self.userID = userID
     self.key= key
+    self.use_qwen = use_qwen
 
 if __name__ == "__main__":
   jit_cache = {}
@@ -1420,7 +1434,7 @@ if __name__ == "__main__":
   else: userID = None
 
   global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant], model_res=yolo_res,
-                                  userID=userID, key=key)
+                                  userID=userID, key=key, use_qwen=use_qwen)
   database.run_put("global_settings", "all", global_settings)
 
   if userID is not None and key is None:
