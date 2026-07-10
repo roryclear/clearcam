@@ -397,7 +397,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frames[cam_name][-1][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-    if use_clip or use_face: object_queue.append(object_filename)
+    if global_settings.use_clip or use_face: object_queue.append(object_filename)
 
   def frame_loop(self, cam_name):
     fail_count = 0
@@ -735,7 +735,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
         
         if parsed_path.path == "/get_features":
-          self.send_200({"object_search":use_clip, "face_search":use_face})
+          self.send_200({"object_search":global_settings.use_clip, "face_search":use_face})
           return
         if parsed_path.path == "/get_max_storage":
           self.send_200(body={"max_gb":self.server.max_gb})
@@ -1027,7 +1027,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           body = self.rfile.read(content_length)
           data = json.loads(body.decode('utf-8'))
           add_to_queue(db.run_put, database, "global_settings", "all", GlobalSettings(**data))
-          add_to_queue(set_clip, data["use_clip"])
+          add_to_queue(set_settings, GlobalSettings(**data))
           self.send_200([])
           return
 
@@ -1100,20 +1100,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: add_to_queue(object_finder._load_all_embeddings)
-            if (uploaded_image or similar_img) and (use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
+            if image_text and global_settings.use_clip: add_to_queue(object_finder._load_all_embeddings)
+            if (uploaded_image or similar_img) and (global_settings.use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
             
-            if uploaded_image and (use_clip or is_face):
+            if uploaded_image and (global_settings.use_clip or is_face):
               results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
-            if similar_img and (use_clip or is_face):
+            if similar_img and (global_settings.use_clip or is_face):
               results = add_to_queue(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
-            if image_text and use_clip:
+            if image_text and global_settings.use_clip:
               results = add_to_queue(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
@@ -1239,12 +1239,12 @@ def process_latest_face(img):
       pkl_path.parent.mkdir(parents=True, exist_ok=True)
       pickle.dump(data, open(pkl_path, "wb"))  
 
-def set_clip(x): # todo
-  global use_clip
-  use_clip = x
+def set_settings(x): # todo
+  global global_settings
+  global_settings = x
 
 def clip_latest_img(img):
-  if use_clip:
+  if global_settings.use_clip:
     img = object_finder.preprocess(img)
     data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
     if "embeddings" not in data: data["embeddings"] = {}
@@ -1276,7 +1276,7 @@ cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, face, RequestHandlerClass):
+    def __init__(self, server_address, RequestHandlerClass):
       ThreadingMixIn.__init__(self)
       HTTPServer.__init__(self, server_address, RequestHandlerClass)
       self.cleanup_stop_event = threading.Event()
@@ -1363,7 +1363,7 @@ class GlobalSettings:
     self.use_clip = use_clip
 
 if __name__ == "__main__":
-  global use_clip # todo
+  global global_settings # todo
   jit_cache = {}
   alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
@@ -1371,12 +1371,11 @@ if __name__ == "__main__":
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
-  database.run_put("global_settings", "all", GlobalSettings())
+  global_settings = GlobalSettings()
+  database.run_put("global_settings", "all", global_settings)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
-  use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
-  if use_clip: use_clip = use_clip != "False" # str to bool
   use_face = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_face=")), None)
   if use_face: use_face = use_face != "False" # str to bool
   model_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
@@ -1386,8 +1385,6 @@ if __name__ == "__main__":
     if model_variant < 6:
       yolo_ress = {"1":320, "2":640, "3":960,"4":1280,"5":1536}
       yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 960):") or "3"]
-    use_clip = input("Would you like to enable clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
-    use_clip = use_clip in ["y", "Y"]
     use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
     use_face = use_face in ["y", "Y"]
 
@@ -1410,7 +1407,7 @@ if __name__ == "__main__":
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip or use_face: from models.objects import ObjectFinder
+  from models.objects import ObjectFinder
 
 
   object_queue = []
@@ -1421,8 +1418,8 @@ if __name__ == "__main__":
   cam = None
 
   model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-  object_finder = ObjectFinder(clip=use_clip, face=use_face) if (use_clip or use_face) else None
-  if use_clip:
+  object_finder = ObjectFinder(clip=global_settings.use_clip, face=use_face) if (global_settings.use_clip or use_face) else None
+  if global_settings.use_clip:
     print("prewarming CLIP....")
     for _ in range(2): _ = object_finder.model._encode_text("text here", realize=True)
     for _ in range(2): _ = jit_infer(object_finder.model.precompute_embedding, Tensor.rand(1, 3, 224, 224), jit_cache=jit_cache).numpy()
@@ -1431,7 +1428,7 @@ if __name__ == "__main__":
   cam = VideoCapture()
 
   try:
-    server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+    server = ThreadedHTTPServer(('0.0.0.0', 8080), RequestHandlerClass=HLSRequestHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"Serving at http://{get_lan_ip()}:8080")
   except OSError as e:
