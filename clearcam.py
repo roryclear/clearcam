@@ -269,7 +269,7 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name) # todo rename alerts_on?
-      if use_clip or use_face: process_queue()
+      process_queue()
       if len(object_queue) > 0:
         try:
           img = cv2.imread(object_queue[0])
@@ -1021,6 +1021,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
+
+        if self.path.startswith("/edit_settings"):
+          content_length = int(self.headers.get('Content-Length', 0))
+          body = self.rfile.read(content_length)
+          data = json.loads(body.decode('utf-8'))
+          add_to_queue(db.run_put, database, "global_settings", "all", GlobalSettings(**data))
+          add_to_queue(set_clip, data["use_clip"])
+          self.send_200([])
+          return
+
         if self.path.startswith("/analyse-footage"):
           params = parse_qs(parsed_path.query)
           filename = params.get("filename", [None])[0]
@@ -1229,6 +1239,10 @@ def process_latest_face(img):
       pkl_path.parent.mkdir(parents=True, exist_ok=True)
       pickle.dump(data, open(pkl_path, "wb"))  
 
+def set_clip(x): # todo
+  global use_clip
+  use_clip = x
+
 def clip_latest_img(img):
   if use_clip:
     img = object_finder.preprocess(img)
@@ -1344,13 +1358,20 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
         super().server_close()
 
+class GlobalSettings:
+  def __init__(self, use_clip=True):
+    self.use_clip = use_clip
+
 if __name__ == "__main__":
+  global use_clip # todo
   jit_cache = {}
   alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
+
+  database.run_put("global_settings", "all", GlobalSettings())
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
