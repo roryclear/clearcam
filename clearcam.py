@@ -246,6 +246,7 @@ class VideoCapture:
     alerts_on[cam_name] = True
 
   def start(self):
+    running_loop = True # todo
     cam_check = time.time()
     cams = database.run_get("links", None)
     for cam_name in cams.keys():
@@ -1201,15 +1202,18 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
         return False
 
 import queue
-task_queue = queue.Queue()
-def add_to_queue(fn, *args):
+counter = 0
+task_queue = queue.PriorityQueue()
+def add_to_queue(fn, *args, priority=10):
+  global counter
   result_queue = queue.Queue(maxsize=1)
-  task_queue.put((fn, args, result_queue))
+  counter += 1
+  task_queue.put((priority, counter, fn, args, result_queue))
   return result_queue.get()
 
 def process_queue():
   try:
-    fn, args, result_queue = task_queue.get_nowait()
+    _, _, fn, args, result_queue = task_queue.get_nowait()
   except queue.Empty: return
   result = fn(*args)
   result_queue.put(result)
@@ -1350,7 +1354,7 @@ class GlobalSettings:
     self.use_face = False
 
 def get_settings():
-  if threading.current_thread().name == "MainThread":
+  if threading.current_thread().name == "MainThread" or not running_loop:
     return database.run_get("global_settings", "all")
   else:
     return add_to_queue(database.run_get, "global_settings", "all")
@@ -1358,6 +1362,7 @@ def get_settings():
 if __name__ == "__main__":
   jit_cache = {}
   alerts_on = {}
+  running_loop = False
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)

@@ -1477,6 +1477,9 @@
           Face Detection
         </label>
       </div>
+    <div style="padding: 10px; text-align: right;">
+      <button onclick="saveSettings()">Save</button>
+    </div>
     </div>
   </div>
 
@@ -3455,6 +3458,30 @@
 
     function closeSettingsModal() {
       document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    function saveSettings() {
+      const settings = {
+        use_clip: document.getElementById('openclipToggle').checked,
+        use_face: document.getElementById('faceToggle').checked
+      };
+
+      fetch('/edit_settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error('Failed to save settings');
+        }
+        closeSettingsModal();
+      })
+      .catch(err => {
+        console.error(err);
+      });
     }
 
     fetchCameras();
