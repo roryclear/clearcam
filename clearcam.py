@@ -779,8 +779,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         
         if parsed_path.path == "/edit_settings":
             if not cam_name:
-                self.send_error(400, "Missing cam or id")
-                return
+              self.send_error(400, "Missing cam or id")
+              return
             zone = database.run_get("settings", cam_name)
             if zone is None: zone = {}
             coords_json = query.get("coords", [None])[0]
@@ -1022,6 +1022,13 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
+        if self.path.startswith("/edit_settings"):
+          content_length = int(self.headers.get('Content-Length', 0))
+          body = self.rfile.read(content_length)
+          data = json.loads(body.decode('utf-8'))
+          set_settings(GlobalSettings(**data))
+          self.send_200([])
+          return
         if self.path.startswith("/analyse-footage"):
           params = parse_qs(parsed_path.query)
           filename = params.get("filename", [None])[0]
@@ -1349,15 +1356,21 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
       super().server_close()
 
 class GlobalSettings:
-  def __init__(self):
-    self.use_clip = True
-    self.use_face = False
+  def __init__(self, use_clip=True, use_face=False):
+    self.use_clip = use_clip
+    self.use_face = use_face
 
 def get_settings():
   if threading.current_thread().name == "MainThread" or not running_loop:
     return database.run_get("global_settings", "all")
   else:
     return add_to_queue(database.run_get, "global_settings", "all")
+
+def set_settings(settings):
+  if threading.current_thread().name == "MainThread" or not running_loop:
+    database.run_put("global_settings", "all", settings)
+  else:
+    add_to_queue(database.run_put, "global_settings", "all", settings)
 
 if __name__ == "__main__":
   jit_cache = {}
