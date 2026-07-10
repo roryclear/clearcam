@@ -211,6 +211,9 @@ class ObjectFinder:
       for _ in range(2): _ = jit_infer(self.model.precompute_embedding, Tensor.rand(1, 3, 224, 224), jit_cache=self.jit_cache).numpy()
       print("DONE")
 
+    def turn_off_clip(self):
+      self.clip = False
+      self.model = None
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
