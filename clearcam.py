@@ -397,6 +397,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frames[cam_name][-1][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
+    global_settings = database.run_get("global_settings", "all")
     if global_settings.use_clip or use_face: object_queue.append(object_filename)
 
   def frame_loop(self, cam_name):
@@ -723,6 +724,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         return BASE_DIR / "cameras"
     
     def do_GET(self):
+        global_settings = add_to_queue(db.run_get, database, "global_settings", "all", front=True)
+
         parsed_path = urlparse(unquote(self.path))
         query = parse_qs(parsed_path.query)
         cam_name = query.get("cam", [None])[0]
@@ -941,7 +944,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               self.send_200(labeled_counts)
               return
             else:
-              database.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
+              database.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name), "0")
               self.send_200([])
       
 
@@ -1018,129 +1021,130 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             shutil.copyfileobj(f, self.wfile)
 
     def do_POST(self):
-        parsed_path = urlparse(self.path)
-        if self.path.startswith("/analyse-footage"):
-          params = parse_qs(parsed_path.query)
-          filename = params.get("filename", [None])[0]
-          chunk = int(params.get("chunk", [0])[0])
-          total = int(params.get("total", [1])[0])
-          if not filename:
-            self.send_error(400, "Missing filename")
-            return
-          filename = os.path.basename(filename)
-          upload_dir = BASE_DIR / "cameras"
-          upload_dir.mkdir(exist_ok=True)
-          length = int(self.headers.get("Content-Length", 0))
-          if length <= 0:
-            self.send_error(411, "Content-Length required")
-            return
-          final_path = upload_dir / filename
-          temp_path = upload_dir / f"{filename}.part"
-          with open(temp_path, "ab") as f:
-            remaining = length
-            while remaining > 0:
-              data = self.rfile.read(min(1024 * 1024, remaining))
-              if not data: break
-              f.write(data)
-              remaining -= len(data)
-          if chunk == total - 1: temp_path.rename(final_path)
-          self.send_200([])
+      global_settings = add_to_queue(db.run_get, database, "global_settings", "all", front=True)
+      parsed_path = urlparse(self.path)
+      if self.path.startswith("/analyse-footage"):
+        params = parse_qs(parsed_path.query)
+        filename = params.get("filename", [None])[0]
+        chunk = int(params.get("chunk", [0])[0])
+        total = int(params.get("total", [1])[0])
+        if not filename:
+          self.send_error(400, "Missing filename")
+          return
+        filename = os.path.basename(filename)
+        upload_dir = BASE_DIR / "cameras"
+        upload_dir.mkdir(exist_ok=True)
+        length = int(self.headers.get("Content-Length", 0))
+        if length <= 0:
+          self.send_error(411, "Content-Length required")
+          return
+        final_path = upload_dir / filename
+        temp_path = upload_dir / f"{filename}.part"
+        with open(temp_path, "ab") as f:
+          remaining = length
+          while remaining > 0:
+            data = self.rfile.read(min(1024 * 1024, remaining))
+            if not data: break
+            f.write(data)
+            remaining -= len(data)
+        if chunk == total - 1: temp_path.rename(final_path)
+        self.send_200([])
 
-        if parsed_path.path == "/event_thumbs":
-            content_length = int(self.headers.get("Content-Length", 0))
-            raw_body = self.rfile.read(content_length)
+      if parsed_path.path == "/event_thumbs":
+          content_length = int(self.headers.get("Content-Length", 0))
+          raw_body = self.rfile.read(content_length)
 
-            try:
-                data = json.loads(raw_body)
-            except json.JSONDecodeError:
-                self.send_error(400, "Invalid JSON")
-                return
-
-            cam_name     = data.get("cam")
-            selected_dir = data.get("folder")
-            name_contains = data.get("name_contains")
-            image_text   = data.get("image_text")
-            similar_img  = data.get("similar_img")
-            start = data.get("start")
-            count = data.get("count")
-            is_face = data.get("is_face") or False
-            if is_face and not use_face: return
-            if start is None: start, count = 0, 100
-            uploaded_image = data.get("uploaded_image")
-            if uploaded_image:
-              if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
-              uploaded_image = base64.b64decode(uploaded_image)
-
-            if cam_name:
-              camera_dirs = [BASE_DIR / "cameras" / cam_name]
-            else:
-              camera_dirs = [d for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
-
-            if selected_dir:
-              selected_dirs = [selected_dir]
-            else:
-              selected_dirs = list({
-                subdir.name 
-                for camera_dir in camera_dirs
-                if (camera_dir / "streams").is_dir()
-                for subdir in (camera_dir / "streams").iterdir() 
-                if subdir.is_dir()
-              })
-            selected_dirs.append("video")
-
-            if image_text and global_settings.use_clip: add_to_queue(object_finder._load_all_embeddings)
-            if (uploaded_image or similar_img) and (global_settings.use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
-            
-            if uploaded_image and (global_settings.use_clip or is_face):
-              results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
-              self.send_results(results, start, count)
-              return
-            
-            if similar_img and (global_settings.use_clip or is_face):
-              results = add_to_queue(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
-              self.send_results(results, start, count)
+          try:
+              data = json.loads(raw_body)
+          except json.JSONDecodeError:
+              self.send_error(400, "Invalid JSON")
               return
 
-            if image_text and global_settings.use_clip:
-              results = add_to_queue(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
-              self.send_results(results, start, count)
-              return
+          cam_name     = data.get("cam")
+          selected_dir = data.get("folder")
+          name_contains = data.get("name_contains")
+          image_text   = data.get("image_text")
+          similar_img  = data.get("similar_img")
+          start = data.get("start")
+          count = data.get("count")
+          is_face = data.get("is_face") or False
+          if is_face and not use_face: return
+          if start is None: start, count = 0, 100
+          uploaded_image = data.get("uploaded_image")
+          if uploaded_image:
+            if ',' in uploaded_image: uploaded_image = uploaded_image.split(',')[1]
+            uploaded_image = base64.b64decode(uploaded_image)
 
-            image_data = []
-            for camera_dir in camera_dirs:
-              for selected_dir in selected_dirs:
-                event_image_path = camera_dir / "event_images" / selected_dir
-                if not event_image_path.exists(): continue
-                event_images = sorted(
-                  event_image_path.glob("*.jpg"),
-                  key=lambda p: int(p.stem.split('_')[0]),
-                  reverse=True
-                )
-                for img in event_images:
-                  if name_contains and name_contains not in img.name: continue
-                  ts = int(img.stem.split('_')[0])
-                  image_url = f"/{img.relative_to(BASE_DIR)}"
-                  image_data.append({
-                    "url": image_url,
-                    "timestamp": ts,
-                    "filename": img.name,
-                    "cam_name": camera_dir.name,
-                    "folder": selected_dir,
-                  })
+          if cam_name:
+            camera_dirs = [BASE_DIR / "cameras" / cam_name]
+          else:
+            camera_dirs = [d for d in (BASE_DIR / "cameras").iterdir() if d.is_dir()]
 
-            image_data.sort(key=image_sort_key, reverse=True)
-            if start is not None and count is not None: image_data = image_data[start:start+count]
+          if selected_dir:
+            selected_dirs = [selected_dir]
+          else:
+            selected_dirs = list({
+              subdir.name 
+              for camera_dir in camera_dirs
+              if (camera_dir / "streams").is_dir()
+              for subdir in (camera_dir / "streams").iterdir() 
+              if subdir.is_dir()
+            })
+          selected_dirs.append("video")
 
-            response_data = {
-              "images": image_data,
-              "count": len(image_data),
-            }
-
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+          if image_text and global_settings.use_clip: add_to_queue(object_finder._load_all_embeddings)
+          if (uploaded_image or similar_img) and (global_settings.use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
+          
+          if uploaded_image and (global_settings.use_clip or is_face):
+            results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
+            self.send_results(results, start, count)
             return
+          
+          if similar_img and (global_settings.use_clip or is_face):
+            results = add_to_queue(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
+            self.send_results(results, start, count)
+            return
+
+          if image_text and global_settings.use_clip:
+            results = add_to_queue(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
+            self.send_results(results, start, count)
+            return
+
+          image_data = []
+          for camera_dir in camera_dirs:
+            for selected_dir in selected_dirs:
+              event_image_path = camera_dir / "event_images" / selected_dir
+              if not event_image_path.exists(): continue
+              event_images = sorted(
+                event_image_path.glob("*.jpg"),
+                key=lambda p: int(p.stem.split('_')[0]),
+                reverse=True
+              )
+              for img in event_images:
+                if name_contains and name_contains not in img.name: continue
+                ts = int(img.stem.split('_')[0])
+                image_url = f"/{img.relative_to(BASE_DIR)}"
+                image_data.append({
+                  "url": image_url,
+                  "timestamp": ts,
+                  "filename": img.name,
+                  "cam_name": camera_dir.name,
+                  "folder": selected_dir,
+                })
+
+          image_data.sort(key=image_sort_key, reverse=True)
+          if start is not None and count is not None: image_data = image_data[start:start+count]
+
+          response_data = {
+            "images": image_data,
+            "count": len(image_data),
+          }
+
+          self.send_response(200)
+          self.send_header('Content-type', 'application/json')
+          self.end_headers()
+          self.wfile.write(json.dumps(response_data).encode('utf-8'))
+          return
 
 def image_sort_key(item):
   try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
@@ -1230,6 +1234,7 @@ def process_latest_face(img):
       pickle.dump(data, open(pkl_path, "wb"))  
 
 def clip_latest_img(img):
+  global_settings = database.run_get("global_settings", "all")
   if global_settings.use_clip:
     img = object_finder.preprocess(img)
     data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
@@ -1349,13 +1354,21 @@ class GlobalSettings:
     self.use_clip = use_clip
 
 if __name__ == "__main__":
-  global_settings = GlobalSettings()
   jit_cache = {}
   alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
+
+  gs = database.run_get("global_settings", "all")
+  if gs == {}:
+    gs = GlobalSettings()
+    print("RORY HERE GS =",gs)
+    database.run_put("global_settings", "all", gs)
+
+    x = database.run_get("global_settings", "all")
+    print(x)
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
