@@ -1250,9 +1250,9 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
   else:
     object_finder.turn_off_clip()
 
-  if x.model_size != global_settings.model_size:
+  if x.model_size != global_settings.model_size or x.model_res != global_settings.model_res:
     yolo_jit_cache = {}
-    model = YOLOv9(x.model_size, yolo_res)
+    model = YOLOv9(x.model_size, x.model_res)
 
   global_settings = x
 
@@ -1372,9 +1372,10 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=True, model_size="t"):
+  def __init__(self, use_clip=True, model_size="t", model_res=960):
     self.use_clip = use_clip
     self.model_size = model_size
+    self.model_res = model_res
 
 if __name__ == "__main__":
   jit_cache = {}
@@ -1401,7 +1402,7 @@ if __name__ == "__main__":
     use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
     use_face = use_face in ["y", "Y"]
 
-  global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant])
+  global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant], model_res=yolo_res)
   database.run_put("global_settings", "all", global_settings)
 
   userID = input("enter your Clearcam user id or press Enter to skip: ")
