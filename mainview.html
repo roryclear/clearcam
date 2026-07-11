@@ -1471,7 +1471,7 @@
         </div>
 
         <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: center;">
-          <button type="button">Save</button>
+          <button type="button" onclick="saveSettings()">Save</button>
         </div>
       </div>
     </div>
@@ -3462,7 +3462,6 @@
     function renderSettings(settings) {
       const container = document.getElementById("settingsContainer");
       container.innerHTML = "";
-
       Object.entries(settings).forEach(([key, value]) => {
         const wrapper = document.createElement("div");
         wrapper.style.display = "flex";
@@ -3526,6 +3525,56 @@
         wrapper.appendChild(label);
         wrapper.appendChild(input);
         container.appendChild(wrapper);
+      });
+    }
+
+    async function saveSettings() {
+      const container = document.getElementById("settingsContainer");
+      const inputs = container.querySelectorAll("input, select");
+      const payload = {};
+      
+      inputs.forEach(input => {
+        const key = input.dataset.key;
+        if (!key) return;
+        
+        if (input.type === "checkbox") {
+          payload[key] = input.checked;
+        }
+        else if (input.tagName === "SELECT") {
+          const val = input.value;
+          if (["model_res", "qwen_size"].includes(key)) {
+            payload[key] = Number(val);
+          } else {
+            payload[key] = val;
+          }
+        }
+        else {
+          const val = input.value;
+          if (key === "userID" || key === "key") {
+            if (val === "*****") {
+              payload[key] = true;
+            } else if (val === "") {
+              payload[key] = false;
+            } else {
+              payload[key] = val;
+            }
+          } else {
+            const num = Number(val);
+            payload[key] = isNaN(num) ? val : num;
+          }
+        }
+      });
+      const body = JSON.stringify(payload);
+      console.log(body);
+      closeSettingsModal();
+      fetch("/edit_settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: body
+      }).catch(e => {
+        console.error("Failed to save settings:", e);
       });
     }
 
