@@ -397,7 +397,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frames[cam_name][-1][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-    if global_settings.use_clip or use_face: object_queue.append(object_filename)
+    if global_settings.use_clip or global_settings.use_face: object_queue.append(object_filename)
 
   def frame_loop(self, cam_name):
     fail_count = 0
@@ -1077,7 +1077,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             start = data.get("start")
             count = data.get("count")
             is_face = data.get("is_face") or False
-            if is_face and not use_face: return
+            if is_face and not global_settings.use_face: return
             if start is None: start, count = 0, 100
             uploaded_image = data.get("uploaded_image")
             if uploaded_image:
@@ -1102,7 +1102,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             selected_dirs.append("video")
 
             if image_text and global_settings.use_clip: add_to_queue(object_finder._load_all_embeddings)
-            if (uploaded_image or similar_img) and (global_settings.use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
+            if (uploaded_image or similar_img) and (global_settings.use_clip or global_settings.use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
             
             if uploaded_image and (global_settings.use_clip or is_face):
               results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
@@ -1226,7 +1226,7 @@ def process_queue():
   result_queue.put(result)
 
 def process_latest_face(img):
-  if use_face and str(object_queue[0]).endswith("_0.jpg"):
+  if global_settings.use_face and str(object_queue[0]).endswith("_0.jpg"):
     face_img = object_finder.img_to_face(img)
     
     if face_img is not None:
@@ -1251,6 +1251,11 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
     object_finder.init_clip()
   else:
     object_finder.turn_off_clip()
+
+  if x.use_face:
+    object_finder.init_face()
+  else:
+    object_finder.turn_off_face()
 
   if x.model_size != global_settings.model_size or x.model_res != global_settings.model_res:
     yolo_jit_cache = {}

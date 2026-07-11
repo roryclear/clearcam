@@ -215,6 +215,17 @@ class ObjectFinder:
       self.clip = False
       self.model = None
 
+    def init_face(self):
+      if self.face: return
+      self.face = True
+      self.blazeface = BlazeFace()
+      self.adaface = ADAFACE()
+    
+    def turn_off_face(self):
+      self.face = False
+      self.blazeface = None
+      self.adaface = None
+
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
         if not os.path.exists(base_path): return object_folders
