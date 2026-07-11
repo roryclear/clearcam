@@ -186,21 +186,15 @@ def encode_text(model, text):
     return x / (x * x).sum(axis=-1, keepdim=True).sqrt()
 
 class ObjectFinder:
-    def __init__(self, base_path="data/cameras", clip=False, face=False):
+    def __init__(self, base_path="data/cameras"):
         self.base_path = base_path
         self.image_embeddings = {}
         self.face_embeddings = {}
         self.image_paths = {}
         self.face_paths = {}
-        self.clip = False # todo
-        self.face = face
+        self.clip = False # todo, should be able to init at start
+        self.face = False # todo
         self.jit_cache = {}
-        
-        if clip: self.init_clip()
-
-        if self.face:
-            self.blazeface = BlazeFace()
-            self.adaface = ADAFACE()
 
     def init_clip(self):
       if self.clip: return
