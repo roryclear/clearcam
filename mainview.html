@@ -3482,8 +3482,8 @@
         "model_res": "Sets the input resolution for YOLOv9 detection.",
         "use_qwen": "Enables AI-powered event summaries for notifications using Qwen3VL vision-language model (Clearcam User ID required).",
         "qwen_size": "Select the Qwen3VL model size (2B or 4B parameters).",
-        "userID": "Your account user ID for notifications and premium features.",
-        "key": "Your account key for encrypting event clips."
+        "userID": "Your account user ID for notifications and remote config.",
+        "key": "Secret key for encrypting event clips."
       };
 
         const wrapper = document.createElement("div");
@@ -3599,6 +3599,15 @@
         }
       });
       
+      if ((payload.userID && payload.userID !== true) || (payload.key && payload.key !== true)) {
+        if (!confirm("Warning: Your User ID and Key will be sent over the network.\n\n" +
+          "For your security, avoid entering these on public or unsecured WiFi networks. " +
+          "It is recommended to configure this over localhost or a trusted private network.\n\n" +
+          "Do you want to continue?")) {
+          return;
+        }
+      }
+
       const body = JSON.stringify(payload);
       closeSettingsModal();
       fetch("/edit_settings", {
