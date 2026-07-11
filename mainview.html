@@ -1286,6 +1286,7 @@
 <body>
   <div id="cameraList" class="camera-grid"></div>
   <div class="multi-view-wrapper">
+    <button onclick="openSettingsModal()">Settings</button>
     <button onclick="toggleMultiView()">Multi View</button>
     <div class="date-picker-container">
       <select id="streamDateSelect" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
@@ -1457,6 +1458,24 @@
         </div>
       </div>
     </div>
+
+    <div id="settingsModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>Global Settings</h3>
+          <span class="close" onclick="closeSettingsModal()">&times;</span>
+        </div>
+
+        <div id="settingsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+          <p>Loading settings...</p>
+        </div>
+
+        <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: center;">
+          <button type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div id="alertModal" class="modal">
       <div class="modal-content" style="max-width: 400px;">
         <div class="modal-header">
@@ -3418,6 +3437,63 @@
         closeImagePreview();
       }
     });
+
+    async function openSettingsModal() {
+      const modal = document.getElementById("settingsModal");
+      modal.style.display = "flex";
+
+      const container = document.getElementById("settingsContainer");
+      container.innerHTML = "<p>Loading settings...</p>";
+
+      try {
+        const res = await fetch("/get_global_settings");
+        const data = await res.json();
+
+        renderSettings(data);
+      } catch (e) {
+        container.innerHTML = "<p style='color:red;'>Failed to load settings</p>";
+      }
+    }
+
+    function closeSettingsModal() {
+      document.getElementById("settingsModal").style.display = "none";
+    }
+
+    function renderSettings(settings) {
+      const container = document.getElementById("settingsContainer");
+      container.innerHTML = "";
+
+      Object.entries(settings).forEach(([key, value]) => {
+        const wrapper = document.createElement("div");
+        wrapper.style.display = "flex";
+        wrapper.style.justifyContent = "space-between";
+        wrapper.style.alignItems = "center";
+        wrapper.style.gap = "10px";
+
+        const label = document.createElement("label");
+        label.textContent = key;
+        label.style.flex = "1";
+
+        let input;
+
+        if (typeof value === "boolean") {
+          input = document.createElement("input");
+          input.type = "checkbox";
+          input.checked = value;
+        } else {
+          input = document.createElement("input");
+          input.type = "text";
+          input.value = value;
+          input.style.width = "120px";
+        }
+
+        input.dataset.key = key;
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(input);
+        container.appendChild(wrapper);
+      });
+    }
 
     fetchCameras();
     setInterval(fetchCameras, 5000);
