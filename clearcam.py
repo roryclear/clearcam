@@ -269,7 +269,7 @@ class VideoCapture:
         cams = new_cams
       for cam_name in cams.keys():
         self.process_frame(cam_name=cam_name) # todo rename alerts_on?
-      if use_clip or use_face: process_queue()
+      process_queue()
       if len(object_queue) > 0:
         try:
           img = cv2.imread(object_queue[0])
@@ -397,7 +397,7 @@ class VideoCapture:
     if (y2_new - y1_new) < 100 or (x2_new - x1_new) < 100: return # too small
     crop = self.last_frames[cam_name][-1][y1_new:y2_new, x1_new:x2_new]
     cv2.imwrite(str(object_filename), crop)
-    if use_clip or use_face: object_queue.append(object_filename)
+    if global_settings.use_clip or use_face: object_queue.append(object_filename)
 
   def frame_loop(self, cam_name):
     fail_count = 0
@@ -447,7 +447,7 @@ class VideoCapture:
         # don't run inference when no active scheds
         if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
-          if not userID or alerts_on[cam_name]:
+          if not global_settings.userID or alerts_on[cam_name]:
             preds, frame = self.run_inference(frame, cam_name=cam_name)
             self.last_frames[cam_name].append(frame.numpy().copy())
             self.last_preds[cam_name] = preds.copy()
@@ -487,15 +487,15 @@ class VideoCapture:
                   if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                     plain.unlink() # only one image per event
                     self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
-                  if userID is not None and not self.vod[cam_name] and alert.is_notif:
+                  if global_settings.userID is not None and not self.vod[cam_name] and alert.is_notif:
                     title = f"Event Detected ({cam_name})"
-                    threading.Thread(target=send_notif, args=(userID,title,None), daemon=True).start()
-                    if use_qwen: # extra notif if qwen
+                    threading.Thread(target=send_notif, args=(global_settings.userID,title,None), daemon=True).start()
+                    if global_settings.use_qwen: # extra notif if qwen
                       # use frames before last, only one reset needed, must convert to RGB
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
                       text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
-                      threading.Thread(target=send_notif, args=(userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
-                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": userID, "key": key, "start": ts, "wait":True}, daemon=True).start()
+                      threading.Thread(target=send_notif, args=(global_settings.userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
+                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts, "wait":True}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
                   alert.last_det = time.time()
           
@@ -506,7 +506,7 @@ class VideoCapture:
             if link != self.src[cam_name]:
               self.src[cam_name] = link
               self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-            if userID and not self.vod[cam_name]: threading.Thread(target=self.check_upload_link, args=(cam_name,), daemon=True).start()
+            if global_settings.userID and not self.vod[cam_name]: threading.Thread(target=self.check_upload_link, args=(cam_name,), daemon=True).start()
           if (time.time() - self.last_counter_update[cam_name]) >= 5: #update counter every 5 secs
             self.last_counter_update[cam_name] = time.time()
 
@@ -536,7 +536,7 @@ class VideoCapture:
               if "reset" in new_settings: del new_settings["reset"]
             self.settings[cam_name] = new_settings
               
-          if userID and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
+          if global_settings.userID and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
             self.last_live_seg[cam_name] = time.time()
             threading.Thread(target=self.upload_live_segment, args=(link, cam_name,), daemon=True).start()
         else: self.count[cam_name]+=1
@@ -550,14 +550,14 @@ class VideoCapture:
     self.last_live_seg[cam_name] = time.time()
     mp4_filename = f"segment.mp4"
     export_clip(self.current_stream_dir_raw[cam_name], Path(mp4_filename), live=True)
-    encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
+    encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), global_settings.key)
     Path(mp4_filename).unlink()
     upload_to_r2(file_path=Path(f"""{mp4_filename}.aes"""), signed_url=link)
 
   def check_upload_link(self, cam_name="camera"):
       query_params = urllib.parse.urlencode({
           "name": quote(cam_name),
-          "session_token": userID
+          "session_token": global_settings.userID
       })
       url = f"https://clearcam.org/get_stream_upload_link?{query_params}"
       
@@ -579,8 +579,9 @@ class VideoCapture:
     shutil.rmtree(BASE_DIR / "cameras" / cam_name / "event_images", ignore_errors=True)
 
   def run_inference(self, frame, cam_name):
+    global model
     frame = Tensor(frame)
-    preds = jit_infer(model, frame, jit_cache).numpy()
+    preds = jit_infer(model, frame, yolo_jit_cache).numpy()
     thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
@@ -735,7 +736,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
         
         if parsed_path.path == "/get_features":
-          self.send_200({"object_search":use_clip, "face_search":use_face})
+          self.send_200({"object_search":global_settings.use_clip, "face_search":use_face})
           return
         if parsed_path.path == "/get_max_storage":
           self.send_200(body={"max_gb":self.server.max_gb})
@@ -1021,6 +1022,16 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed_path = urlparse(self.path)
+
+        if self.path.startswith("/edit_settings"):
+          content_length = int(self.headers.get('Content-Length', 0))
+          body = self.rfile.read(content_length)
+          data = json.loads(body.decode('utf-8'))
+          add_to_queue(db.run_put, database, "global_settings", "all", GlobalSettings(**data))
+          add_to_queue(set_settings, GlobalSettings(**data))
+          self.send_200([])
+          return
+
         if self.path.startswith("/analyse-footage"):
           params = parse_qs(parsed_path.query)
           filename = params.get("filename", [None])[0]
@@ -1090,20 +1101,20 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               })
             selected_dirs.append("video")
 
-            if image_text and use_clip: add_to_queue(object_finder._load_all_embeddings)
-            if (uploaded_image or similar_img) and (use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
+            if image_text and global_settings.use_clip: add_to_queue(object_finder._load_all_embeddings)
+            if (uploaded_image or similar_img) and (global_settings.use_clip or use_face): add_to_queue(object_finder._load_all_embeddings, is_face)
             
-            if uploaded_image and (use_clip or is_face):
+            if uploaded_image and (global_settings.use_clip or is_face):
               results = add_to_queue(run_clip, object_finder, uploaded_image, start+count, cam_name, selected_dir, is_face)
               self.send_results(results, start, count)
               return
             
-            if similar_img and (use_clip or is_face):
+            if similar_img and (global_settings.use_clip or is_face):
               results = add_to_queue(run_clip, object_finder, similar_img, start+count, cam_name, selected_dir, is_face) # todo one with above
               self.send_results(results, start, count)
               return
 
-            if image_text and use_clip:
+            if image_text and global_settings.use_clip:
               results = add_to_queue(run_search, object_finder, image_text, start+count, cam_name, selected_dir)
               self.send_results(results, start, count)
               return
@@ -1229,8 +1240,37 @@ def process_latest_face(img):
       pkl_path.parent.mkdir(parents=True, exist_ok=True)
       pickle.dump(data, open(pkl_path, "wb"))  
 
+def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanitize inputs so yolo doesn't crash
+  global global_settings
+  global model
+  global yolo_res
+  global yolo_jit_cache
+  global qwen
+  global qwen_prompt
+  if x.use_clip:
+    object_finder.init_clip()
+  else:
+    object_finder.turn_off_clip()
+
+  if x.model_size != global_settings.model_size or x.model_res != global_settings.model_res:
+    yolo_jit_cache = {}
+    model = YOLOv9(x.model_size, x.model_res)
+
+  if x.key == None: # dont use alerts without a key
+    x.userID = None
+    x.use_qwen = False
+
+  if global_settings.use_qwen != x.use_qwen or global_settings.qwen_size != x.qwen_size:
+    if x.use_qwen:
+      qwen = Qwen3VL(size=f"{x.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
+      qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+      qwen.prewarm()
+    else: qwen = None
+
+  global_settings = x
+
 def clip_latest_img(img):
-  if use_clip:
+  if global_settings.use_clip:
     img = object_finder.preprocess(img)
     data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
     if "embeddings" not in data: data["embeddings"] = {}
@@ -1238,7 +1278,7 @@ def clip_latest_img(img):
     data["embeddings"][str(object_queue[0])] = emb
     with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
   
-    if userID:
+    if global_settings.userID:
       cam_name = object_queue[0].parts[object_queue[0].parts.index("cameras")+1:object_queue[0].parts.index("objects")][0]
       alerts = database.run_get("alerts", cam_name) # todo, get cam_name from file path!
       for k, v in alerts.items():
@@ -1251,18 +1291,18 @@ def clip_latest_img(img):
         similarity = (v.desc_emb @ emb.T).item()
         print("sim =",similarity,v.desc,object_queue[0])
         if similarity > v.threshold:
-          send_notif(userID, f"Event Detected ({cam_name}: {v.desc})")
+          send_notif(global_settings.userID, f"Event Detected ({cam_name}: {v.desc})")
           alerts[k].last_det = time.time()
           database.run_put("alerts", cam_name, alerts[k], k)
           seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
-          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": userID, "key": key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
+          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
           break
 
 cams = dict()
 active_subprocesses = []
 import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    def __init__(self, server_address, use_clip, face, RequestHandlerClass):
+    def __init__(self, server_address, RequestHandlerClass):
       ThreadingMixIn.__init__(self)
       HTTPServer.__init__(self, server_address, RequestHandlerClass)
       self.cleanup_stop_event = threading.Event()
@@ -1344,8 +1384,19 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
         super().server_close()
 
+class GlobalSettings:
+  def __init__(self, use_clip=True, model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
+    self.use_clip = use_clip
+    self.model_size = model_size
+    self.model_res = model_res
+    self.userID = userID
+    self.key= key
+    self.use_qwen = use_qwen
+    self.qwen_size = qwen_size
+
 if __name__ == "__main__":
   jit_cache = {}
+  yolo_jit_cache = {}
   alerts_on = {}
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
@@ -1354,8 +1405,6 @@ if __name__ == "__main__":
 
   userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
   key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
-  use_clip = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_clip=")), None)
-  if use_clip: use_clip = use_clip != "False" # str to bool
   use_face = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_face=")), None)
   if use_face: use_face = use_face != "False" # str to bool
   model_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
@@ -1372,6 +1421,7 @@ if __name__ == "__main__":
 
   userID = input("enter your Clearcam user id or press Enter to skip: ")
   use_qwen = False
+  qwen_size = 2
   if len(userID) > 0:
     key = ""
     while len(key) < 1: key = input("enter a password for encryption: ")
@@ -1385,12 +1435,15 @@ if __name__ == "__main__":
       use_qwen = True
   else: userID = None
 
+  global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant], model_res=yolo_res,
+                                  userID=userID, key=key, use_qwen=use_qwen, qwen_size=qwen_size)
+  database.run_put("global_settings", "all", global_settings)
+
   if userID is not None and key is None:
     print("Error: key is required when userID is provided")
     sys.exit(1)
   
-  if use_clip or use_face: from models.objects import ObjectFinder
-
+  from models.objects import ObjectFinder
 
   object_queue = []
   cam_name = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--cam_name=")), "my_camera")
@@ -1400,17 +1453,11 @@ if __name__ == "__main__":
   cam = None
 
   model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-  object_finder = ObjectFinder(clip=use_clip, face=use_face) if (use_clip or use_face) else None
-  if use_clip:
-    print("prewarming CLIP....")
-    for _ in range(2): _ = object_finder.model._encode_text("text here", realize=True)
-    for _ in range(2): _ = jit_infer(object_finder.model.precompute_embedding, Tensor.rand(1, 3, 224, 224), jit_cache=jit_cache).numpy()
-    print("DONE")
-  #model = RFDETR("small")
+  object_finder = ObjectFinder(clip=global_settings.use_clip, face=use_face)
   cam = VideoCapture()
 
   try:
-    server = ThreadedHTTPServer(('0.0.0.0', 8080), use_clip=use_clip, face=use_face, RequestHandlerClass=HLSRequestHandler)
+    server = ThreadedHTTPServer(('0.0.0.0', 8080), RequestHandlerClass=HLSRequestHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"Serving at http://{get_lan_ip()}:8080")
   except OSError as e:
@@ -1419,8 +1466,7 @@ if __name__ == "__main__":
       server = None
     else:
         raise
-  
-
+    
   restart_time = (0, 0)
   threading.Thread(
     target=schedule_daily_restart,

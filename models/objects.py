@@ -7,7 +7,7 @@ from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
 import time
-from utils.helpers import send_notif, export_and_upload, BASE_DIR
+from utils.helpers import send_notif, export_and_upload, BASE_DIR, jit_infer
 from models.blazeface import BlazeFace
 from models.adaface import ADAFACE
 from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
@@ -192,14 +192,28 @@ class ObjectFinder:
         self.face_embeddings = {}
         self.image_paths = {}
         self.face_paths = {}
-        self.clip = clip
+        self.clip = False # todo
         self.face = face
+        self.jit_cache = {}
         
-        if self.clip: self.model = OpenCLIP()
+        if clip: self.init_clip()
 
         if self.face:
             self.blazeface = BlazeFace()
             self.adaface = ADAFACE()
+
+    def init_clip(self):
+      if self.clip: return
+      self.clip = True
+      self.model = OpenCLIP()
+      print("prewarming CLIP....")
+      for _ in range(2): _ = self.model._encode_text("text here", realize=True)
+      for _ in range(2): _ = jit_infer(self.model.precompute_embedding, Tensor.rand(1, 3, 224, 224), jit_cache=self.jit_cache).numpy()
+      print("DONE")
+
+    def turn_off_clip(self):
+      self.clip = False
+      self.model = None
 
     def find_object_folders(self, base_path="data/cameras"):
         object_folders = []
