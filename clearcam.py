@@ -1279,7 +1279,9 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
 def clip_latest_img(img):
   if global_settings.use_clip:
     img = object_finder.preprocess(img)
-    data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
+    try:
+      data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
+    except Exception: data = {}
     if "embeddings" not in data: data["embeddings"] = {}
     emb = jit_infer(object_finder.model.precompute_embedding, Tensor(img).unsqueeze(0), jit_cache).numpy()
     data["embeddings"][str(object_queue[0])] = emb
