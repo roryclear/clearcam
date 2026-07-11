@@ -1286,6 +1286,7 @@
 <body>
   <div id="cameraList" class="camera-grid"></div>
   <div class="multi-view-wrapper">
+    <button onclick="openSettingsModal()">Settings</button>
     <button onclick="toggleMultiView()">Multi View</button>
     <div class="date-picker-container">
       <select id="streamDateSelect" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
@@ -1457,6 +1458,24 @@
         </div>
       </div>
     </div>
+
+    <div id="settingsModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>Global Settings</h3>
+          <span class="close" onclick="closeSettingsModal()">&times;</span>
+        </div>
+
+        <div id="settingsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+          <p>Loading settings...</p>
+        </div>
+
+        <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: center;">
+          <button type="button" onclick="saveSettings()">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div id="alertModal" class="modal">
       <div class="modal-content" style="max-width: 400px;">
         <div class="modal-header">
@@ -3418,6 +3437,189 @@
         closeImagePreview();
       }
     });
+
+    async function openSettingsModal() {
+      const modal = document.getElementById("settingsModal");
+      modal.style.display = "flex";
+
+      const container = document.getElementById("settingsContainer");
+      container.innerHTML = "<p>Loading settings...</p>";
+
+      try {
+        const res = await fetch("/get_global_settings");
+        const data = await res.json();
+
+        renderSettings(data);
+      } catch (e) {
+        container.innerHTML = "<p style='color:red;'>Failed to load settings</p>";
+      }
+    }
+
+    function closeSettingsModal() {
+      document.getElementById("settingsModal").style.display = "none";
+    }
+
+    function renderSettings(settings) {
+      const container = document.getElementById("settingsContainer");
+      container.innerHTML = "";
+      Object.entries(settings).forEach(([key, value]) => {
+
+      const labelMap = {
+        "use_clip": "OpenCLIP Search",
+        "use_face": "Face Detection (Experimental)",
+        "model_size": "YOLOv9 Model",
+        "model_res": "YOLOv9 Resolution",
+        "use_qwen": "AI Event Summaries (Qwen3VL)",
+        "qwen_size": "Qwen3VL Size",
+        "userID": "User ID",
+        "key": "Key"
+        };
+
+      const tooltipMap = {
+        "use_clip": "Enables searching events using natural language or image similarity with OpenCLIP.",
+        "use_face": "Enables searching detected people using a face image.",
+        "model_size": "YOLOv9 Detection model size (tiny, small, medium, compact, extended)",
+        "model_res": "Sets the input resolution for YOLOv9 detection.",
+        "use_qwen": "Enables AI-powered event summaries for notifications using Qwen3VL vision-language model (Clearcam User ID required).",
+        "qwen_size": "Select the Qwen3VL model size (2B or 4B parameters).",
+        "userID": "Your account user ID for notifications and remote config.",
+        "key": "Secret key for encrypting event clips."
+      };
+
+        const wrapper = document.createElement("div");
+        wrapper.style.display = "flex";
+        wrapper.style.justifyContent = "space-between";
+        wrapper.style.alignItems = "center";
+        wrapper.style.gap = "10px";
+
+        const label = document.createElement("label");
+        const labelContent = (labelMap[key] || key);
+        label.innerHTML = `
+        ${labelContent}
+        <span class="tooltip" style="margin-left: 4px;">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltiptext">${tooltipMap[key] || ''}</span>
+          </span>
+        `;
+        label.style.flex = "1";
+        let input;
+        if (key === "model_size") {
+          input = document.createElement("select");
+          ["t", "s", "m", "c", "e"].forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt;
+            option.textContent = opt;
+            if (value === opt) option.selected = true;
+            input.appendChild(option);
+          });
+        }
+        else if (key === "model_res") {
+          input = document.createElement("select");
+          [320, 640, 960, 1280, 1536].forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt;
+            option.textContent = opt;
+            if (value == opt) option.selected = true;
+            input.appendChild(option);
+          });
+        }
+        else if (key === "qwen_size") {
+          input = document.createElement("select");
+          const qwenOptions = [
+            { value: 2, label: "2B" },
+            { value: 4, label: "4B" }
+          ];
+          qwenOptions.forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (value == opt.value) option.selected = true;
+            input.appendChild(option);
+          });
+        }
+        else if (key === "userID" || key === "key") {
+          input = document.createElement("input");
+          input.type = "password";
+          input.value = value ? "*****" : "";
+          input.placeholder = key;
+          input.style.width = "120px";
+        }
+        else if (typeof value === "boolean") {
+          input = document.createElement("input");
+          input.type = "checkbox";
+          input.checked = value;
+        }
+        else {
+          input = document.createElement("input");
+          input.type = "text";
+          input.value = value;
+          input.style.width = "120px";
+        }
+        input.dataset.key = key;
+        wrapper.appendChild(label);
+        wrapper.appendChild(input);
+        container.appendChild(wrapper);
+      });
+    }
+
+    async function saveSettings() {
+      const container = document.getElementById("settingsContainer");
+      const inputs = container.querySelectorAll("input, select");
+      const payload = {};
+      
+      inputs.forEach(input => {
+        const key = input.dataset.key;
+        if (!key) return;
+        
+        if (input.type === "checkbox") {
+          payload[key] = input.checked;
+        }
+        else if (input.tagName === "SELECT") {
+          const val = input.value;
+          if (["model_res", "qwen_size"].includes(key)) {
+            payload[key] = Number(val);
+          } else {
+            payload[key] = val;
+          }
+        }
+        else {
+          const val = input.value;
+          if (key === "userID" || key === "key") {
+            if (val === "*****") {
+              payload[key] = true;
+            } else if (val === "") {
+              payload[key] = null;
+            } else {
+              payload[key] = val;
+            }
+          } else {
+            const num = Number(val);
+            payload[key] = isNaN(num) ? val : num;
+          }
+        }
+      });
+      
+      if ((payload.userID && payload.userID !== true) || (payload.key && payload.key !== true)) {
+        if (!confirm("Warning: Your User ID and Key will be sent over the network.\n\n" +
+          "For your security, avoid entering these on public or unsecured WiFi networks. " +
+          "It is recommended to configure this over localhost or a trusted private network.\n\n" +
+          "Do you want to continue?")) {
+          return;
+        }
+      }
+
+      const body = JSON.stringify(payload);
+      closeSettingsModal();
+      fetch("/edit_settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: body
+      }).catch(e => {
+        console.error("Failed to save settings:", e);
+      });
+    }
 
     fetchCameras();
     setInterval(fetchCameras, 5000);
