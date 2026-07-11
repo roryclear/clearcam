@@ -1274,7 +1274,6 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
       qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
       qwen.prewarm()
     else: qwen = None
-
   global_settings = x
 
 def clip_latest_img(img):
@@ -1393,7 +1392,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=True, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
+  def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
     self.use_clip = use_clip
     self.use_face = use_face
     self.model_size = model_size
@@ -1424,45 +1423,8 @@ if __name__ == "__main__":
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
-  userID = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--userid=")), None)
-  key = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--key=")), None)
-  use_face = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--use_face=")), None)
-  if use_face: use_face = use_face != "False" # str to bool
-  model_variant = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_size=")), None)
-  yolo_res = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--yolo_res=")), 640)
-  if not model_variant:
-    model_variant = int(input("Select a YOLOv9 model from: \n1: tiny\n2: small\n3: medium\n4: large\n5: xl\nor an RFDETER Model from \n6: nano\n7: small\n8: medium\n9: large\nor press enter to skip (defaults to tiny):") or "1")
-    if model_variant < 6:
-      yolo_ress = {"1":320, "2":640, "3":960,"4":1280,"5":1536}
-      yolo_res = yolo_ress[input("\nSelect a YOLOV9 resoltuion from \n1: 320\n2: 640\n3: 960\n4: 1280\n5: 1536\nor press enter to skip (defaults to 960):") or "3"]
-    use_clip = input("Would you like to enable clip search on events? (y/n) (1.7GB model), or press enter to skip:") or False
-    use_clip = use_clip in ["y", "Y"]
-    use_face = input("Would you like to enable (experimental) face recognition search? (y/n), or press enter to skip:") or False
-    use_face = use_face in ["y", "Y"]
-
-  userID = input("enter your Clearcam user id or press Enter to skip: ")
-  use_qwen = False
-  qwen_size = 2
-  if len(userID) > 0:
-    key = ""
-    while len(key) < 1: key = input("enter a password for encryption: ")
-    qwen_size = input("Select a Qwen3VL model for AI Summaries from \n2: 2B\n4: 4B\nor press enter to skip:") or False
-    if qwen_size in ["2", "4"]:
-      print("prewarming Qwen3VL....")
-      qwen = Qwen3VL(size=f"{qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
-      qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
-      qwen.prewarm()
-      print("DONE")
-      use_qwen = True
-  else: userID = None
-
-  global_settings = GlobalSettings(use_clip=use_clip, model_size=models[model_variant], model_res=yolo_res,
-                                  userID=userID, key=key, use_qwen=use_qwen, qwen_size=qwen_size)
+  global_settings = GlobalSettings()
   database.run_put("global_settings", "all", global_settings)
-
-  if userID is not None and key is None:
-    print("Error: key is required when userID is provided")
-    sys.exit(1)
   
   from models.objects import ObjectFinder
 
@@ -1473,8 +1435,8 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   cam = None
 
-  model = YOLOv9(models[int(model_variant)], res=int(yolo_res)) if int(model_variant) < 6 else RFDETR(models[int(model_variant)])
-  object_finder = ObjectFinder(clip=global_settings.use_clip, face=use_face)
+  model = YOLOv9(global_settings.model_size, res=int(global_settings.model_res))
+  object_finder = ObjectFinder()
   cam = VideoCapture()
 
   try:
