@@ -3463,6 +3463,18 @@
       const container = document.getElementById("settingsContainer");
       container.innerHTML = "";
       Object.entries(settings).forEach(([key, value]) => {
+
+      const labelMap = {
+        "use_clip": "OpenCLIP Search",
+        "use_face": "Face Detection",
+        "model_size": "YOLOv9 Model",
+        "model_res": "YOLOv9 Resolution",
+        "use_qwen": "AI Event Summaries (Qwen3VL)",
+        "qwen_size": "Qwen3VL Size",
+        "userID": "User ID",
+        "key": "Key"
+        };
+
         const wrapper = document.createElement("div");
         wrapper.style.display = "flex";
         wrapper.style.justifyContent = "space-between";
@@ -3470,7 +3482,7 @@
         wrapper.style.gap = "10px";
 
         const label = document.createElement("label");
-        label.textContent = key;
+        label.textContent = labelMap[key] || key;
         label.style.flex = "1";
         let input;
         if (key === "model_size") {
