@@ -3554,7 +3554,7 @@
             if (val === "*****") {
               payload[key] = true;
             } else if (val === "") {
-              payload[key] = false;
+              payload[key] = null;
             } else {
               payload[key] = val;
             }
@@ -3564,8 +3564,8 @@
           }
         }
       });
+      
       const body = JSON.stringify(payload);
-      console.log(body);
       closeSettingsModal();
       fetch("/edit_settings", {
         method: "POST",

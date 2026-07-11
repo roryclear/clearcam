@@ -1027,6 +1027,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           content_length = int(self.headers.get('Content-Length', 0))
           body = self.rfile.read(content_length)
           data = json.loads(body.decode('utf-8'))
+          # keep userid and key if "True"
+          if data["userID"] == True: data["userID"] = global_settings.userID
+          if data["key"] == True: data["key"] = global_settings.key
           add_to_queue(db.run_put, database, "global_settings", "all", GlobalSettings(**data))
           add_to_queue(set_settings, GlobalSettings(**data))
           self.send_200([])
