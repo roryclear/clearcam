@@ -3473,22 +3473,56 @@
         const label = document.createElement("label");
         label.textContent = key;
         label.style.flex = "1";
-
         let input;
-
-        if (typeof value === "boolean") {
+        if (key === "model_size") {
+          input = document.createElement("select");
+          ["t", "s", "m", "c", "e"].forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt;
+            option.textContent = opt;
+            if (value === opt) option.selected = true;
+            input.appendChild(option);
+          });
+        }
+        else if (key === "model_res") {
+          input = document.createElement("select");
+          [320, 640, 960, 1280, 1536].forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt;
+            option.textContent = opt;
+            if (value == opt) option.selected = true;
+            input.appendChild(option);
+          });
+        }
+        else if (key === "qwen_size") {
+          input = document.createElement("select");
+          [2, 4].forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt;
+            option.textContent = opt;
+            if (value == opt) option.selected = true;
+            input.appendChild(option);
+          });
+        }
+        else if (key === "userID" || key === "key") {
+          input = document.createElement("input");
+          input.type = "text";
+          input.value = value ? "*****" : "";
+          input.placeholder = key;
+          input.style.width = "120px";
+        }
+        else if (typeof value === "boolean") {
           input = document.createElement("input");
           input.type = "checkbox";
           input.checked = value;
-        } else {
+        }
+        else {
           input = document.createElement("input");
           input.type = "text";
           input.value = value;
           input.style.width = "120px";
         }
-
         input.dataset.key = key;
-
         wrapper.appendChild(label);
         wrapper.appendChild(input);
         container.appendChild(wrapper);
