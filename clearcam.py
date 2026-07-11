@@ -1272,7 +1272,9 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
     if x.use_qwen:
       qwen = Qwen3VL(size=f"{x.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
       qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+      print("prewarming Qwen")
       qwen.prewarm()
+      print("DONE")
     else: qwen = None
   global_settings = x
 
