@@ -276,7 +276,7 @@ class VideoCapture:
           img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
           clip_latest_img(img)
           process_latest_face(img)
-        except Exception: print("error in object processing", object_queue[0])
+        except Exception as e: print("error in object processing", object_queue[0], e)
         del object_queue[0] 
            
 
