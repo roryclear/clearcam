@@ -3466,7 +3466,7 @@
 
       const labelMap = {
         "use_clip": "OpenCLIP Search",
-        "use_face": "Face Detection",
+        "use_face": "Face Detection (Experimental)",
         "model_size": "YOLOv9 Model",
         "model_res": "YOLOv9 Resolution",
         "use_qwen": "AI Event Summaries (Qwen3VL)",
@@ -3475,6 +3475,17 @@
         "key": "Key"
         };
 
+      const tooltipMap = {
+        "use_clip": "Enables searching events using natural language or image similarity with OpenCLIP.",
+        "use_face": "Enables searching detected people using a face image.",
+        "model_size": "YOLOv9 Detection model size (tiny, small, medium, compact, extended)",
+        "model_res": "Sets the input resolution for YOLOv9 detection.",
+        "use_qwen": "Enables AI-powered event summaries for notifications using Qwen3VL vision-language model (Clearcam User ID required).",
+        "qwen_size": "Select the Qwen3VL model size (2B or 4B parameters).",
+        "userID": "Your account user ID for notifications and premium features.",
+        "key": "Your account key for encrypting event clips."
+      };
+
         const wrapper = document.createElement("div");
         wrapper.style.display = "flex";
         wrapper.style.justifyContent = "space-between";
@@ -3482,7 +3493,14 @@
         wrapper.style.gap = "10px";
 
         const label = document.createElement("label");
-        label.textContent = labelMap[key] || key;
+        const labelContent = (labelMap[key] || key);
+        label.innerHTML = `
+        ${labelContent}
+        <span class="tooltip" style="margin-left: 4px;">
+          <span class="tooltip-icon">?</span>
+          <span class="tooltiptext">${tooltipMap[key] || ''}</span>
+          </span>
+        `;
         label.style.flex = "1";
         let input;
         if (key === "model_size") {
@@ -3507,11 +3525,15 @@
         }
         else if (key === "qwen_size") {
           input = document.createElement("select");
-          [2, 4].forEach(opt => {
+          const qwenOptions = [
+            { value: 2, label: "2B" },
+            { value: 4, label: "4B" }
+          ];
+          qwenOptions.forEach(opt => {
             const option = document.createElement("option");
-            option.value = opt;
-            option.textContent = opt;
-            if (value == opt) option.selected = true;
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (value == opt.value) option.selected = true;
             input.appendChild(option);
           });
         }
