@@ -735,8 +735,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.send_200()
           return
         
-        if parsed_path.path == "/get_features":
-          self.send_200({"object_search":global_settings.use_clip, "face_search":use_face})
+        if parsed_path.path == "/get_global_settings":
+          self.send_200(global_settings.__dict__)
           return
         if parsed_path.path == "/get_max_storage":
           self.send_200(body={"max_gb":self.server.max_gb})
@@ -1385,8 +1385,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=True, model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
+  def __init__(self, use_clip=True, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
     self.use_clip = use_clip
+    self.use_face = use_face
     self.model_size = model_size
     self.model_res = model_res
     self.userID = userID
