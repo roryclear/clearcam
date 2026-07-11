@@ -736,7 +736,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
         
         if parsed_path.path == "/get_global_settings":
-          self.send_200(global_settings.__dict__)
+          self.send_200(secret_settings(global_settings).__dict__)
           return
         if parsed_path.path == "/get_max_storage":
           self.send_200(body={"max_gb":self.server.max_gb})
@@ -1399,6 +1399,18 @@ class GlobalSettings:
     self.key= key
     self.use_qwen = use_qwen
     self.qwen_size = qwen_size
+
+def secret_settings(settings):
+    return GlobalSettings(
+        use_clip=settings.use_clip,
+        use_face=settings.use_face,
+        model_size=settings.model_size,
+        model_res=settings.model_res,
+        userID=settings.userID is not None,
+        key=settings.key is not None,
+        use_qwen=settings.use_qwen,
+        qwen_size=settings.qwen_size
+    )
 
 if __name__ == "__main__":
   jit_cache = {}
