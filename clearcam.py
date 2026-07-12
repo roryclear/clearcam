@@ -1424,8 +1424,6 @@ if __name__ == "__main__":
   cams = database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
-  global_settings = GlobalSettings()
-  database.run_put("global_settings", "all", global_settings)
   
   from models.objects import ObjectFinder
 
@@ -1436,9 +1434,25 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   cam = None
 
+  global_settings = database.run_get("global_settings", "all")
+  if global_settings == {}: # todo, use None?
+    global_settings = GlobalSettings()
+    database.run_put("global_settings", "all", global_settings)
+
   model = YOLOv9(global_settings.model_size, res=int(global_settings.model_res))
   object_finder = ObjectFinder()
   cam = VideoCapture()
+
+  if global_settings.use_clip: object_finder.init_clip()
+  if global_settings.use_face: object_finder.init_face()
+
+  if global_settings.key != None and global_settings.use_qwen:
+    qwen = Qwen3VL(size=f"{global_settings.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
+    qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+    print("prewarming Qwen")
+    qwen.prewarm()
+    print("DONE")
+
 
   try:
     server = ThreadedHTTPServer(('0.0.0.0', 8080), RequestHandlerClass=HLSRequestHandler)
