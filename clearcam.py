@@ -2,7 +2,6 @@ from tinygrad.tensor import Tensor
 from tinygrad.helpers import fetch
 from detection.yolov9 import YOLOv9
 from llm.qwen3vl import Qwen3VL
-from detection.rfdetr import RFDETR, detr_to_yolo
 import numpy as np
 from pathlib import Path
 import cv2
@@ -585,8 +584,6 @@ class VideoCapture:
     thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
-    if type(model) == RFDETR: # RF-DETR has different class_ids
-      for j in range(len(online_targets)): online_targets[j].class_id = detr_to_yolo[int(online_targets[j].class_id)]
     preds = []
     for x in online_targets:
       if x.tracklet_len < 1: continue # dont alert for 1 frame, too many false positives.  
