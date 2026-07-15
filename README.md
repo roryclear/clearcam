@@ -78,6 +78,7 @@ https://x.com/RoryClear/status/1959249250811785405
 2. python3 clearcam.py
 3. open localhost:8080 in your browser
 4. (optional) enter your Clearcam premium userID in the web UI settings (viewable in iOS app settings page) to receive streams and notifications
+- use DEV=AMD / DEV=NV python3 clearcam.py if your CPU is being used instead of your GPU
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 
 ## install iOS App from source
