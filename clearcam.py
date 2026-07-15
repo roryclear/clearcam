@@ -1265,14 +1265,14 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
     x.userID = None
     x.use_qwen = False
 
-  if global_settings.use_qwen != x.use_qwen or global_settings.qwen_size != x.qwen_size:
-    if x.use_qwen:
-      qwen = Qwen3VL(size=f"{x.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
-      qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
-      print("prewarming Qwen")
-      qwen.prewarm()
-      print("DONE")
-    else: qwen = None
+  # todo change size mid run doesn't work
+  if (x.use_qwen and qwen is None) or (x.use_qwen and global_settings.qwen_size != x.qwen_size):
+    qwen = None
+    qwen = Qwen3VL(size=f"{x.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
+    qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+    print("prewarming Qwen")
+    qwen.prewarm()
+    print("DONE")
   global_settings = x
 
 def clip_latest_img(img):
@@ -1419,6 +1419,7 @@ if __name__ == "__main__":
   jit_cache = {}
   yolo_jit_cache = {}
   alerts_on = {}
+  qwen = None
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
   cams = database.run_get("links", None)
