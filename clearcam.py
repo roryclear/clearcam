@@ -256,7 +256,6 @@ class VideoCapture:
         cam_check = time.time()
         new_cams = database.run_get("links", None)
         for cam_name in new_cams.keys():
-          if type(new_cams[cam_name]) != str: continue # todo find cause
           if cam_name not in cams:
             self.init_cam(cam_name=cam_name, src=new_cams[cam_name])
             if not self.vod[cam_name]: threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only
@@ -302,7 +301,6 @@ class VideoCapture:
     if cam_name in self.proc: self._safe_kill_process(self.proc[cam_name])
     if cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[cam_name])
     src = self.src[cam_name]
-    if type(src) != str: return # todo, fixes a crash, fix cause
 
     ffmpeg_path = find_ffmpeg()
     
@@ -621,11 +619,6 @@ class VideoCapture:
   
     preds = np.array(preds)
     return preds, frame
-
-  def release(self, cam_name):
-      self.running[cam_name] = False
-      if cam_name in self.proc: self.proc[cam_name].kill()
-      if cam_name in self.hls_proc: self.hls_proc[cam_name].kill()    
 
 def is_bright_color(color):
   r, g, b = color
@@ -1159,21 +1152,20 @@ def image_sort_key(item):
   try: return datetime.strptime(item["folder"], "%Y-%m-%d").timestamp() + item["timestamp"]
   except ValueError: return -1
 
-def schedule_daily_restart(cam, restart_time):
-    while True:
-        now = datetime.now().time()
-        target = time_obj(restart_time[0], restart_time[1])
-        if now >= target:
-          delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
-        else:
-          delta = ((target.hour * 3600 + target.minute * 60) - 
-            (now.hour * 3600 + now.minute * 60 + now.second))
-        time.sleep(delta)
-        cams = database.run_get("links", None)
-        for cam_name in cams.keys():
-          cam.start_time[cam_name] = None
-          cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
-          cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
+def schedule_daily_restart(cam):
+  while True:
+    now = datetime.now().time()
+    target = time_obj(0, 0)
+    if now >= target:
+      delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
+    else:
+      delta = ((target.hour * 3600 + target.minute * 60) - (now.hour * 3600 + now.minute * 60 + now.second))
+    time.sleep(delta)
+    cams = database.run_get("links", None)
+    for cam_name in cams.keys():
+      cam.start_time[cam_name] = None
+      cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
+      cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
 
 
 
@@ -1469,7 +1461,7 @@ if __name__ == "__main__":
   restart_time = (0, 0)
   threading.Thread(
     target=schedule_daily_restart,
-    args=(cam, restart_time),
+    args=(cam),
     daemon=True
   ).start()
   cam.start()
