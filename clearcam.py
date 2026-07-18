@@ -1167,7 +1167,7 @@ def schedule_daily_restart(cam, restart_time):
     target_hour = restart_time[0]
     target_minute = restart_time[1]
     target_minutes = target_hour * 60 + target_minute
-    intervals = [(target_minutes + i * 60) % (24 * 60) for i in range(4)]  # 360 = 6 hours in minutes...1 hour for now
+    intervals = [(target_minutes + i * 60) % (24 * 60) for i in range(24)]  # 360 = 6 hours in minutes...1 hour for now, in range 24
     next_interval = None
     for interval in intervals:
       if interval > current_minutes:
@@ -1183,6 +1183,7 @@ def schedule_daily_restart(cam, restart_time):
 
     cams = database.run_get("links", None)
     for cam_name in cams.keys():
+      print("RESTART", cam_name)
       if (next_interval == target_minutes): cam.start_time[cam_name] = None # reset time at midnight
       cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
       cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
