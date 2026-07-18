@@ -343,8 +343,9 @@ class VideoCapture:
           str(path / "stream.m3u8")
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      time.sleep(15)
-      if self.start_time[cam_name] is None: self.start_time[cam_name] = time.time()
+      if self.start_time[cam_name] is None:
+        time.sleep(15)
+        self.start_time[cam_name] = time.time()
       
       command = [
           ffmpeg_path,
@@ -1166,7 +1167,7 @@ def schedule_daily_restart(cam, restart_time):
     target_hour = restart_time[0]
     target_minute = restart_time[1]
     target_minutes = target_hour * 60 + target_minute
-    intervals = [(target_minutes + i * 360) % (24 * 60) for i in range(4)]  # 360 = 6 hours in minutes
+    intervals = [(target_minutes + i * 60) % (24 * 60) for i in range(4)]  # 360 = 6 hours in minutes...1 hour for now
     next_interval = None
     for interval in intervals:
       if interval > current_minutes:
@@ -1182,7 +1183,7 @@ def schedule_daily_restart(cam, restart_time):
 
     cams = database.run_get("links", None)
     for cam_name in cams.keys():
-      cam.start_time[cam_name] = None
+      if (next_interval == target_minutes): cam.start_time[cam_name] = None # reset time at midnight
       cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
       cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
 
