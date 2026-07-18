@@ -1160,21 +1160,31 @@ def image_sort_key(item):
   except ValueError: return -1
 
 def schedule_daily_restart(cam, restart_time):
-    while True:
-        now = datetime.now().time()
-        target = time_obj(restart_time[0], restart_time[1])
-        if now >= target:
-          delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
-        else:
-          delta = ((target.hour * 3600 + target.minute * 60) - 
-            (now.hour * 3600 + now.minute * 60 + now.second))
-        time.sleep(delta)
-        cams = database.run_get("links", None)
-        for cam_name in cams.keys():
-          cam.start_time[cam_name] = None
-          cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
-          cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
+  while True:
+    now = datetime.now()
+    current_minutes = now.hour * 60 + now.minute
+    target_hour = restart_time[0]
+    target_minute = restart_time[1]
+    target_minutes = target_hour * 60 + target_minute
+    intervals = [(target_minutes + i * 360) % (24 * 60) for i in range(4)]  # 360 = 6 hours in minutes
+    next_interval = None
+    for interval in intervals:
+      if interval > current_minutes:
+        next_interval = interval
+        break
+    if next_interval is None:
+      next_interval = intervals[0]
+      delta = (24 * 60 - current_minutes + next_interval) * 60
+    else:
+      delta = (next_interval - current_minutes) * 60
 
+    time.sleep(delta)
+
+    cams = database.run_get("links", None)
+    for cam_name in cams.keys():
+      cam.start_time[cam_name] = None
+      cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
+      cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
 
 
 def get_lan_ip():
