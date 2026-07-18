@@ -131,23 +131,33 @@ def resize(img, new_size):
   return img
 
 def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
-  segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
+  segments = sorted(stream_dir.glob("*.m4s"), key=os.path.getmtime)
   recent_segments = deque()
   cutoff = os.path.getmtime(segments[0]) + start if start is not None else time.time() - length if live else time.time() - length
   end = os.path.getmtime(segments[0]) + start + length if start is not None else time.time() - end
   recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
   recent_segments.extend(recent_raw)
-  concat_list_path = stream_dir / "concat_list.txt"
-  with open(concat_list_path, "w") as f: f.writelines(f"file '{segment.resolve()}'\n" for segment in recent_segments)
+
+  playlist_path = stream_dir / "clip.m3u8"
+
+  with open(playlist_path, "w") as f:
+    f.write("#EXTM3U\n")
+    f.write("#EXT-X-VERSION:7\n")
+    f.write("#EXT-X-TARGETDURATION:2\n")
+    f.write(f'#EXT-X-MAP:URI="{(stream_dir / "init.mp4").resolve()}"\n')
+    for segment in recent_segments:
+      f.write("#EXTINF:2.0,\n")
+      f.write(f"{segment.resolve()}\n")
+    f.write("#EXT-X-ENDLIST\n")
+
   output_path.parent.mkdir(parents=True, exist_ok=True)
   ffmpeg_path = find_ffmpeg()
   if live:
     command = [
         ffmpeg_path,
         "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_list_path),
+        "-protocol_whitelist", "file,crypto,data",
+        "-i", str(playlist_path),
         "-loglevel", "quiet",
         "-vf", "scale=-2:240,fps=24,format=yuv420p",
         "-c:v", "libx264",  
@@ -159,13 +169,10 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
     ]
     subprocess.run(command, check=True)
   else:
-    with open(stream_dir / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
     command = [
       ffmpeg_path,
       "-y",
-      "-f", "concat",
-      "-safe", "0",
-      "-i", str(concat_list_path),
+      "-i", str(playlist_path),
       "-c:v", "libx264",
       "-crf", "18",
       "-pix_fmt", "yuv420p",
@@ -183,9 +190,7 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
       command = [
         ffmpeg_path,
         "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_list_path),
+        "-i", str(playlist_path),
         "-c:v", "libx264",
         "-crf", str(18 + comp),
         "-pix_fmt", "yuv420p",  # needed for android
