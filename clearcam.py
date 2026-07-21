@@ -302,7 +302,6 @@ class VideoCapture:
     if cam_name in self.proc: self._safe_kill_process(self.proc[cam_name])
     if cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[cam_name])
     src = self.src[cam_name]
-    if type(src) != str: return # todo, fixes a crash, fix cause
 
     ffmpeg_path = find_ffmpeg()
     
@@ -446,8 +445,9 @@ class VideoCapture:
         if self.raw_frame[cam_name] is None: return
         print(f"\rHERE2 PROCESS FRAME: {cam_name}", end="", flush=True)
         frame = self.raw_frame[cam_name].copy()
+        print(f"\rHERE3 PROCESS FRAME: {cam_name} {frame_num} {last_frame_num}", end="", flush=True)
         if frame_num == last_frame_num: return
-        print(f"\rHERE3 PROCESS FRAME: {cam_name}", end="", flush=True)
+        print(f"\rHERE4 PROCESS FRAME: {cam_name}", end="", flush=True)
         # don't run inference when no active scheds
         if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
