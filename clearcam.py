@@ -438,15 +438,11 @@ class VideoCapture:
         self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
         database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
     else:
-      print(f"\rHERE1 PROCESS FRAME: {cam_name}")
       frame_num = self.frame_num[cam_name]
       last_frame_num = self.last_frame_num[cam_name]
       if self.raw_frame[cam_name] is None: return
-      print(f"\rHERE2 PROCESS FRAME: {cam_name}")
       frame = self.raw_frame[cam_name].copy()
-      print(f"\rHERE3 PROCESS FRAME: {cam_name} {frame_num} {last_frame_num}")
       if frame_num == last_frame_num: return
-      print(f"\rHERE4 PROCESS FRAME: {cam_name}")
       # don't run inference when no active scheds
       if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
       else:
