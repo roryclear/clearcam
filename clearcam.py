@@ -508,7 +508,8 @@ class VideoCapture:
           if link != self.src[cam_name]:
             self.src[cam_name] = link
             self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-          if global_settings.userID and not self.vod[cam_name]: threading.Thread(target=self.check_upload_link, args=(cam_name,), daemon=True).start()
+          if global_settings.userID and not self.vod[cam_name]: threading.Thread(target=lambda: (self.check_upload_link(cam_name) if True else None), daemon=True
+    ).start()
         if (time.time() - self.last_counter_update[cam_name]) >= 5: #update counter every 5 secs
           self.last_counter_update[cam_name] = time.time()
 
