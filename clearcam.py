@@ -201,7 +201,6 @@ class VideoCapture:
     self.alert_counters = {}
     self.live_link = {}
     self.live_link_lock = {}
-    self.last_frame_time = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -244,7 +243,6 @@ class VideoCapture:
     self.filename[cam_name] = None
     self.live_link_lock[cam_name] = threading.Lock()
     alerts_on[cam_name] = True
-    self.last_frame_time[cam_name] = time.time()
 
   def start(self):
     cam_check = time.time()
@@ -447,12 +445,7 @@ class VideoCapture:
       last_frame_num = self.last_frame_num[cam_name]
       if self.raw_frame[cam_name] is None: return
       frame = self.raw_frame[cam_name].copy()
-      if frame_num == last_frame_num:
-        if time.time() - self.last_frame_time[cam_name] > 30: # 30 second timeout for now
-          print(f"{cam_name} stuck, restarting ffmpeg...")
-          self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-          return
-      else: self.last_frame_time[cam_name] = time.time()
+      if frame_num == last_frame_num: return
       # don't run inference when no active scheds
       if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
       else:
