@@ -423,7 +423,9 @@ class VideoCapture:
         print("Error in frame_loop:", e, cam_name)
         fail_count += 1
         time.sleep(1)
-        if fail_count > 10: self._open_ffmpeg(cam_name=cam_name)
+        if fail_count > 10:
+          self._open_ffmpeg(cam_name=cam_name)
+          fail_count = 0
 
   def process_frame(self, cam_name):
     if self.vod[cam_name]:
