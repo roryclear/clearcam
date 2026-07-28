@@ -287,17 +287,6 @@ class VideoCapture:
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
-  def _safe_kill_process(self, proc):
-    if proc:
-      try:
-        proc.terminate()
-        proc.wait(timeout=5)
-      except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-      except Exception:
-        pass
-
   def _open_ffmpeg(self, cam_name):
     path = self._get_new_stream_dir(cam_name)
     if cam_name in self.proc: self.proc[cam_name].terminate()
@@ -461,7 +450,7 @@ class VideoCapture:
           curr_time = time.time()
           fps = 1 / (curr_time - self.prev_time[cam_name])
           self.prev_time[cam_name] = curr_time
-          #print(f"\rFPS: {fps:.2f} {cam_name}", end="", flush=True)
+          print(f"\rFPS: {fps:.2f} {cam_name}", end="", flush=True)
         else:
           self.last_frame_num[cam_name] = self.frame_num[cam_name]
           self.last_preds = []
