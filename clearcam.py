@@ -277,6 +277,7 @@ class VideoCapture:
           process_latest_face(img)
         except Exception as e: print("error in object processing", object_queue[0], e)
         del object_queue[0] 
+         
            
 
 
@@ -299,8 +300,8 @@ class VideoCapture:
 
   def _open_ffmpeg(self, cam_name):
     path = self._get_new_stream_dir(cam_name)
-    if cam_name in self.proc: self._safe_kill_process(self.proc[cam_name])
-    if cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[cam_name])
+    if cam_name in self.proc: self.proc[cam_name].terminate()
+    if cam_name in self.hls_proc: self.hls_proc[cam_name].terminate()
     src = self.src[cam_name]
 
     ffmpeg_path = find_ffmpeg()
@@ -460,7 +461,7 @@ class VideoCapture:
           curr_time = time.time()
           fps = 1 / (curr_time - self.prev_time[cam_name])
           self.prev_time[cam_name] = curr_time
-          print(f"\rFPS: {fps:.2f} {cam_name}", end="", flush=True)
+          #print(f"\rFPS: {fps:.2f} {cam_name}", end="", flush=True)
         else:
           self.last_frame_num[cam_name] = self.frame_num[cam_name]
           self.last_preds = []
