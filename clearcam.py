@@ -395,7 +395,9 @@ class VideoCapture:
     frame_size = self.width[cam_name] * self.height[cam_name] * 3
     while (BASE_DIR / "cameras" / cam_name).exists():
       try:
+        print("reading",cam_name)
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
+        print("read done",cam_name)
         if len(raw_bytes) != frame_size:
           fail_count += 1
           if fail_count > 10:
@@ -450,7 +452,7 @@ class VideoCapture:
           curr_time = time.time()
           fps = 1 / (curr_time - self.prev_time[cam_name])
           self.prev_time[cam_name] = curr_time
-          print(f"\rFPS: {fps:.2f} {cam_name}", end="", flush=True)
+          #print(f"\rFPS: {fps:.2f} {cam_name}", end="", flush=True)
         else:
           self.last_frame_num[cam_name] = self.frame_num[cam_name]
           self.last_preds = []
