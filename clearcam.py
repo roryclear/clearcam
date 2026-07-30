@@ -201,7 +201,6 @@ class VideoCapture:
     self.alert_counters = {}
     self.live_link = {}
     self.live_link_lock = {}
-    self.frame_last_update = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -222,7 +221,6 @@ class VideoCapture:
     self.width[cam_name], self.height[cam_name] = _get_stream_resolution(src)
     self.settings[cam_name] = None
     self.start_time[cam_name] = None
-    self.frame_last_update[cam_name] = time.time()
     
     self.alert_counters[cam_name] = database.run_get("alerts",cam_name)
     if not self.alert_counters[cam_name]:
@@ -253,7 +251,6 @@ class VideoCapture:
       print("starting",cam_name,"src:",cams[cam_name])
       self.init_cam(cam_name=cam_name, src=cams[cam_name])
       threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only!
-      threading.Thread(target=self.frame_loop_watch, daemon=True).start()
     while True:
       if time.time() - cam_check >= 5:
         cam_check = time.time()
@@ -393,20 +390,6 @@ class VideoCapture:
     cv2.imwrite(str(object_filename), crop)
     if global_settings.use_clip or global_settings.use_face: object_queue.append(object_filename)
 
-  def frame_loop_watch(self):
-      while True:
-        cams = database.run_get("links", None)
-        for cam_name in cams:
-          last = self.frame_last_update.get(cam_name, 0)
-          if time.time() - last > 60:
-            print(f"{cam_name}: frame loop stalled, restarting")
-            try: self.proc[cam_name].kill()
-            except: pass
-            self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-            self.frame_last_update[cam_name] = time.time()
-            threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start()
-        time.sleep(10)
-
   def frame_loop(self, cam_name):
     fail_count = 0
     frame_size = self.width[cam_name] * self.height[cam_name] * 3
@@ -424,7 +407,6 @@ class VideoCapture:
           fail_count = 0
         self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
         self.frame_num[cam_name] += 1
-        self.frame_last_update[cam_name] = time.time()
         time.sleep(1 / 100)
         fail_count = 0
       except Exception as e:
