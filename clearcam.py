@@ -395,7 +395,8 @@ class VideoCapture:
 
   def frame_loop_watch(self):
       while True:
-        for cam_name in self.cameras:
+        cams = database.run_get("links", None)
+        for cam_name in cams:
           last = self.frame_last_update.get(cam_name, 0)
           if time.time() - last > 60:
             print(f"{cam_name}: frame loop stalled, restarting")
