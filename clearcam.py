@@ -201,6 +201,7 @@ class VideoCapture:
     self.alert_counters = {}
     self.live_link = {}
     self.live_link_lock = {}
+    self.proc_lock = {}
 
     #self.last_shapes_time = time.time()
     #self.det_shapes = []
@@ -221,6 +222,7 @@ class VideoCapture:
     self.width[cam_name], self.height[cam_name] = _get_stream_resolution(src)
     self.settings[cam_name] = None
     self.start_time[cam_name] = None
+    self.proc_lock[cam_name] = threading.Lock()
     
     self.alert_counters[cam_name] = database.run_get("alerts",cam_name)
     if not self.alert_counters[cam_name]:
@@ -395,9 +397,7 @@ class VideoCapture:
     frame_size = self.width[cam_name] * self.height[cam_name] * 3
     while (BASE_DIR / "cameras" / cam_name).exists():
       try:
-        print("reading",cam_name)
-        raw_bytes = self.proc[cam_name].stdout.read(frame_size)
-        print("read done",cam_name)
+        with self.proc_lock[cam_name]: raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
           fail_count += 1
           if fail_count > 10:
@@ -1164,10 +1164,12 @@ def schedule_daily_restart(cam, restart_time):
       cams = database.run_get("links", None)
       for cam_name in cams.keys():
         cam.start_time[cam_name] = None
+        with cam.proc_lock[cam_name]:
+          if cam.proc[cam_name]:
+              cam.proc[cam_name].stdout.close()
+              cam.proc[cam_name].kill()
         cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
         cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
-
-
 
 def get_lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
