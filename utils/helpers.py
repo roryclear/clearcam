@@ -131,7 +131,7 @@ def resize(img, new_size):
   return img
 
 def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
-  segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
+  segments = sorted(stream_dir.glob("*.m4s"), key=os.path.getmtime)
   recent_segments = deque()
   cutoff = os.path.getmtime(segments[0]) + start if start is not None else time.time() - length if live else time.time() - length
   end = os.path.getmtime(segments[0]) + start + length if start is not None else time.time() - end

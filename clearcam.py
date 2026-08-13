@@ -339,7 +339,7 @@ class VideoCapture:
           "-hls_list_size", "0",
           "-hls_playlist_type", "event",
           "-hls_flags", "append_list+independent_segments+temp_file",
-          "-hls_segment_filename", str(path / "stream_%06d.ts"),
+          "-hls_segment_filename", str(path / "stream_%06d.m4s"),
           str(path / "stream.m3u8")
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
