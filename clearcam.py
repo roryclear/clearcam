@@ -332,7 +332,7 @@ class VideoCapture:
           "-fflags", "+genpts",
           "-avoid_negative_ts", "make_zero",
           "-i", src,
-          "-c", "copy",
+          "-c:v", "copy",
           "-an",
           "-f", "hls",
           "-hls_time", "2",
