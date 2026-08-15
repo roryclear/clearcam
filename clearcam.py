@@ -320,6 +320,7 @@ class VideoCapture:
         "-hls_segment_type", "fmp4",
         "-hls_fmp4_init_filename", "init.mp4",
         "-hls_segment_filename", str(path / "seg_%06d.m4s"),
+        "-start_number", "0",
         str(path / "stream.m3u8"),
       ]
       return subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL), None
@@ -338,7 +339,7 @@ class VideoCapture:
           "-hls_time", "2",
           "-hls_list_size", "0",
           "-hls_playlist_type", "event",
-          "-hls_flags", "append_list+independent_segments+temp_file",
+          "-hls_flags", "append_list+independent_segments",
           "-hls_segment_filename", str(path / "stream_%06d.m4s"),
           str(path / "stream.m3u8")
       ]
