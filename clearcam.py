@@ -545,7 +545,6 @@ class VideoCapture:
 
     except Exception as e:
       print("Error in process_frame:", e, cam_name)
-      self._open_ffmpeg(cam_name)
       time.sleep(1)
 
   def upload_live_segment(self, link, cam_name):
