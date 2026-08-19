@@ -1194,22 +1194,22 @@ def event_img_info(image): return {"ts": int(float(image.split('_')[0])), "objec
 
 def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool:
     try:
-        url_parts = urllib.parse.urlparse(signed_url)
-        if url_parts.scheme == 'https':
-            conn = http.client.HTTPSConnection(url_parts.netloc)
-        else:
-            conn = http.client.HTTPConnection(url_parts.netloc)
-        
-        with file_path.open('rb') as f:
-            headers = {'Content-Type': 'application/octet-stream'}
-            conn.request("PUT", url_parts.path + "?" + url_parts.query, body=f, headers=headers)
-            response = conn.getresponse()
-            if 200 <= response.status < 300:
-                return True
-            return False
-    except Exception as e:
-        print(f"Error uploading to R2: {e}")
+      url_parts = urllib.parse.urlparse(signed_url)
+      if url_parts.scheme == 'https':
+        conn = http.client.HTTPSConnection(url_parts.netloc)
+      else:
+        conn = http.client.HTTPConnection(url_parts.netloc)
+      
+      with file_path.open('rb') as f:
+        file_size = file_path.stat().st_size
+        headers = {'Content-Type': 'application/octet-stream', "Content-Length": str(file_size)}
+        conn.request("PUT", url_parts.path + "?" + url_parts.query, body=f, headers=headers)
+        response = conn.getresponse()
+        if 200 <= response.status < 300: return True
         return False
+    except Exception as e:
+      print(f"Error uploading to R2: {e}")
+      return False
 
 import queue
 task_queue = queue.Queue()
