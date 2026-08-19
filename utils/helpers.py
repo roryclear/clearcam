@@ -131,73 +131,48 @@ def resize(img, new_size):
   return img
 
 def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, start=None):
-  segments = sorted(stream_dir.glob("*.ts"), key=os.path.getmtime)
+  segments = sorted(stream_dir.glob("*.m4s"), key=os.path.getmtime)
   recent_segments = deque()
-  cutoff = os.path.getmtime(segments[0]) + start if start is not None else time.time() - length if live else time.time() - length
-  end = os.path.getmtime(segments[0]) + start + length if start is not None else time.time() - end
-  recent_raw = [f for f in segments if os.path.getmtime(f) >= cutoff and os.path.getmtime(f) <= end]
+  first_segment_time = os.path.getmtime(segments[0])
+  if start is not None:
+    cutoff = first_segment_time + start
+    end_time = cutoff + length
+  else:
+    cutoff = time.time() - length
+    end_time = time.time() - end
+  recent_raw = [f for f in segments if cutoff <= os.path.getmtime(f) <= end_time]
   recent_segments.extend(recent_raw)
-  concat_list_path = stream_dir / "concat_list.txt"
-  with open(concat_list_path, "w") as f: f.writelines(f"file '{segment.resolve()}'\n" for segment in recent_segments)
+  if live and recent_segments and recent_segments[-1] == segments[-1]: recent_segments.pop()
   output_path.parent.mkdir(parents=True, exist_ok=True)
   ffmpeg_path = find_ffmpeg()
-  if live:
-    command = [
-        ffmpeg_path,
-        "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_list_path),
-        "-loglevel", "quiet",
-        "-vf", "scale=-2:240,fps=24,format=yuv420p",
-        "-c:v", "libx264",  
-        "-pix_fmt", "yuv420p",
-        "-preset", "veryslow",
-        "-crf", "32",
-        "-an",
-        str(output_path)
-    ]
-    subprocess.run(command, check=True)
-  else:
-    with open(stream_dir / "concat_list.txt", "r") as f: print(" ".join(line.strip() for line in f))
-    command = [
-      ffmpeg_path,
-      "-y",
-      "-f", "concat",
-      "-safe", "0",
-      "-i", str(concat_list_path),
-      "-c:v", "libx264",
-      "-crf", "18",
-      "-pix_fmt", "yuv420p",
-      "-an",  # No audio
-      str(output_path)
-    ]
-    subprocess.run(command, check=True)
-    comp = 5
-    file_size = 10*1024*1024
-    with open(output_path, "rb") as f:
-      file_data = f.read()
-      file_size = len(file_data)
-    while file_size >= 9*1024*1024: # max size 10MB, # todo, calculate time from ts files
-      temp_output = output_path.with_stem(output_path.stem + "_compressed")
+  init_path = stream_dir / "init.mp4"
+  combined_path = stream_dir / ".export_combined.mp4"
+
+  try:
+    with open(combined_path, "wb") as out:
+      with open(init_path, "rb") as f: out.write(f.read())
+      for segment in recent_segments:
+        with open(segment, "rb") as f: out.write(f.read())
+    crf = 32
+    while True:
       command = [
         ffmpeg_path,
         "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_list_path),
+        "-i", str(combined_path),
+        *(["-vf", "scale=-2:240,fps=24,format=yuv420p", "-preset", "veryslow",] if live else []),
         "-c:v", "libx264",
-        "-crf", str(18 + comp),
-        "-pix_fmt", "yuv420p",  # needed for android
-        "-an",  # No audio
-        str(temp_output)
+        "-pix_fmt", "yuv420p",
+        "-preset", "veryslow",
+        "-crf", str(crf),
+        "-an",
+        str(output_path)
       ]
       subprocess.run(command, check=True)
-      os.replace(temp_output, output_path)
-      with open(output_path, "rb") as f:
-        file_data = f.read()
-      file_size = len(file_data)
-      comp += 5
+      if output_path.stat().st_size < 9*1024*1024: break
+      crf += 5
+
+  finally:
+    if combined_path.exists(): combined_path.unlink()
 
 def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, length=20, wait=False):
     if wait: time.sleep(10) # todo, objects can be too far ahead 
