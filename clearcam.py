@@ -1013,6 +1013,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache')
         elif file_path.suffix == '.ts':
             self.send_header('Content-Type', 'video/MP2T')
+        elif file_path.suffix == '.m4s':
+            self.send_header('Content-Type', 'video/iso.segment')
         elif file_path.suffix == '.png':
             self.send_header('Content-Type', 'image/jpeg')
         self.end_headers()
