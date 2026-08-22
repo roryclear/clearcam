@@ -557,22 +557,24 @@ class VideoCapture:
     upload_to_r2(file_path=Path(f"""{mp4_filename}.aes"""), signed_url=link)
 
   def check_upload_link(self, cam_name="camera"):
-      query_params = urllib.parse.urlencode({
-          "name": quote(cam_name),
-          "session_token": global_settings.userID
-      })
-      url = f"https://clearcam.org/get_stream_upload_link?{query_params}"
-      
-      req = urllib.request.Request(url)
-      with urllib.request.urlopen(req) as response:
-          if response.status == 200:
-              response_data = json.loads(response.read().decode('utf-8'))
-              upload_link = response_data.get("upload_link")
-              alerts_on_res = response_data.get("alerts_on")
-              with self.live_link_lock[cam_name]: self.live_link[cam_name] = upload_link
-              alerts_on[cam_name] = (alerts_on_res == 1)
-          else:
-              if cam_name in self.live_link: self.live_link[cam_name] = None
+      try:
+        query_params = urllib.parse.urlencode({
+            "name": quote(cam_name),
+            "session_token": global_settings.userID
+        })
+        url = f"https://clearcam.org/get_stream_upload_link?{query_params}"
+        
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                response_data = json.loads(response.read().decode('utf-8'))
+                upload_link = response_data.get("upload_link")
+                alerts_on_res = response_data.get("alerts_on")
+                with self.live_link_lock[cam_name]: self.live_link[cam_name] = upload_link
+                alerts_on[cam_name] = (alerts_on_res == 1)
+            else:
+                if cam_name in self.live_link: self.live_link[cam_name] = None
+      except Exception: return
 
   def reset_vod(self, cam_name):
     self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name]) # reset video on settings change
