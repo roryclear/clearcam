@@ -338,8 +338,11 @@ class VideoCapture:
           "-hls_time", "2",
           "-hls_list_size", "0",
           "-hls_playlist_type", "event",
+          "-hls_segment_type", "fmp4",
+          "-hls_fmp4_init_filename", "init.mp4",
           "-hls_flags", "append_list+independent_segments+temp_file",
-          "-hls_segment_filename", str(path / "stream_%06d.ts"),
+          "-hls_segment_filename", str(path / "stream_%06d.m4s"),
+          "-start_number", "0",
           str(path / "stream.m3u8")
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1009,6 +1012,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache')
         elif file_path.suffix == '.ts':
             self.send_header('Content-Type', 'video/MP2T')
+        elif file_path.suffix == '.m4s':
+            self.send_header('Content-Type', 'video/iso.segment')
         elif file_path.suffix == '.png':
             self.send_header('Content-Type', 'image/jpeg')
         self.end_headers()
