@@ -286,21 +286,10 @@ class VideoCapture:
       stream_dir_raw.mkdir(parents=True, exist_ok=True)
       return stream_dir_raw
 
-  def _safe_kill_process(self, proc):
-    if proc:
-      try:
-        proc.terminate()
-        proc.wait(timeout=5)
-      except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-      except Exception:
-        pass
-
   def _open_ffmpeg(self, cam_name):
     path = self._get_new_stream_dir(cam_name)
-    if cam_name in self.proc: self._safe_kill_process(self.proc[cam_name])
-    if cam_name in self.hls_proc: self._safe_kill_process(self.hls_proc[cam_name])
+    if cam_name in self.proc: self.proc[cam_name].kill()
+    if cam_name in self.hls_proc: self.hls_proc[cam_name].kill()
     src = self.src[cam_name]
     if type(src) != str: return # todo, fixes a crash, fix cause
 
@@ -1165,19 +1154,19 @@ def image_sort_key(item):
 
 def schedule_daily_restart(cam, restart_time):
     while True:
-        now = datetime.now().time()
-        target = time_obj(restart_time[0], restart_time[1])
-        if now >= target:
-          delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
-        else:
-          delta = ((target.hour * 3600 + target.minute * 60) - 
-            (now.hour * 3600 + now.minute * 60 + now.second))
-        time.sleep(delta)
-        cams = database.run_get("links", None)
-        for cam_name in cams.keys():
-          cam.start_time[cam_name] = None
-          cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
-          cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
+      now = datetime.now().time()
+      target = time_obj(restart_time[0], restart_time[1])
+      if now >= target:
+        delta = (24 * 3600) - ((now.hour * 3600 + now.minute * 60 + now.second) - (target.hour * 3600 + target.minute * 60))
+      else:
+        delta = ((target.hour * 3600 + target.minute * 60) - 
+          (now.hour * 3600 + now.minute * 60 + now.second))
+      time.sleep(delta)
+      cams = database.run_get("links", None)
+      for cam_name in cams.keys():
+        cam.start_time[cam_name] = None
+        cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
+        cam.current_stream_dir_raw[cam_name] = cam._get_new_stream_dir(cam_name)
 
 
 
