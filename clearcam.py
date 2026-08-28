@@ -397,9 +397,13 @@ class VideoCapture:
       try:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
-          # todo, restart removed because it adds extra ffmpeg procs, don't call right after startup (during 15s sleep)
-          print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
           time.sleep(0.5)
+          if time.time() - self.start_time[cam_name] > 60: # 1 min grace before restart
+            fail_count += 1
+            if fail_count > 5:
+              print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
+              self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
+              fail_count = 0
         else:
           fail_count = 0
         self.raw_frame[cam_name] = np.frombuffer(raw_bytes, np.uint8).reshape((self.height[cam_name], self.width[cam_name], 3))
