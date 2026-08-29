@@ -15,8 +15,14 @@ import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
 from tinygrad import Tensor, TinyJit
 
+def send_pushover_nofif(global_settings, text, body_text):
+  data = urllib.parse.urlencode({"token": global_settings.pushover_token, "user": global_settings.pushover_user, "message": f"{text} - {body_text}" if body_text else text,}).encode()
+  urllib.request.urlopen("https://api.pushover.net/1/messages.json", data=data)
+
 def send_notif(global_settings, text=None, body_text=None):
+    if global_settings.pushover_user is not None and global_settings.pushover_token is not None: send_pushover_nofif(global_settings, text, body_text)
     session_token = global_settings.userID
+    if not session_token: return
     host = "www.clearcam.org"
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"

@@ -3471,7 +3471,7 @@
         "model_res": "YOLOv9 Resolution",
         "use_qwen": "AI Event Summaries (Qwen3VL)",
         "qwen_size": "Qwen3VL Size",
-        "userID": "User ID",
+        "userID": "Clearcam User ID",
         "key": "Key",
         "pushover_user": "Pushover User Token",
         "pushover_token": "Pusover Token"
@@ -3588,7 +3588,7 @@
         }
         else {
           const val = input.value;
-          if (key === "userID" || key === "key") {
+          if (key === "userID" || key === "key" || key == "pushover_user" || key == "pushover_token") {
             if (val === "*****") {
               payload[key] = true;
             } else if (val === "") {
