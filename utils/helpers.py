@@ -15,7 +15,8 @@ import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
 from tinygrad import Tensor, TinyJit
 
-def send_notif(session_token: str, text=None, body_text=None):
+def send_notif(global_settings, text=None, body_text=None):
+    session_token = global_settings.userID
     host = "www.clearcam.org"
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"

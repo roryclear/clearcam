@@ -488,13 +488,13 @@ class VideoCapture:
                     self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
                   if global_settings.userID is not None and not self.vod[cam_name] and alert.is_notif:
                     title = f"Event Detected ({cam_name})"
-                    threading.Thread(target=send_notif, args=(global_settings.userID,title,None), daemon=True).start()
+                    threading.Thread(target=send_notif, args=(global_settings,title,None), daemon=True).start()
                     if global_settings.use_qwen: # extra notif if qwen
                       # use frames before last, only one reset needed, must convert to RGB
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
                       text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
-                      threading.Thread(target=send_notif, args=(global_settings.userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
-                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts, "wait":True}, daemon=True).start()
+                      threading.Thread(target=send_notif, args=(global_settings,f"AI Summary ({cam_name}):",text), daemon=True).start()
+                    if global_settings.userID: threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts, "wait":True}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
                   alert.last_det = time.time()
           
@@ -1392,7 +1392,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
+  def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2, pushover_token=None, pushover_user=None):
     self.use_clip = use_clip
     self.use_face = use_face
     self.model_size = model_size
@@ -1401,6 +1401,8 @@ class GlobalSettings:
     self.key= key
     self.use_qwen = use_qwen
     self.qwen_size = qwen_size
+    self.pushover_token = pushover_token
+    self.pushover_user = pushover_user
 
 def secret_settings(settings):
     return GlobalSettings(
@@ -1411,7 +1413,9 @@ def secret_settings(settings):
         userID=settings.userID is not None,
         key=settings.key is not None,
         use_qwen=settings.use_qwen,
-        qwen_size=settings.qwen_size
+        qwen_size=settings.qwen_size,
+        pushover_user=settings.pushover_user is not None,
+        pushover_token=settings.pushover_token is not None,
     )
 
 if __name__ == "__main__":

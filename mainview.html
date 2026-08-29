@@ -3472,7 +3472,9 @@
         "use_qwen": "AI Event Summaries (Qwen3VL)",
         "qwen_size": "Qwen3VL Size",
         "userID": "User ID",
-        "key": "Key"
+        "key": "Key",
+        "pushover_user": "Pushover User Token",
+        "pushover_token": "Pusover Token"
         };
 
       const tooltipMap = {
@@ -3480,10 +3482,12 @@
         "use_face": "Enables searching detected people using a face image.",
         "model_size": "YOLOv9 Detection model size (tiny, small, medium, compact, extended)",
         "model_res": "Sets the input resolution for YOLOv9 detection.",
-        "use_qwen": "Enables AI-powered event summaries for notifications using Qwen3VL vision-language model (Clearcam User ID required).",
+        "use_qwen": "Enables AI-powered event summaries for notifications using Qwen3VL vision-language model (Clearcam or Pushover user required).",
         "qwen_size": "Select the Qwen3VL model size (2B or 4B parameters).",
         "userID": "Your account user ID for notifications and remote config.",
-        "key": "Secret key for encrypting event clips."
+        "key": "Secret key for encrypting event clips.",
+        "pushover_user": "Use Pushover Notifications to send yourself notifications.",
+        "pushover_token": "Use Pushover Notifications to send yourself notifications.",
       };
 
         const wrapper = document.createElement("div");
@@ -3537,11 +3541,11 @@
             input.appendChild(option);
           });
         }
-        else if (key === "userID" || key === "key") {
+        else if (key === "userID" || key === "key" || key === "pushover_user" || key === "pushover_token") {
           input = document.createElement("input");
           input.type = "password";
           input.value = value ? "*****" : "";
-          input.placeholder = key;
+          input.placeholder = key.replace("_", " ");
           input.style.width = "120px";
         }
         else if (typeof value === "boolean") {
