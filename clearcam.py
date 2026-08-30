@@ -335,7 +335,6 @@ class VideoCapture:
           str(path / "stream.m3u8")
       ]
       hls_proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      time.sleep(15)
       if self.start_time[cam_name] is None: self.start_time[cam_name] = time.time()
       
       command = [
@@ -410,7 +409,7 @@ class VideoCapture:
         self.frame_num[cam_name] += 1
         time.sleep(1 / 100)
       except Exception as e:
-        print("Error in frame_loop:", e, cam_name)
+        print("Waiting for frames from",cam_name)
         time.sleep(1)
 
   def process_frame(self, cam_name):
