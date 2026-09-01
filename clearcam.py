@@ -1398,6 +1398,11 @@ class GlobalSettings:
     self.qwen_size = qwen_size
     self.qwen_prompt = qwen_prompt
 
+  # add any new properties here
+  def __setstate__(self, state):
+    self.__dict__.update(state)
+    if not hasattr(self, "qwen_prompt"): self.qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+
 def secret_settings(settings):
     return GlobalSettings(
         use_clip=settings.use_clip,
