@@ -484,7 +484,7 @@ class VideoCapture:
                     if global_settings.use_qwen: # extra notif if qwen
                       # use frames before last, only one reset needed, must convert to RGB
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
-                      text = qwen.generate(prompt=qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
+                      text = qwen.generate(prompt=global_settings.qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
                       threading.Thread(target=send_notif, args=(global_settings.userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
                     threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts, "wait":True}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
@@ -1386,7 +1386,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().server_close()
 
 class GlobalSettings:
-  def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2):
+  def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2,
+               qwen_prompt="What has been detected on my CCTV camera? Write in one short sentence"):
     self.use_clip = use_clip
     self.use_face = use_face
     self.model_size = model_size
@@ -1395,6 +1396,7 @@ class GlobalSettings:
     self.key= key
     self.use_qwen = use_qwen
     self.qwen_size = qwen_size
+    self.qwen_prompt = qwen_prompt
 
 def secret_settings(settings):
     return GlobalSettings(
@@ -1405,7 +1407,8 @@ def secret_settings(settings):
         userID=settings.userID is not None,
         key=settings.key is not None,
         use_qwen=settings.use_qwen,
-        qwen_size=settings.qwen_size
+        qwen_size=settings.qwen_size,
+        qwen_prompt=settings.qwen_prompt
     )
 
 if __name__ == "__main__":
@@ -1442,7 +1445,6 @@ if __name__ == "__main__":
 
   if global_settings.key != None and global_settings.use_qwen:
     qwen = Qwen3VL(size=f"{global_settings.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
-    qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
     print("prewarming Qwen")
     qwen.prewarm()
     print("DONE")

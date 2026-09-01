@@ -3471,6 +3471,7 @@
         "model_res": "YOLOv9 Resolution",
         "use_qwen": "AI Event Summaries (Qwen3VL)",
         "qwen_size": "Qwen3VL Size",
+        "qwen_prompt": "Qwen3VL Prompt",
         "userID": "User ID",
         "key": "Key"
         };
@@ -3483,7 +3484,8 @@
         "use_qwen": "Enables AI-powered event summaries for notifications using Qwen3VL vision-language model (Clearcam User ID required).",
         "qwen_size": "Select the Qwen3VL model size (2B or 4B parameters).",
         "userID": "Your account user ID for notifications and remote config.",
-        "key": "Secret key for encrypting event clips."
+        "key": "Secret key for encrypting event clips.",
+        "qwen_prompt": "The prompt for the language model to answer and summarize the event (tip: explicitly tell it to be brief, otherwise it will return too much text!)."
       };
 
         const wrapper = document.createElement("div");
@@ -3549,6 +3551,12 @@
           input.type = "checkbox";
           input.checked = value;
         }
+        else if (key === "qwen_prompt") {
+          input = document.createElement("textarea");
+          input.value = value;
+          input.rows = 3;
+          input.style.width = "240px";
+        }
         else {
           input = document.createElement("input");
           input.type = "text";
@@ -3564,7 +3572,7 @@
 
     async function saveSettings() {
       const container = document.getElementById("settingsContainer");
-      const inputs = container.querySelectorAll("input, select");
+      const inputs = container.querySelectorAll("input, select, textarea");
       const payload = {};
       
       inputs.forEach(input => {
