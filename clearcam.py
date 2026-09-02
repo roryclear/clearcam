@@ -397,7 +397,7 @@ class VideoCapture:
         raw_bytes = self.proc[cam_name].stdout.read(frame_size)
         if len(raw_bytes) != frame_size:
           time.sleep(0.5)
-          if time.time() - self.start_time[cam_name] > 60: # 1 min grace before restart
+          if time.time() - self.start_time[cam_name] > 15: # 15 sec grace before restart
             fail_count += 1
             if fail_count > 5:
               print(f"{cam_name} FFmpeg frame read failed (count={fail_count}), restarting stream...{self.src[cam_name]}")
@@ -409,7 +409,7 @@ class VideoCapture:
         self.frame_num[cam_name] += 1
         time.sleep(1 / 100)
       except Exception as e:
-        print("Waiting for frames from",cam_name)
+        print(f"Waiting for frames from {cam_name}...")
         time.sleep(1)
 
   def process_frame(self, cam_name):
