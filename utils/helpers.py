@@ -174,7 +174,7 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
   finally:
     if combined_path.exists(): combined_path.unlink()
 
-def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, length=20, wait=False):
+def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, length=20):
     os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
     mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
     temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"

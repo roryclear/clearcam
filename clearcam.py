@@ -486,7 +486,7 @@ class VideoCapture:
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
                       text = qwen.generate(prompt=global_settings.qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
                       threading.Thread(target=send_notif, args=(global_settings.userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
-                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts, "wait":True}, daemon=True).start()
+                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
                   alert.last_det = time.time()
           
@@ -1296,7 +1296,7 @@ def clip_latest_img(img):
           alerts[k].last_det = time.time()
           database.run_put("alerts", cam_name, alerts[k], k)
           seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
-          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20, "wait": True}, daemon=True).start()
+          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20}, daemon=True).start()
           break
 
 cams = dict()
