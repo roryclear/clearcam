@@ -472,7 +472,7 @@ class VideoCapture:
                   filepath.mkdir(parents=True, exist_ok=True)
                   annotated_frame = draw_predictions(self.last_frames[cam_name][-1].copy(), filtered_preds, color_dict)
                   # todo alerts can be sent with the wrong thumbnail if two happen quickly, use map
-                  ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 5)
+                  ts = int(self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES) / self.src_fps[cam_name]) - 5 if self.vod[cam_name] else int(time.time() - self.start_time[cam_name] - 15)
                   self.filename[cam_name] = filepath / f"{ts}_notif.jpg" if alert.is_notif else filepath / f"{ts}.jpg"
                   if not self.vod[cam_name]: cv2.imwrite(str(self.filename[cam_name]), annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 85]) # we've 10MB limit for video file, raw png is 3MB!
                   if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
