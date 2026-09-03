@@ -72,22 +72,6 @@ class OpenCLIP:
         self.positional_embedding_text = Tensor.empty(77, 768)
         self.token_embedding = nn.Embedding(49408, 768)
 
-        self.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
-        self.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
-        self.resblocks = []
-        
-        for i in range(12):
-            resblock = Blank()
-            resblock.ln_1 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
-            resblock.ln_2 = nn.LayerNorm(768, 1e-5, elementwise_affine=True)
-            resblock.attn_out_proj_weight = Tensor.empty(768, 768)
-            resblock.attn_out_proj_bias = Tensor.empty(768)
-            resblock.mlp_c_fc = nn.Linear(768, 3072)
-            resblock.mlp_c_proj = nn.Linear(3072, 768)
-            resblock.in_proj_weight = Tensor.empty(2304, 768)
-            resblock.in_proj_bias = Tensor.empty(2304)        
-            self.resblocks.append(resblock)
-
         state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
         load_state_dict(self, state_dict)
         
