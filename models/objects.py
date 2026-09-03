@@ -68,10 +68,6 @@ class OpenCLIP:
             resblock.mlp_c_proj = nn.Linear(4096, 1024)
             self.resblocks_img.append(resblock)
 
-        self.text_projection = Tensor.empty(768, 768)
-        self.positional_embedding_text = Tensor.empty(77, 768)
-        self.token_embedding = nn.Embedding(49408, 768)
-
         state_dict = safe_load(fetch("https://huggingface.co/roryclear/CLIP-ViT-L-14-laion2B-s32B-b82K/resolve/main/CLIP-ViT-L-14-laion2B-s32B-b82K.safetensors"))
         load_state_dict(self, state_dict)
         
