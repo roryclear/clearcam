@@ -31,7 +31,7 @@ class OpenCLIP:
         self.token_embedding = nn.Embedding(49408, 768)
 
         self.ln_final = nn.LayerNorm(768, eps=1e-5, elementwise_affine=True)
-        self.attn_mask = Tensor.ones(77, 77).tril().where(0.0, -math.inf).cast("float32")
+        self.attn_mask = Tensor.ones(77, 77).tril().cast(dtypes.bool).where(0.0, -math.inf).cast(dtypes.float)
         self.resblocks = []
         
         for i in range(12):
