@@ -1,4 +1,5 @@
 from llm.qwen3vl import Qwen3VL
+from utils.helpers import jit_infer
 import cv2
 if __name__ == "__main__":
   qwen = Qwen3VL(size=f"2B", res=(640, 640)) # h, w. they need to be multiples of 32
