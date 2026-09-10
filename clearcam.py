@@ -480,12 +480,12 @@ class VideoCapture:
                     self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
                   if global_settings.use_notifs() is not None and not self.vod[cam_name] and alert.is_notif:
                     title = f"Event Detected ({cam_name})"
-                    threading.Thread(target=send_notif, args=(global_settings.userID,title,None,global_settings.server_url), daemon=True).start()
+                    threading.Thread(target=send_notif, kwargs={"session_token": global_settings.userID,"text":title,"body_text": None,"host": global_settings.server_url,}, daemon=True).start()
                     if global_settings.use_qwen: # extra notif if qwen
                       # use frames before last, only one reset needed, must convert to RGB
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
                       text = qwen.generate(prompt=global_settings.qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
-                      threading.Thread(target=send_notif, args=(global_settings.userID,f"AI Summary ({cam_name}):",text,global_settings.server_url), daemon=True).start()
+                      threading.Thread(target=send_notif, kwargs={"session_token": global_settings.userID, "text": f"AI Summary ({cam_name}):", "body_text": text, "host": global_settings.server_url}, daemon=True).start()
                     if global_settings.clearcam_user(): threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
                   alert.last_det = time.time()
@@ -1292,7 +1292,7 @@ def clip_latest_img(img):
         similarity = (v.desc_emb @ emb.T).item()
         print("sim =",similarity,v.desc,object_queue[0])
         if similarity > v.threshold:
-          send_notif(global_settings.userID, f"Event Detected ({cam_name}: {v.desc})",None,global_settings.server_url)
+          send_notif(session_token=global_settings.userID, text=f"Event Detected ({cam_name}: {v.desc})", body_text=None, host=global_settings.server_url)
           alerts[k].last_det = time.time()
           database.run_put("alerts", cam_name, alerts[k], k)
           if global_settings.clearcam_user():
