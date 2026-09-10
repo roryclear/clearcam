@@ -1,16 +1,14 @@
 import os
 import pickle
-from datetime import datetime
-from tinygrad import nn, Tensor, TinyJit, Device
+from tinygrad import nn, Tensor, TinyJit
 from tinygrad.helpers import fetch
 from tinygrad.dtype import dtypes
 import numpy as np
 import cv2
-import time
-from utils.helpers import send_notif, export_and_upload, BASE_DIR, jit_infer
+from utils.helpers import jit_infer
 from models.blazeface import BlazeFace
 from models.adaface import ADAFACE
-from tinygrad.nn.state import safe_save, safe_load, get_state_dict, load_state_dict
+from tinygrad.nn.state import safe_load, load_state_dict
 from utils.clip_tokenizer import SimpleTokenizer
 import math
 from clearcam import event_img_info
