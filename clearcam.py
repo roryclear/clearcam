@@ -478,7 +478,7 @@ class VideoCapture:
                   if (plain := filepath / f"{ts}.jpg").exists() and (filepath / f"{ts}_notif.jpg").exists():
                     plain.unlink() # only one image per event
                     self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
-                  if global_settings.userID is not None and not self.vod[cam_name] and alert.is_notif:
+                  if global_settings.use_notifs() is not None and not self.vod[cam_name] and alert.is_notif:
                     title = f"Event Detected ({cam_name})"
                     threading.Thread(target=send_notif, args=(global_settings.userID,title,None), daemon=True).start()
                     if global_settings.use_qwen: # extra notif if qwen
@@ -1279,7 +1279,7 @@ def clip_latest_img(img):
     data["embeddings"][str(object_queue[0])] = emb
     with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
   
-    if global_settings.userID:
+    if global_settings.use_notifs():
       cam_name = object_queue[0].parts[object_queue[0].parts.index("cameras")+1:object_queue[0].parts.index("objects")][0]
       alerts = database.run_get("alerts", cam_name) # todo, get cam_name from file path!
       for k, v in alerts.items():
@@ -1295,8 +1295,9 @@ def clip_latest_img(img):
           send_notif(global_settings.userID, f"Event Detected ({cam_name}: {v.desc})")
           alerts[k].last_det = time.time()
           database.run_put("alerts", cam_name, alerts[k], k)
-          seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
-          threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20}, daemon=True).start()
+          if global_settings.userID:
+            seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
+            threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20}, daemon=True).start()
           break
 
 cams = dict()
@@ -1402,6 +1403,8 @@ class GlobalSettings:
   def __setstate__(self, state):
     self.__dict__.update(state)
     if not hasattr(self, "qwen_prompt"): self.qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+
+  def use_notifs(self): return self.userID
 
 def secret_settings(settings):
     return GlobalSettings(
