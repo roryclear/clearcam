@@ -438,7 +438,7 @@ class VideoCapture:
         # don't run inference when no active scheds
         if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
         else:
-          if not global_settings.userID or alerts_on[cam_name]:
+          if not global_settings.use_notifs() or alerts_on[cam_name]:
             preds, frame = self.run_inference(frame, cam_name=cam_name)
             self.last_frames[cam_name].append(frame.numpy().copy())
             self.last_preds[cam_name] = preds.copy()
@@ -486,7 +486,7 @@ class VideoCapture:
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
                       text = qwen.generate(prompt=global_settings.qwen_prompt, image=cv2.cvtColor(cv2.imread(self.filename[cam_name]), cv2.COLOR_BGR2RGB), reset=False) # must reset or run out of context
                       threading.Thread(target=send_notif, args=(global_settings.userID,f"AI Summary ({cam_name}):",text), daemon=True).start()
-                    threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts}, daemon=True).start()
+                    if global_settings.clearcam_user(): threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": self.filename[cam_name], "userID": global_settings.userID, "key": global_settings.key, "start": ts}, daemon=True).start()
                   self.last_det[cam_name] = time.time()
                   alert.last_det = time.time()
           
@@ -497,7 +497,7 @@ class VideoCapture:
             if link != self.src[cam_name]:
               self.src[cam_name] = link
               self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
-            if global_settings.userID and not self.vod[cam_name]: threading.Thread(target=self.check_upload_link, args=(cam_name,), daemon=True).start()
+            if global_settings.clearcam_user() and not self.vod[cam_name]: threading.Thread(target=self.check_upload_link, args=(cam_name,), daemon=True).start()
           if (time.time() - self.last_counter_update[cam_name]) >= 5: #update counter every 5 secs
             self.last_counter_update[cam_name] = time.time()
 
@@ -527,7 +527,7 @@ class VideoCapture:
               if "reset" in new_settings: del new_settings["reset"]
             self.settings[cam_name] = new_settings
               
-          if global_settings.userID and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
+          if global_settings.clearcam_user() and not self.vod[cam_name] and cam_name in self.live_link and (link:=self.live_link[cam_name]) and (time.time() - self.last_live_seg[cam_name]) >= 4:
             self.last_live_seg[cam_name] = time.time()
             threading.Thread(target=self.upload_live_segment, args=(link, cam_name,), daemon=True).start()
         else: self.count[cam_name]+=1
@@ -1295,7 +1295,7 @@ def clip_latest_img(img):
           send_notif(global_settings.userID, f"Event Detected ({cam_name}: {v.desc})")
           alerts[k].last_det = time.time()
           database.run_put("alerts", cam_name, alerts[k], k)
-          if global_settings.userID:
+          if global_settings.clearcam_user():
             seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
             threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20}, daemon=True).start()
           break
@@ -1388,7 +1388,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 class GlobalSettings:
   def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2,
-               qwen_prompt="What has been detected on my CCTV camera? Write in one short sentence"):
+               qwen_prompt="What has been detected on my CCTV camera? Write in one short sentence", server_url="https://clearcam.org"):
     self.use_clip = use_clip
     self.use_face = use_face
     self.model_size = model_size
@@ -1398,6 +1398,7 @@ class GlobalSettings:
     self.use_qwen = use_qwen
     self.qwen_size = qwen_size
     self.qwen_prompt = qwen_prompt
+    self.server_url = server_url
 
   # add any new properties here
   def __setstate__(self, state):
@@ -1405,6 +1406,7 @@ class GlobalSettings:
     if not hasattr(self, "qwen_prompt"): self.qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
 
   def use_notifs(self): return self.userID
+  def clearcam_user(self): return self.userID is not None and self.server_url == "https://clearcam.org"
 
 def secret_settings(settings):
     return GlobalSettings(
@@ -1416,7 +1418,8 @@ def secret_settings(settings):
         key=settings.key is not None,
         use_qwen=settings.use_qwen,
         qwen_size=settings.qwen_size,
-        qwen_prompt=settings.qwen_prompt
+        qwen_prompt=settings.qwen_prompt,
+        server_url=settings.server_url
     )
 
 if __name__ == "__main__":

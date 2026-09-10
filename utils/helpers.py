@@ -16,7 +16,7 @@ BASE_DIR = Path(__file__).parent.parent / "data"
 from tinygrad import Tensor, TinyJit
 
 def send_notif(session_token: str, text=None, body_text=None):
-    host = "www.clearcam.org"
+    host = "clearcam.org" # todo, use settings!
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"
     content_type = f"multipart/form-data; boundary={boundary}"
