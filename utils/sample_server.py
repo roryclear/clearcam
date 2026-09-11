@@ -1,4 +1,9 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import uuid
+import http.client
+
+PUSHOVER_TOKEN = "PUT_YOUR_TOKEN_HERE"
+PUSHOVER_USER = "PUT_YOUR_TOKEN_HERE"
 
 class Handler(BaseHTTPRequestHandler):
   def do_POST(self):
@@ -36,8 +41,49 @@ class Handler(BaseHTTPRequestHandler):
     print("text:", text)
     print("body_text:", body_text)
     print("img:", img_filename, len(img) if img else None)
-    if img is not None: with open("received.jpg", "wb") as f: f.write(img)
+    if body_text is not None: text += " " + body_text
+    if img is not None:
+      with open("received.jpg", "wb") as f: f.write(img)
+
+    pushover_send(token=PUSHOVER_TOKEN, user=PUSHOVER_USER, message=text, image="received.jpg" if img is not None else None)
+
     self.send_response(200)
     self.end_headers()
+
+def pushover_send(token, user, message, image=None):
+  boundary = uuid.uuid4().hex
+  parts = [
+    f"--{boundary}\r\n"
+    'Content-Disposition: form-data; name="token"\r\n\r\n'
+    f"{token}\r\n",
+    f"--{boundary}\r\n"
+    'Content-Disposition: form-data; name="user"\r\n\r\n'
+    f"{user}\r\n",
+    f"--{boundary}\r\n"
+    'Content-Disposition: form-data; name="message"\r\n\r\n'
+    f"{message}\r\n",
+  ]
+  body = "".join(parts).encode()
+  if image is not None:
+    with open(image, "rb") as f: image_bytes = f.read()
+    body += (
+      f"--{boundary}\r\n"
+      'Content-Disposition: form-data; name="attachment"; filename="f40.jpg"\r\n'
+      "Content-Type: image/jpeg\r\n\r\n"
+    ).encode() + image_bytes + b"\r\n"
+  body += f"--{boundary}--\r\n".encode()
+  conn = http.client.HTTPSConnection("api.pushover.net")
+  conn.request(
+      "POST",
+      "/1/messages.json",
+      body=body,
+      headers={
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Length": str(len(body)),
+      },
+  )
+  response = conn.getresponse()
+  print(response.read().decode())
+  conn.close()
 
 HTTPServer(("0.0.0.0", 8081), Handler).serve_forever()
