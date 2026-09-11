@@ -21,28 +21,30 @@ def send_notif(session_token: str, text=None, body_text=None, host="https://clea
     endpoint = "/send" #/test
     boundary = f"Boundary-{uuid.uuid4()}"
     content_type = f"multipart/form-data; boundary={boundary}"
-    lines = [
+    lines = []
+    if session_token is not None:
+      lines.extend([
         f"--{boundary}",
         'Content-Disposition: form-data; name="session_token"',
         "",
         session_token,
-        f"--{boundary}--",
-        ""
-    ]
+      ])
     if text is not None:
       lines.extend([
-      f"--{boundary}",
-      'Content-Disposition: form-data; name="text"',
-      "",
-      text,
-    ])
+        f"--{boundary}",
+        'Content-Disposition: form-data; name="text"',
+        "",
+        text,
+      ])
     if body_text is not None:
       lines.extend([
-      f"--{boundary}",
-      'Content-Disposition: form-data; name="body_text"',
-      "",
-      body_text,
-    ])
+        f"--{boundary}",
+        'Content-Disposition: form-data; name="body_text"',
+        "",
+        body_text,
+      ])
+    lines.extend([f"--{boundary}--", ""])
+
     body = "\r\n".join(lines).encode("utf-8")
     if img is not None and host != "clearcam.org":
       with open(img, "rb") as f: img_data = f.read()

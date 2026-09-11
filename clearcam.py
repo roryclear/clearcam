@@ -1254,7 +1254,7 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
     yolo_jit_cache = {}
     model = YOLOv9(x.model_size, x.model_res)
 
-  if x.key == None: # dont use alerts without a key
+  if x.key == None and x.server_url == "https://clearcam.org": # dont use alerts without a key, unless own server!
     x.userID = None
     x.use_qwen = False
 
@@ -1405,8 +1405,8 @@ class GlobalSettings:
     self.__dict__.update(state)
     if not hasattr(self, "qwen_prompt"): self.qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
 
-  def use_notifs(self): return self.userID
-  def clearcam_user(self): return self.userID is not None and self.server_url == "https://clearcam.org"
+  def use_notifs(self): return self.userID or self.server_url != "https://clearcam.org"
+  def clearcam_user(self): return self.userID is not None
 
 def secret_settings(settings):
     return GlobalSettings(
