@@ -1404,6 +1404,7 @@ class GlobalSettings:
   def __setstate__(self, state):
     self.__dict__.update(state)
     if not hasattr(self, "qwen_prompt"): self.qwen_prompt = "What has been detected on my CCTV camera? Write in one short sentence"
+    if not hasattr(self, "server_url"): self.server_url = "https://clearcam.org"
 
   def use_notifs(self): return self.userID or self.server_url != "https://clearcam.org"
   def clearcam_user(self): return self.userID is not None
