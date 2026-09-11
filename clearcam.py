@@ -480,7 +480,7 @@ class VideoCapture:
                     self.filename[cam_name] = filepath / f"{ts}_notif.jpg"
                   if global_settings.use_notifs() is not None and not self.vod[cam_name] and alert.is_notif:
                     title = f"Event Detected ({cam_name})"
-                    threading.Thread(target=send_notif, kwargs={"session_token": global_settings.userID,"text":title,"body_text": None,"host": global_settings.server_url,}, daemon=True).start()
+                    threading.Thread(target=send_notif, kwargs={"session_token": global_settings.userID,"text":title,"body_text": None,"host": global_settings.server_url, "img": self.filename[cam_name]}, daemon=True).start()
                     if global_settings.use_qwen: # extra notif if qwen
                       # use frames before last, only one reset needed, must convert to RGB
                       for i in range(len(self.last_frames[cam_name])-1): qwen.generate(image=cv2.cvtColor(self.last_frames[cam_name][i], cv2.COLOR_BGR2RGB), reset=True if i==0 else False)
