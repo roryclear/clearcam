@@ -82,7 +82,7 @@ https://x.com/RoryClear/status/1959249250811785405
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 
 ## Bring your own notifications!
-- You can now change the URL notifications are send to in settings.
+- You can now change the URL notifications are sent to in settings.
 - Use Home Assistant, Pushover, N8N, or any program to send yourself alerts.
 - Sample Pushover notification server included: https://github.com/roryclear/clearcam/blob/main/utils/sample_server.py
 
