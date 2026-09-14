@@ -81,6 +81,11 @@ https://x.com/RoryClear/status/1959249250811785405
 - use DEV=AMD / DEV=NV python3 clearcam.py if your CPU is being used instead of your GPU
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 
+## Bring your own notifications!
+- You can now change the URL notifications are send to in settings.
+- Use Home Assistant, Pushover, N8N, or any program to send yourself alerts.
+- Sample Pushover notification server included: https://github.com/roryclear/clearcam/blob/main/utils/sample_server.py
+
 ## install iOS App from source
 1. git clone https://github.com/roryclear/clearcam.git
 2. open ios/clearcam.xcodeproj
