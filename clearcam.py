@@ -1254,9 +1254,7 @@ def set_settings(x): # todo, save to db, do logic in GlobalSettings class, sanit
     yolo_jit_cache = {}
     model = YOLOv9(x.model_size, x.model_res)
 
-  if x.key == None and x.server_url == "https://clearcam.org": # dont use alerts without a key, unless own server!
-    x.userID = None
-    x.use_qwen = False
+  if x.key == None: x.userID = None
 
   # todo change size mid run doesn't work
   if (x.use_qwen and qwen is None) or (x.use_qwen and global_settings.qwen_size != x.qwen_size):
