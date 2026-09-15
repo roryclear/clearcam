@@ -1455,7 +1455,7 @@ if __name__ == "__main__":
   if global_settings.use_clip: object_finder.init_clip()
   if global_settings.use_face: object_finder.init_face()
 
-  if global_settings.key != None and global_settings.use_qwen:
+  if global_settings.use_qwen:
     qwen = Qwen3VL(size=f"{global_settings.qwen_size}B", res=(544, 960)) # h, w. they need to be multiples of 32
     print("prewarming Qwen")
     qwen.prewarm()
