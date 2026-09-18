@@ -1,5 +1,6 @@
 from tinygrad.tensor import Tensor
 from tinygrad.helpers import fetch
+from tinygrad.dtype import dtypes
 from detection.yolov9 import YOLOv9
 from llm.qwen3vl import Qwen3VL
 import numpy as np
@@ -662,7 +663,7 @@ def run_search(clip, image_text, top_k, cam_name, selected_dir): return clip.sea
 def run_clip(clip, im, top_k, cam_name, selected_dir, is_face):
   im = clip.preprocess_face(im) if is_face else clip.preprocess_clip(im)
   if im is not None:
-    embedding = clip.adaface(Tensor(im)).numpy() if is_face else jit_infer(clip.model.precompute_embedding, Tensor(im), jit_cache=jit_cache).numpy()
+    embedding = clip.adaface(Tensor(im, dtype=dtypes.float32)).numpy() if is_face else jit_infer(clip.model.precompute_embedding, Tensor(im, dtype=dtypes.float32), jit_cache=jit_cache).numpy()
     res = clip.search(None, top_k, cam_name, selected_dir, embedding, is_face)
   else:
     res = []
