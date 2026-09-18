@@ -16,5 +16,6 @@ def teset_clip_jit():
 
 if __name__ == "__main__":
   jit_cache = {}
-  clip = ObjectFinder(clip=True)
+  clip = ObjectFinder()
+  clip.init_clip()
   teset_clip_jit()
