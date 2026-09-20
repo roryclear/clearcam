@@ -6,12 +6,11 @@ Tensor.manual_seed(42)
 import numpy as np
 if __name__ == "__main__":
   jit_cache = {}
-  img = cv2.imread("test/clip_images/front.png")
-  img = Tensor(img)
+  img = Tensor.rand((1, 160, 68, 120))
   model = YOLOv9("t", 960)
   for _ in range(3): ret = jit_infer(model, img, jit_cache).numpy()
 
-  expected = 32733.125
+  expected = 17993.432
   np.testing.assert_allclose(ret, expected, rtol=1e-4)
 
   # sanity test, BEAM is flakey

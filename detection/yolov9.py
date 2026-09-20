@@ -289,7 +289,7 @@ class YOLOv9():
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     #load_state_dict(self, state_dict)
 
-  def __call__(self, frame): return self.model(Tensor.rand((1, 160, 68, 120))).sum()
+  def __call__(self, frame): return self.model(frame).sum()
 
   def preprocess(self, image, new_shape=None, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
     if new_shape is None: new_shape = self.res
