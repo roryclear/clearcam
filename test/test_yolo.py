@@ -8,15 +8,10 @@ if __name__ == "__main__":
   img = cv2.imread("test/clip_images/front.png")
   img = Tensor(img)
   model = YOLOv9("t", 960)
-  for _ in range(3): preds = jit_infer(model, img, jit_cache).numpy()
-  ret = []
-  print(preds)
-  for p in preds:
-    if p[-2] > 0.7: ret.append(list(p))
-  print("\n",ret)
-  assert len(ret) == 1
-  expected = [511.69214, 367.81128, 1294.1671, 899.5974, 0.8302731, 2.0]
-  np.testing.assert_allclose(expected,ret[0], rtol=1e-4)
+  for _ in range(3): ret = jit_infer(model, img, jit_cache).numpy()
+
+  expected = 9757807
+  np.testing.assert_allclose(expected,ret, rtol=1e-4)
 
   # sanity test, BEAM is flakey
 

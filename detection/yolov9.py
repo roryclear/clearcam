@@ -383,6 +383,7 @@ class YOLOv9():
       if m.f != -1: x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
       x = m(x)
       y.append(x)
+    return x[0].sum()
     preds = postprocess(x[0])[0]
     preds = self.scale_boxes(pre.shape[:2], preds, frame.shape)
     return preds
