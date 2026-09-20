@@ -299,32 +299,11 @@ class Silence():
 class YOLOv9():
   def __init__(self, size="t", res=1280):
     self.res = res
-    a, b, c, d, e, f, g, h, i, j, k, l, m, n, p, q, r, s, t, u, v, w, size = SIZES[size]
-    self.model = Sequential(size=23)
-    self.model[0] = Conv(in_channels=3, out_channels=a, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-    self.model[1] = Conv(in_channels=a, out_channels=a*2, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1),  groups=1, bias=True)
-    self.model[2] = ELAN1(ch0=a*2, ch1=m, ch2=a, ch3=b) 
-    self.model[3] = AConv(in_channels=m, out_channels=u, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-    self.model[4] = RepNCSPELAN4(b, n, v, n=p)
-    self.model[5] = AConv(in_channels=b, out_channels=q, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-    self.model[6] = RepNCSPELAN4(c, d, c, n=p)
-    self.model[7] = AConv(in_channels=q, out_channels=e, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-    self.model[8] = RepNCSPELAN4(w, r, w, n=p)
-    self.model[9] = SPPELAN(ch0=w, ch1=b, ch2=f, ch3=w)
-    self.model[10] = Upsample()
-    self.model[11] = Concat(f=[-1, 6])
-    self.model[12] = RepNCSPELAN4(g, d, c, n=p)
-    self.model[13] = Upsample()
-    self.model[14] = Concat(f=[-1, 4])
-    self.model[15] = RepNCSPELAN4(h, n, b, n=p)
-    self.model[16] = AConv(in_channels=v, out_channels=i, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
-    self.model[17] = Concat(f=[-1, 12])
-    self.model[18] = RepNCSPELAN4(j, d, c, n=p)
-    self.model[19] = AConv(in_channels=q, out_channels=b, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+    self.model = RepNCSPELAN4(160, 16, 64, n=3)
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
-    load_state_dict(self, state_dict)
+    #load_state_dict(self, state_dict)
 
-  def __call__(self, frame): return self.model[15](Tensor.rand((1, 160, 68, 120))).sum()
+  def __call__(self, frame): return self.model(Tensor.rand((1, 160, 68, 120))).sum()
 
   def preprocess(self, image, new_shape=None, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
     if new_shape is None: new_shape = self.res
