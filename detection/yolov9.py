@@ -303,12 +303,12 @@ class YOLOv9():
     self.model = Sequential(size=23)
     self.model[0] = Conv(in_channels=3, out_channels=a, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
     self.model[1] = Conv(in_channels=a, out_channels=a*2, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1),  groups=1, bias=True)
-    self.model[2] = ELAN1(ch0=a*2, ch1=m, ch2=a, ch3=b) if size in ["t", "s"] else RepNCSPELAN4(s, 32, t, n=p)
-    self.model[3] = ADown() if size == "c" else AConv(in_channels=m, out_channels=u, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+    self.model[2] = ELAN1(ch0=a*2, ch1=m, ch2=a, ch3=b) 
+    self.model[3] = AConv(in_channels=m, out_channels=u, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
     self.model[4] = RepNCSPELAN4(b, n, v, n=p)
-    self.model[5] = ADown(256) if size == "c" else AConv(in_channels=b, out_channels=q, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+    self.model[5] = AConv(in_channels=b, out_channels=q, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
     self.model[6] = RepNCSPELAN4(c, d, c, n=p)
-    self.model[7] = ADown(256) if size == "c" else AConv(in_channels=q, out_channels=e, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+    self.model[7] = AConv(in_channels=q, out_channels=e, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
     self.model[8] = RepNCSPELAN4(w, r, w, n=p)
     self.model[9] = SPPELAN(ch0=w, ch1=b, ch2=f, ch3=w)
     self.model[10] = Upsample()
@@ -317,17 +317,17 @@ class YOLOv9():
     self.model[13] = Upsample()
     self.model[14] = Concat(f=[-1, 4])
     self.model[15] = RepNCSPELAN4(h, n, b, n=p)
-    self.model[16] = ADown(128) if size == "c" else AConv(in_channels=v, out_channels=i, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+    self.model[16] = AConv(in_channels=v, out_channels=i, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
     self.model[17] = Concat(f=[-1, 12])
     self.model[18] = RepNCSPELAN4(j, d, c, n=p)
-    self.model[19] = ADown(256) if size == "c" else AConv(in_channels=q, out_channels=b, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
+    self.model[19] = AConv(in_channels=q, out_channels=b, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), groups=1, bias=True)
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     load_state_dict(self, state_dict)
 
   def __call__(self, frame):
     y = []  # outputs
     x = Tensor.rand((1, 3, 544, 960))
-    for i in range(19): # first 20 layers?
+    for i in range(18): # first 20 layers?
       m = self.model[i]
       if m.f != -1: x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
       x = m(x)
