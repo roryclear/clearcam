@@ -121,9 +121,8 @@ class RepNCSPELAN4():
       x = self.cv1(x)
       y0, y1 = x.chunk(2, 1)
       y2 = self.cv2(y1)
-      y3 = self.cv3(y2)
-      concat_result = Tensor.cat(y0, y1, y2, y3, dim=1)
-      return self.cv4(concat_result)
+      concat_result = Tensor.cat(y0, y1, y2, dim=1)
+      return concat_result
 
 class SP():
     def __init__(self, k=3, s=1):
