@@ -327,7 +327,7 @@ class YOLOv9():
   def __call__(self, frame):
     y = []  # outputs
     x = Tensor.rand((1, 3, 544, 960))
-    for i in range(18): # first 20 layers?
+    for i in range(17): # fsirst 20 layers?
       m = self.model[i]
       if m.f != -1: x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
       x = m(x)
