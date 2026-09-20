@@ -285,7 +285,7 @@ class Silence():
 class YOLOv9():
   def __init__(self, size="t", res=1280):
     self.res = res
-    self.model = Conv(in_channels=160, out_channels=64, kernel_size=1, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1, bias=True)
+    self.model =  nn.Conv2d(160, 64, 1, (1,1), (0,0), (1,1), 1, True)
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     #load_state_dict(self, state_dict)
 
