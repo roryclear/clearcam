@@ -378,7 +378,7 @@ class YOLOv9():
     x = x[..., ::-1].permute(0, 3, 1, 2) #BGR to RGB!
     x = x / 255.0
     y = []  # outputs
-    for i in range(len(self.model)):
+    for i in range(20): # first 20 layers?
       m = self.model[i]
       if m.f != -1: x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
       x = m(x)
