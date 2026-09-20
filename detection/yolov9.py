@@ -107,7 +107,7 @@ class RepNCSP():
 
 class RepNCSPELAN4():
     def __init__(self, a=1, b=1, c=1, n=3, f=-1, size=2):
-        self.cv1 = Conv(in_channels=a, out_channels=b*4, kernel_size=1, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1, bias=True)
+        self.cv1 = Conv(in_channels=160, out_channels=64, kernel_size=1, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1, bias=True)
 
     def __call__(self, x): return self.cv1(x)
 
@@ -285,7 +285,7 @@ class Silence():
 class YOLOv9():
   def __init__(self, size="t", res=1280):
     self.res = res
-    self.model = RepNCSPELAN4(160, 16, 64, n=3)
+    self.model = Conv(in_channels=160, out_channels=64, kernel_size=1, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1, bias=True)
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     #load_state_dict(self, state_dict)
 
