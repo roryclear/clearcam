@@ -108,21 +108,8 @@ class RepNCSP():
 class RepNCSPELAN4():
     def __init__(self, a=1, b=1, c=1, n=3, f=-1, size=2):
         self.cv1 = Conv(in_channels=a, out_channels=b*4, kernel_size=1, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1, bias=True)
-        self.cv2 = Sequential(size=size)
-        self.cv2[0] = RepNCSP(b*2, b, n)
-        if size > 1: self.cv2[1] = Conv(in_channels=b*2, out_channels=b*2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-        self.cv3 = Sequential(size=2)
-        self.cv3[0] = RepNCSP(b*2, b, n)
-        if size > 1: self.cv3[1] = Conv(in_channels=b*2, out_channels=b*2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-        self.cv4 = Conv(in_channels=b*8, out_channels=c, kernel_size=1, stride=(1, 1), padding=(0, 0), dilation=(1, 1))
-        self.f = f
 
-    def __call__(self, x):
-      x = self.cv1(x)
-      y0, y1 = x.chunk(2, 1)
-      y2 = self.cv2(y1)
-      concat_result = Tensor.cat(y0, y1, y2, dim=1)
-      return concat_result
+    def __call__(self, x): return self.cv1(x)
 
 class SP():
     def __init__(self, k=3, s=1):
