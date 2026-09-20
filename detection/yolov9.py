@@ -9,6 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 from tinygrad import TinyJit
 from utils.helpers import resize
+Tensor.manual_seed(42)
 
 class Sequential():
     def __init__(self, size=0, list=None):
@@ -373,20 +374,14 @@ class YOLOv9():
     load_state_dict(self, state_dict)
 
   def __call__(self, frame):
-    pre = self.preprocess(frame)
-    x = pre.unsqueeze(0)
-    x = x[..., ::-1].permute(0, 3, 1, 2) #BGR to RGB!
-    x = x / 255.0
     y = []  # outputs
+    x = Tensor.rand((1, 3, 544, 960))
     for i in range(20): # first 20 layers?
       m = self.model[i]
       if m.f != -1: x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
       x = m(x)
       y.append(x)
     return x[0].sum()
-    preds = postprocess(x[0])[0]
-    preds = self.scale_boxes(pre.shape[:2], preds, frame.shape)
-    return preds
 
   def preprocess(self, image, new_shape=None, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
     if new_shape is None: new_shape = self.res
