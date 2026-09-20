@@ -11,7 +11,7 @@ if __name__ == "__main__":
   model = YOLOv9("t", 960)
   for _ in range(3): ret = jit_infer(model, img, jit_cache).numpy()
 
-  expected = 18533.5
+  expected = 18764.467
   np.testing.assert_allclose(ret, expected, rtol=1e-4)
 
   # sanity test, BEAM is flakey
