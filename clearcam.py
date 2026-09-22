@@ -289,8 +289,8 @@ class VideoCapture:
 
   def _open_ffmpeg(self, cam_name):
     path = self._get_new_stream_dir(cam_name)
-    if cam_name in self.proc: self.proc[cam_name].kill()
-    if cam_name in self.hls_proc: self.hls_proc[cam_name].kill()
+    if cam_name in self.proc and self.proc[cam_name]: self.proc[cam_name].kill()
+    if cam_name in self.hls_proc and self.hls_proc[cam_name]: self.hls_proc[cam_name].kill()
     src = self.src[cam_name]
     if type(src) != str: return # todo, fixes a crash, fix cause
 
@@ -613,11 +613,6 @@ class VideoCapture:
   
     preds = np.array(preds)
     return preds, frame
-
-  def release(self, cam_name):
-      self.running[cam_name] = False
-      if cam_name in self.proc: self.proc[cam_name].kill()
-      if cam_name in self.hls_proc: self.hls_proc[cam_name].kill()    
 
 def is_bright_color(color):
   r, g, b = color
