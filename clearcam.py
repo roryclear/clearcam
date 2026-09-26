@@ -1368,18 +1368,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         #if dets_dir.exists(): shutil.rmtree(dets_dir)
         print(f"Deleted oldest recording: {oldest_recording}")
 
-    def server_close(self):
-        if hasattr(self, 'cleanup_stop_event'):
-            self.cleanup_stop_event.set()
-        if hasattr(self, 'cleanup_thread') and self.cleanup_thread:
-            self.cleanup_thread.join(timeout=5)
-        if hasattr(self, 'clip_stop_event'):
-            self.object_finder_stop_event.set()
-        if hasattr(self, 'clip_thread') and self.object_finder_thread:
-            self.object_finder_thread.join(timeout=5)
-
-        super().server_close()
-
 class GlobalSettings:
   def __init__(self, use_clip=False, use_face=False ,model_size="t", model_res=960, userID=None, key=None, use_qwen=False, qwen_size=2,
                qwen_prompt="What has been detected on my CCTV camera? Write in one short sentence", server_url="https://clearcam.org"):
