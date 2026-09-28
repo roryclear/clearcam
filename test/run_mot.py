@@ -1,15 +1,13 @@
-from detection.yolov9 import YOLOv9, safe_load, load_state_dict, Sequential, Silence, Conv, RepNCSPELAN4, AConv,\
-ADown, CBLinear, CBFuse, SPPELAN, Upsample, Concat, DDetect, postprocess, fetch
+from detection.yolov9 import YOLOv9, fetch
 from utils.helpers import draw_bounding_boxes
 import cv2
-from tinygrad import Tensor, TinyJit
+from tinygrad import Tensor
 from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
 import sys
 
 if __name__ == "__main__":
-  m = sys.argv[1]
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
 
