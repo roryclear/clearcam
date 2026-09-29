@@ -12,11 +12,12 @@ if __name__ == "__main__":
   
   jit_cache = {}
   size = "t"
+  draw = False
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
   w, h = int(cap.get(3)), int(cap.get(4))
-  out = cv2.VideoWriter(f"test_outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+  if draw: out = cv2.VideoWriter(f"test_outputs/out_{size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
 
   model = YOLOv9(size, res=960)
   expected = 156
@@ -36,11 +37,12 @@ if __name__ == "__main__":
       if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
       preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
     print("ppl =",len(ppl))
-    _, buffer = cv2.imencode(".jpg", im0)
-    out.write(draw_bounding_boxes(buffer, preds, class_labels))
+    if draw:
+      _, buffer = cv2.imencode(".jpg", im0)
+      out.write(draw_bounding_boxes(buffer, preds, class_labels))
     
     i+=1
     print("frame",i)
   cap.release()
-  out.release()
+  if draw: out.release()
   assert len(ppl) == expected
