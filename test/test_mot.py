@@ -1,16 +1,16 @@
 from detection.yolov9 import YOLOv9, fetch
-from utils.helpers import draw_bounding_boxes
+from utils.helpers import draw_bounding_boxes, jit_infer
 import cv2
 from tinygrad import Tensor
 from tinygrad.dtype import dtypes
 import numpy as np
 from pathlib import Path
-import sys
 
 if __name__ == "__main__":
   from ocsort_tracker import ocsort
   ocs_tracker = ocsort.OCSort(max_age=60)
-
+  
+  jit_cache = {}
   size = "t"
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     if not ret: break
     im = im0
     im = Tensor(im).cast(dtypes.float32)
-    pred = model(im).numpy()
+    pred = jit_infer(model, x=im, jit_cache=jit_cache).numpy()
     online_targets = ocs_tracker.update(pred, 0.25)
     preds = []
     for x in online_targets:
