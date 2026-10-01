@@ -712,6 +712,26 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed_path.query)
         cam_name = query.get("cam", [None])[0]
 
+        if parsed_path.path == "/export":
+          start = int(query.get("start", [None])[0])
+          end = int(query.get("end", [None])[0])
+          date = query.get("date", [None])[0]
+          for _ in range(100): print(start, end, cam_name, date)
+
+          stream_path = Path("data") / "cameras" / cam_name / "streams" / date / "stream.m3u8"
+          ffmpeg_path = find_ffmpeg()
+          command = [
+              ffmpeg_path,
+              "-ss", str(start * 60),
+              "-i", str(stream_path),
+              "-t", str((end - start) * 60),
+              "-c", "copy",
+              "-an",
+              "output.mp4",
+          ]
+          subprocess.run(command, check=True)
+          self.send_200(body={"hello":"world"})
+
         if parsed_path.path == "/set_max_storage":
           max_gb = float(query.get("max", [None])[0])
           self.server.max_gb = max_gb
