@@ -713,32 +713,32 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         cam_name = query.get("cam", [None])[0]
 
         if parsed_path.path == "/export":
-          start = int(query.get("start", [None])[0])
-          end = int(query.get("end", [None])[0])
           date = query.get("date", [None])[0]
-          for _ in range(100): print(start, end, cam_name, date)
+          for _ in range(100): print(cam_name, date)
 
 
-          stream_dir = (
-              Path("data")
-              / "cameras"
-              / cam_name
-              / "streams"
-              / date
-          )
-
+          stream_dir = (Path("data") / "cameras" / cam_name / "streams" / date)
+          temp_path = stream_dir / "_concat.mp4"
           output_path = Path("output.mp4")
-
           m4s_files = sorted(stream_dir.glob("stream_*.m4s"))
 
-          with output_path.open("wb") as out:
-              with (stream_dir / "init.mp4").open("rb") as f:
-                  shutil.copyfileobj(f, out)
+          with temp_path.open("wb") as out:
+            with (stream_dir / "init.mp4").open("rb") as f: shutil.copyfileobj(f, out)
 
-              # Media fragments
-              for m4s in m4s_files:
-                  with m4s.open("rb") as f:
-                      shutil.copyfileobj(f, out)
+            for m4s in m4s_files:
+              with m4s.open("rb") as f: shutil.copyfileobj(f, out)
+          ffmpeg_path = find_ffmpeg()
+          command = [
+              ffmpeg_path,
+              "-loglevel", "error",
+              "-i", str(temp_path),
+              "-c", "copy",
+              "-movflags", "+faststart",
+              str(output_path),
+          ]
+          subprocess.run(command, check=True)
+
+          temp_path.unlink()
 
           self.send_200(body={"hello":"world"})
 
