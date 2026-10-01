@@ -714,20 +714,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/export":
           date = query.get("date", [None])[0]
-          for _ in range(100): print(cam_name, date)
-
-
           stream_dir = (Path("data") / "cameras" / cam_name / "streams" / date)
           temp_path = stream_dir / "_concat.mp4"
-          output_path = Path("output.mp4")
+          output_path = stream_dir / "_export.mp4"
           m4s_files = sorted(stream_dir.glob("stream_*.m4s"))
-
           with temp_path.open("wb") as out:
             with (stream_dir / "init.mp4").open("rb") as f: shutil.copyfileobj(f, out)
 
             for m4s in m4s_files:
               with m4s.open("rb") as f: shutil.copyfileobj(f, out)
+
           ffmpeg_path = find_ffmpeg()
+
           command = [
               ffmpeg_path,
               "-loglevel", "error",
@@ -736,11 +734,18 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               "-movflags", "+faststart",
               str(output_path),
           ]
-          subprocess.run(command, check=True)
 
+          subprocess.run(command, check=True)
           temp_path.unlink()
 
-          self.send_200(body={"hello":"world"})
+          # Send the MP4
+          self.send_response(200)
+          self.send_header("Content-Type", "video/mp4")
+          self.send_header("Content-Disposition", f'attachment; filename="{cam_name}_{date}.mp4"',)
+          self.send_header("Content-Length", str(output_path.stat().st_size))
+          self.end_headers()
+          with output_path.open("rb") as f: shutil.copyfileobj(f, self.wfile)
+          output_path.unlink()
 
         if parsed_path.path == "/set_max_storage":
           max_gb = float(query.get("max", [None])[0])
