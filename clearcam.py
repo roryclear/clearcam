@@ -718,18 +718,28 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           date = query.get("date", [None])[0]
           for _ in range(100): print(start, end, cam_name, date)
 
-          stream_path = Path("data") / "cameras" / cam_name / "streams" / date / "stream.m3u8"
-          ffmpeg_path = find_ffmpeg()
-          command = [
-              ffmpeg_path,
-              "-ss", str(start * 60),
-              "-i", str(stream_path),
-              "-t", str((end - start) * 60),
-              "-c", "copy",
-              "-an",
-              "output.mp4",
-          ]
-          subprocess.run(command, check=True)
+
+          stream_dir = (
+              Path("data")
+              / "cameras"
+              / cam_name
+              / "streams"
+              / date
+          )
+
+          output_path = Path("output.mp4")
+
+          m4s_files = sorted(stream_dir.glob("stream_*.m4s"))
+
+          with output_path.open("wb") as out:
+              with (stream_dir / "init.mp4").open("rb") as f:
+                  shutil.copyfileobj(f, out)
+
+              # Media fragments
+              for m4s in m4s_files:
+                  with m4s.open("rb") as f:
+                      shutil.copyfileobj(f, out)
+
           self.send_200(body={"hello":"world"})
 
         if parsed_path.path == "/set_max_storage":
