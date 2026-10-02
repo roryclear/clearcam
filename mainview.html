@@ -863,6 +863,23 @@
         align-items: center;
     }
 
+    .camera-card button.download-button {
+      background: none;
+      color: var(--text-primary);
+      padding: 4px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .camera-card button.download-button:hover {
+      background: none;
+      color: var(--accent-primary);
+    }
+
     .modal-content {
         background-color: var(--bg-primary);
         padding: 20px;
@@ -1571,6 +1588,14 @@
       <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
     </symbol>
     
+    <symbol id="icon-download" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </g>
+    </symbol>
+
     <symbol id="icon-play" viewBox="0 0 24 24">
       <path d="M8 5v14l11-7z"/>
     </symbol>
@@ -2282,7 +2307,14 @@
           <div class="video-placeholder" id="${placeholderId}">Loading stream...</div>
         </div>
         <div class="camera-info">
-          <span class="camera-name">${camName}</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="camera-name">${camName}</span>
+            <button class="download-button" onclick="downloadCameraFootage('${camName}')" title="Download">
+              <span class="icon">
+                <svg><use href="#icon-download"></use></svg>
+              </span>
+            </button>
+          </div>
           <div style="display: flex; gap: 6px; align-items: center;">
             <div class="button-group">
               <button class="icon-button" onclick="openSettingsEditor('${camName}')" title="Settings">
@@ -2408,6 +2440,10 @@
       }
     }
     document.addEventListener('DOMContentLoaded', loadFeatureFlags);
+
+    function downloadCameraFootage(camName) {
+      console.log('Download requested for', camName);
+    }
 
     function isClickOnPoint(point, clickX, clickY) {
         const pointRect = point.getBoundingClientRect();
