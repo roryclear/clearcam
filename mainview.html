@@ -2442,7 +2442,7 @@
     document.addEventListener('DOMContentLoaded', loadFeatureFlags);
 
     function downloadCameraFootage(camName) {
-      console.log('Download requested for', camName);
+      window.location.href = `/export?cam=${encodeURIComponent(camName)}&date=${currentStreamDate}`;
     }
 
     function isClickOnPoint(point, clickX, clickY) {
