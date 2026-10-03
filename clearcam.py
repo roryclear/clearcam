@@ -28,6 +28,8 @@ import re
 import base64
 from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload, jit_infer
 import pickle
+import queue as queue_mod
+import socket
 
 # RTSP URL
 # Video capture thread
@@ -44,6 +46,81 @@ from ocsort_tracker import ocsort
 
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 models = {1: "t", 2: "s", 3: "m", 4: "c", 5: "e", 6: "nano", 7: "small", 8:"medium", 9:"large"}
+
+# ============================================================================
+# runtime.py — единая точка доступа к разделяемым объектам процесса.
+# Все глобальные мутабельные состояния (настройки, модели, БД, очереди) живут
+# здесь и защищены блокировками. Остальной код обращается к ним только через
+# рантайм-хелперы ниже — это устраняет гонки между HTTP-потоками и потоками
+# обработки кадров.
+# ============================================================================
+_runtime_lock = threading.RLock()          # защищает global_settings / model / qwen
+_state_lock = threading.Lock()             # защищает словари VideoCapture
+_object_queue_lock = threading.Lock()      # защищает object_queue
+_database = db()                           # sqlite-соединение (check_same_thread=False, WAL)
+_task_queue = queue_mod.Queue()            # тяжёлые CLIP/face-задачи исполняются в главном цикле
+
+class _ModuleHolder:
+  """Лениво заполняемый держатель модульных объектов (совместимость с exec())."""
+  def __init__(self, name): self._name, self._obj = name, None
+  def get(self):
+    if self._obj is None: raise RuntimeError(f"{self._name} not initialized")
+    return self._obj
+  def set(self, obj): self._obj = obj
+  def __bool__(self): return self._obj is not None
+
+_cam_holder = _ModuleHolder("cam (VideoCapture)")
+_object_finder_holder = _ModuleHolder("object_finder")
+
+def get_global_settings():
+  with _runtime_lock: return global_settings
+
+def get_model():
+  with _runtime_lock: return model
+
+def get_qwen():
+  with _runtime_lock: return qwen
+
+def get_object_finder():
+  return _object_finder_holder.get()
+
+def get_cam():
+  return _cam_holder.get()
+
+def settings_snapshot():
+  """Атомарный снимок всех флагов настроек — читать один раз за кадр."""
+  with _runtime_lock:
+    s = global_settings
+    return {"use_clip": s.use_clip, "use_face": s.use_face, "use_qwen": s.use_qwen,
+            "use_notifs": s.use_notifs(), "clearcam_user": s.clearcam_user(),
+            "userID": s.userID, "key": s.key, "server_url": s.server_url,
+            "qwen_prompt": s.qwen_prompt}
+
+def enqueue_object(path):
+  with _object_queue_lock: object_queue.append(path)
+
+def pop_object():
+  with _object_queue_lock:
+    return object_queue.pop(0) if object_queue else None
+
+def peek_object():
+  with _object_queue_lock:
+    return object_queue[0] if object_queue else None
+
+def object_queue_size():
+  with _object_queue_lock: return len(object_queue)
+
+def add_to_queue(fn, *args):
+  result_queue = queue_mod.Queue(maxsize=1)
+  _task_queue.put((fn, args, result_queue))
+  return result_queue.get()
+
+def process_queue():
+  try:
+    fn, args, result_queue = _task_queue.get_nowait()
+  except queue_mod.Empty: return
+  result = fn(*args)
+  result_queue.put(result)
 
 class RollingClassCounter:
   def __init__(self, window_seconds=None, max=None, classes=None, sched=[[0,86399],True,True,True,True,True,True,True],cam_name=None, desc=None, threshold=0.28):
@@ -207,6 +284,10 @@ class VideoCapture:
     #self.det_shapes = []
 
   def init_cam(self, cam_name, src):
+    with _state_lock: self._init_cam_unlocked(cam_name, src)
+
+  # NOTE: all callers must hold _state_lock (see init_cam / start / process_frame)
+  def _init_cam_unlocked(self, cam_name, src):
     self.counter[cam_name] = RollingClassCounter(cam_name=cam_name, window_seconds=float('inf'))
     self.src[cam_name] = src # todo
     self.last_frames[cam_name] = deque(maxlen=2)
@@ -223,12 +304,12 @@ class VideoCapture:
     self.settings[cam_name] = None
     self.start_time[cam_name] = None
     
-    self.alert_counters[cam_name] = database.run_get("alerts",cam_name)
+    self.alert_counters[cam_name] = _database.run_get("alerts",cam_name)
     if not self.alert_counters[cam_name]:
       self.alert_counters[cam_name] = dict()
       id, alert_counter = str(uuid.uuid4()), RollingClassCounter(window_seconds=None, max=1, classes={0,1,2,3,5,7},cam_name=cam_name)
       self.alert_counters[cam_name][id] = alert_counter
-      database.run_put("alerts", cam_name, alert_counter, id=id)
+      _database.run_put("alerts", cam_name, alert_counter, id=id)
 
     self.last_det[cam_name] = -1
     self.last_live_check[cam_name] = time.time()
@@ -247,15 +328,16 @@ class VideoCapture:
 
   def start(self):
     cam_check = time.time()
-    cams = database.run_get("links", None)
+    cams = _database.run_get("links", None)
     for cam_name in cams.keys():
       print("starting",cam_name,"src:",cams[cam_name])
       self.init_cam(cam_name=cam_name, src=cams[cam_name])
       threading.Thread(target=self.frame_loop, args=(cam_name,), daemon=True).start() # todo non vod only!
+    # local snapshot of mutable dicts used by the busy-loop below (see _state_lock usage)
     while True:
       if time.time() - cam_check >= 5:
         cam_check = time.time()
-        new_cams = database.run_get("links", None)
+        new_cams = _database.run_get("links", None)
         for cam_name in new_cams.keys():
           if type(new_cams[cam_name]) != str: continue # todo find cause
           if cam_name not in cams:
@@ -417,18 +499,19 @@ class VideoCapture:
     try:
       if self.vod[cam_name]:
         if cam_name not in self.cap:
-          self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name])
-          self.src_fps[cam_name] = self.cap[cam_name].get(cv2.CAP_PROP_FPS) or 30
+          with _state_lock:
+            self.cap[cam_name] = cv2.VideoCapture(self.src[cam_name])
+            self.src_fps[cam_name] = self.cap[cam_name].get(cv2.CAP_PROP_FPS) or 30
 
         self.cap[cam_name].grab()  # skip for max fps
         ret, frame = self.cap[cam_name].read()
         self.last_frames[cam_name].append(frame)
-        if not ret or cam_name not in database.run_get("links", None):
+        if not ret or cam_name not in _database.run_get("links", None):
           self.running[cam_name] = False
-          if "Processing" not in database.run_get("analysis_prog", cam_name): database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
+          if "Processing" not in _database.run_get("analysis_prog", cam_name): _database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
         else:
           self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
-          database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
+          _database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
       else:
         frame_num = self.frame_num[cam_name]
         last_frame_num = self.last_frame_num[cam_name]
@@ -493,7 +576,7 @@ class VideoCapture:
           
           if (time.time() - self.last_live_check[cam_name]) >= 5:
             self.last_live_check[cam_name] = time.time()
-            link = database.run_get("links", cam_name)
+            link = _database.run_get("links", cam_name)
             if type(link) == list: link = link[0] # todo, flakey?
             if link != self.src[cam_name]:
               self.src[cam_name] = link
@@ -502,18 +585,18 @@ class VideoCapture:
           if (time.time() - self.last_counter_update[cam_name]) >= 5: #update counter every 5 secs
             self.last_counter_update[cam_name] = time.time()
 
-            counters = database.run_get("counters", cam_name)
+            counters = _database.run_get("counters", cam_name)
             if counters not in [None, {}]:
               if counters.reset:
                 self.counter[cam_name].reset_counts()
                 self.counter[cam_name].reset = False
-            database.run_put("counters", cam_name, self.counter[cam_name])
+            _database.run_put("counters", cam_name, self.counter[cam_name])
             
-            alerts = database.run_get("alerts", cam_name)
+            alerts = _database.run_get("alerts", cam_name)
             for id,a in alerts.items():
               if not a.new: continue
               a.new = False
-              database.run_put("alerts", cam_name, a, id=id)
+              _database.run_put("alerts", cam_name, a, id=id)
               if a is None:
                 del self.alert_counters[cam_name][id]
                 continue
@@ -522,7 +605,7 @@ class VideoCapture:
 
             self.alert_counters[cam_name] = {i:a for i,a in self.alert_counters[cam_name].items() if i in alerts}
             
-            new_settings = database.run_get("settings", cam_name)
+            new_settings = _database.run_get("settings", cam_name)
             if self.settings[cam_name] is not None and new_settings != self.settings[cam_name] and is_vod(cam_name):
               self.reset_vod(cam_name)
               if "reset" in new_settings: del new_settings["reset"]
@@ -750,7 +833,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/set_max_storage":
           max_gb = float(query.get("max", [None])[0])
           self.server.max_gb = max_gb
-          database.run_put("max_storage", "all", max_gb)
+          _database.run_put("max_storage", "all", max_gb)
           self.send_200()
           return
         
@@ -762,8 +845,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           return
 
         if parsed_path.path == "/list_cameras":
-          cams = database.run_get("links", None)
-          progs = database.run_get("analysis_prog", None)
+          cams = _database.run_get("links", None)
+          progs = _database.run_get("analysis_prog", None)
           cam_progress = {cam_name: progs.get(cam_name, None) for cam_name in cams}
           self.send_200(cam_progress)
           return
@@ -791,7 +874,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam_name or src")
                 return
             
-            database.run_put("links", cam_name, src)
+            _database.run_put("links", cam_name, src)
             self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()
@@ -801,7 +884,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             if not cam_name:
                 self.send_error(400, "Missing cam or id")
                 return
-            zone = database.run_get("settings", cam_name)
+            zone = _database.run_get("settings", cam_name)
             if zone is None: zone = {}
             coords_json = query.get("coords", [None])[0]
             if coords_json is not None:
@@ -814,8 +897,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             zone["is_notif"] = (str(is_notif).lower() == "true") if (is_notif := query.get("is_notif", [None])[0]) is not None else zone.get("is_notif")
             zone["outside"] = (str(outside).lower() == "true") if (outside := query.get("outside", [None])[0]) is not None else zone.get("outside")
             query.get("threshold", [None])[0] is not None and zone.update({"threshold": float(query.get("threshold", [None])[0])}) #need the val  
-            database.run_put("settings", cam_name, zone) # todo, key for each
-            if (url := query.get("url")) is not None: database.run_put("links", cam_name, url[0])
+            _database.run_put("settings", cam_name, zone) # todo, key for each
+            if (url := query.get("url")) is not None: _database.run_put("links", cam_name, url[0])
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -828,7 +911,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam or id")
                 return
 
-            raw_alerts = database.run_get("alerts", cam_name)
+            raw_alerts = _database.run_get("alerts", cam_name)
             alert = None
             alert_id = query.get("id", [None])[0]
             is_on = query.get("is_on", [None])[0]
@@ -868,15 +951,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               else:
                 del raw_alerts[alert_id]
             if alert is not None:
-              database.run_put("alerts", cam_name, alert, alert_id)
+              _database.run_put("alerts", cam_name, alert, alert_id)
             else:
-              database.run_delete("alerts", cam_name, alert_id)
+              _database.run_delete("alerts", cam_name, alert_id)
             
             # make vod reset
-            settings = database.run_get("settings", cam_name)
+            settings = _database.run_get("settings", cam_name)
             if settings is None: settings = {}
             settings["reset"] = True
-            database.run_put("settings", cam_name, settings)
+            _database.run_put("settings", cam_name, settings)
 
  
             self.send_response(200)
@@ -886,7 +969,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed_path.path == "/get_settings":
-            zone = database.run_get("settings",cam_name)
+            zone = _database.run_get("settings",cam_name)
             if zone is not None:
               if cam_name in zone and "settings" in zone[cam_name]: zone = zone[cam_name]["settings"]
             else:
@@ -900,7 +983,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
 
-            raw_alerts = database.run_get("alerts",cam_name)
+            raw_alerts = _database.run_get("alerts",cam_name)
             alert_info = []
             for key,alert in raw_alerts.items():
                 sched = alert.sched if alert.sched else [[0,86399],True,True,True,True,True,True,True]
@@ -927,15 +1010,15 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
             
             try:
               shutil.rmtree(BASE_DIR / "cameras" / cam_name, ignore_errors=True)
-              if os.path.isfile(database.run_get("links", None)[cam_name]): os.remove(database.run_get("links", None)[cam_name])
+              if os.path.isfile(_database.run_get("links", None)[cam_name]): os.remove(_database.run_get("links", None)[cam_name])
               # todo clean
-              alerts = database.run_get("alerts", cam_name)
+              alerts = _database.run_get("alerts", cam_name)
               for id, _ in alerts.items():
-                database.run_delete("alerts", cam_name, id=id)
-              database.run_delete("links", cam_name)
-              database.run_delete("analysis_prog", cam_name)
-              database.run_delete("settings", cam_name)
-              database.run_delete("counters", cam_name)
+                _database.run_delete("alerts", cam_name, id=id)
+              _database.run_delete("links", cam_name)
+              _database.run_delete("analysis_prog", cam_name)
+              _database.run_delete("settings", cam_name)
+              _database.run_delete("counters", cam_name)
             except Exception as e:
               self.send_error(500, f"Error deleting camera: {e}")
               return
@@ -951,7 +1034,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing cam parameter")
                 return
             
-            counter = database.run_get("counters", cam_name)
+            counter = _database.run_get("counters", cam_name)
             if counter:
               labeled_counts = {
                 class_labels[int(k)]: len(v)
@@ -961,7 +1044,7 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
               self.send_200(labeled_counts)
               return
             else:
-              database.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
+              _database.run_put("counters", cam_name, RollingClassCounter(cam_name=cam_name))
               self.send_200([])
       
 
@@ -969,9 +1052,9 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           if not cam_name:
             self.send_error(400, "Missing cam parameter")
             return
-          counter = database.run_get("counters",cam_name)
+          counter = _database.run_get("counters",cam_name)
           if counter: counter.reset_counts()
-          database.run_put("counters", cam_name, counter)
+          _database.run_put("counters", cam_name, counter)
           self.send_response(200)
           self.send_header("Content-Type", "application/json")
           self.end_headers()
@@ -1193,7 +1276,7 @@ def schedule_daily_restart(cam, restart_time):
         delta = ((target.hour * 3600 + target.minute * 60) - 
           (now.hour * 3600 + now.minute * 60 + now.second))
       time.sleep(delta)
-      cams = database.run_get("links", None)
+      cams = _database.run_get("links", None)
       for cam_name in cams.keys():
         cam.start_time[cam_name] = None
         cam.hls_proc[cam_name], cam.proc[cam_name] = cam._open_ffmpeg(cam_name)
@@ -1234,20 +1317,6 @@ def upload_to_r2(file_path: Path, signed_url: str, max_retries: int = 0) -> bool
     except Exception as e:
       print(f"Error uploading to R2: {e}")
       return False
-
-import queue
-task_queue = queue.Queue()
-def add_to_queue(fn, *args):
-  result_queue = queue.Queue(maxsize=1)
-  task_queue.put((fn, args, result_queue))
-  return result_queue.get()
-
-def process_queue():
-  try:
-    fn, args, result_queue = task_queue.get_nowait()
-  except queue.Empty: return
-  result = fn(*args)
-  result_queue.put(result)
 
 def process_latest_face(img):
   if global_settings.use_face and str(object_queue[0]).endswith("_0.jpg"):
@@ -1310,20 +1379,20 @@ def clip_latest_img(img):
   
     if global_settings.use_notifs():
       cam_name = object_queue[0].parts[object_queue[0].parts.index("cameras")+1:object_queue[0].parts.index("objects")][0]
-      alerts = database.run_get("alerts", cam_name) # todo, get cam_name from file path!
+      alerts = _database.run_get("alerts", cam_name) # todo, get cam_name from file path!
       for k, v in alerts.items():
         if time.time() - v.last_det < 60 or not v.is_active(): continue
         if v.desc is None: continue
         if not hasattr(v, "desc_emb") or v.desc_emb is None:
           v.desc_emb = run_encode_text(object_finder, v.desc)
-          database.run_put("alerts", cam_name, v, id=k)
+          _database.run_put("alerts", cam_name, v, id=k)
 
         similarity = (v.desc_emb @ emb.T).item()
         print("sim =",similarity,v.desc,object_queue[0])
         if similarity > v.threshold:
           send_notif(session_token=global_settings.userID, text=f"Event Detected ({cam_name}: {v.desc})", body_text=None, host=global_settings.server_url)
           alerts[k].last_det = time.time()
-          database.run_put("alerts", cam_name, alerts[k], k)
+          _database.run_put("alerts", cam_name, alerts[k], k)
           if global_settings.clearcam_user():
             seen_time = event_img_info(str(object_queue[0]).split("/")[-1].split(".jpg")[0])["ts"]
             threading.Thread(target=export_and_upload, kwargs={"cam_name": cam_name, "thumbnail": object_queue[0], "userID": global_settings.userID, "key": global_settings.key, "start": seen_time, "length": 20}, daemon=True).start()
@@ -1331,17 +1400,16 @@ def clip_latest_img(img):
 
 cams = dict()
 active_subprocesses = []
-import socket
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def __init__(self, server_address, RequestHandlerClass):
       ThreadingMixIn.__init__(self)
       HTTPServer.__init__(self, server_address, RequestHandlerClass)
       self.cleanup_stop_event = threading.Event()
       self.cleanup_thread = None
-      max_gb = database.run_get("max_storage", None)
+      max_gb = _database.run_get("max_storage", None)
       if max_gb == {}:
-        database.run_put("max_storage", "all", 256)
-        max_gb = database.run_get("max_storage", None)
+        _database.run_put("max_storage", "all", 256)
+        max_gb = _database.run_get("max_storage", None)
       self.max_gb = max_gb["all"]
       self.object_finder_stop_event = threading.Event()
       self.object_finder_thread = None
@@ -1447,7 +1515,7 @@ if __name__ == "__main__":
   qwen = None
   multiprocessing.set_start_method("spawn", force=True)
   database = db()
-  cams = database.run_get("links", None)
+  cams = _database.run_get("links", None)
   classes = {"0","1","2","7"} # person, bike, car, truck, bird (14)
 
   
@@ -1460,10 +1528,10 @@ if __name__ == "__main__":
   color_dict = {label: tuple((((i+1) * 50) % 256, ((i+1) * 100) % 256, ((i+1) * 150) % 256)) for i, label in enumerate(class_labels)}
   cam = None
 
-  global_settings = database.run_get("global_settings", "all")
+  global_settings = _database.run_get("global_settings", "all")
   if global_settings == {}: # todo, use None?
     global_settings = GlobalSettings()
-    database.run_put("global_settings", "all", global_settings)
+    _database.run_put("global_settings", "all", global_settings)
 
   model = YOLOv9(global_settings.model_size, res=int(global_settings.model_res))
   object_finder = ObjectFinder()

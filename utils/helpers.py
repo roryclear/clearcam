@@ -15,6 +15,9 @@ import numpy as np
 BASE_DIR = Path(__file__).parent.parent / "data"
 from tinygrad import Tensor, TinyJit
 
+# ---- constants (see also config.py in project root) ----
+MAX_CLIP_UPLOAD_BYTES = 9 * 1024 * 1024  # size cap for exported event clips
+
 def send_notif(session_token: str, text=None, body_text=None, host="https://clearcam.org", img=None):
     https = host.startswith("https://")
     if host.startswith("http"): host = host[host.index("//")+2:] # remove https:// / http:
@@ -43,12 +46,17 @@ def send_notif(session_token: str, text=None, body_text=None, host="https://clea
         "",
         body_text,
       ])
-    lines.extend([f"--{boundary}--", ""])
-
-    body = "\r\n".join(lines).encode("utf-8")
-    if img is not None and host != "clearcam.org":
-      with open(img, "rb") as f: img_data = f.read()
-      body += (f"--{boundary}\r\n"f'Content-Disposition: form-data; name="img"; filename="{os.path.basename(img)}"\r\n'f"Content-Type: image/jpeg\r\n\r\n").encode() + img_data + f"\r\n--{boundary}--\r\n".encode()
+    # NOTE: previously the closing boundary was appended here and the image part
+    # was added *after* it, producing malformed multipart bodies on self-hosted
+    # notification servers. The closing boundary is now written last, after all parts.
+    body = b"\r\n".join(line.encode("utf-8") for line in lines)
+    if img is not None and "clearcam.org" not in host:
+      try:
+        with open(img, "rb") as f: img_data = f.read()
+        body += (f"--{boundary}\r\n"f'Content-Disposition: form-data; name="img"; filename="{os.path.basename(img)}"\r\n'"Content-Type: image/jpeg\r\n\r\n").encode() + img_data + b"\r\n"
+      except Exception as e:
+        print(f"Error attaching notification image: {e}")
+    body += f"--{boundary}--\r\n".encode()
 
     conn = http.client.HTTPSConnection(host) if https else  http.client.HTTPConnection(host)
     headers = {"Content-Type": content_type, "Content-Length": str(len(body))}
@@ -174,13 +182,13 @@ def export_clip(stream_dir, output_path: Path, live=False, length=5, end=0, star
         str(output_path)
       ]
       subprocess.run(command, check=True)
-      if output_path.stat().st_size < 9*1024*1024: break
+      if output_path.stat().st_size < MAX_CLIP_UPLOAD_BYTES: break
       crf += 5
 
   finally:
     if combined_path.exists(): combined_path.unlink()
 
-def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, length=20):
+def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, length=20, base_url="https://clearcam.org"):
     os.makedirs(BASE_DIR / "cameras" / cam_name / "event_clips", exist_ok=True)
     mp4_filename = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
     temp_output = BASE_DIR / "cameras" / f"{cam_name}/event_clips/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_temp.mp4"
@@ -188,7 +196,7 @@ def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, lengt
     subprocess.run(['ffmpeg', '-i', mp4_filename, '-i', str(thumbnail), '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', '-y', temp_output])
     os.replace(temp_output, mp4_filename)
     encrypt_file(Path(mp4_filename), Path(f"""{mp4_filename}.aes"""), key)
-    upload_file(Path(f"{mp4_filename}.aes"), userID)
+    upload_file(Path(f"{mp4_filename}.aes"), userID, base_url=base_url)
     os.unlink(mp4_filename)
 
 def jit_infer(fn, x, jit_cache):
@@ -214,7 +222,7 @@ def find_ffmpeg():
             return path
     return 'ffmpeg'
 
-def upload_file(file_path: Path, session_token: str):
+def upload_file(file_path: Path, session_token: str, base_url: str = "https://clearcam.org"):
     if not file_path.exists():
         print(f"File not found: {file_path}")
         return False
@@ -235,7 +243,7 @@ def upload_file(file_path: Path, session_token: str):
             "size": str(file_size)
         }
         query_string = urllib.parse.urlencode(params)
-        url = f"https://clearcam.org/upload?{query_string}"
+        url = f"{base_url.rstrip('/')}/upload?{query_string}"
         
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as response:
