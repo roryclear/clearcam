@@ -87,19 +87,16 @@ def draw_bounding_boxes(orig_img_path, predictions, class_labels):
   object_count = defaultdict(int)
   
   for pred in predictions:
-    if len(pred) == 7: # todo
-      x1, y1, x2, y2, conf, class_id, _ = pred
-    else:
-      x1, y1, x2, y2, conf, class_id = pred
+    if len(pred) == 7: x1, y1, x2, y2, conf, class_id, track_id = pred
     if conf == 0:
         continue
 
-    x1, y1, x2, y2, class_id = map(int, (x1, y1, x2, y2, class_id))
+    x1, y1, x2, y2, class_id, track_id = map(int, (x1, y1, x2, y2, class_id, track_id))
     color = color_dict[class_labels[class_id]]
 
     cv2.rectangle(orig_img, (x1, y1), (x2, y2), color, box_thickness)
 
-    label = f"{class_labels[class_id]} {conf:.2f}"
+    label = f"{class_labels[class_id]} {track_id}"
     text_size, _ = cv2.getTextSize(label, font, font_scale, 1)
     label_y, bg_y = (
         (y1 - 4, y1 - text_size[1] - 4)

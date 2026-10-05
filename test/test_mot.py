@@ -12,7 +12,7 @@ if __name__ == "__main__":
   
   jit_cache = {}
   size = "t"
-  draw = False
+  draw = True
   class_labels = fetch('https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names').read_text().split("\n")
   Path('./test_outputs').mkdir(parents=True, exist_ok=True)
   cap = cv2.VideoCapture("test/videos/MOT16-03.mp4")
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     for x in online_targets:
       if x.tracklet_len < 1 or x.speed < 2.5: continue
       if x.class_id == 0 and x.track_id not in ppl: ppl.add(x.track_id)
-      preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id]))
+      preds.append(np.array([x.tlwh[0], x.tlwh[1], x.tlwh[0] + x.tlwh[2], x.tlwh[1] + x.tlwh[3], x.score, x.class_id, x.track_id]))
     print("ppl =",len(ppl))
     if draw:
       _, buffer = cv2.imencode(".jpg", im0)
