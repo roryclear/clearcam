@@ -715,30 +715,26 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/export":
           date = query.get("date", [None])[0]
           stream_dir = (Path("data") / "cameras" / cam_name / "streams" / date)
-          temp_path = stream_dir / "_concat.mp4"
           output_path = stream_dir / "_export.mp4"
           m4s_files = sorted(stream_dir.glob("stream_*.m4s"))
-          with temp_path.open("wb") as out:
-            with (stream_dir / "init.mp4").open("rb") as f: shutil.copyfileobj(f, out)
-
-            for m4s in m4s_files:
-              with m4s.open("rb") as f: shutil.copyfileobj(f, out)
-
           ffmpeg_path = find_ffmpeg()
-
           command = [
-              ffmpeg_path,
-              "-loglevel", "error",
-              "-i", str(temp_path),
-              "-c", "copy",
-              "-movflags", "+faststart",
-              str(output_path),
+            ffmpeg_path,
+            "-y",
+            "-loglevel", "error",
+            "-i", "pipe:0",
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(output_path),
           ]
-
-          subprocess.run(command, check=True)
-          temp_path.unlink()
-
-          # Send the MP4
+          proc = subprocess.Popen(command, stdin=subprocess.PIPE)
+          try:
+            with (stream_dir / "init.mp4").open("rb") as f: shutil.copyfileobj(f, proc.stdin)
+            for m4s in m4s_files:
+              with m4s.open("rb") as f: shutil.copyfileobj(f, proc.stdin)
+          finally:
+            proc.stdin.close()
+          if proc.wait() != 0: output_path.unlink(missing_ok=True)
           self.send_response(200)
           self.send_header("Content-Type", "video/mp4")
           self.send_header("Content-Disposition", f'attachment; filename="{cam_name}_{date}.mp4"',)
