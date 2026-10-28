@@ -18,7 +18,6 @@ from datetime import datetime, time as time_obj
 import uuid
 import urllib
 from urllib.parse import urlparse, parse_qs
-from pathlib import Path
 import struct
 from urllib.parse import unquote, quote
 import zlib
@@ -1014,6 +1013,14 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           pass
 
         file_path = BASE_DIR / "cameras" / requested_path
+        try: file_path = ((BASE_DIR / "cameras").resolve() / requested_path).resolve()
+        except (OSError, RuntimeError):
+          self.send_error(404)
+          return
+        try: _ = file_path.relative_to((BASE_DIR / "cameras").resolve())
+        except:
+          self.send_error(404)
+          return
 
         if not file_path.exists():
             self.send_error(404)
