@@ -425,7 +425,7 @@ class VideoCapture:
       self.running[cam_name] = False
       if "Processing" not in database.run_get("analysis_prog", cam_name): database.run_put("analysis_prog", cam_name, {"Tracking":100}) # todo stop when done?
     else:
-      self.last_preds[cam_name], _ = self.run_inference(frame, cam_name=cam_name)
+      self.last_preds[cam_name] = self.run_inference(frame, cam_name=cam_name)
       database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
 
 
@@ -440,8 +440,8 @@ class VideoCapture:
     if not any(counter.is_active() for _, counter in self.alert_counters[cam_name].items()): self.last_preds[cam_name] = [] # to remove annotation when no alerts active
     else:
       if not global_settings.use_notifs() or alerts_on[cam_name]:
-        preds, frame = self.run_inference(frame, cam_name=cam_name)
-        self.last_frames[cam_name].append(frame.numpy().copy())
+        preds = self.run_inference(frame, cam_name=cam_name)
+        self.last_frames[cam_name].append(frame.copy())
         self.last_preds[cam_name] = preds.copy()
         self.last_frame_num[cam_name] = self.frame_num[cam_name]
 
@@ -608,7 +608,7 @@ class VideoCapture:
           if not alert.get_counts()[1] and ((new and not alert.zone) or (new_in_zone and alert.zone)): alert.add(int(x.class_id))
   
     preds = np.array(preds)
-    return preds, frame
+    return preds
 
 def is_bright_color(color):
   r, g, b = color
