@@ -267,7 +267,7 @@ class VideoCapture:
               self.hls_proc[cam_name], self.proc[cam_name] = self._open_ffmpeg(cam_name)
         cams = new_cams
       for cam_name in cams.keys():
-        if self.vod[cam_name]: self.process_frame_vod(cam_name=cam_name) 
+        if self.vod[cam_name] and self.running[cam_name]: self.process_frame_vod(cam_name=cam_name) 
         else: self.process_frame(cam_name=cam_name)
       process_queue()
       if len(object_queue) > 0:
@@ -427,7 +427,6 @@ class VideoCapture:
     else:
       self.last_preds[cam_name] = self.run_inference(frame, cam_name=cam_name)
       database.run_put("analysis_prog", cam_name, {"Tracking":self.cap[cam_name].get(cv2.CAP_PROP_POS_FRAMES)/self.cap[cam_name].get(cv2.CAP_PROP_FRAME_COUNT)*100})
-
 
   def process_frame(self, cam_name):
     frame_num = self.frame_num[cam_name]
