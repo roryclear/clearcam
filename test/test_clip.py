@@ -1,4 +1,4 @@
-from models.objects import ObjectFinder, precompute_embeddings_jit, precompute_embedding_jit_bs1
+from models.objects import ObjectFinder
 import numpy as np
 from tinygrad import Tensor
 import cv2
@@ -12,7 +12,8 @@ def test_clip_outputs():
   np.testing.assert_allclose(0.330654, sim, rtol=1e-6, atol=1e-6)
 
 if __name__ == "__main__":
-  clip = ObjectFinder(clip=True)
+  clip = ObjectFinder()
+  clip.init_clip()
   test_clip_outputs()
 
 
