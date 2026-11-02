@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 import cv2
 from collections import defaultdict, deque
-import time, sys
+import time, sys, subprocess
 import json
 import http
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -17,28 +17,16 @@ import shutil
 from datetime import datetime, time as time_obj
 import uuid
 import urllib
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote, quote
 import struct
-from urllib.parse import unquote, quote
 import zlib
 from utils.db import db
 import multiprocessing
 import re
 import base64
-from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload, jit_infer
+from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, encrypt_file, export_and_upload, jit_infer, BASE_DIR
 import pickle
-
-# RTSP URL
-# Video capture thread
-import subprocess
-import threading
-import time
-import numpy as np
-import cv2
-from datetime import datetime
 import os
-import threading
-from utils.helpers import BASE_DIR
 from ocsort_tracker import ocsort
 
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
@@ -122,8 +110,6 @@ def write_png(filename, array):
     )
     with open(filename, "wb") as f:
         f.write(png_bytes)
-
-import numpy as np
 
 def draw_rectangle_numpy(img, pt1, pt2, color, thickness=1):
     x1, y1 = pt1
