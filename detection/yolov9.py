@@ -387,16 +387,13 @@ class YOLOv9():
     preds = self.scale_boxes(pre.shape[:2], preds, frame.shape)
     return preds
 
-  def preprocess(self, image, new_shape=None, auto=True, scaleFill=False, scaleup=True, stride=32) -> Tensor:
-    if new_shape is None: new_shape = self.res
+  def preprocess(self, image, stride=32) -> Tensor:
+    new_shape = (self.res, self.res)
     shape = image.shape[:2]
-    new_shape = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    r = min(r, 1.0) if not scaleup else r
     new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
     dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-    dw, dh = (np.mod(dw, stride), np.mod(dh, stride)) if auto else (0.0, 0.0)
-    new_unpad = (new_shape[1], new_shape[0]) if scaleFill else new_unpad
+    dw, dh = (np.mod(dw, stride), np.mod(dh, stride))
     dw /= 2
     dh /= 2
     image = resize(image, new_unpad)
