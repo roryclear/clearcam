@@ -387,6 +387,19 @@ class YOLOv9():
     preds = self.scale_boxes(pre.shape[:2], preds, frame.shape)
     return preds
 
+  def cv2_preprocess(self, image, stride=32): # todo for batch
+    new_shape = (self.res, self.res)
+    shape = image.shape[:2]
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
+    dw, dh = (np.mod(dw, stride), np.mod(dh, stride))
+    dw /= 2
+    dh /= 2
+    image = cv2.resize(image, new_unpad, new_unpad, interpolation=cv2.INTER_LINEAR)
+    image = np.pad(image,((int(round(dh - 0.1)), int(round(dh - 0.1))),(int(round(dw - 0.1)), int(round(dw - 0.1))),(0, 0)),mode='constant',constant_values=-0)
+    return image
+
   def preprocess(self, image, stride=32) -> Tensor:
     new_shape = (self.res, self.res)
     shape = image.shape[:2]
@@ -459,3 +472,4 @@ SIZES = {"t": [16, 64, 96, 24, 128, 256, 224, 160, 48, 144, 192, 80, 32, 16, 3, 
 "s": [32, 128, 192, 48, 256, 512, 448, 320, 96, 288, 384, 128, 64, 32, 3, 192, 64, 64, 128, 128, 128, 256, "s"],
 "m": [32, 240, 360, 90, 480, 960, 840, 600, 184, 544, 720, 240, 128, 60, 1, 360, 120, 64, 128, 240, 240, 480, "m"],
 "c": [64, 256, 512, 128, 256, 1024, 1024, 1024, 128, 768, 1024, 256, 128, 64, 1, 256, 128, 128, 256, 128, 512, 512, "c"]}
+
