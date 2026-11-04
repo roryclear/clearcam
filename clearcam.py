@@ -553,7 +553,7 @@ class VideoCapture:
   def run_inference(self, frame, cam_name):
     global model
     frame = Tensor(frame)
-    preds = jit_infer(model, frame, yolo_jit_cache).numpy()
+    preds = jit_infer(model, frame, jit_cache=yolo_jit_cache).numpy()
     thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
@@ -1289,7 +1289,7 @@ def clip_latest_img(img):
       data = pickle.load(open(object_queue[0].parent / 'embeddings.pkl', 'rb')) if os.path.exists(object_queue[0].parent / 'embeddings.pkl') else {}
     except Exception: data = {}
     if "embeddings" not in data: data["embeddings"] = {}
-    emb = jit_infer(object_finder.model.precompute_embedding, Tensor(img).unsqueeze(0), jit_cache).numpy()
+    emb = jit_infer(object_finder.model.precompute_embedding, Tensor(img).unsqueeze(0), jit_cache=jit_cache).numpy()
     data["embeddings"][str(object_queue[0])] = emb
     with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
   

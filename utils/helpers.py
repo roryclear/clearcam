@@ -188,14 +188,13 @@ def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, lengt
     upload_file(Path(f"{mp4_filename}.aes"), userID)
     os.unlink(mp4_filename)
 
-def jit_infer(fn, x, jit_cache):
-    shape = tuple(x.shape)
-    if shape not in jit_cache:
-        @TinyJit
-        def compiled(x, fn):
-            return fn(x)
-        jit_cache[shape] = compiled
-    return jit_cache[shape](x, fn)
+def jit_infer(fn, *x, jit_cache):
+  shapes = tuple(xi.shape if hasattr(xi, "shape") else xi for xi in x)
+  if shapes not in jit_cache:
+    @TinyJit
+    def compiled(*x): return fn(*x)
+    jit_cache[shapes] = compiled
+  return jit_cache[shapes](*x)
 
 def find_ffmpeg():
     ffmpeg_path = shutil.which('ffmpeg')
