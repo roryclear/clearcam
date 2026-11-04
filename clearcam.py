@@ -553,7 +553,7 @@ class VideoCapture:
   def run_inference(self, frame, cam_name):
     global model
     frame = Tensor(frame)
-    preds = jit_infer(model, frame, jit_cache=yolo_jit_cache).numpy()
+    preds = jit_infer(model, frame, frame.shape, jit_cache=yolo_jit_cache).numpy()
     thresh = (self.settings[cam_name].get("threshold") if self.settings[cam_name] else 0.5) or 0.5 #todo clean!
     online_targets = self.tracker[cam_name].update(preds, thresh)
     online_targets = [p for p in online_targets if (classes is None or str(int(p.class_id)) in classes)]
