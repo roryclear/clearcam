@@ -372,7 +372,8 @@ class YOLOv9():
     state_dict = safe_load(fetch(f'https://huggingface.co/roryclear/yolov9/resolve/main/yolov9-{size}.safetensors'))
     load_state_dict(self, state_dict)
 
-  def __call__(self, frame):
+  def __call__(self, frame, og_shape=None):
+    if og_shape is None: og_shape = frame.shape
     pre = self.preprocess(frame)
     x = pre.unsqueeze(0)
     x = x[..., ::-1].permute(0, 3, 1, 2) #BGR to RGB!
@@ -384,7 +385,7 @@ class YOLOv9():
       x = m(x)
       y.append(x)
     preds = postprocess(x[0])[0]
-    preds = self.scale_boxes(pre.shape[:2], preds, frame.shape)
+    preds = self.scale_boxes(pre.shape[:2], preds, og_shape)
     return preds
 
   def cv2_preprocess(self, image, stride=32): # todo for batch
