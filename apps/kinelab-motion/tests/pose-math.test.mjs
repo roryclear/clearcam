@@ -53,3 +53,13 @@ test('missing pose does not create reps or silently mark a posture', () => {
   assert.equal(state.status, 'tracking-lost');
   assert.equal(trackingStatus([]), 'lost');
 });
+
+
+test('losing the body midway through a squat discards an incomplete repetition', () => {
+  let state = createSquatState();
+  for (const [knee, time] of [[110, 0], [108, 120], [null, 400], [160, 650], [165, 850]]) {
+    state = advanceSquat(state, knee, time);
+  }
+  assert.equal(state.reps, 0);
+  assert.equal(state.phase, 'ready');
+});

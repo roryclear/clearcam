@@ -72,6 +72,8 @@ export function advanceSquat(state, kneeAngle, timestampMs) {
   const next = { ...state };
   if (!Number.isFinite(kneeAngle)) {
     next.status = 'tracking-lost';
+    next.phase = 'ready';
+    next.enteredDownAt = null;
     next.downFrames = 0;
     next.upFrames = 0;
     return next;
