@@ -19,7 +19,13 @@ what this project has actually measured. It claims no clinical-grade precision.
   sit-to-stand reps, tracking-dropout mid-rep discards the partial rep, and
   jittered input produces no false reps. These are deterministic logic tests
   of counting behaviour, **not** accuracy measurements against real people.
-- Full suite at time of writing: 42 tests, all passing
+- Phase-sequence segmentation (added on `feat/kinelab-phase2-validation`):
+  squat visits `ready > down > ready` per rep and is bit-identical across two
+  runs (2/2 reps); sit-to-stand visits `seated > rising > standing > sitting`
+  in order. Note the squat machine has no separate bottom/up phases — depth
+  is tracked inside `down`; an earlier draft of this test wrongly assumed
+  `bottom`/`up` phases and failed, which is how this was pinned down.
+- Full suite at time of writing: 44 tests, all passing
   (`node --test apps/kinelab-motion/tests/*.test.mjs`, exit 0).
 
 ## Explicitly not claimed
