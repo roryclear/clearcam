@@ -28,7 +28,9 @@ test('createExtensionIfEnabled never constructs when flag is off', () => {
 
 test('registering a challenge extension does not alter exercise counting', () => {
   const m = new ExtensionManager();
-  m.registerExtension('challenge', new MovementChallenge());
+  const challenge = new MovementChallenge();
+  challenge.id = 'test-challenge'; // ExtensionManager contract requires an id
+  m.registerExtension('challenge', challenge);
   const squat = new SquatExercise();
   let s = squat.createState();
   const seq = [[170, 0], [110, 100], [100, 450], [165, 800], [168, 900]];
