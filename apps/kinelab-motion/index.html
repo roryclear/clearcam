@@ -160,6 +160,7 @@
               <span id="rep-unit-label">REPETITIONS</span>
             </div>
             <div class="dynamic-telemetry" id="dynamic-telemetry"></div>
+            <div id="baseline-deviation" class="subtle-text" role="status"></div>
             <div class="insight-feedback" id="squat-feedback">Select an exercise to activate real-time movement analysis.</div>
             <div class="insight-actions">
               <button type="button" class="text-button" id="reset-reps">Reset count ↺</button>
@@ -233,6 +234,15 @@
             <div class="action-group">
               <button type="button" id="delete-session-btn" class="btn btn-danger">Delete Session</button>
             </div>
+          </div>
+
+          <div class="analytics-actions" aria-label="Compare saved sessions">
+            <div class="action-group">
+              <label>Compare <select id="compare-a" aria-label="First session to compare"></select></label>
+              <label>with <select id="compare-b" aria-label="Second session to compare"></select></label>
+              <button type="button" id="compare-btn" class="btn btn-ghost">Compare Sessions</button>
+            </div>
+            <div id="compare-result" class="subtle-text" role="status">Pick two saved sessions to see measured deltas for the selected joint.</div>
           </div>
 
           <!-- Session List -->

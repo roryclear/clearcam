@@ -73,3 +73,14 @@ export class ExtensionManager {
 }
 
 export const defaultExtensionManager = new ExtensionManager();
+
+/**
+ * Constructs an extension only when its feature flag is enabled.
+ * When disabled the factory is never called, so flagged features cost
+ * nothing and cannot affect core pose tracking.
+ */
+export function createExtensionIfEnabled(manager, flag, factory) {
+  if (!manager || typeof factory !== 'function') return null;
+  if (!manager.isFeatureEnabled(flag)) return null;
+  return factory();
+}

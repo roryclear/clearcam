@@ -102,6 +102,45 @@ test('Benchmark: Tracking dropout at inflection point correctly discards partial
   assert.equal(state.phase, 'ready');
 });
 
+test('Benchmark: squat phase sequence is ordered and deterministic across two runs', () => {
+  const run = () => {
+    const squat = new SquatExercise();
+    let s = squat.createState();
+    const phases = [];
+    for (const f of generateSquatTrajectory(2, 2200, 30)) {
+      s = squat.update(s, { angles: { leftKnee: f.kneeAngle, rightKnee: f.kneeAngle }, timestampMs: f.timeMs, trackingQuality: 'good' });
+      if (phases[phases.length - 1] !== s.phase) phases.push(s.phase);
+    }
+    return { phases, reps: s.reps };
+  };
+  const a = run();
+  const b = run();
+  assert.deepEqual(a, b);
+  assert.equal(a.reps, 2);
+  // Squat contract: ready > down > ready per rep (depth tracked inside 'down').
+  assert.deepEqual(a.phases, ['ready', 'down', 'ready', 'down', 'ready']);
+});
+
+test('Benchmark: sit-to-stand phase sequence visits seated/rising/standing/sitting in order', () => {
+  const sts = new SitToStandExercise();
+  let s = sts.createState();
+  const phases = [];
+  const dt = 1000 / 30;
+  for (let i = 0; i <= 75; i++) {
+    const progress = (i * dt % 2500) / 2500;
+    const angle = 127.5 - 37.5 * Math.cos(progress * 2 * Math.PI);
+    s = sts.update(s, { angles: { leftKnee: angle, rightKnee: angle, leftHip: angle, rightHip: angle }, timestampMs: i * dt, trackingQuality: 'good' });
+    if (phases[phases.length - 1] !== s.phase) phases.push(s.phase);
+  }
+  const order = ['seated', 'rising', 'standing', 'sitting'];
+  let last = -1;
+  for (const p of order) {
+    const at = phases.indexOf(p, last + 1);
+    assert.ok(at > last, `phase ${p} missing/out of order in: ${phases.join('>')}`);
+    last = at;
+  }
+});
+
 test('Benchmark: UI-PRMD style sit-to-stand trajectory counts 5/5 reps', () => {
   const sts = new SitToStandExercise();
   let state = sts.createState();

@@ -19,6 +19,7 @@ import { defaultSessionStorage } from './sessions/session-storage.mjs';
 import { TimelinePlayer } from './sessions/timeline-player.mjs';
 import { ChartRenderer } from './sessions/chart-renderer.mjs';
 import { exportToCSV, exportToJSON, downloadFile } from './sessions/export-helpers.mjs';
+import { compareSessions } from './sessions/session-compare.mjs';
 import { defaultAudioSynthesizer } from './integrations/audio-cues.mjs';
 
 const el = id => document.getElementById(id);
@@ -180,6 +181,19 @@ function renderTelemetry(angles) {
     const measured = angles?.[def.key];
     valueEl.textContent = Number.isFinite(measured) ? `${Math.round(measured)}°` : '—';
     valueEl.classList.toggle('unavailable', !Number.isFinite(measured));
+  }
+  const baselineEl = document.getElementById('baseline-deviation');
+  if (baselineEl) {
+    const baseline = settings.get().exercise.baseline;
+    const knee = [angles?.leftKnee, angles?.rightKnee].filter(Number.isFinite);
+    const hip = [angles?.leftHip, angles?.rightHip].filter(Number.isFinite);
+    if (baseline && knee.length && hip.length) {
+      const dKnee = Math.round((knee.reduce((s, v) => s + v, 0) / knee.length - baseline.standingKneeDeg) * 10) / 10;
+      const dHip = Math.round((hip.reduce((s, v) => s + v, 0) / hip.length - baseline.standingHipDeg) * 10) / 10;
+      baselineEl.textContent = `Baseline Δ knee ${dKnee > 0 ? '+' : ''}${dKnee}° · hip ${dHip > 0 ? '+' : ''}${dHip}°`;
+    } else {
+      baselineEl.textContent = baseline ? 'Baseline Δ — (angles unavailable)' : '';
+    }
   }
 }
 
@@ -566,6 +580,14 @@ function updateSessionsList() {
   const index = storage.getIndex();
   nodes.sessionCountBadge.textContent = String(index.length);
   nodes.savedSessionsList.innerHTML = '';
+  for (const selId of ['compare-a', 'compare-b']) {
+    const sel = document.getElementById(selId);
+    if (sel) {
+      const prev = sel.value;
+      sel.innerHTML = index.map(item => `<option value="${item.id}">${item.exerciseId.toUpperCase()} · ${item.recordedAt ?? item.id}</option>`).join('');
+      if (index.some(item => item.id === prev)) sel.value = prev;
+    }
+  }
 
   if (index.length === 0) {
     nodes.savedSessionsList.innerHTML = '<div style="color: #6d7d93; font-size: 11px; padding: 10px;">No saved sessions yet. Click "Record" during a movement to save a session.</div>';
@@ -710,6 +732,19 @@ if (baselineBtn) {
     settings.update({ exercise: { baseline } });
     if (label) label.textContent = `Baseline saved: knee ${baseline.standingKneeDeg}°, hip ${baseline.standingHipDeg}°.`;
     announce('Standing baseline saved.');
+  });
+}
+
+const compareBtn = document.getElementById('compare-btn');
+if (compareBtn) {
+  compareBtn.addEventListener('click', () => {
+    const resultEl = document.getElementById('compare-result');
+    const a = storage.getSession(document.getElementById('compare-a')?.value);
+    const b = storage.getSession(document.getElementById('compare-b')?.value);
+    if (!a || !b) { if (resultEl) resultEl.textContent = 'Save at least two sessions to compare.'; return; }
+    const r = compareSessions(a, b, nodes.chartJointSelect.value);
+    const fmt = v => (v === null || v === undefined ? '—' : `${v}°`);
+    if (resultEl) resultEl.textContent = `Δ reps ${r.repDelta > 0 ? '+' : ''}${r.repDelta} · Δ duration ${Math.round(r.durationDeltaMs / 100) / 10}s · mean angle Δ ${fmt(r.meanDeltaDeg)} · max angle Δ ${fmt(r.maxDeltaDeg)} (${r.frameCountA} vs ${r.frameCountB} frames)`;
   });
 }
 
