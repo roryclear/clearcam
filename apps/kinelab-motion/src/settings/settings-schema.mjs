@@ -1,0 +1,110 @@
+/**
+ * Settings schema, validation rules, and default preferences.
+ */
+
+export const SETTINGS_VERSION = 2;
+export const STORAGE_KEY = 'kinelab_motion_settings_v2';
+
+export const DEFAULT_SETTINGS = Object.freeze({
+  version: SETTINGS_VERSION,
+  camera: {
+    facingMode: 'environment', // 'environment' | 'user'
+    mirroring: 'auto', // 'auto' | 'on' | 'off'
+    resolution: '720p', // '480p' | '720p' | '1080p'
+  },
+  tracking: {
+    model: 'heavy', // 'heavy' | 'full'
+    autoFallback: true,
+    smoothing: 'medium', // 'off' | 'low' | 'medium' | 'high'
+    confidenceThreshold: 0.55,
+  },
+  overlays: {
+    showSkeleton: true,
+    showJointMarkers: true,
+    showDegreeLabels: true,
+    showAngleArcs: true,
+    showMotionTrails: false,
+    showSymmetryHUD: true,
+    showGhost: false,
+  },
+  exercise: {
+    activeExercise: 'squat', // 'squat' | 'sit_to_stand' | 'lunge' | 'shoulder_abduction' | 'single_leg_balance' | 'free'
+    sensitivity: 'normal', // 'forgiving' | 'normal' | 'strict'
+    audioCues: true,
+  },
+  privacy: {
+    localProcessingOnly: true,
+    recordingMode: 'manual', // 'off' | 'manual'
+  },
+});
+
+export function validateSettings(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  const camera = {
+    facingMode: ['environment', 'user'].includes(raw.camera?.facingMode)
+      ? raw.camera.facingMode
+      : DEFAULT_SETTINGS.camera.facingMode,
+    mirroring: ['auto', 'on', 'off'].includes(raw.camera?.mirroring)
+      ? raw.camera.mirroring
+      : DEFAULT_SETTINGS.camera.mirroring,
+    resolution: ['480p', '720p', '1080p'].includes(raw.camera?.resolution)
+      ? raw.camera.resolution
+      : DEFAULT_SETTINGS.camera.resolution,
+  };
+
+  const tracking = {
+    model: ['heavy', 'full'].includes(raw.tracking?.model)
+      ? raw.tracking.model
+      : DEFAULT_SETTINGS.tracking.model,
+    autoFallback: Boolean(raw.tracking?.autoFallback ?? DEFAULT_SETTINGS.tracking.autoFallback),
+    smoothing: ['off', 'low', 'medium', 'high'].includes(raw.tracking?.smoothing)
+      ? raw.tracking.smoothing
+      : DEFAULT_SETTINGS.tracking.smoothing,
+    confidenceThreshold:
+      typeof raw.tracking?.confidenceThreshold === 'number' &&
+      raw.tracking.confidenceThreshold >= 0.3 &&
+      raw.tracking.confidenceThreshold <= 0.9
+        ? raw.tracking.confidenceThreshold
+        : DEFAULT_SETTINGS.tracking.confidenceThreshold,
+  };
+
+  const overlays = {
+    showSkeleton: Boolean(raw.overlays?.showSkeleton ?? DEFAULT_SETTINGS.overlays.showSkeleton),
+    showJointMarkers: Boolean(raw.overlays?.showJointMarkers ?? DEFAULT_SETTINGS.overlays.showJointMarkers),
+    showDegreeLabels: Boolean(raw.overlays?.showDegreeLabels ?? DEFAULT_SETTINGS.overlays.showDegreeLabels),
+    showAngleArcs: Boolean(raw.overlays?.showAngleArcs ?? DEFAULT_SETTINGS.overlays.showAngleArcs),
+    showMotionTrails: Boolean(raw.overlays?.showMotionTrails ?? DEFAULT_SETTINGS.overlays.showMotionTrails),
+    showSymmetryHUD: Boolean(raw.overlays?.showSymmetryHUD ?? DEFAULT_SETTINGS.overlays.showSymmetryHUD),
+    showGhost: Boolean(raw.overlays?.showGhost ?? DEFAULT_SETTINGS.overlays.showGhost),
+  };
+
+  const validExercises = ['squat', 'sit_to_stand', 'lunge', 'shoulder_abduction', 'single_leg_balance', 'free'];
+  const exercise = {
+    activeExercise: validExercises.includes(raw.exercise?.activeExercise)
+      ? raw.exercise.activeExercise
+      : DEFAULT_SETTINGS.exercise.activeExercise,
+    sensitivity: ['forgiving', 'normal', 'strict'].includes(raw.exercise?.sensitivity)
+      ? raw.exercise.sensitivity
+      : DEFAULT_SETTINGS.exercise.sensitivity,
+    audioCues: Boolean(raw.exercise?.audioCues ?? DEFAULT_SETTINGS.exercise.audioCues),
+  };
+
+  const privacy = {
+    localProcessingOnly: true, // Always enforce local
+    recordingMode: ['off', 'manual'].includes(raw.privacy?.recordingMode)
+      ? raw.privacy.recordingMode
+      : DEFAULT_SETTINGS.privacy.recordingMode,
+  };
+
+  return {
+    version: SETTINGS_VERSION,
+    camera,
+    tracking,
+    overlays,
+    exercise,
+    privacy,
+  };
+}
