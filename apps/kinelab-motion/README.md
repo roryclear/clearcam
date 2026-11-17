@@ -1,17 +1,121 @@
-# KineLab Motion — single-camera live tracking (experimental)
+# KineLab Motion 2.0 — Modular Motion Intelligence Studio
 
-Standalone, **single-camera** browser prototype inside the Clearcam fork. It does not change the original Clearcam streaming, cameras, or NVR code. This milestone intentionally excludes multi-camera capture, calibrated 3D, recording, uploads, and clinical interpretation.
+High-performance, modular, **single-camera** motion analysis and interactive movement studio built into the Clearcam project.
 
-## Features
+Maintains complete privacy: all inference, smoothing, exercise counting, and session recording occurs 100% locally in the browser sandbox. No video frames, landmarks, or biomechanical data are ever transmitted to external servers. Multiple-camera capture and clinical medical diagnosis are explicitly out of scope.
 
-- One phone or webcam using `getUserMedia`, front/back camera switch when supported.
-- Google MediaPipe Pose Landmarker (Heavy by default, GPU/CPU fallback, then Full if needed).
-- 33 body landmarks, real-time skeleton connections, and live knee/hip/elbow/shoulder angles (left and right).
-- Confidence-gated joints: display `—` instead of a made-up number when a landmark is lost.
-- Free Tracking and an **approximate** squat-repetition prototype based on 2D knee angles.
-- Responsive dashboard; no recording, server-side inference, upload, accounts, or database.
+---
 
-## Run locally
+## 1. Key Capabilities
+
+### A. Motion Tracking Engine
+- **MediaPipe Pose Landmarker**: Pinned official release `@mediapipe/tasks-vision@1.2.3`, running Heavy model by default with automatic GPU/CPU and Full model fallbacks.
+- **One Euro Temporal Filter**: CHI 2012 speed-based adaptive low-pass filter eliminates resting joint jitter without introducing perceptible latency during explosive movements.
+- **Outlier Rejection**: Rejects unphysical landmark teleportation and single-frame detection glitches.
+- **Missing Landmark Handling**: Graceful coasting and re-initialization when limbs are occluded or leave the frame. Unavailable joints show `—` instead of fabricated angles.
+- **Adaptive Performance Fallback**: Automatically monitors frame rate and inference latency; recommends or switches to Full model if latency exceeds 110ms.
+- **Performance HUD**: Real-time inference FPS, render FPS, latency (ms), and model status.
+
+### B. Modular Exercise Recognition Engine
+Modular state-machine architecture with configurable thresholds, hysteresis, and debounce logic:
+1. **Squat**: Preserves exact baseline behavior, tracking knee flexion, inflection depth, and return to standing extension.
+2. **Sit-to-Stand**: Evaluates 30-second chair-stand functional mobility transitions (seated $\to$ rising $\to$ standing $\to$ seated).
+3. **Lunge**: Detects lead-leg vs rear-leg depth and upright recovery.
+4. **Shoulder Flexion / Abduction**: Evaluates lateral and forward arm elevation range of motion and bilateral symmetry.
+5. **Single-Leg Balance**: Timed continuous single-leg hold duration counter with stance leg detection and touchdown tracking.
+6. **Free Tracking**: Unconstrained exploration with live 33-landmark skeleton and joint telemetry.
+
+*Safety Rule: Tracking loss immediately halts phase progression and discards incomplete repetitions.*
+
+### C. Real-Time Visual Intelligence
+- Neon bone connections with confidence-based transparency.
+- High-contrast joint markers.
+- Live angle degree badges with pixel aspect ratio preservation.
+- Circular joint angle sweep arcs showing movement depth.
+- Optional motion trails on extremities (wrists, ankles).
+- Bilateral symmetry HUD comparing left vs right limb angles and asymmetry delta ($\Delta^\circ$).
+- Ghost reference skeleton overlay from recorded sessions.
+- Full respect for `prefers-reduced-motion`.
+
+### D. Recording, Replay, and Motion Analytics
+- **Local Recording**: Opt-in recording of compact landmark frames, timestamps, movement phases, and joint angles.
+- **Timeline Replay**: Scrub bar, frame stepping, Play/Pause, and playback speeds (0.5x, 1x, 2x).
+- **Interactive Chart**: Pure HTML5 Canvas joint-angle graph over time with scrubber indicator line.
+- **Ghost Comparison**: Save any playback frame as a ghost overlay for movement comparison.
+- **Data Export**: One-click export to CSV and JSON.
+- **Storage Management**: Local browser storage management with size estimation and clear controls.
+
+### E. Intelligent Settings Panel
+- **Camera**: Facing mode (Rear/Front), mirroring mode, resolution preference (720p, 1080p, 480p).
+- **Tracking**: Heavy/Full model, auto-fallback, 1€ smoothing preset (Off, Low, Medium, High), confidence threshold.
+- **Overlays**: Independent toggles for skeleton, joints, badges, arcs, trails, symmetry HUD, and ghost.
+- **Exercise**: Sensitivity adjustment (Forgiving, Standard, Strict), procedural Web Audio API cues.
+- **Privacy**: Local processing status, local session data controls, reset to factory defaults.
+
+---
+
+## 2. Architecture & Module Map
+
+```
+apps/kinelab-motion/
+├── index.html                 # Semantic dark cinematic studio shell
+├── styles.css                 # Responsive CSS grid/flexbox with neon accents
+├── README.md                  # System documentation & developer guide
+├── src/
+│   ├── app.mjs                # Application orchestrator
+│   ├── pose-math.mjs          # Backwards-compatible facade re-exporting core math
+│   ├── tracking/
+│   │   ├── mediapipe-runner.mjs     # Model lifecycle, CDN loader, delegate fallback
+│   │   ├── performance-monitor.mjs  # Inference/render FPS and latency tracking
+│   │   ├── adaptive-controller.mjs  # Performance watchdog and auto-fallback
+│   │   └── worker-bridge.mjs        # Web Worker feasibility check & architecture probe
+│   ├── filters/
+│   │   ├── one-euro-filter.mjs      # LowPassFilter and OneEuroPoint2D
+│   │   ├── outlier-filter.mjs       # Speed and jump gating
+│   │   └── pose-filter.mjs          # 33-landmark composite filter & presets
+│   ├── biomechanics/
+│   │   ├── landmark-indices.mjs     # MediaPipe topology & constants
+│   │   ├── angle-calculations.mjs   # 2D geometry, angleAt, uncertainty metrics
+│   │   └── symmetry-analyzer.mjs    # Bilateral left/right limb symmetry
+│   ├── exercises/
+│   │   ├── exercise-base.mjs        # BaseExercise interface & sensitivity presets
+│   │   ├── exercise-registry.mjs    # Dynamic module registry
+│   │   ├── squat-exercise.mjs       # Squat repetition state machine
+│   │   ├── sit-to-stand-exercise.mjs# Chair rise functional mobility
+│   │   ├── lunge-exercise.mjs       # Lunge depth and lead leg detection
+│   │   ├── shoulder-abduction-exercise.mjs # Overhead reach and range of motion
+│   │   └── balance-exercise.mjs     # Single-leg timed hold
+│   ├── overlays/
+│   │   ├── overlay-renderer.mjs     # Master canvas coordinator
+│   │   ├── skeleton-renderer.mjs    # Bones and joint nodes
+│   │   ├── angle-arc-renderer.mjs   # Geometric sweep arcs and badges
+│   │   ├── motion-trails.mjs        # Extremity velocity trails
+│   │   └── ghost-renderer.mjs       # Reference skeleton overlay
+│   ├── sessions/
+│   │   ├── session-recorder.mjs     # Compact telemetry serialization
+│   │   ├── session-storage.mjs      # LocalStorage index & persistence
+│   │   ├── timeline-player.mjs      # Replay loop, scrubbing, speed control
+│   │   ├── chart-renderer.mjs       # Pure canvas joint angle graph
+│   │   └── export-helpers.mjs       # CSV & JSON exporters
+│   ├── settings/
+│   │   ├── settings-schema.mjs      # Defaults and schema validation
+│   │   └── settings-manager.mjs     # Evented state container
+│   └── integrations/
+│       ├── audio-cues.mjs           # Zero-dependency Web Audio synthesizers
+│       └── extension-contracts.mjs  # Feature flags and extensibility interfaces
+└── tests/
+    ├── pose-math.test.mjs           # Preserved baseline regression tests
+    ├── filters.test.mjs             # 1€ filter, outlier, and pose smoothing tests
+    ├── biomechanics.test.mjs        # 2D projection, trunk angle, symmetry tests
+    ├── exercises.test.mjs           # State transitions, debounce, tracking-loss tests
+    ├── settings.test.mjs            # Validation, defaults, corruption recovery
+    ├── sessions.test.mjs            # Recording, playback, CSV/JSON serialization
+    └── synthetic-benchmarks.test.mjs# UI-PRMD / RepCount style kinematics benchmarks
+```
+
+---
+
+## 3. Run Locally
 
 From the repository root:
 
@@ -19,27 +123,28 @@ From the repository root:
 python3 -m http.server 4173 --directory apps/kinelab-motion
 ```
 
-Open <http://localhost:4173> in Chrome, Edge, or Safari. Click **Start camera**, grant permission, keep your full body visible, and choose **Free tracking** or **Squat prototype**. The first use needs internet access to fetch the pinned MediaPipe SDK/WASM and the model from Google. The app runs pose inference in the browser after loading.
+Open <http://localhost:4173> in Google Chrome, Microsoft Edge, or Safari.
+Click **Start camera**, grant browser camera permission, and position your body inside the frame.
 
-> Opening a page on a phone at `http://YOUR_PC_IP:4173` generally **won't permit camera access**: mobile devices need an HTTPS origin. Serve this static folder behind an HTTPS-enabled local tunnel or trusted static HTTPS host. Don't expose the Clearcam Python NVR's port 8080 to the public internet.
+> **Mobile Note**: Accessing the server from a phone over LAN (`http://<IP>:4173`) requires an HTTPS origin or localhost port forwarding via Chrome DevTools (`chrome://inspect`) because browsers restrict `navigator.mediaDevices.getUserMedia` to secure contexts.
 
-## Tests
+---
+
+## 4. Test Suite
+
+Run the complete test suite:
 
 ```bash
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node 20+ is recommended for the built-in test runner. No npm install is required for this isolated web prototype.
+All 35 automated tests run natively on Node.js 20+ without external npm dependencies.
 
-## Limitations
+---
 
-- Shown angles are **2D projected image-plane angles**, *not* calibrated 3D kinematics. They depend on camera orientation, perspective, joint visibility, and where the user stands. They are not clinical measurements.
-- The squat tracker applies simple fixed knee-angle thresholds with hysteresis and a minimum phase duration. It does **not** determine correct or safe form and is not suitable as an exercise prescription.
-- Web MediaPipe `detectForVideo()` is synchronous. We throttle inference to approximately 10 FPS to reduce UI blocking; displayed FPS is inference FPS, not camera capture FPS. On slower devices use the Full model.
-- Default mode uses the rear camera when available. Camera capture occurs only after user permission, and tracks are stopped on Stop / page exit.
-- Google MediaPipe SDK and model load from remote CDNs on first use. Frames are analyzed locally in the browser. Consult MediaPipe's privacy notice for SDK metrics details.
-- iOS support and device-level performance must be tested on real hardware; browser camera support and model delegate performance vary.
+## 5. Privacy & Security
 
-## Future modular additions
-
-Exercise-specific analyzers can build on `src/pose-math.mjs` and the live pose result loop. Add new modes as separate tested pure functions; do not bake diagnosis or claims of "proper form" into generic landmark detection. Support recording or remote streaming **only after an explicit consent, retention, and access-control design**.
+- **Zero Remote Video Transmission**: Video frames never leave the device.
+- **Zero Cloud Databases**: Saved sessions remain in the browser's `localStorage` until cleared.
+- **No Clearcam NVR Exposure**: Does not expose or modify Clearcam's backend RTSP or NVR endpoints.
+- **Client-Side Only**: Third-party assets are pinned by version and hash from trusted CDNs.

@@ -5,75 +5,466 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#080c16" />
   <meta name="referrer" content="no-referrer" />
-  <meta name="description" content="KineLab Motion: private, live single-camera pose visualization, joint angles, and experimental squat tracking." />
-  <title>KineLab Motion — Live Pose Studio</title>
+  <meta name="description" content="KineLab Motion 2.0: Modular, real-time, single-camera motion intelligence, multi-exercise recognition, and movement analytics." />
+  <title>KineLab Motion 2.0 — Motion Intelligence Studio</title>
   <link rel="stylesheet" href="./styles.css" />
   <script type="module" src="./src/app.mjs"></script>
 </head>
 <body>
-  <div class="ambient ambient-a" aria-hidden="true"></div><div class="ambient ambient-b" aria-hidden="true"></div>
+  <div class="ambient ambient-a" aria-hidden="true"></div>
+  <div class="ambient ambient-b" aria-hidden="true"></div>
+
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="KineLab Motion home">
-        <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 36 36" fill="none"><path d="M8 27V9m20 18V9M8 18h20M13 9l10 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
-        <span class="brand-name">KINE<span>LAB</span><small> / MOTION</small></span>
+        <span class="brand-symbol" aria-hidden="true">
+          <svg viewBox="0 0 36 36" fill="none"><path d="M8 27V9m20 18V9M8 18h20M13 9l10 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+        <span class="brand-name">KINE<span>LAB</span><small> / MOTION 2.0</small></span>
       </a>
-      <div class="header-meta"><span class="local-pill"><span class="local-dot"></span>LOCAL PROCESSING</span><span class="build-version">BETA / 001</span></div>
+      <div class="header-meta">
+        <span class="local-pill"><span class="local-dot"></span>LOCAL PROCESSING</span>
+        <button type="button" id="open-recordings" class="meta-button" title="Open recorded motion sessions">
+          <span class="rec-icon">●</span> SESSIONS <span id="session-count-badge" class="count-badge">0</span>
+        </button>
+        <button type="button" id="open-settings" class="meta-button" title="Configure camera, tracker, and overlays" aria-haspopup="dialog">
+          ⚙ SETTINGS
+        </button>
+      </div>
     </header>
 
     <main>
       <section class="hero" aria-labelledby="page-heading">
-        <div><p class="eyebrow"><span class="dash"></span> REAL-TIME MOVEMENT INTELLIGENCE</p>
+        <div>
+          <p class="eyebrow"><span class="dash"></span> MOTION INTELLIGENCE 2.0 · SINGLE CAMERA</p>
           <h1 id="page-heading">Make movement <em>visible.</em></h1>
-          <p class="subhead">Your camera. Live skeletal tracking. Joint angles in real time. One frame at a time.</p>
+          <p class="subhead">One camera. 33 landmarks. Modular exercise recognition and local analytics.</p>
         </div>
-        <div class="hero-index" aria-hidden="true"><span class="index-number">01</span><span>LIVE CAPTURE</span></div>
+        <div class="hero-index" aria-hidden="true">
+          <span class="index-number">2.0</span><span>LOCAL STUDIO</span>
+        </div>
       </section>
 
       <section class="workspace" aria-label="Single-camera movement studio">
+        <!-- Live Capture & Overlays -->
         <div class="capture-panel">
-          <div class="panel-heading"><div class="heading-with-icon"><span class="panel-icon" aria-hidden="true">◈</span><h2>Live canvas</h2><span class="subtle-text">/ Camera 01</span></div><span class="capture-label" id="capture-label"><span class="status-dot"></span><span>OFFLINE</span></span></div>
+          <div class="panel-heading">
+            <div class="heading-with-icon">
+              <span class="panel-icon" aria-hidden="true">◈</span>
+              <h2>Live canvas</h2>
+              <span class="subtle-text">/ Camera 01</span>
+            </div>
+            <div class="heading-actions">
+              <span id="recording-indicator" class="rec-pill" hidden><span class="rec-pulse"></span>REC <span id="rec-timer">00:00</span></span>
+              <span class="capture-label" id="capture-label"><span class="status-dot"></span><span>OFFLINE</span></span>
+            </div>
+          </div>
+
           <div class="stage" id="video-stage">
             <video id="camera-video" autoplay muted playsinline aria-label="Live camera preview"></video>
             <canvas id="pose-canvas" aria-label="Body pose skeleton with measured angles" role="img"></canvas>
+
             <div class="stage-empty" id="stage-empty">
-              <div class="empty-visual" aria-hidden="true"><svg viewBox="0 0 200 200" fill="none"><circle cx="100" cy="100" r="74" stroke="currentColor" stroke-dasharray="2 9" opacity=".4"/><circle cx="100" cy="100" r="51" stroke="currentColor" opacity=".2"/><path d="M81 71a19 19 0 1 1 38 0 19 19 0 0 1-38 0zm19 21v39m0-23-27 17m27-17 27 17m-27 6-18 32m18-32 18 32" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/><circle cx="100" cy="100" r="3" fill="currentColor"/></svg></div>
+              <div class="empty-visual" aria-hidden="true">
+                <svg viewBox="0 0 200 200" fill="none"><circle cx="100" cy="100" r="74" stroke="currentColor" stroke-dasharray="2 9" opacity=".4"/><circle cx="100" cy="100" r="51" stroke="currentColor" opacity=".2"/><path d="M81 71a19 19 0 1 1 38 0 19 19 0 0 1-38 0zm19 21v39m0-23-27 17m27-17 27 17m-27 6-18 32m18-32 18 32" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/><circle cx="100" cy="100" r="3" fill="currentColor"/></svg>
+              </div>
               <p class="empty-title">Your movement canvas awaits.</p>
-              <p class="empty-caption">Start your camera to visualize live skeletal tracking.<br/>Nothing is recorded or uploaded.</p>
-              <span class="helper-hint">✳ &nbsp; Use good lighting and keep your full body visible</span>
+              <p class="empty-caption">Start your camera to visualize live skeletal tracking.<br/>Processed privately in this browser. Nothing uploaded.</p>
+              <span class="helper-hint">✳ &nbsp; Position camera at hip height and keep full body visible</span>
             </div>
+
+            <!-- In-Canvas HUD -->
             <div class="hud hud-top-left"><span class="hud-led"></span><span id="hud-state">STANDBY</span></div>
-            <div class="hud hud-top-right"><span id="inference-fps">--</span> FPS <span class="hud-sep">/</span> <span id="model-name">HEAVY</span></div>
-            <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 2D SCREEN-PLANE ANGLES</div>
-            <div class="frame-corner top-left" aria-hidden="true"></div><div class="frame-corner top-right" aria-hidden="true"></div><div class="frame-corner bottom-left" aria-hidden="true"></div><div class="frame-corner bottom-right" aria-hidden="true"></div>
+            <div class="hud hud-top-right">
+              <span id="inference-fps">--</span> FPS <span class="hud-sep">/</span>
+              <span id="model-name">HEAVY</span> <span class="hud-sep">·</span>
+              <span id="latency-display">--ms</span>
+            </div>
+            <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 1€ SMOOTHED <span class="hud-sep">·</span> 2D ANGLES</div>
+
+            <div class="frame-corner top-left" aria-hidden="true"></div>
+            <div class="frame-corner top-right" aria-hidden="true"></div>
+            <div class="frame-corner bottom-left" aria-hidden="true"></div>
+            <div class="frame-corner bottom-right" aria-hidden="true"></div>
           </div>
+
+          <!-- Stage Controls -->
           <div class="stage-controls">
-            <div class="action-buttons"><button type="button" id="start-button" class="btn btn-primary"><span class="button-mark" aria-hidden="true">◉</span> Start camera</button><button type="button" id="stop-button" class="btn btn-secondary" disabled>Stop</button><button type="button" id="switch-button" class="btn btn-ghost" disabled>⇄ <span>Flip</span></button></div>
+            <div class="action-buttons">
+              <button type="button" id="start-button" class="btn btn-primary"><span class="button-mark" aria-hidden="true">◉</span> Start camera</button>
+              <button type="button" id="stop-button" class="btn btn-secondary" disabled>Stop</button>
+              <button type="button" id="switch-button" class="btn btn-ghost" disabled>⇄ <span>Flip</span></button>
+              <button type="button" id="record-button" class="btn btn-record" disabled><span class="rec-dot">●</span> <span>Record</span></button>
+            </div>
             <div class="tiny-status" id="tracking-pill"><span class="tiny-dot"></span>Waiting for camera</div>
           </div>
+
+          <!-- Quick Controls Bar -->
           <div class="controls-row">
-            <label class="input-field"><span>ANALYSIS MODE</span><select id="analysis-mode"><option value="free">Free tracking</option><option value="squat">Squat prototype</option></select></label>
-            <label class="input-field"><span>TRACKER MODEL</span><select id="model-choice"><option value="heavy">High accuracy · Heavy</option><option value="full">Faster · Full</option></select></label>
-            <label class="checkbox-field"><input type="checkbox" id="show-angles" checked /><span>Display angle labels</span></label>
+            <label class="input-field">
+              <span>EXERCISE MODULE</span>
+              <select id="analysis-mode">
+                <option value="squat">Squat</option>
+                <option value="sit_to_stand">Sit-to-Stand</option>
+                <option value="lunge">Lunge</option>
+                <option value="shoulder_abduction">Shoulder Flexion / Abduction</option>
+                <option value="single_leg_balance">Single-Leg Balance</option>
+                <option value="free">Free tracking</option>
+              </select>
+            </label>
+            <label class="input-field">
+              <span>TRACKER MODEL</span>
+              <select id="model-choice">
+                <option value="heavy">High accuracy · Heavy</option>
+                <option value="full">Faster · Full</option>
+              </select>
+            </label>
+            <label class="checkbox-field">
+              <input type="checkbox" id="show-angles" checked />
+              <span>Angle badges</span>
+            </label>
+            <label class="checkbox-field">
+              <input type="checkbox" id="show-arcs" checked />
+              <span>Angle arcs</span>
+            </label>
           </div>
+
           <div id="app-message" class="app-message" role="status" aria-live="polite">Ready. Allow camera access when prompted.</div>
         </div>
 
+        <!-- Telemetry & Exercise Sidebar -->
         <aside class="telemetry-panel" aria-labelledby="telemetry-title">
-          <div class="telemetry-heading"><div><p class="side-eyebrow">LIVE TELEMETRY</p><h2 id="telemetry-title">Joint angles<span class="heading-accent">.</span></h2></div><span class="angle-unit">DEG</span></div>
+          <div class="telemetry-heading">
+            <div>
+              <p class="side-eyebrow">LIVE TELEMETRY</p>
+              <h2 id="telemetry-title">Joint angles<span class="heading-accent">.</span></h2>
+            </div>
+            <span class="angle-unit">DEG</span>
+          </div>
           <p class="panel-note">Projected 2D angles from one camera. Unavailable joints show —.</p>
+
           <div class="angles" id="angle-list" aria-label="Joint angles"></div>
+
+          <!-- Dynamic Exercise Monitor -->
           <section class="insight" aria-labelledby="insight-title">
-            <p class="side-eyebrow">MOVEMENT EXPERIMENT</p>
-            <div class="insight-head"><h3 id="insight-title">Squat monitor</h3><span class="experiment-tag">PROTOTYPE</span></div>
-            <div class="rep-display"><span id="rep-count">00</span><span>REPETITIONS</span></div>
-            <div class="insight-feedback" id="squat-feedback">Select “Squat prototype” to activate approximate repetition tracking.</div>
-            <button type="button" class="text-button" id="reset-reps">Reset count ↺</button>
+            <p class="side-eyebrow">EXERCISE RECOGNITION</p>
+            <div class="insight-head">
+              <h3 id="insight-title">Squat monitor</h3>
+              <span id="exercise-badge" class="experiment-tag">REPETITION</span>
+            </div>
+            <div class="rep-display">
+              <span id="rep-count">00</span>
+              <span id="rep-unit-label">REPETITIONS</span>
+            </div>
+            <div class="dynamic-telemetry" id="dynamic-telemetry"></div>
+            <div class="insight-feedback" id="squat-feedback">Select an exercise to activate real-time movement analysis.</div>
+            <div class="insight-actions">
+              <button type="button" class="text-button" id="reset-reps">Reset count ↺</button>
+            </div>
+          </section>
+
+          <!-- Bilateral Symmetry Card -->
+          <section class="symmetry-card" id="symmetry-card">
+            <div class="symmetry-head">
+              <span class="side-eyebrow">BILATERAL SYMMETRY</span>
+              <span id="overall-sym-badge" class="sym-badge">BALANCED</span>
+            </div>
+            <div class="symmetry-grid" id="symmetry-grid">
+              <!-- Rendered dynamically -->
+            </div>
           </section>
         </aside>
       </section>
 
-      <footer class="footnote"><div><span class="footnote-mark" aria-hidden="true">✳</span> <strong>PRIVATE BY DESIGN</strong> — Camera frames are processed in this browser. No recording or video upload.</div><div>Experimental visuals and angles; not a clinical assessment or a validated measure of exercise form.</div></footer>
+      <!-- Replay & Motion Analytics Drawer -->
+      <section class="analytics-drawer" id="analytics-drawer" hidden aria-labelledby="analytics-heading">
+        <div class="analytics-header">
+          <div class="analytics-title-group">
+            <span class="panel-icon" aria-hidden="true">◷</span>
+            <h2 id="analytics-heading">Movement Replay &amp; Analytics</h2>
+            <span id="active-session-title" class="subtle-text">No session selected</span>
+          </div>
+          <button type="button" id="close-analytics" class="btn-close" aria-label="Close analytics drawer">✕</button>
+        </div>
+
+        <div class="analytics-body">
+          <div class="timeline-controls">
+            <button type="button" id="play-pause-btn" class="btn btn-ghost">▶ Play</button>
+            <button type="button" id="step-back-btn" class="btn btn-ghost" title="Previous frame">‹</button>
+            <button type="button" id="step-fwd-btn" class="btn btn-ghost" title="Next frame">›</button>
+            <span class="timeline-time" id="timeline-time">00:00.0 / 00:00.0</span>
+            <input type="range" id="timeline-scrubber" min="0" max="0" value="0" class="timeline-slider" aria-label="Session timeline scrubber" />
+            <div class="speed-selector">
+              <button type="button" class="speed-btn active" data-speed="1">1x</button>
+              <button type="button" class="speed-btn" data-speed="0.5">0.5x</button>
+              <button type="button" class="speed-btn" data-speed="2">2x</button>
+            </div>
+          </div>
+
+          <div class="analytics-chart-panel">
+            <div class="chart-header">
+              <span class="chart-title">JOINT ANGLE OVER TIME</span>
+              <label class="chart-joint-select">
+                <span>JOINT:</span>
+                <select id="chart-joint">
+                  <option value="leftKnee">Left Knee</option>
+                  <option value="rightKnee">Right Knee</option>
+                  <option value="leftHip">Left Hip</option>
+                  <option value="rightHip">Right Hip</option>
+                  <option value="leftShoulder">Left Shoulder</option>
+                  <option value="rightShoulder">Right Shoulder</option>
+                  <option value="leftElbow">Left Elbow</option>
+                  <option value="rightElbow">Right Elbow</option>
+                </select>
+              </label>
+            </div>
+            <canvas id="analytics-chart" width="900" height="180" class="analytics-chart-canvas"></canvas>
+          </div>
+
+          <div class="analytics-actions">
+            <div class="action-group">
+              <button type="button" id="set-ghost-btn" class="btn btn-ghost">👻 Set as Ghost Overlay</button>
+              <button type="button" id="export-json-btn" class="btn btn-ghost">Export JSON</button>
+              <button type="button" id="export-csv-btn" class="btn btn-ghost">Export CSV</button>
+            </div>
+            <div class="action-group">
+              <button type="button" id="delete-session-btn" class="btn btn-danger">Delete Session</button>
+            </div>
+          </div>
+
+          <!-- Session List -->
+          <div class="saved-sessions-list" id="saved-sessions-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Dialog / Modal -->
+      <dialog id="settings-dialog" class="settings-modal" aria-labelledby="settings-title">
+        <div class="modal-shell">
+          <div class="modal-header">
+            <div class="heading-with-icon">
+              <span class="panel-icon">⚙</span>
+              <h2 id="settings-title">Studio Settings</h2>
+            </div>
+            <button type="button" id="close-settings" class="btn-close" aria-label="Close settings">✕</button>
+          </div>
+
+          <div class="settings-tabs" role="tablist">
+            <button type="button" class="tab-btn active" role="tab" data-tab="tab-camera" aria-selected="true">Camera</button>
+            <button type="button" class="tab-btn" role="tab" data-tab="tab-tracking" aria-selected="false">Tracking</button>
+            <button type="button" class="tab-btn" role="tab" data-tab="tab-overlays" aria-selected="false">Overlays</button>
+            <button type="button" class="tab-btn" role="tab" data-tab="tab-exercise" aria-selected="false">Exercise</button>
+            <button type="button" class="tab-btn" role="tab" data-tab="tab-privacy" aria-selected="false">Privacy</button>
+          </div>
+
+          <div class="modal-body">
+            <!-- Camera Tab -->
+            <div class="tab-content active" id="tab-camera" role="tabpanel">
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Camera Orientation</span>
+                  <span class="setting-desc">Preferred lens facing mode</span>
+                </div>
+                <select id="cfg-camera-facing">
+                  <option value="environment">Rear / Environment</option>
+                  <option value="user">Front / User</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Mirroring</span>
+                  <span class="setting-desc">Flip horizontal preview</span>
+                </div>
+                <select id="cfg-camera-mirror">
+                  <option value="auto">Auto (Front only)</option>
+                  <option value="on">Always On</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Capture Resolution</span>
+                  <span class="setting-desc">Balance sharpness and battery usage</span>
+                </div>
+                <select id="cfg-camera-res">
+                  <option value="720p">720p HD (Balanced)</option>
+                  <option value="1080p">1080p Full HD</option>
+                  <option value="480p">480p SD (Low power)</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- Tracking Tab -->
+            <div class="tab-content" id="tab-tracking" role="tabpanel">
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">MediaPipe Model</span>
+                  <span class="setting-desc">Heavy prefers high accuracy, Full is lightweight</span>
+                </div>
+                <select id="cfg-track-model">
+                  <option value="heavy">Heavy (High precision)</option>
+                  <option value="full">Full (Performance)</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Adaptive Performance Fallback</span>
+                  <span class="setting-desc">Auto-switch to Full model if latency exceeds 110ms</span>
+                </div>
+                <input type="checkbox" id="cfg-track-autofallback" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Temporal Smoothing (1€ Filter)</span>
+                  <span class="setting-desc">Jitter reduction intensity</span>
+                </div>
+                <select id="cfg-track-smoothing">
+                  <option value="medium">Medium (Recommended)</option>
+                  <option value="low">Low (Fastest response)</option>
+                  <option value="high">High (Maximum stillness)</option>
+                  <option value="off">Off (Direct raw coords)</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Confidence Gating Threshold</span>
+                  <span class="setting-desc">Minimum landmark confidence for angle calculation</span>
+                </div>
+                <select id="cfg-track-confidence">
+                  <option value="0.55">0.55 (Standard)</option>
+                  <option value="0.45">0.45 (Lenient)</option>
+                  <option value="0.65">0.65 (Strict)</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- Overlays Tab -->
+            <div class="tab-content" id="tab-overlays" role="tabpanel">
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Full-body Skeleton Lines</span>
+                  <span class="setting-desc">Show neon bone connections</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-skeleton" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Colored Joint Markers</span>
+                  <span class="setting-desc">Show circular joint nodes</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-joints" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Joint Degree Labels</span>
+                  <span class="setting-desc">Show floating degree badges</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-labels" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Joint Angle Arcs</span>
+                  <span class="setting-desc">Draw geometric sector sweeps</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-arcs" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Motion Trails</span>
+                  <span class="setting-desc">Show velocity trails on wrists and ankles</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-trails" />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Bilateral Symmetry HUD</span>
+                  <span class="setting-desc">Show left/right angle balance card</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-symhud" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Ghost Reference Skeleton</span>
+                  <span class="setting-desc">Show faint reference overlay from saved session</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-ghost" />
+              </label>
+            </div>
+
+            <!-- Exercise Tab -->
+            <div class="tab-content" id="tab-exercise" role="tabpanel">
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Form Sensitivity</span>
+                  <span class="setting-desc">Angle threshold strictness</span>
+                </div>
+                <select id="cfg-exercise-sensitivity">
+                  <option value="normal">Standard</option>
+                  <option value="forgiving">Forgiving (+12° tolerance)</option>
+                  <option value="strict">Strict Form (-8° tolerance)</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Audio Cues</span>
+                  <span class="setting-desc">Procedural chimes on repetition completion and hold ticks</span>
+                </div>
+                <input type="checkbox" id="cfg-exercise-audio" checked />
+              </label>
+            </div>
+
+            <!-- Privacy Tab -->
+            <div class="tab-content" id="tab-privacy" role="tabpanel">
+              <div class="privacy-banner">
+                <span class="privacy-icon">🛡</span>
+                <div>
+                  <strong>Local-Only Execution</strong>
+                  <p>Inference occurs entirely inside your browser's WebAssembly sandbox. Video frames are never uploaded to any server or cloud service.</p>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Saved Motion Sessions</span>
+                  <span class="setting-desc" id="storage-estimate-label">Calculating storage…</span>
+                </div>
+                <div class="button-group">
+                  <button type="button" id="clear-all-sessions-btn" class="btn btn-danger">Clear All Data</button>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Restore Safe Defaults</span>
+                  <span class="setting-desc">Reset all configurations back to factory settings</span>
+                </div>
+                <button type="button" id="reset-defaults-btn" class="btn btn-ghost">Reset Defaults ↺</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </dialog>
+
+      <footer class="footnote">
+        <div>
+          <span class="footnote-mark" aria-hidden="true">✳</span>
+          <strong>PRIVATE BY DESIGN</strong> — Camera frames processed locally. No recording or video upload.
+        </div>
+        <div>Experimental visuals and angles; not a clinical assessment or a validated measure of exercise form.</div>
+      </footer>
     </main>
   </div>
 </body>

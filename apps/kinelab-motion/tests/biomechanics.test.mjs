@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  angleAt,
+  reliable,
+  getJointAngles,
+  trackingStatus,
+  calculateTrunkAngle,
+  dominantKneeAngle,
+  angleUncertainty,
+} from '../src/biomechanics/angle-calculations.mjs';
+import { analyzeSymmetry } from '../src/biomechanics/symmetry-analyzer.mjs';
+
+const point = (x, y, visibility = 0.99) => ({ x, y, visibility, presence: 0.99 });
+const blankPose = () => Array.from({ length: 33 }, () => point(0.5, 0.5));
+
+test('reliable checks coordinates, visibility and presence', () => {
+  assert.equal(reliable(point(0.5, 0.5)), true);
+  assert.equal(reliable(point(NaN, 0.5)), false);
+  assert.equal(reliable(point(0.5, 0.5, 0.2), 0.55), false);
+  assert.equal(reliable(null), false);
+});
+
+test('angleAt accurately computes 90 and 180 degree angles', () => {
+  // Right angle at (0.5, 0.5)
+  const a90 = angleAt(point(0.5, 0.2), point(0.5, 0.5), point(0.8, 0.5), 1000, 1000);
+  assert.equal(a90, 90);
+
+  // Straight line 180 degrees
+  const a180 = angleAt(point(0.5, 0.2), point(0.5, 0.5), point(0.5, 0.8), 1000, 1000);
+  assert.equal(a180, 180);
+});
+
+test('angleUncertainty scales with landmark visibility', () => {
+  const pHigh = point(0.5, 0.5, 0.98);
+  const pLow = point(0.5, 0.5, 0.60);
+  const uHigh = angleUncertainty(pHigh, pHigh, pHigh);
+  const uLow = angleUncertainty(pLow, pLow, pLow);
+
+  assert.ok(uHigh < 0.1, `High visibility should yield low uncertainty, got ${uHigh}`);
+  assert.ok(uLow > 0.3, `Low visibility should yield higher uncertainty, got ${uLow}`);
+});
+
+test('calculateTrunkAngle computes vertical torso inclination', () => {
+  const pose = blankPose();
+  // Upright vertical spine: shoulders directly above hips
+  pose[11] = point(0.4, 0.2); // left shoulder
+  pose[12] = point(0.6, 0.2); // right shoulder (mid = 0.5, 0.2)
+  pose[23] = point(0.4, 0.6); // left hip
+  pose[24] = point(0.6, 0.6); // right hip (mid = 0.5, 0.6)
+
+  const uprightAngle = calculateTrunkAngle(pose, 1000, 1000);
+  assert.equal(uprightAngle, 0);
+
+  // Leaning forward (shoulders shifted rightwards)
+  pose[11] = point(0.6, 0.2);
+  pose[12] = point(0.8, 0.2); // mid = 0.7, 0.2 -> dx = 0.2, dy = -0.4
+  const leanAngle = calculateTrunkAngle(pose, 1000, 1000);
+  assert.ok(leanAngle > 20 && leanAngle < 30);
+});
+
+test('analyzeSymmetry detects bilateral limb imbalances', () => {
+  const symmetricAngles = {
+    leftKnee: 90, rightKnee: 91,
+    leftHip: 120, rightHip: 119,
+    leftElbow: 150, rightElbow: 152,
+    leftShoulder: 45, rightShoulder: 44,
+  };
+  const symReport = analyzeSymmetry(symmetricAngles);
+  assert.equal(symReport.pairs.knee.isSymmetric, true);
+  assert.ok(symReport.overallAsymmetryDeg < 2.0);
+
+  const asymmetricAngles = {
+    leftKnee: 70, rightKnee: 110, // 40 degree difference
+    leftHip: 120, rightHip: 120,
+    leftElbow: 150, rightElbow: 150,
+    leftShoulder: 45, rightShoulder: 45,
+  };
+  const asymReport = analyzeSymmetry(asymmetricAngles);
+  assert.equal(asymReport.pairs.knee.isSymmetric, false);
+  assert.equal(asymReport.pairs.knee.diffDeg, 40);
+});
