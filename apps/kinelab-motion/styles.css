@@ -301,6 +301,8 @@ a { color: inherit; text-decoration: none; }
   .capture-panel { padding: 10px; }
   .stage { min-height: 0; aspect-ratio: 4/3; max-height: 60vh; }
   .hud-bottom-left { display: none; }
+  .hud { font-size: 8.5px; padding: 5px 8px; max-width: 62%; }
+  .hud-top-left { max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stage-controls { padding: 12px 2px; }
   .action-buttons { width: 100%; }
   .btn-primary { flex: 1; }
