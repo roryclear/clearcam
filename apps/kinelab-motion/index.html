@@ -78,7 +78,9 @@
             <div class="hud hud-top-right">
               <span id="inference-fps">--</span> FPS <span class="hud-sep">/</span>
               <span id="model-name">HEAVY</span> <span class="hud-sep">·</span>
-              <span id="latency-display">--ms</span>
+              <span id="latency-display">--ms</span> <span class="hud-sep">·</span>
+              <span id="render-fps">--</span> RENDER <span class="hud-sep">·</span>
+              <span id="dropped-frames">0</span> DROPPED
             </div>
             <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 1€ SMOOTHED <span class="hud-sep">·</span> 2D ANGLES</div>
 
@@ -107,7 +109,8 @@
                 <option value="squat">Squat</option>
                 <option value="sit_to_stand">Sit-to-Stand</option>
                 <option value="lunge">Lunge</option>
-                <option value="shoulder_abduction">Shoulder Flexion / Abduction</option>
+                <option value="shoulder_abduction">Shoulder Abduction</option>
+              <option value="shoulder_flexion">Shoulder Flexion</option>
                 <option value="single_leg_balance">Single-Leg Balance</option>
                 <option value="free">Free tracking</option>
               </select>
@@ -388,6 +391,14 @@
 
               <label class="setting-row">
                 <div class="setting-info">
+                  <span class="setting-name">Movement Direction</span>
+                  <span class="setting-desc">Arrows on wrists and ankles showing measured movement direction</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-direction" />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
                   <span class="setting-name">Bilateral Symmetry HUD</span>
                   <span class="setting-desc">Show left/right angle balance card</span>
                 </div>
@@ -424,6 +435,14 @@
                 </div>
                 <input type="checkbox" id="cfg-exercise-audio" checked />
               </label>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Standing Baseline</span>
+                  <span class="setting-desc" id="baseline-status">Capture your relaxed standing knee/hip angles as a personal reference. Stored locally only.</span>
+                </div>
+                <button type="button" id="capture-baseline-btn" class="btn btn-ghost">Capture Baseline</button>
+              </div>
             </div>
 
             <!-- Privacy Tab -->

@@ -6,6 +6,7 @@ import { SkeletonRenderer } from './skeleton-renderer.mjs';
 import { AngleArcRenderer } from './angle-arc-renderer.mjs';
 import { MotionTrails } from './motion-trails.mjs';
 import { GhostRenderer } from './ghost-renderer.mjs';
+import { drawDirectionArrows } from './direction-indicators.mjs';
 
 export class OverlayRenderer {
   constructor(canvas) {
@@ -13,6 +14,8 @@ export class OverlayRenderer {
     this.ctx = canvas.getContext('2d');
     this.trails = new MotionTrails();
     this.ghostPose = null;
+    this.prevLandmarks = null;
+    this.prevTimestampMs = null;
   }
 
   setGhostPose(landmarks) {
@@ -46,6 +49,7 @@ export class OverlayRenderer {
       showDegreeLabels = true,
       showAngleArcs = true,
       showMotionTrails = false,
+      showDirection = false,
       showGhost = false,
       mirrored = false,
       reducedMotion = false,
@@ -113,6 +117,13 @@ export class OverlayRenderer {
         minVisibility,
       });
     }
+
+    // 6b. Movement direction arrows (measured velocity only; reduced-motion disables)
+    if (showDirection && !reducedMotion && this.prevLandmarks && this.prevTimestampMs !== null) {
+      drawDirectionArrows(ctx, landmarks, this.prevLandmarks, timestampMs - this.prevTimestampMs, project, { scale, minVisibility });
+    }
+    this.prevLandmarks = landmarks;
+    this.prevTimestampMs = timestampMs;
 
     // 7. Optional hold progress ring
     if (holdProgress && Number.isFinite(holdProgress.current) && Number.isFinite(holdProgress.target)) {

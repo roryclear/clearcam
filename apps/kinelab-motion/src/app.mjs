@@ -85,6 +85,7 @@ const nodes = {
   cfgOverlayLabels: el('cfg-overlay-labels'),
   cfgOverlayArcs: el('cfg-overlay-arcs'),
   cfgOverlayTrails: el('cfg-overlay-trails'),
+  cfgOverlayDirection: el('cfg-overlay-direction'),
   cfgOverlaySymHud: el('cfg-overlay-symhud'),
   cfgOverlayGhost: el('cfg-overlay-ghost'),
   cfgExerciseSensitivity: el('cfg-exercise-sensitivity'),
@@ -331,6 +332,10 @@ function frameLoop() {
     const metrics = perf.getMetrics();
     nodes.inferenceFps.textContent = String(metrics.inferenceFps);
     nodes.latencyDisplay.textContent = `${Math.round(metrics.lastLatencyMs)}ms`;
+    const renderEl = document.getElementById('render-fps');
+    if (renderEl) renderEl.textContent = String(metrics.renderFps);
+    const droppedEl = document.getElementById('dropped-frames');
+    if (droppedEl) droppedEl.textContent = String(metrics.droppedFrames);
 
     // Adaptive Performance Check
     const adaptEval = adaptive.evaluate(metrics);
@@ -362,11 +367,13 @@ function frameLoop() {
       showDegreeLabels: cfg.overlays.showDegreeLabels && nodes.showAngles.checked,
       showAngleArcs: cfg.overlays.showAngleArcs && nodes.showArcs.checked,
       showMotionTrails: cfg.overlays.showMotionTrails,
+      showDirection: cfg.overlays.showDirection,
       showGhost: cfg.overlays.showGhost,
       mirrored: isMirrored,
       minVisibility: cfg.tracking.confidenceThreshold,
     });
 
+    appState.lastAngles = angles;
     renderTelemetry(angles);
     renderSymmetry(angles);
     updateTrackingHUD(quality);
@@ -685,6 +692,27 @@ nodes.resetReps.addEventListener('click', () => {
   }
 });
 
+const baselineBtn = document.getElementById('capture-baseline-btn');
+if (baselineBtn) {
+  baselineBtn.addEventListener('click', () => {
+    const a = appState.lastAngles || {};
+    const knees = [a.leftKnee, a.rightKnee].filter(Number.isFinite);
+    const hips = [a.leftHip, a.rightHip].filter(Number.isFinite);
+    const label = document.getElementById('baseline-status');
+    if (!knees.length || !hips.length) {
+      if (label) label.textContent = 'No valid standing angles yet - start the camera and stand in frame.';
+      return;
+    }
+    const baseline = {
+      standingKneeDeg: Math.round((knees.reduce((s, v) => s + v, 0) / knees.length) * 10) / 10,
+      standingHipDeg: Math.round((hips.reduce((s, v) => s + v, 0) / hips.length) * 10) / 10,
+    };
+    settings.update({ exercise: { baseline } });
+    if (label) label.textContent = `Baseline saved: knee ${baseline.standingKneeDeg}°, hip ${baseline.standingHipDeg}°.`;
+    announce('Standing baseline saved.');
+  });
+}
+
 nodes.analysisMode.addEventListener('change', () => {
   switchExercise(nodes.analysisMode.value);
 });
@@ -819,6 +847,7 @@ function populateSettingsForm() {
   nodes.cfgOverlayLabels.checked = cfg.overlays.showDegreeLabels;
   nodes.cfgOverlayArcs.checked = cfg.overlays.showAngleArcs;
   nodes.cfgOverlayTrails.checked = cfg.overlays.showMotionTrails;
+  if (nodes.cfgOverlayDirection) nodes.cfgOverlayDirection.checked = cfg.overlays.showDirection;
   nodes.cfgOverlaySymHud.checked = cfg.overlays.showSymmetryHUD;
   nodes.cfgOverlayGhost.checked = cfg.overlays.showGhost;
 
@@ -851,6 +880,7 @@ function bindSettingsInputs() {
         showDegreeLabels: nodes.cfgOverlayLabels.checked,
         showAngleArcs: nodes.cfgOverlayArcs.checked,
         showMotionTrails: nodes.cfgOverlayTrails.checked,
+        showDirection: nodes.cfgOverlayDirection ? nodes.cfgOverlayDirection.checked : false,
         showSymmetryHUD: nodes.cfgOverlaySymHud.checked,
         showGhost: nodes.cfgOverlayGhost.checked,
       },
@@ -872,7 +902,7 @@ function bindSettingsInputs() {
     nodes.cfgCameraFacing, nodes.cfgCameraMirror, nodes.cfgCameraRes,
     nodes.cfgTrackModel, nodes.cfgTrackAutoFallback, nodes.cfgTrackSmoothing,
     nodes.cfgTrackConfidence, nodes.cfgOverlaySkeleton, nodes.cfgOverlayJoints,
-    nodes.cfgOverlayLabels, nodes.cfgOverlayArcs, nodes.cfgOverlayTrails,
+    nodes.cfgOverlayLabels, nodes.cfgOverlayArcs, nodes.cfgOverlayTrails, nodes.cfgOverlayDirection,
     nodes.cfgOverlaySymHud, nodes.cfgOverlayGhost,
     nodes.cfgExerciseSensitivity, nodes.cfgExerciseAudio,
   ];

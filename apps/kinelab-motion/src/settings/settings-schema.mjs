@@ -24,13 +24,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
     showDegreeLabels: true,
     showAngleArcs: true,
     showMotionTrails: false,
+    showDirection: false,
     showSymmetryHUD: true,
     showGhost: false,
   },
   exercise: {
-    activeExercise: 'squat', // 'squat' | 'sit_to_stand' | 'lunge' | 'shoulder_abduction' | 'single_leg_balance' | 'free'
+    activeExercise: 'squat', // 'squat' | 'sit_to_stand' | 'lunge' | 'shoulder_abduction' | 'shoulder_flexion' | 'single_leg_balance' | 'free'
     sensitivity: 'normal', // 'forgiving' | 'normal' | 'strict'
     audioCues: true,
+    baseline: null, // null | { standingKneeDeg, standingHipDeg } captured from a valid standing frame
   },
   privacy: {
     localProcessingOnly: true,
@@ -77,11 +79,16 @@ export function validateSettings(raw) {
     showDegreeLabels: Boolean(raw.overlays?.showDegreeLabels ?? DEFAULT_SETTINGS.overlays.showDegreeLabels),
     showAngleArcs: Boolean(raw.overlays?.showAngleArcs ?? DEFAULT_SETTINGS.overlays.showAngleArcs),
     showMotionTrails: Boolean(raw.overlays?.showMotionTrails ?? DEFAULT_SETTINGS.overlays.showMotionTrails),
+    showDirection: Boolean(raw.overlays?.showDirection ?? DEFAULT_SETTINGS.overlays.showDirection),
     showSymmetryHUD: Boolean(raw.overlays?.showSymmetryHUD ?? DEFAULT_SETTINGS.overlays.showSymmetryHUD),
     showGhost: Boolean(raw.overlays?.showGhost ?? DEFAULT_SETTINGS.overlays.showGhost),
   };
 
-  const validExercises = ['squat', 'sit_to_stand', 'lunge', 'shoulder_abduction', 'single_leg_balance', 'free'];
+  const validExercises = ['squat', 'sit_to_stand', 'lunge', 'shoulder_abduction', 'shoulder_flexion', 'single_leg_balance', 'free'];
+  const rawBaseline = raw.exercise?.baseline;
+  const baselineValid = rawBaseline && Number.isFinite(rawBaseline.standingKneeDeg) && Number.isFinite(rawBaseline.standingHipDeg) &&
+    rawBaseline.standingKneeDeg >= 90 && rawBaseline.standingKneeDeg <= 180 &&
+    rawBaseline.standingHipDeg >= 90 && rawBaseline.standingHipDeg <= 180;
   const exercise = {
     activeExercise: validExercises.includes(raw.exercise?.activeExercise)
       ? raw.exercise.activeExercise
@@ -90,6 +97,9 @@ export function validateSettings(raw) {
       ? raw.exercise.sensitivity
       : DEFAULT_SETTINGS.exercise.sensitivity,
     audioCues: Boolean(raw.exercise?.audioCues ?? DEFAULT_SETTINGS.exercise.audioCues),
+    baseline: baselineValid
+      ? { standingKneeDeg: rawBaseline.standingKneeDeg, standingHipDeg: rawBaseline.standingHipDeg }
+      : null,
   };
 
   const privacy = {

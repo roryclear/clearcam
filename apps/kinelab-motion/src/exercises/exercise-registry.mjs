@@ -7,6 +7,7 @@ import { SquatExercise } from './squat-exercise.mjs';
 import { SitToStandExercise } from './sit-to-stand-exercise.mjs';
 import { LungeExercise } from './lunge-exercise.mjs';
 import { ShoulderAbductionExercise } from './shoulder-abduction-exercise.mjs';
+import { ShoulderFlexionExercise } from './shoulder-flexion-exercise.mjs';
 import { SingleLegBalanceExercise } from './balance-exercise.mjs';
 
 export class ExerciseRegistry {
@@ -18,6 +19,7 @@ export class ExerciseRegistry {
     this.register(new SitToStandExercise());
     this.register(new LungeExercise());
     this.register(new ShoulderAbductionExercise());
+    this.register(new ShoulderFlexionExercise());
     this.register(new SingleLegBalanceExercise());
   }
 
