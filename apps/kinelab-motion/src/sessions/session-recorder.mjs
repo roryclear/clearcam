@@ -1,23 +1,76 @@
 /**
- * Session Recorder: Local, opt-in recording of movement telemetry and skeletal frames.
+ * Session Recorder: Local, opt-in recording of movement telemetry, skeletal frames,
+ * and synchronized native video stream via MediaRecorder.
  * Reference: Sports2D and Rerun data structures for human kinematics.
  */
 
 export class SessionRecorder {
-  constructor() {
+  constructor({ MediaRecorderClass = typeof MediaRecorder !== 'undefined' ? MediaRecorder : null } = {}) {
+    this.MediaRecorderClass = MediaRecorderClass;
     this.isRecording = false;
+    this.isRecordingVideo = false;
     this.sessionId = null;
     this.startTimeMs = null;
     this.exerciseId = 'free';
     this.frames = []; // Array of frame objects
+
+    this.mediaRecorder = null;
+    this.videoChunks = [];
+    this.videoMimeType = null;
   }
 
-  start({ exerciseId = 'free' } = {}) {
+  _pickMimeType() {
+    if (!this.MediaRecorderClass || typeof this.MediaRecorderClass.isTypeSupported !== 'function') {
+      return 'video/webm';
+    }
+    const candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+    ];
+    for (const type of candidates) {
+      if (this.MediaRecorderClass.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return '';
+  }
+
+  start({ exerciseId = 'free', mediaStream = null } = {}) {
     this.isRecording = true;
     this.sessionId = `session_${Date.now()}`;
     this.startTimeMs = performance.now();
     this.exerciseId = exerciseId;
     this.frames = [];
+    this.videoChunks = [];
+    this.videoMimeType = null;
+
+    if (mediaStream && this.MediaRecorderClass) {
+      try {
+        const mimeType = this._pickMimeType();
+        this.videoMimeType = mimeType || 'video/webm';
+        const options = mimeType ? { mimeType } : {};
+        this.mediaRecorder = new this.MediaRecorderClass(mediaStream, options);
+
+        this.mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            this.videoChunks.push(event.data);
+          }
+        };
+
+        this.mediaRecorder.start(250); // Timeslice chunks every 250ms
+        this.isRecordingVideo = true;
+      } catch (err) {
+        console.warn('[SessionRecorder] MediaRecorder initialization failed, falling back to telemetry-only:', err);
+        this.mediaRecorder = null;
+        this.isRecordingVideo = false;
+      }
+    } else {
+      this.mediaRecorder = null;
+      this.isRecordingVideo = false;
+    }
   }
 
   recordFrame({
@@ -64,14 +117,11 @@ export class SessionRecorder {
     });
   }
 
-  stop() {
-    if (!this.isRecording) return null;
-    this.isRecording = false;
-
+  _buildSessionData(videoBlob = null) {
     const totalDurationMs = this.frames.length > 0 ? this.frames[this.frames.length - 1].timeMs : 0;
     const finalReps = this.frames.length > 0 ? this.frames[this.frames.length - 1].reps : 0;
 
-    const sessionData = {
+    return {
       id: this.sessionId,
       recordedAt: new Date().toISOString(),
       exerciseId: this.exerciseId,
@@ -79,8 +129,42 @@ export class SessionRecorder {
       durationMs: totalDurationMs,
       finalReps,
       frames: this.frames,
+      hasVideo: Boolean(videoBlob && videoBlob.size > 0),
+      videoBlob: videoBlob,
+      videoMimeType: this.videoMimeType,
     };
+  }
 
-    return sessionData;
+  stop() {
+    if (!this.isRecording) return null;
+    this.isRecording = false;
+
+    // Synchronous path when no video was recorded (preserves backwards compatibility)
+    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+      this.isRecordingVideo = false;
+      this.mediaRecorder = null;
+      return this._buildSessionData(null);
+    }
+
+    // Asynchronous path when finalizing video recording
+    return new Promise((resolve) => {
+      try {
+        this.mediaRecorder.onstop = () => {
+          let videoBlob = null;
+          if (this.videoChunks.length > 0) {
+            videoBlob = new Blob(this.videoChunks, { type: this.videoMimeType || 'video/webm' });
+          }
+          this.isRecordingVideo = false;
+          this.mediaRecorder = null;
+          resolve(this._buildSessionData(videoBlob));
+        };
+        this.mediaRecorder.stop();
+      } catch (err) {
+        console.warn('[SessionRecorder] Error finalizing video recording:', err);
+        this.isRecordingVideo = false;
+        this.mediaRecorder = null;
+        resolve(this._buildSessionData(null));
+      }
+    });
   }
 }
