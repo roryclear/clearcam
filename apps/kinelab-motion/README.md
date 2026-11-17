@@ -84,11 +84,13 @@ apps/kinelab-motion/
 │   │   ├── sit-to-stand-exercise.mjs# Chair rise functional mobility
 │   │   ├── lunge-exercise.mjs       # Lunge depth and lead leg detection
 │   │   ├── shoulder-abduction-exercise.mjs # Overhead reach and range of motion
+│   │   ├── shoulder-flexion-exercise.mjs   # Forward reach and sagittal range of motion
 │   │   └── balance-exercise.mjs     # Single-leg timed hold
 │   ├── overlays/
 │   │   ├── overlay-renderer.mjs     # Master canvas coordinator
 │   │   ├── skeleton-renderer.mjs    # Bones and joint nodes
 │   │   ├── angle-arc-renderer.mjs   # Geometric sweep arcs and badges
+│   │   ├── direction-indicators.mjs # Velocity arrows and movement direction
 │   │   ├── motion-trails.mjs        # Extremity velocity trails
 │   │   └── ghost-renderer.mjs       # Reference skeleton overlay
 │   ├── sessions/
@@ -96,13 +98,15 @@ apps/kinelab-motion/
 │   │   ├── session-storage.mjs      # LocalStorage index & persistence
 │   │   ├── timeline-player.mjs      # Replay loop, scrubbing, speed control
 │   │   ├── chart-renderer.mjs       # Pure canvas joint angle graph
+│   │   ├── session-compare.mjs      # Delta metrics and session comparison
 │   │   └── export-helpers.mjs       # CSV & JSON exporters
 │   ├── settings/
 │   │   ├── settings-schema.mjs      # Defaults and schema validation
 │   │   └── settings-manager.mjs     # Evented state container
 │   └── integrations/
 │       ├── audio-cues.mjs           # Zero-dependency Web Audio synthesizers
-│       └── extension-contracts.mjs  # Feature flags and extensibility interfaces
+│       ├── extension-contracts.mjs  # Feature flags and extensibility interfaces
+│       └── movement-challenge.mjs   # Interactive target acquisition challenge
 └── tests/
     ├── pose-math.test.mjs           # Preserved baseline regression tests
     ├── filters.test.mjs             # 1€ filter, outlier, and pose smoothing tests
@@ -110,7 +114,10 @@ apps/kinelab-motion/
     ├── exercises.test.mjs           # State transitions, debounce, tracking-loss tests
     ├── settings.test.mjs            # Validation, defaults, corruption recovery
     ├── sessions.test.mjs            # Recording, playback, CSV/JSON serialization
-    └── synthetic-benchmarks.test.mjs# UI-PRMD / RepCount style kinematics benchmarks
+    ├── synthetic-benchmarks.test.mjs# UI-PRMD / RepCount style kinematics benchmarks
+    ├── gap-closure.test.mjs         # Shoulder flexion, direction, and baseline tests
+    ├── integrations.test.mjs        # Extension isolation and audio synthesis tests
+    └── movement-challenge.test.mjs  # Interactive challenge gameplay logic tests
 ```
 
 ---
@@ -138,7 +145,7 @@ Run the complete test suite:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-All 35 automated tests run natively on Node.js 20+ without external npm dependencies.
+All 47 automated tests run natively on Node.js 20+ without external npm dependencies.
 
 ---
 
