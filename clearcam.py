@@ -28,6 +28,7 @@ from utils.helpers import send_notif, find_ffmpeg, export_clip, upload_file, enc
 import pickle
 import os
 from ocsort_tracker import ocsort
+import selfnotify
 
 (BASE_DIR / "cameras").mkdir(parents=True, exist_ok=True)
 models = {1: "t", 2: "s", 3: "m", 4: "c", 5: "e", 6: "nano", 7: "small", 8:"medium", 9:"large"}
@@ -723,6 +724,8 @@ class HLSRequestHandler(BaseHTTPRequestHandler):
           self.end_headers()
           with output_path.open("rb") as f: shutil.copyfileobj(f, self.wfile)
           output_path.unlink()
+
+        if parsed_path.path == "/get_vapid_key": return self.send_200(body={"vapid_key":selfnotify.keygen()})
 
         if parsed_path.path == "/set_max_storage":
           max_gb = float(query.get("max", [None])[0])

@@ -3505,7 +3505,8 @@
         "qwen_prompt": "Qwen3VL Prompt",
         "userID": "User ID",
         "key": "Key",
-        "server_url": "Notification Server URL"
+        "server_url": "Notification Server URL",
+        "get_vapid_key": "Get Vapid Key (New)"
         };
 
       const tooltipMap = {
@@ -3518,7 +3519,8 @@
         "userID": "Your account user ID for notifications and remote config.",
         "key": "Secret key for encrypting event clips.",
         "qwen_prompt": "The prompt for the language model to answer and summarize the event (tip: explicitly tell it to be brief, otherwise it will return too much text!).",
-        "server_url": "URL of server that receives requests upon events."
+        "server_url": "URL of server that receives requests upon events.",
+        "get_vapid_key": "Send yourself notifications for free with selfnotify."
       };
 
         const wrapper = document.createElement("div");
@@ -3601,6 +3603,74 @@
         wrapper.appendChild(input);
         container.appendChild(wrapper);
       });
+
+      const vapidWrapper = document.createElement("div");
+      vapidWrapper.style.display = "flex";
+      vapidWrapper.style.flexDirection = "column";
+      vapidWrapper.style.gap = "10px";
+      vapidWrapper.style.marginTop = "15px";
+
+      const vapidHeader = document.createElement("div");
+      vapidHeader.style.display = "flex";
+      vapidHeader.style.alignItems = "center";
+      vapidHeader.style.gap = "10px";
+
+      const vapidLabel = document.createElement("label");
+      vapidLabel.textContent = "Generate VAPID Key";
+      vapidLabel.style.flex = "1";
+
+      const vapidButton = document.createElement("button");
+      vapidButton.textContent = "Generate";
+      vapidButton.type = "button";
+
+      vapidHeader.appendChild(vapidLabel);
+      vapidHeader.appendChild(vapidButton);
+
+      const vapidResultBox = document.createElement("div");
+      vapidResultBox.style.display = "none";
+      vapidResultBox.style.padding = "10px";
+      vapidResultBox.style.border = "1px solid var(--border-color)";
+      vapidResultBox.style.borderRadius = "6px";
+      vapidResultBox.style.background = "var(--bg-secondary)";
+
+      const vapidKeyText = document.createElement("div");
+      vapidKeyText.style.wordBreak = "break-all";
+      vapidKeyText.style.fontFamily = "monospace";
+      vapidKeyText.style.fontSize = "13px";
+      vapidKeyText.style.marginBottom = "10px";
+
+      const copyVapidButton = document.createElement("button");
+      copyVapidButton.textContent = "Copy";
+      copyVapidButton.type = "button";
+
+      copyVapidButton.onclick = async () => {
+        await navigator.clipboard.writeText(vapidKeyText.textContent);
+        copyVapidButton.textContent = "Copied";
+        setTimeout(() => {
+          copyVapidButton.textContent = "Copy";
+        }, 2000);
+      };
+
+      vapidButton.onclick = async () => {
+        vapidButton.disabled = true;
+        vapidButton.textContent = "Generating...";
+
+        const response = await fetch("/get_vapid_key");
+        const result = await response.json();
+
+        vapidKeyText.textContent = result.vapid_key;
+        vapidResultBox.style.display = "block";
+
+        vapidButton.disabled = false;
+        vapidButton.textContent = "Generate";
+      };
+
+      vapidResultBox.appendChild(vapidKeyText);
+      vapidResultBox.appendChild(copyVapidButton);
+
+      vapidWrapper.appendChild(vapidHeader);
+      vapidWrapper.appendChild(vapidResultBox);
+      container.appendChild(vapidWrapper);
     }
 
     async function saveSettings() {
