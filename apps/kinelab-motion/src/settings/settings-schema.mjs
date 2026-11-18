@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     activeExercise: 'squat', // 'squat' | 'sit_to_stand' | 'lunge' | 'shoulder_abduction' | 'shoulder_flexion' | 'single_leg_balance' | 'free'
     sensitivity: 'normal', // 'forgiving' | 'normal' | 'strict'
     audioCues: true,
+    voiceCoach: false,
     baseline: null, // null | { standingKneeDeg, standingHipDeg } captured from a valid standing frame
   },
   privacy: {
@@ -101,6 +102,7 @@ export function validateSettings(raw) {
       ? raw.exercise.sensitivity
       : DEFAULT_SETTINGS.exercise.sensitivity,
     audioCues: Boolean(raw.exercise?.audioCues ?? DEFAULT_SETTINGS.exercise.audioCues),
+    voiceCoach: Boolean(raw.exercise?.voiceCoach ?? DEFAULT_SETTINGS.exercise.voiceCoach),
     baseline: baselineValid
       ? { standingKneeDeg: rawBaseline.standingKneeDeg, standingHipDeg: rawBaseline.standingHipDeg }
       : null,

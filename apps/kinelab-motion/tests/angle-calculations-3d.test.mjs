@@ -5,6 +5,8 @@ import {
   reliable3D,
   getJointAngles3D,
   calculateTrunkAngle3D,
+  calculateShankAngle3D,
+  evaluateSquatBiomechanics,
 } from '../src/biomechanics/angle-calculations.mjs';
 import { JOINTS } from '../src/biomechanics/landmark-indices.mjs';
 
@@ -83,4 +85,40 @@ test('calculateTrunkAngle3D computes upright spine and resolves sagittal forward
 
   const leanAngle = calculateTrunkAngle3D(worldLandmarks);
   assert.equal(Math.round(leanAngle), 45);
+});
+
+test('calculateShankAngle3D computes tibial inclination relative to vertical', () => {
+  const worldLandmarks = Array(33).fill(null).map(() => ({ x: 0, y: 0, z: 0, visibility: 0.9 }));
+
+  // Upright vertical shank: knee at (0, 0, 0), ankle directly below at (0, 0.45, 0)
+  worldLandmarks[JOINTS.leftKnee] = { x: 0, y: 0, z: 0, visibility: 0.9 };
+  worldLandmarks[JOINTS.leftAnkle] = { x: 0, y: 0.45, z: 0, visibility: 0.9 };
+
+  const uprightShank = calculateShankAngle3D(worldLandmarks, 'left');
+  assert.equal(Math.round(uprightShank), 0);
+
+  // 45 degree forward dorsiflexion: ankle at (0, 0.45, -0.45) relative to knee
+  worldLandmarks[JOINTS.leftAnkle] = { x: 0, y: 0.45, z: -0.45, visibility: 0.9 };
+  const tiltedShank = calculateShankAngle3D(worldLandmarks, 'left');
+  assert.equal(Math.round(tiltedShank), 45);
+});
+
+test('evaluateSquatBiomechanics detects parallel torso-shank alignment vs excessive forward lean', () => {
+  // Parallel alignment: trunk = 32 deg, shank = 30 deg (diff = 2 deg <= 8 deg)
+  const balanced = evaluateSquatBiomechanics({
+    kneeAngle: 85,
+    trunkAngle: 32,
+    shankAngle: 30,
+  });
+  assert.equal(balanced.isParallel, true);
+  assert.equal(balanced.alignmentScore, 'OPTIMAL');
+
+  // Excessive torso lean: trunk = 58 deg, shank = 15 deg (diff = 43 deg > 20 deg)
+  const excessiveLean = evaluateSquatBiomechanics({
+    kneeAngle: 85,
+    trunkAngle: 58,
+    shankAngle: 15,
+  });
+  assert.equal(excessiveLean.isParallel, false);
+  assert.equal(excessiveLean.alignmentScore, 'TORSO LEAN');
 });

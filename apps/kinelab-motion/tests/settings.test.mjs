@@ -65,3 +65,11 @@ test('validateSettings validates angleDimension defaulting to 3d', () => {
   const invalid = validateSettings({ tracking: { angleDimension: '4d' } });
   assert.equal(invalid.tracking.angleDimension, '3d');
 });
+
+test('validateSettings validates voiceCoach option', () => {
+  const result = validateSettings({});
+  assert.equal(result.exercise.voiceCoach, false);
+
+  const enabled = validateSettings({ exercise: { voiceCoach: true } });
+  assert.equal(enabled.exercise.voiceCoach, true);
+});

@@ -406,6 +406,44 @@ a { color: inherit; text-decoration: none; }
 .footnote strong { color: #a5b7c7; font-size: 9px; letter-spacing: .1em; }
 .footnote-mark { color: #86f8d8; }
 
+/* Segment Biomechanics Card */
+.segment-metrics {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  background: rgba(13, 21, 33, 0.7);
+  border: 1px solid #23344a;
+  border-radius: 9px;
+  display: grid;
+  gap: 7px;
+}
+.segment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.segment-label {
+  font-size: 9px;
+  color: #8da0b8;
+  font-weight: 740;
+  letter-spacing: .06em;
+}
+.segment-val {
+  font: 700 13px/1.2 ui-monospace, monospace;
+  color: #e5f7f1;
+}
+.segment-badge {
+  font: 800 9px/1 ui-monospace, monospace;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #14353c;
+  color: #72f0d5;
+  letter-spacing: .06em;
+}
+.segment-badge.warn {
+  background: #3c2414;
+  color: #f0a372;
+}
+
 /* Responsive Media Queries */
 @media (max-width: 1050px) {
   .workspace { grid-template-columns: 1fr; }

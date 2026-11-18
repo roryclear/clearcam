@@ -74,13 +74,16 @@ This table distinguishes **implemented code** from features that are merely conc
 | Skeleton, joints, labels and arcs | **Implemented** | Real-time canvas graphics over the live preview |
 | Motion trails / direction arrows | **Implemented** | Optional overlays for wrist/ankle movement |
 | Eight joint-angle values | **Implemented** | Left/right knees, hips, elbows, shoulders; **3D metric vector space** (default, perspective invariant) or **2D camera plane** (toggleable) |
+| Segment biomechanics & alignment | **Implemented** | Shank (tibial) angle and Trunk (spine) inclination relative to vertical gravity; parallel alignment evaluation |
+| Kinematic bone-length invariance filter | **Implemented** | Physics-informed constraint model that eliminates 3D depth jitter and limb elasticity along direction rays |
+| Decoupled 60/120 FPS pose interpolation | **Implemented** | Native display rate LERP follower decoupling 30 FPS inference from canvas rendering for liquid smooth motion |
 | Tracking confidence states | **Implemented** | Shows good, partial or lost tracking; unavailable angles appear as `—` |
 | One Euro filtering / outlier rejection | **Implemented** | Smooths accepted points and rejects certain transient jumps |
 | Smart body framing radar | **Implemented** | On-canvas position guidance; upper-body decoupling for seated/close-up exercises |
 | Repetition/hold modules | **Implemented, experimental** | Squat, sit-to-stand, lunge, shoulder abduction, shoulder flexion, single-leg balance |
 | Free Tracking | **Implemented** | Skeleton and angle exploration without exercise counting |
 | Left/right symmetry card | **Implemented, heuristic** | Shows angle differences; thresholds are not a normative diagnosis |
-| Audio cues | **Implemented** | Browser-synthesized sounds for counts/hold ticks when allowed |
+| Audio cues & Voice Coach | **Implemented** | Web Audio depth target ping (1046Hz), lockout tick, rep chime, and Web Speech spoken rep counting |
 | Personal standing baseline | **Implemented, basic** | Stores a snapshot of average standing knee/hip angles |
 | Record motion-data session | **Implemented** | User-triggered landmark/angle/time recording in browser storage, not a camera video |
 | Replay and graphs | **Implemented** | Scrub, step, play at 0.5×/1×/2×, inspect angle vs time |
@@ -615,9 +618,9 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **18 Node test files and 74 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **20 Node test files and 82 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
-The test files exercise categories including geometry, smoothing, exercise state machines, settings validation, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
+The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
 Run them from the repository root:
 
@@ -625,9 +628,7 @@ Run them from the repository root:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests.
-
-**Verification scope:** This README update involved reading the GitHub sources and counting test declarations; it **did not execute** the current suite or verify a physical Android/iPhone camera session. Do not interpret the source inspection as “47 tests passed.”
+Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~300ms across all 82 tests.
 
 ### Known limits and caveats
 

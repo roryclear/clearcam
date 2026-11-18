@@ -155,6 +155,21 @@
 
           <div class="angles" id="angle-list" aria-label="Joint angles"></div>
 
+          <div class="segment-metrics" id="segment-metrics" aria-label="Segment Biomechanics">
+            <div class="segment-row">
+              <span class="segment-label">TRUNK LEAN (SPINE)</span>
+              <span class="segment-val" id="val-trunk-lean">—</span>
+            </div>
+            <div class="segment-row">
+              <span class="segment-label">SHANK TILT (SHIN)</span>
+              <span class="segment-val" id="val-shank-tilt">—</span>
+            </div>
+            <div class="segment-row">
+              <span class="segment-label">SQUAT ALIGNMENT</span>
+              <span class="segment-badge" id="val-squat-align">PARALLEL</span>
+            </div>
+          </div>
+
           <!-- Dynamic Exercise Monitor -->
           <section class="insight" aria-labelledby="insight-title">
             <p class="side-eyebrow">EXERCISE RECOGNITION</p>
@@ -504,9 +519,17 @@
               <label class="setting-row">
                 <div class="setting-info">
                   <span class="setting-name">Audio Cues</span>
-                  <span class="setting-desc">Procedural chimes on repetition completion and hold ticks</span>
+                  <span class="setting-desc">Procedural chimes on repetition completion, depth reached, and hold ticks</span>
                 </div>
                 <input type="checkbox" id="cfg-exercise-audio" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Voice Coach</span>
+                  <span class="setting-desc">Spoken repetition counting and form cues via Web Speech</span>
+                </div>
+                <input type="checkbox" id="cfg-exercise-voice" />
               </label>
 
               <div class="setting-row">

@@ -194,6 +194,86 @@ export function calculateTrunkAngle3D(worldLandmarks, threshold = 0.55) {
   return Math.round((angleRad * 180 / Math.PI) * 10) / 10;
 }
 
+/**
+ * Calculates tibial / shank inclination angle relative to vertical (in degrees) in 2D image plane.
+ * In standing, shank is vertical (0 deg). In a squat/lunge, forward knee travel increases this angle.
+ */
+export function calculateShankAngle(landmarks, width, height, side = 'left', threshold = 0.55) {
+  if (!Array.isArray(landmarks)) return null;
+  const kneeIdx = side === 'right' ? JOINTS.rightKnee : JOINTS.leftKnee;
+  const ankleIdx = side === 'right' ? JOINTS.rightAnkle : JOINTS.leftAnkle;
+
+  const knee = landmarks[kneeIdx];
+  const ankle = landmarks[ankleIdx];
+  if (!reliable(knee, threshold) || !reliable(ankle, threshold)) return null;
+
+  const dx = (ankle.x - knee.x) * width;
+  const dy = (ankle.y - knee.y) * height; // downward pointing vector in image space
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-4) return null;
+
+  const cosTheta = Math.max(-1.0, Math.min(1.0, dy / len));
+  return Math.round(Math.acos(cosTheta) * 1800 / Math.PI) / 10;
+}
+
+/**
+ * Calculates tibial / shank inclination in 3D metric space relative to gravity vertical (0 deg = vertical).
+ * Eliminates perspective foreshortening for accurate dorsiflexion and knee travel diagnostics.
+ */
+export function calculateShankAngle3D(worldLandmarks, side = 'left', threshold = 0.55) {
+  if (!Array.isArray(worldLandmarks)) return null;
+  const kneeIdx = side === 'right' ? JOINTS.rightKnee : JOINTS.leftKnee;
+  const ankleIdx = side === 'right' ? JOINTS.rightAnkle : JOINTS.leftAnkle;
+
+  const knee = worldLandmarks[kneeIdx];
+  const ankle = worldLandmarks[ankleIdx];
+  if (!reliable3D(knee, threshold) || !reliable3D(ankle, threshold)) return null;
+
+  const dx = ankle.x - knee.x;
+  const dy = ankle.y - knee.y; // downward is +Y in metric landmarks
+  const dz = (ankle.z ?? 0) - (knee.z ?? 0);
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-4) return null;
+
+  const cosTheta = Math.max(-1.0, Math.min(1.0, dy / len));
+  return Math.round(Math.acos(cosTheta) * 1800 / Math.PI) / 10;
+}
+
+/**
+ * Evaluates squat segment alignment: parallel torso and shin lines vs excessive forward lean.
+ * In biomechanics, balanced squats maintain parallel torso and shank vectors (diff <= 10 deg).
+ */
+export function evaluateSquatBiomechanics({ kneeAngle, trunkAngle, shankAngle } = {}) {
+  if (!Number.isFinite(kneeAngle)) {
+    return { isParallel: false, alignmentScore: 'UNKNOWN', diffDeg: null };
+  }
+
+  const hasTrunk = Number.isFinite(trunkAngle);
+  const hasShank = Number.isFinite(shankAngle);
+
+  if (!hasTrunk || !hasShank) {
+    return { isParallel: false, alignmentScore: 'MEASURING', diffDeg: null };
+  }
+
+  const diffDeg = Math.round(Math.abs(trunkAngle - shankAngle) * 10) / 10;
+  const isParallel = diffDeg <= 10.0;
+
+  let alignmentScore = 'OPTIMAL';
+  if (diffDeg > 20.0) {
+    alignmentScore = trunkAngle > shankAngle ? 'TORSO LEAN' : 'UPRIGHT';
+  } else if (diffDeg > 10.0) {
+    alignmentScore = 'MODERATE';
+  }
+
+  return {
+    isParallel,
+    alignmentScore,
+    diffDeg,
+    trunkAngle,
+    shankAngle,
+  };
+}
+
 const UPPER_BODY_EXERCISES = new Set(['shoulder-abduction', 'shoulder_abduction', 'shoulder-flexion', 'shoulder_flexion']);
 const UPPER_KEY_INDICES = Object.freeze([11, 12, 13, 14, 15, 16, 23, 24]);
 

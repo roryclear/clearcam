@@ -21,7 +21,7 @@ export function createSquatState() {
 }
 
 export function advanceSquat(state, kneeAngle, timestampMs, config = {}) {
-  const next = { ...state, lastKneeAngle: kneeAngle };
+  const next = { ...state, lastKneeAngle: kneeAngle, justHitDepth: false, justCompletedRep: false };
   const downThreshold = config.downThreshold ?? 115;
   const upThreshold = config.upThreshold ?? 155;
   const minDurationMs = config.minDurationMs ?? 350;
@@ -45,6 +45,7 @@ export function advanceSquat(state, kneeAngle, timestampMs, config = {}) {
       next.enteredDownAt = timestampMs;
       next.downFrames = 0;
       next.status = 'rise';
+      next.justHitDepth = true;
     } else {
       next.status = kneeAngle > (upThreshold - 10) ? 'ready' : 'lowering';
     }
@@ -61,6 +62,7 @@ export function advanceSquat(state, kneeAngle, timestampMs, config = {}) {
       next.upFrames = 0;
       next.lastRepAt = timestampMs;
       next.status = 'completed';
+      next.justCompletedRep = true;
     } else {
       next.status = kneeAngle >= upThreshold ? 'finishing' : 'rise';
     }

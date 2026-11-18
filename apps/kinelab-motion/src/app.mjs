@@ -5,10 +5,22 @@
  */
 
 import { ANGLE_DEFINITIONS, SKELETON_CONNECTIONS } from './pose-math.mjs';
-import { getJointAngles, getJointAngles3D, trackingStatus } from './biomechanics/angle-calculations.mjs';
+import {
+  getJointAngles,
+  getJointAngles3D,
+  trackingStatus,
+  calculateTrunkAngle,
+  calculateTrunkAngle3D,
+  calculateShankAngle,
+  calculateShankAngle3D,
+  evaluateSquatBiomechanics,
+  dominantKneeAngle,
+} from './biomechanics/angle-calculations.mjs';
 import { defaultFramingAssistant } from './tracking/framing-assistant.mjs';
 import { analyzeSymmetry } from './biomechanics/symmetry-analyzer.mjs';
 import { PoseFilter } from './filters/pose-filter.mjs';
+import { KinematicBoneFilter } from './filters/kinematic-filter.mjs';
+import { PoseInterpolator } from './filters/pose-interpolator.mjs';
 import { PerformanceMonitor } from './tracking/performance-monitor.mjs';
 import { AdaptiveController } from './tracking/adaptive-controller.mjs';
 import { MediaPipeRunner } from './tracking/mediapipe-runner.mjs';
@@ -99,6 +111,12 @@ const nodes = {
   cfgOverlayGhost: el('cfg-overlay-ghost'),
   cfgExerciseSensitivity: el('cfg-exercise-sensitivity'),
   cfgExerciseAudio: el('cfg-exercise-audio'),
+  cfgExerciseVoice: el('cfg-exercise-voice'),
+
+  // Segment Metrics
+  valTrunkLean: el('val-trunk-lean'),
+  valShankTilt: el('val-shank-tilt'),
+  valSquatAlign: el('val-squat-align'),
 
   // Analytics & Replay Drawer
   openRecordingsBtn: el('open-recordings'),
@@ -134,6 +152,8 @@ const nodes = {
 // Subsystem Instances
 const settings = defaultSettingsManager;
 const filter = new PoseFilter();
+const kinematicFilter = new KinematicBoneFilter();
+const interpolator = new PoseInterpolator({ lambda: 32.0 });
 const perf = new PerformanceMonitor();
 const adaptive = new AdaptiveController();
 const runner = new MediaPipeRunner();
@@ -157,6 +177,10 @@ const appState = {
   lastVideoTime: -1,
   lastInferenceAt: -Infinity,
   FRAME_INTERVAL_MS: 28, // High-throughput ~35 FPS real-time motion tracking
+  lastAngles: null,
+  lastFraming: null,
+  lastWorldLandmarks: null,
+  lastSmoothedLandmarks: null,
   activeExerciseInstance: null,
   exerciseState: null,
   currentSessionViewing: null,
@@ -225,12 +249,33 @@ function updateAngleDimUI(dimension = '3d') {
   }
 }
 
-function renderTelemetry(angles) {
+function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, is3D = true, width = 640, height = 480) {
   for (const def of ANGLE_DEFINITIONS) {
     const valueEl = angleRows.get(def.key);
     const measured = angles?.[def.key];
     valueEl.textContent = Number.isFinite(measured) ? `${Math.round(measured)}°` : '—';
     valueEl.classList.toggle('unavailable', !Number.isFinite(measured));
+  }
+
+  // Segment angles (Trunk & Shank) and Squat Alignment Evaluation
+  const trunk = is3D && worldLandmarks
+    ? calculateTrunkAngle3D(worldLandmarks)
+    : calculateTrunkAngle(smoothedLandmarks, width, height);
+  const shank = is3D && worldLandmarks
+    ? calculateShankAngle3D(worldLandmarks, 'left')
+    : calculateShankAngle(smoothedLandmarks, width, height, 'left');
+
+  if (nodes.valTrunkLean) {
+    nodes.valTrunkLean.textContent = Number.isFinite(trunk) ? `${Math.round(trunk)}°` : '—';
+  }
+  if (nodes.valShankTilt) {
+    nodes.valShankTilt.textContent = Number.isFinite(shank) ? `${Math.round(shank)}°` : '—';
+  }
+  if (nodes.valSquatAlign) {
+    const knee = dominantKneeAngle(angles);
+    const evalResult = evaluateSquatBiomechanics({ kneeAngle: knee, trunkAngle: trunk, shankAngle: shank });
+    nodes.valSquatAlign.textContent = evalResult.alignmentScore;
+    nodes.valSquatAlign.classList.toggle('warn', evalResult.alignmentScore === 'TORSO LEAN');
   }
   const baselineEl = document.getElementById('baseline-deviation');
   if (baselineEl) {
@@ -350,10 +395,13 @@ function handleExerciseFrame(landmarks, angles, width, height, timestampMs, trac
   });
   appState.exerciseState = nextState;
 
-  // Sound cues on rep completion or milestone
+  // Sound cues on rep completion, depth target, or milestone
   if (settings.get().exercise.audioCues) {
     if (nextState.reps > (prevState?.reps ?? 0)) {
       audio.playRepCount();
+      audio.speakRep(nextState.reps);
+    } else if (nextState.justHitDepth) {
+      audio.playDepthTarget();
     } else if (nextState.phase === 'holding' && Math.floor(nextState.currentHoldSec) > Math.floor(prevState?.currentHoldSec ?? 0)) {
       audio.playHoldTick();
     }
@@ -378,7 +426,33 @@ function frameLoop() {
 
   const video = nodes.video;
   const now = performance.now();
+  const cfg = settings.get();
 
+  // 1. Decoupled 60/120 FPS High-Fluidity Overlay Rendering
+  const renderedLandmarks = interpolator.step(now);
+  if (renderedLandmarks && appState.lastAngles) {
+    const isMirrored = cfg.camera.mirroring === 'on' ||
+      (cfg.camera.mirroring === 'auto' && cfg.camera.facingMode === 'user');
+
+    overlay.render({
+      landmarks: renderedLandmarks,
+      angles: appState.lastAngles,
+      timestampMs: now,
+      framing: appState.lastFraming,
+    }, {
+      showSkeleton: cfg.overlays.showSkeleton,
+      showJointMarkers: cfg.overlays.showJointMarkers,
+      showDegreeLabels: cfg.overlays.showDegreeLabels && nodes.showAngles.checked,
+      showAngleArcs: cfg.overlays.showAngleArcs && nodes.showArcs.checked,
+      showMotionTrails: cfg.overlays.showMotionTrails,
+      showDirection: cfg.overlays.showDirection,
+      showGhost: cfg.overlays.showGhost,
+      mirrored: isMirrored,
+      minVisibility: cfg.tracking.confidenceThreshold,
+    });
+  }
+
+  // 2. Camera & Pose Inference Scheduling (bounded at target ~35 FPS)
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
       video.currentTime === appState.lastVideoTime ||
       now - appState.lastInferenceAt < appState.FRAME_INTERVAL_MS) {
@@ -409,20 +483,27 @@ function frameLoop() {
       nodes.modelChoice.value = 'full';
     }
 
-    const cfg = settings.get();
-    // 1 Euro and Outlier Filtering
+    // 1 Euro and Outlier Filtering on 2D image coordinates
     filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
     const smoothedLandmarks = filter.filter(rawResult.landmarks, now);
+
+    // Kinematic Bone-Length Invariance Filter on 3D metric coordinates
+    let constrainedWorldLandmarks = rawResult.worldLandmarks;
+    if (rawResult.worldLandmarks) {
+      constrainedWorldLandmarks = kinematicFilter.filter(rawResult.worldLandmarks, now);
+    }
 
     const activeExerciseId = cfg.exercise.activeExercise || 'squat';
     const quality = trackingStatus(smoothedLandmarks, cfg.tracking.confidenceThreshold, activeExerciseId);
     const framing = defaultFramingAssistant.evaluate(smoothedLandmarks, activeExerciseId);
+    appState.lastFraming = framing;
 
     // Compute angles: 3D metric vector space (perspective invariant) or 2D image plane
     const angles2D = getJointAngles(smoothedLandmarks, video.videoWidth, video.videoHeight, cfg.tracking.confidenceThreshold);
     let angles = angles2D;
-    if (cfg.tracking.angleDimension === '3d' && rawResult.worldLandmarks) {
-      const angles3D = getJointAngles3D(rawResult.worldLandmarks, cfg.tracking.confidenceThreshold);
+    const is3D = cfg.tracking.angleDimension === '3d';
+    if (is3D && constrainedWorldLandmarks) {
+      const angles3D = getJointAngles3D(constrainedWorldLandmarks, cfg.tracking.confidenceThreshold);
       angles = { ...angles2D };
       for (const [k, v] of Object.entries(angles3D)) {
         if (Number.isFinite(v)) {
@@ -431,29 +512,13 @@ function frameLoop() {
       }
     }
 
-    // Render Master Overlays
-    const isMirrored = cfg.camera.mirroring === 'on' ||
-      (cfg.camera.mirroring === 'auto' && cfg.camera.facingMode === 'user');
-
-    overlay.render({
-      landmarks: smoothedLandmarks,
-      angles,
-      timestampMs: now,
-      framing,
-    }, {
-      showSkeleton: cfg.overlays.showSkeleton,
-      showJointMarkers: cfg.overlays.showJointMarkers,
-      showDegreeLabels: cfg.overlays.showDegreeLabels && nodes.showAngles.checked,
-      showAngleArcs: cfg.overlays.showAngleArcs && nodes.showArcs.checked,
-      showMotionTrails: cfg.overlays.showMotionTrails,
-      showDirection: cfg.overlays.showDirection,
-      showGhost: cfg.overlays.showGhost,
-      mirrored: isMirrored,
-      minVisibility: cfg.tracking.confidenceThreshold,
-    });
+    // Supply target pose to 60/120 FPS interpolator
+    if (smoothedLandmarks) {
+      interpolator.setTarget(smoothedLandmarks, now);
+    }
 
     appState.lastAngles = angles;
-    renderTelemetry(angles);
+    renderTelemetry(angles, smoothedLandmarks, constrainedWorldLandmarks, is3D, video.videoWidth, video.videoHeight);
     renderSymmetry(angles);
     updateTrackingHUD(quality, framing);
     handleExerciseFrame(smoothedLandmarks, angles, video.videoWidth, video.videoHeight, now, quality);
@@ -1068,6 +1133,9 @@ function populateSettingsForm() {
 
   nodes.cfgExerciseSensitivity.value = cfg.exercise.sensitivity;
   nodes.cfgExerciseAudio.checked = cfg.exercise.audioCues;
+  if (nodes.cfgExerciseVoice) {
+    nodes.cfgExerciseVoice.checked = Boolean(cfg.exercise.voiceCoach);
+  }
 
   const usage = storage.getStorageEstimate();
   const kb = Math.round(usage.bytes / 1024);
@@ -1103,6 +1171,7 @@ function bindSettingsInputs() {
       exercise: {
         sensitivity: nodes.cfgExerciseSensitivity.value,
         audioCues: nodes.cfgExerciseAudio.checked,
+        voiceCoach: nodes.cfgExerciseVoice ? nodes.cfgExerciseVoice.checked : false,
       },
     });
 
@@ -1113,6 +1182,9 @@ function bindSettingsInputs() {
     updateAngleDimUI(settings.get().tracking.angleDimension);
 
     audio.setEnabled(nodes.cfgExerciseAudio.checked);
+    if (nodes.cfgExerciseVoice) {
+      audio.setVoiceCoachEnabled(nodes.cfgExerciseVoice.checked);
+    }
   };
 
   const inputs = [
@@ -1123,6 +1195,7 @@ function bindSettingsInputs() {
     nodes.cfgOverlaySymHud, nodes.cfgOverlayGhost,
     nodes.cfgExerciseSensitivity, nodes.cfgExerciseAudio,
   ];
+  if (nodes.cfgExerciseVoice) inputs.push(nodes.cfgExerciseVoice);
   if (nodes.cfgTrackAngleDim) inputs.push(nodes.cfgTrackAngleDim);
 
   for (const input of inputs) {
