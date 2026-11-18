@@ -10,6 +10,10 @@ Maintains complete privacy: all inference, smoothing, exercise counting, and ses
 
 ### A. Motion Tracking Engine
 - **MediaPipe Pose Landmarker**: Pinned official release `@mediapipe/tasks-vision@1.2.3`, running Heavy model by default with automatic GPU/CPU and Full model fallbacks.
+- **3D Metric Vector Joint Angles**: Computes 3D dot-product vector angles from pelvis-centered `worldLandmarks` metric space in meters ($X, Y, Z$). Perspective invariant across camera tilt, elevation, and depth foreshortening.
+- **High-Throughput Resolution Decoupling**: Decouples preview resolution from inference tensor dimensions via an offscreen downscaling canvas (480p/360p), reducing inference latency from 67ms down to ~18-20ms and achieving ~35 FPS tracking throughput.
+- **Body Framing Assistant**: Evaluates camera field-of-view, limb visibility, and exercise-specific requirements. Displays real-time on-canvas positioning radar and prompts (`Step back: Knees and feet needed`).
+- **Upper-Body Decoupling**: Allows seated and waist-up tracking for upper-body movements (Shoulder Flexion / Abduction) without triggering false tracking-loss states.
 - **One Euro Temporal Filter**: CHI 2012 speed-based adaptive low-pass filter eliminates resting joint jitter without introducing perceptible latency during explosive movements.
 - **Outlier Rejection**: Rejects unphysical landmark teleportation and single-frame detection glitches.
 - **Missing Landmark Handling**: Graceful coasting and re-initialization when limbs are occluded or leave the frame. Unavailable joints show `—` instead of fabricated angles.
@@ -38,8 +42,11 @@ Modular state-machine architecture with configurable thresholds, hysteresis, and
 - Full respect for `prefers-reduced-motion`.
 
 ### D. Recording, Replay, and Motion Analytics
-- **Local Recording**: Opt-in recording of compact landmark frames, timestamps, movement phases, and joint angles.
-- **Timeline Replay**: Scrub bar, frame stepping, Play/Pause, and playback speeds (0.5x, 1x, 2x).
+- **Dual Video & Telemetry Recording**: Captures camera video stream via HTML5 `MediaRecorder` alongside synchronized skeletal landmarks and joint telemetry.
+- **IndexedDB Video Storage**: High-performance local binary blob persistence for recorded workouts via `IndexedDB`, independent of `localStorage` 5MB quota limits.
+- **Synchronized Video + Skeleton Replay**: Dual-layer replay stage aligning real recorded camera footage with synchronized animated skeletal overlays.
+- **Timeline Controls**: Scrub bar, frame stepping, Play/Pause, and playback speeds (0.5x, 1x, 2x).
+- **Workout Results Card**: Instant post-workout debrief displaying Total Repetitions, Duration, Peak Depth Angle, and Bilateral Symmetry Score.
 - **Interactive Chart**: Pure HTML5 Canvas joint-angle graph over time with scrubber indicator line.
 - **Ghost Comparison**: Save any playback frame as a ghost overlay for movement comparison.
 - **Data Export**: One-click export to CSV and JSON.
@@ -65,7 +72,8 @@ apps/kinelab-motion/
 │   ├── app.mjs                # Application orchestrator
 │   ├── pose-math.mjs          # Backwards-compatible facade re-exporting core math
 │   ├── tracking/
-│   │   ├── mediapipe-runner.mjs     # Model lifecycle, CDN loader, delegate fallback
+│   │   ├── mediapipe-runner.mjs     # Model lifecycle, CDN loader, resolution decoupling
+│   │   ├── framing-assistant.mjs    # Body positioning radar & limb requirement checks
 │   │   ├── performance-monitor.mjs  # Inference/render FPS and latency tracking
 │   │   ├── adaptive-controller.mjs  # Performance watchdog and auto-fallback
 │   │   └── worker-bridge.mjs        # Web Worker feasibility check & architecture probe
@@ -75,7 +83,7 @@ apps/kinelab-motion/
 │   │   └── pose-filter.mjs          # 33-landmark composite filter & presets
 │   ├── biomechanics/
 │   │   ├── landmark-indices.mjs     # MediaPipe topology & constants
-│   │   ├── angle-calculations.mjs   # 2D geometry, angleAt, uncertainty metrics
+│   │   ├── angle-calculations.mjs   # 2D & 3D metric vector geometry, angleAt, uncertainty
 │   │   └── symmetry-analyzer.mjs    # Bilateral left/right limb symmetry
 │   ├── exercises/
 │   │   ├── exercise-base.mjs        # BaseExercise interface & sensitivity presets
@@ -94,9 +102,10 @@ apps/kinelab-motion/
 │   │   ├── motion-trails.mjs        # Extremity velocity trails
 │   │   └── ghost-renderer.mjs       # Reference skeleton overlay
 │   ├── sessions/
-│   │   ├── session-recorder.mjs     # Compact telemetry serialization
-│   │   ├── session-storage.mjs      # LocalStorage index & persistence
-│   │   ├── timeline-player.mjs      # Replay loop, scrubbing, speed control
+│   │   ├── session-recorder.mjs     # Video MediaRecorder & compact telemetry serialization
+│   │   ├── video-store.mjs          # IndexedDB video blob persistence engine
+│   │   ├── session-storage.mjs      # LocalStorage index & metadata persistence
+│   │   ├── timeline-player.mjs      # Synchronized video/canvas replay, scrub, speed
 │   │   ├── chart-renderer.mjs       # Pure canvas joint angle graph
 │   │   ├── session-compare.mjs      # Delta metrics and session comparison
 │   │   └── export-helpers.mjs       # CSV & JSON exporters
@@ -108,16 +117,23 @@ apps/kinelab-motion/
 │       ├── extension-contracts.mjs  # Feature flags and extensibility interfaces
 │       └── movement-challenge.mjs   # Interactive target acquisition challenge
 └── tests/
-    ├── pose-math.test.mjs           # Preserved baseline regression tests
-    ├── filters.test.mjs             # 1€ filter, outlier, and pose smoothing tests
-    ├── biomechanics.test.mjs        # 2D projection, trunk angle, symmetry tests
-    ├── exercises.test.mjs           # State transitions, debounce, tracking-loss tests
-    ├── settings.test.mjs            # Validation, defaults, corruption recovery
-    ├── sessions.test.mjs            # Recording, playback, CSV/JSON serialization
-    ├── synthetic-benchmarks.test.mjs# UI-PRMD / RepCount style kinematics benchmarks
-    ├── gap-closure.test.mjs         # Shoulder flexion, direction, and baseline tests
-    ├── integrations.test.mjs        # Extension isolation and audio synthesis tests
-    └── movement-challenge.test.mjs  # Interactive challenge gameplay logic tests
+    ├── angle-calculations-3d.test.mjs  # 3D metric space and depth vector tests
+    ├── mediapipe-scaling.test.mjs      # High-throughput resolution decoupling tests
+    ├── framing-assistant.test.mjs      # Body framing radar & upper-body decoupling tests
+    ├── accuracy-framing-integration.test.mjs # Cross-module accuracy integration tests
+    ├── video-store.test.mjs            # IndexedDB video storage & blob lifecycle tests
+    ├── session-recorder-video.test.mjs # MediaRecorder video chunk capture tests
+    ├── timeline-player-sync.test.mjs   # Video element synchronization tests
+    ├── pose-math.test.mjs              # Preserved baseline regression tests
+    ├── filters.test.mjs                # 1€ filter, outlier, and pose smoothing tests
+    ├── biomechanics.test.mjs           # 2D projection, trunk angle, symmetry tests
+    ├── exercises.test.mjs              # State transitions, debounce, tracking-loss tests
+    ├── settings.test.mjs               # Validation, defaults, corruption recovery
+    ├── sessions.test.mjs               # Recording, playback, CSV/JSON serialization
+    ├── synthetic-benchmarks.test.mjs   # UI-PRMD / RepCount style kinematics benchmarks
+    ├── gap-closure.test.mjs            # Shoulder flexion, direction, and baseline tests
+    ├── integrations.test.mjs           # Extension isolation and audio synthesis tests
+    └── movement-challenge.test.mjs     # Interactive challenge gameplay logic tests
 ```
 
 ---
@@ -145,7 +161,7 @@ Run the complete test suite:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-All 47 automated tests run natively on Node.js 20+ without external npm dependencies.
+All 71 automated tests run natively on Node.js 20+ without external npm dependencies.
 
 ---
 
