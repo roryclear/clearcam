@@ -4,6 +4,12 @@
 
 # clearcam: Add object detection, tracking, mobile notifications, AI summaries, and search to any security camera.
 
+> ### ⚡ Featured: KineLab Motion 2.0 (`apps/kinelab-motion`)
+> **Real-Time Single-Camera Motion Intelligence, 3D Biomechanics & Synchronized Video Replay Studio**  
+> 33-Landmark Pose Tracking • 3D Metric Vector Kinematics • Smart Body Framing Radar • Modular Exercise Recognition • Dual Video + Telemetry Replay  
+> 🚀 **Quick Start:** `python apps/kinelab-motion/serve.py 4173` → [http://localhost:4173](http://localhost:4173)  
+> 📖 **Read the Documentation:** [KineLab Motion 2.0 Studio Guide](apps/kinelab-motion/README.md) • [74 Passing Automated Tests](apps/kinelab-motion/README.md#13-testing-known-limitations-and-verification-status)
+
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
 <tr valign="top">
 <td style="padding-right: 10px;">
