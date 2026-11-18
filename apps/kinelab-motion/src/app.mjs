@@ -149,7 +149,7 @@ const appState = {
   raf: 0,
   lastVideoTime: -1,
   lastInferenceAt: -Infinity,
-  FRAME_INTERVAL_MS: 75, // ~13.3 FPS inference throttling for smooth mobile performance
+  FRAME_INTERVAL_MS: 28, // High-throughput ~35 FPS real-time motion tracking
   activeExerciseInstance: null,
   exerciseState: null,
   currentSessionViewing: null,
