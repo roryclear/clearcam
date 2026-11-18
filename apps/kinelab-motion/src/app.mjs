@@ -1143,8 +1143,9 @@ nodes.resetDefaultsBtn.addEventListener('click', () => {
   announce('Settings reset to defaults.');
 });
 
-nodes.clearAllSessionsBtn.addEventListener('click', () => {
+nodes.clearAllSessionsBtn.addEventListener('click', async () => {
   storage.clearAll();
+  await videoStore.clearAll();
   updateSessionsList();
   populateSettingsForm();
   announce('All local sessions cleared.');

@@ -14,9 +14,14 @@ test('ExerciseRegistry registers and discovers the 5 core exercises', () => {
   const reg = defaultExerciseRegistry;
   assert.equal(reg.has('squat'), true);
   assert.equal(reg.has('sit_to_stand'), true);
+  assert.equal(reg.has('sit-to-stand'), true);
   assert.equal(reg.has('lunge'), true);
   assert.equal(reg.has('shoulder_abduction'), true);
+  assert.equal(reg.has('shoulder-abduction'), true);
   assert.equal(reg.has('single_leg_balance'), true);
+  assert.equal(reg.has('single-leg-balance'), true);
+  assert.ok(reg.get('sit-to-stand'));
+  assert.equal(reg.get('sit-to-stand').id, 'sit_to_stand');
   assert.equal(reg.getAll().length >= 5, true);
 });
 

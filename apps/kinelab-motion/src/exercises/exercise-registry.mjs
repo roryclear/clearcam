@@ -31,7 +31,11 @@ export class ExerciseRegistry {
   }
 
   get(id) {
-    return this.exercises.get(id) ?? null;
+    if (!id) return null;
+    return this.exercises.get(id) ??
+      this.exercises.get(id.replace(/-/g, '_')) ??
+      this.exercises.get(id.replace(/_/g, '-')) ??
+      null;
   }
 
   getAll() {
@@ -39,7 +43,10 @@ export class ExerciseRegistry {
   }
 
   has(id) {
-    return this.exercises.has(id);
+    if (!id) return false;
+    return this.exercises.has(id) ||
+      this.exercises.has(id.replace(/-/g, '_')) ||
+      this.exercises.has(id.replace(/_/g, '-'));
   }
 }
 

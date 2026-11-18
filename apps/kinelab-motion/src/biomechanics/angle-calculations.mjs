@@ -157,6 +157,43 @@ export function calculateTrunkAngle(landmarks, width, height, threshold = 0.55) 
   return Math.round((angleRad * 180 / Math.PI) * 10) / 10;
 }
 
+/**
+ * Calculates trunk inclination in 3D metric space relative to vertical axis (0 deg = upright).
+ * Captures true forward and lateral spinal tilt invariant to camera angle.
+ */
+export function calculateTrunkAngle3D(worldLandmarks, threshold = 0.55) {
+  if (!Array.isArray(worldLandmarks)) return null;
+  const ls = worldLandmarks[JOINTS.leftShoulder];
+  const rs = worldLandmarks[JOINTS.rightShoulder];
+  const lh = worldLandmarks[JOINTS.leftHip];
+  const rh = worldLandmarks[JOINTS.rightHip];
+
+  if (!reliable3D(ls, threshold) || !reliable3D(rs, threshold) ||
+      !reliable3D(lh, threshold) || !reliable3D(rh, threshold)) {
+    return null;
+  }
+
+  const midShoulderX = (ls.x + rs.x) / 2;
+  const midShoulderY = (ls.y + rs.y) / 2;
+  const midShoulderZ = ((ls.z ?? 0) + (rs.z ?? 0)) / 2;
+
+  const midHipX = (lh.x + rh.x) / 2;
+  const midHipY = (lh.y + rh.y) / 2;
+  const midHipZ = ((lh.z ?? 0) + (rh.z ?? 0)) / 2;
+
+  const dx = midShoulderX - midHipX;
+  const dy = midShoulderY - midHipY; // pointing up is negative y in metric coordinates
+  const dz = midShoulderZ - midHipZ;
+
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-4) return null;
+
+  // Angle with vertical upwards vector (0, -1, 0)
+  const cosTheta = Math.max(-1.0, Math.min(1.0, -dy / len));
+  const angleRad = Math.acos(cosTheta);
+  return Math.round((angleRad * 180 / Math.PI) * 10) / 10;
+}
+
 const UPPER_BODY_EXERCISES = new Set(['shoulder-abduction', 'shoulder_abduction', 'shoulder-flexion', 'shoulder_flexion']);
 const UPPER_KEY_INDICES = Object.freeze([11, 12, 13, 14, 15, 16, 23, 24]);
 

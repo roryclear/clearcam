@@ -65,3 +65,25 @@ test('FramingAssistant reports optimal when full body is detected for squats', (
   assert.equal(res.missingSegments.length, 0);
   assert.ok(res.guidance.includes('Framing optimal'));
 });
+
+test('FramingAssistant seamlessly supports underscored and hyphenated exercise IDs', () => {
+  const assistant = new FramingAssistant();
+  const upperBodyOnly = createDummyLandmarks([
+    JOINTS.nose,
+    JOINTS.leftShoulder, JOINTS.rightShoulder,
+    JOINTS.leftElbow, JOINTS.rightElbow,
+    JOINTS.leftWrist, JOINTS.rightWrist,
+    JOINTS.leftHip, JOINTS.rightHip,
+  ]);
+
+  // sit_to_stand requires lowerBody
+  const sitToStand = assistant.evaluate(upperBodyOnly, 'sit_to_stand');
+  assert.equal(sitToStand.status, 'inadequate');
+  assert.ok(sitToStand.missingSegments.includes('lowerBody'));
+  assert.ok(sitToStand.guidance.includes('sit to stand'));
+
+  // shoulder_abduction permits upper body
+  const shoulder = assistant.evaluate(upperBodyOnly, 'shoulder_abduction');
+  assert.equal(shoulder.status, 'optimal');
+  assert.ok(shoulder.guidance.includes('shoulder abduction'));
+});

@@ -8,10 +8,14 @@ import { JOINTS } from '../biomechanics/landmark-indices.mjs';
 export const EXERCISE_REQUIREMENTS = Object.freeze({
   'squat': ['upperBody', 'torso', 'lowerBody'],
   'sit-to-stand': ['upperBody', 'torso', 'lowerBody'],
+  'sit_to_stand': ['upperBody', 'torso', 'lowerBody'],
   'lunge': ['upperBody', 'torso', 'lowerBody'],
   'single-leg-balance': ['upperBody', 'torso', 'lowerBody'],
+  'single_leg_balance': ['upperBody', 'torso', 'lowerBody'],
   'shoulder-flexion': ['upperBody', 'torso'],
+  'shoulder_flexion': ['upperBody', 'torso'],
   'shoulder-abduction': ['upperBody', 'torso'],
+  'shoulder_abduction': ['upperBody', 'torso'],
   'free': ['upperBody'],
 });
 
@@ -55,16 +59,20 @@ export class FramingAssistant {
       lowerBody: this._checkSegment(landmarks, [JOINTS.leftKnee, JOINTS.rightKnee, JOINTS.leftAnkle, JOINTS.rightAnkle]),
     };
 
-    const required = EXERCISE_REQUIREMENTS[exerciseId] || EXERCISE_REQUIREMENTS.free;
+    const normalizedKey = String(exerciseId || 'free').toLowerCase();
+    const required = EXERCISE_REQUIREMENTS[normalizedKey] ||
+      EXERCISE_REQUIREMENTS[normalizedKey.replace(/_/g, '-')] ||
+      EXERCISE_REQUIREMENTS.free;
     const missingSegments = required.filter(seg => !segments[seg]);
 
+    const prettyName = normalizedKey.replace(/[_-]/g, ' ');
     let status = 'optimal';
-    let guidance = `Framing optimal for ${exerciseId.replace('-', ' ')}`;
+    let guidance = `Framing optimal for ${prettyName}`;
 
     if (missingSegments.length > 0) {
       if (missingSegments.includes('lowerBody')) {
         status = 'inadequate';
-        guidance = `Step back: Knees and feet needed for ${exerciseId.replace('-', ' ')}`;
+        guidance = `Step back: Knees and feet needed for ${prettyName}`;
       } else if (missingSegments.includes('upperBody') || missingSegments.includes('torso')) {
         status = 'inadequate';
         guidance = `Move into frame: Torso and shoulders needed`;

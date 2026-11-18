@@ -4,6 +4,7 @@ import {
   angle3DAt,
   reliable3D,
   getJointAngles3D,
+  calculateTrunkAngle3D,
 } from '../src/biomechanics/angle-calculations.mjs';
 import { JOINTS } from '../src/biomechanics/landmark-indices.mjs';
 
@@ -62,4 +63,24 @@ test('getJointAngles3D computes independent 3D angles across all 8 standard join
   const angles3D = getJointAngles3D(worldLandmarks);
   assert.equal(angles3D.leftKnee, 90);
   assert.equal(angles3D.rightKnee, null); // degenerate points return null
+});
+
+test('calculateTrunkAngle3D computes upright spine and resolves sagittal forward lean', () => {
+  const worldLandmarks = Array(33).fill(null).map(() => ({ x: 0, y: 0, z: 0, visibility: 0.9 }));
+
+  // Upright posture: shoulders directly above hips along -Y axis in MediaPipe metric space
+  worldLandmarks[JOINTS.leftShoulder] = { x: -0.2, y: -0.5, z: 0, visibility: 0.9 };
+  worldLandmarks[JOINTS.rightShoulder] = { x: 0.2, y: -0.5, z: 0, visibility: 0.9 };
+  worldLandmarks[JOINTS.leftHip] = { x: -0.15, y: 0, z: 0, visibility: 0.9 };
+  worldLandmarks[JOINTS.rightHip] = { x: 0.15, y: 0, z: 0, visibility: 0.9 };
+
+  const uprightAngle = calculateTrunkAngle3D(worldLandmarks);
+  assert.equal(uprightAngle, 0);
+
+  // Sagittal forward lean: shoulders lean forward along +Z axis by 0.5m while Y is -0.5m (45 degree lean)
+  worldLandmarks[JOINTS.leftShoulder].z = 0.5;
+  worldLandmarks[JOINTS.rightShoulder].z = 0.5;
+
+  const leanAngle = calculateTrunkAngle3D(worldLandmarks);
+  assert.equal(Math.round(leanAngle), 45);
 });
