@@ -38,7 +38,7 @@ export class LungeExercise extends BaseExercise {
   }
 
   update(state, { landmarks, angles, timestampMs, trackingQuality }) {
-    const next = { ...state };
+    const next = { ...state, justHitDepth: false, justCompletedRep: false };
 
     if (trackingQuality === 'lost') {
       next.status = 'tracking-lost';
@@ -101,6 +101,7 @@ export class LungeExercise extends BaseExercise {
             next.enteredDeepAt = timestampMs;
             next.status = 'depth-reached';
             next.deepFrames = 0;
+            next.justHitDepth = true;
           }
         } else if (leadKnee > 145) {
           next.phase = 'standing';
@@ -129,6 +130,7 @@ export class LungeExercise extends BaseExercise {
             next.phase = 'standing';
             next.status = 'completed';
             next.standingFrames = 0;
+            next.justCompletedRep = true;
           }
         } else if (leadKnee <= lungeDepthThreshold) {
           next.phase = 'deep_lunge';

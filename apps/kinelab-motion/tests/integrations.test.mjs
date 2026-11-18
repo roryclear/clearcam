@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import { ExtensionManager, FEATURE_FLAGS, createExtensionIfEnabled } from '../src/integrations/extension-contracts.mjs';
 import { MovementChallenge } from '../src/integrations/movement-challenge.mjs';
 import { SquatExercise } from '../src/exercises/squat-exercise.mjs';
+import { AudioCueSynthesizer } from '../src/integrations/audio-cues.mjs';
+
+test('AudioCueSynthesizer supports depth target chime, lockout click, and voice coach controls', () => {
+  const synth = new AudioCueSynthesizer({ enabled: false, voiceCoach: true });
+  assert.equal(synth.enabled, false);
+  assert.equal(synth.voiceCoach, true);
+
+  // Safe to call even without browser Web Audio/SpeechSynthesis
+  synth.playDepthTarget();
+  synth.playLockoutTick();
+  synth.speakRep(5);
+
+  synth.setVoiceCoachEnabled(false);
+  assert.equal(synth.voiceCoach, false);
+});
 
 test('ExtensionManager: interactive flags default off, audio on', () => {
   const m = new ExtensionManager();

@@ -1,12 +1,16 @@
 /**
- * Lightweight, zero-dependency procedural audio cues using the Web Audio API.
- * Provides auditory feedback for repetition completion, hold ticks, and state changes.
+ * Lightweight, zero-dependency procedural audio cues and voice coaching.
+ * Uses the Web Audio API for instantaneous acoustic biofeedback (depth chime,
+ * lockout tick, rep chime) and Web Speech API for hands-free voice coaching.
  */
 
 export class AudioCueSynthesizer {
-  constructor({ enabled = true } = {}) {
+  constructor({ enabled = true, voiceCoach = false } = {}) {
     this.enabled = enabled;
+    this.voiceCoach = voiceCoach;
     this.ctx = null;
+    this.lastSpokenText = '';
+    this.lastSpokenAt = 0;
   }
 
   ensureContext() {
@@ -25,6 +29,10 @@ export class AudioCueSynthesizer {
 
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
+  }
+
+  setVoiceCoachEnabled(enabled) {
+    this.voiceCoach = Boolean(enabled);
   }
 
   /**
@@ -55,6 +63,61 @@ export class AudioCueSynthesizer {
     } catch (err) {
       console.warn('Audio playback suppressed:', err);
     }
+  }
+
+  /**
+   * Crystalline high ping (1046.5Hz C6) when reaching valid inflection depth.
+   * Gives instant biofeedback without needing to stare at the screen.
+   */
+  playDepthTarget() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1046.5, now); // C6
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.13);
+    } catch {}
+  }
+
+  /**
+   * Crisp lockout tick (523Hz C5) when returning to full extension.
+   */
+  playLockoutTick() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, now); // C5
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.09, now + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.065);
+    } catch {}
   }
 
   /**
@@ -110,6 +173,41 @@ export class AudioCueSynthesizer {
       osc.start(now);
       osc.stop(now + 0.26);
     } catch {}
+  }
+
+  /**
+   * Voice Coach: Speaks text using Web Speech API (speechSynthesis).
+   */
+  speak(text) {
+    if (!this.enabled || !this.voiceCoach || typeof window === 'undefined' || !window.speechSynthesis) {
+      return;
+    }
+
+    const now = performance.now();
+    if (this.lastSpokenText === text && now - this.lastSpokenAt < 1200) {
+      return; // Debounce rapid repeat speech
+    }
+
+    this.lastSpokenText = text;
+    this.lastSpokenAt = now;
+
+    try {
+      window.speechSynthesis.cancel(); // Cancel any lingering utterance
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.1; // Slightly brisk athletic cadence
+      utterance.pitch = 1.0;
+      utterance.volume = 0.85;
+      window.speechSynthesis.speak(utterance);
+    } catch {}
+  }
+
+  /**
+   * Voice coach rep count announcement.
+   */
+  speakRep(repCount) {
+    if (repCount > 0) {
+      this.speak(String(repCount));
+    }
   }
 }
 
