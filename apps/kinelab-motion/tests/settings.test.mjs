@@ -54,3 +54,14 @@ test('SettingsManager loads, updates, persists, and notifies subscribers', () =>
   const manager2 = new SettingsManager({ storage });
   assert.equal(manager2.get().tracking.smoothing, 'high');
 });
+
+test('validateSettings validates angleDimension defaulting to 3d', () => {
+  const result = validateSettings({});
+  assert.equal(result.tracking.angleDimension, '3d');
+
+  const custom2D = validateSettings({ tracking: { angleDimension: '2d' } });
+  assert.equal(custom2D.tracking.angleDimension, '2d');
+
+  const invalid = validateSettings({ tracking: { angleDimension: '4d' } });
+  assert.equal(invalid.tracking.angleDimension, '3d');
+});

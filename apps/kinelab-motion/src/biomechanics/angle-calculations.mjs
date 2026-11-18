@@ -75,6 +75,59 @@ export function getJointAngles(landmarks, width, height, threshold = 0.55) {
 }
 
 /**
+ * Checks whether a 3D metric world landmark has valid spatial coordinates and satisfies visibility threshold.
+ */
+export function reliable3D(point, minVisibility = 0.55) {
+  return Boolean(
+    point &&
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    Number.isFinite(point.z ?? 0) &&
+    (point.visibility === undefined || point.visibility >= minVisibility) &&
+    (point.presence === undefined || point.presence >= minVisibility)
+  );
+}
+
+/**
+ * Calculates the perspective-invariant 3D spatial joint angle at joint B
+ * formed by rays BA and BC using real-world metric coordinates (in meters).
+ * Eliminates 2D camera foreshortening and oblique perspective distortions.
+ * Returns null if points are occluded, degenerate, or zero-length.
+ */
+export function angle3DAt(a, b, c, minVisibility = 0.55) {
+  if (![a, b, c].every(point => reliable3D(point, minVisibility))) return null;
+
+  const ux = a.x - b.x;
+  const uy = a.y - b.y;
+  const uz = (a.z ?? 0) - (b.z ?? 0);
+
+  const vx = c.x - b.x;
+  const vy = c.y - b.y;
+  const vz = (c.z ?? 0) - (b.z ?? 0);
+
+  const magU = Math.hypot(ux, uy, uz);
+  const magV = Math.hypot(vx, vy, vz);
+
+  if (magU < 1e-6 || magV < 1e-6) return null;
+
+  const dot = ux * vx + uy * vy + uz * vz;
+  const cos = Math.max(-1, Math.min(1, dot / (magU * magV)));
+  return Math.round(Math.acos(cos) * 18000 / Math.PI) / 100;
+}
+
+/**
+ * Calculates joint angles for all 8 standard definitions using 3D metric worldLandmarks.
+ */
+export function getJointAngles3D(worldLandmarks, threshold = 0.55) {
+  return Object.fromEntries(
+    ANGLE_DEFINITIONS.map(def => [
+      def.key,
+      angle3DAt(worldLandmarks?.[def.from], worldLandmarks?.[def.joint], worldLandmarks?.[def.to], threshold),
+    ])
+  );
+}
+
+/**
  * Calculates trunk inclination angle relative to vertical (in degrees).
  * Useful for posture monitoring and sit-to-stand trunk lean.
  */
@@ -105,10 +158,58 @@ export function calculateTrunkAngle(landmarks, width, height, threshold = 0.55) 
 }
 
 /**
- * Assesses overall body visibility and tracking stability.
+ * Calculates trunk inclination in 3D metric space relative to vertical axis (0 deg = upright).
+ * Captures true forward and lateral spinal tilt invariant to camera angle.
  */
-export function trackingStatus(landmarks, threshold = 0.55) {
+export function calculateTrunkAngle3D(worldLandmarks, threshold = 0.55) {
+  if (!Array.isArray(worldLandmarks)) return null;
+  const ls = worldLandmarks[JOINTS.leftShoulder];
+  const rs = worldLandmarks[JOINTS.rightShoulder];
+  const lh = worldLandmarks[JOINTS.leftHip];
+  const rh = worldLandmarks[JOINTS.rightHip];
+
+  if (!reliable3D(ls, threshold) || !reliable3D(rs, threshold) ||
+      !reliable3D(lh, threshold) || !reliable3D(rh, threshold)) {
+    return null;
+  }
+
+  const midShoulderX = (ls.x + rs.x) / 2;
+  const midShoulderY = (ls.y + rs.y) / 2;
+  const midShoulderZ = ((ls.z ?? 0) + (rs.z ?? 0)) / 2;
+
+  const midHipX = (lh.x + rh.x) / 2;
+  const midHipY = (lh.y + rh.y) / 2;
+  const midHipZ = ((lh.z ?? 0) + (rh.z ?? 0)) / 2;
+
+  const dx = midShoulderX - midHipX;
+  const dy = midShoulderY - midHipY; // pointing up is negative y in metric coordinates
+  const dz = midShoulderZ - midHipZ;
+
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-4) return null;
+
+  // Angle with vertical upwards vector (0, -1, 0)
+  const cosTheta = Math.max(-1.0, Math.min(1.0, -dy / len));
+  const angleRad = Math.acos(cosTheta);
+  return Math.round((angleRad * 180 / Math.PI) * 10) / 10;
+}
+
+const UPPER_BODY_EXERCISES = new Set(['shoulder-abduction', 'shoulder_abduction', 'shoulder-flexion', 'shoulder_flexion']);
+const UPPER_KEY_INDICES = Object.freeze([11, 12, 13, 14, 15, 16, 23, 24]);
+
+/**
+ * Assesses overall body visibility and tracking stability.
+ * Decouples upper-body movements so seated or waist-up framing tracks accurately.
+ */
+export function trackingStatus(landmarks, threshold = 0.55, exerciseId = null) {
   if (!Array.isArray(landmarks) || landmarks.length < 29) return 'lost';
+
+  if (exerciseId && UPPER_BODY_EXERCISES.has(exerciseId)) {
+    const trackedUpper = UPPER_KEY_INDICES.filter(index => reliable(landmarks[index], threshold)).length;
+    if (trackedUpper >= 5) return 'good';
+    return trackedUpper >= 3 ? 'partial' : 'lost';
+  }
+
   const tracked = KEY_TRACKED_INDICES.filter(index => reliable(landmarks[index], threshold)).length;
   if (tracked >= 10) return 'good';
   return tracked >= 5 ? 'partial' : 'lost';

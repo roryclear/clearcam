@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     autoFallback: true,
     smoothing: 'medium', // 'off' | 'low' | 'medium' | 'high'
     confidenceThreshold: 0.55,
+    angleDimension: '3d', // '3d' | '2d' (3D metric vectors vs 2D image plane)
   },
   overlays: {
     showSkeleton: true,
@@ -71,6 +72,9 @@ export function validateSettings(raw) {
       raw.tracking.confidenceThreshold <= 0.9
         ? raw.tracking.confidenceThreshold
         : DEFAULT_SETTINGS.tracking.confidenceThreshold,
+    angleDimension: ['3d', '2d'].includes(raw.tracking?.angleDimension)
+      ? raw.tracking.angleDimension
+      : DEFAULT_SETTINGS.tracking.angleDimension,
   };
 
   const overlays = {

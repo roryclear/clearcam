@@ -41,6 +41,7 @@ export class OverlayRenderer {
       angles = {},
       timestampMs = performance.now(),
       holdProgress = null, // { current, target } or null
+      framing = null, // { status: 'optimal'|'partial'|'inadequate', guidance: string }
     } = renderData;
 
     const {
@@ -129,6 +130,54 @@ export class OverlayRenderer {
     if (holdProgress && Number.isFinite(holdProgress.current) && Number.isFinite(holdProgress.target)) {
       this.drawHoldRing(ctx, width, height, holdProgress, scale);
     }
+
+    // 8. Body framing guidance banner (when framing is non-optimal)
+    if (framing && framing.status && framing.status !== 'optimal' && framing.guidance) {
+      this.drawFramingBanner(ctx, width, height, framing, scale);
+    }
+  }
+
+  drawFramingBanner(ctx, width, height, framing, scale) {
+    const isWarning = framing.status === 'inadequate';
+    const text = framing.guidance;
+    const fontSize = Math.max(11, Math.round(13 * scale));
+    ctx.save();
+    ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, -apple-system, sans-serif`;
+    const textMetrics = ctx.measureText(text);
+    const paddingX = 14 * scale;
+    const pillHeight = 30 * scale;
+    const pillWidth = textMetrics.width + paddingX * 2 + 16 * scale;
+    const cx = width / 2;
+    const topY = 24 * scale;
+    const rx = cx - pillWidth / 2;
+
+    // Background pill
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(rx, topY, pillWidth, pillHeight, pillHeight / 2);
+    } else {
+      ctx.rect(rx, topY, pillWidth, pillHeight);
+    }
+    ctx.fillStyle = isWarning ? 'rgba(28, 18, 12, 0.88)' : 'rgba(14, 24, 38, 0.88)';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = isWarning ? 'rgba(255, 179, 71, 0.6)' : 'rgba(90, 200, 250, 0.6)';
+    ctx.stroke();
+
+    // Status dot
+    const dotX = rx + paddingX + 4 * scale;
+    const dotY = topY + pillHeight / 2;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 4 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = isWarning ? '#ffb347' : '#5ac8fa';
+    ctx.fill();
+
+    // Guidance text
+    ctx.fillStyle = isWarning ? '#ffe3b0' : '#e1f5fe';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, dotX + 10 * scale, dotY);
+    ctx.restore();
   }
 
   drawHoldRing(ctx, width, height, { current, target }, scale) {

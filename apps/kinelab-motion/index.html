@@ -7,8 +7,8 @@
   <meta name="referrer" content="no-referrer" />
   <meta name="description" content="KineLab Motion 2.0: Modular, real-time, single-camera motion intelligence, multi-exercise recognition, and movement analytics." />
   <title>KineLab Motion 2.0 — Motion Intelligence Studio</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <script type="module" src="./src/app.mjs"></script>
+  <link rel="stylesheet" href="./styles.css?v=2.6" />
+  <script type="module" src="./src/app.mjs?v=2.6"></script>
 </head>
 <body>
   <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -82,7 +82,7 @@
               <span id="render-fps">--</span> RENDER <span class="hud-sep">·</span>
               <span id="dropped-frames">0</span> DROPPED
             </div>
-            <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 1€ SMOOTHED <span class="hud-sep">·</span> 2D ANGLES</div>
+            <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 1€ SMOOTHED <span class="hud-sep">·</span> <span id="hud-angle-mode">3D METRIC</span></div>
 
             <div class="frame-corner top-left" aria-hidden="true"></div>
             <div class="frame-corner top-right" aria-hidden="true"></div>
@@ -142,9 +142,16 @@
               <p class="side-eyebrow">LIVE TELEMETRY</p>
               <h2 id="telemetry-title">Joint angles<span class="heading-accent">.</span></h2>
             </div>
-            <span class="angle-unit">DEG</span>
+            <div class="telemetry-controls-group">
+              <button type="button" id="angle-dim-toggle" class="angle-dim-toggle" title="Toggle between 3D Real-World Metric and 2D Screen Projection">
+                <span class="dim-badge active" id="dim-3d">3D METRIC</span>
+                <span class="dim-sep">/</span>
+                <span class="dim-badge" id="dim-2d">2D SCREEN</span>
+              </button>
+              <span class="angle-unit">DEG</span>
+            </div>
           </div>
-          <p class="panel-note">Projected 2D angles from one camera. Unavailable joints show —.</p>
+          <p class="panel-note" id="telemetry-note">3D metric vector angles derived from pelvis-centered coordinates. Perspective invariant.</p>
 
           <div class="angles" id="angle-list" aria-label="Joint angles"></div>
 
@@ -188,10 +195,55 @@
             <h2 id="analytics-heading">Movement Replay &amp; Analytics</h2>
             <span id="active-session-title" class="subtle-text">No session selected</span>
           </div>
-          <button type="button" id="close-analytics" class="btn-close" aria-label="Close analytics drawer">✕</button>
+          <div class="analytics-header-controls">
+            <label class="session-selector-label">
+              <span>SELECT SESSION:</span>
+              <select id="session-select-top" class="session-select-top" aria-label="Select session to inspect">
+                <option value="">(No session)</option>
+              </select>
+            </label>
+            <button type="button" id="close-analytics" class="btn-close" aria-label="Close analytics drawer">✕</button>
+          </div>
         </div>
 
         <div class="analytics-body">
+          <!-- Workout Results Summary Card -->
+          <div class="workout-results-card" id="workout-results-card">
+            <div class="results-header">
+              <span class="results-badge-tag" id="res-exercise-tag">SESSION RESULTS</span>
+              <span class="results-timestamp" id="res-timestamp">No session selected</span>
+            </div>
+            <div class="results-grid">
+              <div class="result-metric">
+                <span class="metric-label">REPETITIONS</span>
+                <span class="metric-value highlight" id="res-rep-count">--</span>
+              </div>
+              <div class="result-metric">
+                <span class="metric-label">DURATION</span>
+                <span class="metric-value" id="res-duration">--:--</span>
+              </div>
+              <div class="result-metric">
+                <span class="metric-label">PEAK DEPTH</span>
+                <span class="metric-value" id="res-peak-angle">--°</span>
+              </div>
+              <div class="result-metric">
+                <span class="metric-label">BILATERAL SYMMETRY</span>
+                <span class="metric-value" id="res-symmetry">--</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Synchronized Video + Skeletal Replay Stage -->
+          <div class="replay-stage-wrapper" id="replay-stage-wrapper">
+            <div class="replay-stage" id="replay-stage">
+              <video id="replay-video" class="replay-video" playsinline muted></video>
+              <canvas id="replay-canvas" class="replay-canvas" width="640" height="480"></canvas>
+              <div id="replay-no-video" class="replay-no-video" hidden>
+                <span>Telemetry Replay (No camera video stream recorded)</span>
+              </div>
+            </div>
+          </div>
+
           <div class="timeline-controls">
             <button type="button" id="play-pause-btn" class="btn btn-ghost">▶ Play</button>
             <button type="button" id="step-back-btn" class="btn btn-ghost" title="Previous frame">‹</button>
@@ -353,6 +405,17 @@
                   <option value="0.55">0.55 (Standard)</option>
                   <option value="0.45">0.45 (Lenient)</option>
                   <option value="0.65">0.65 (Strict)</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Angle Calculation Coordinate Space</span>
+                  <span class="setting-desc">3D metric vectors (perspective invariant) vs 2D camera plane</span>
+                </div>
+                <select id="cfg-track-angledim">
+                  <option value="3d">3D Metric Space (Recommended)</option>
+                  <option value="2d">2D Camera Screen Projection</option>
                 </select>
               </label>
             </div>
