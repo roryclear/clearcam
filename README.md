@@ -61,6 +61,35 @@
 </tr>
 </table>
 
+---
+
+## ⚡ KineLab Motion 2.0 — Motion Intelligence Studio (`apps/kinelab-motion`)
+
+KineLab Motion 2.0 is an interactive, single-camera real-time motion analysis and biomechanics platform integrated directly into the Clearcam project.
+
+- **33-Landmark Pose Tracking**: Powered by Google MediaPipe Tasks Vision (`@mediapipe/tasks-vision@1.2.3`), defaulting to the Heavy model with automatic Full fallback.
+- **3D Metric Vector Kinematics**: Computes 3D joint angles and sagittal trunk tilt from pelvis-centered metric coordinates in meters ($X, Y, Z$), perspective-invariant to camera angle or depth foreshortening.
+- **Smart Body Framing Assistant**: Real-time on-canvas positioning radar and limb guidance, with upper-body decoupling for seated or close-up exercise tracking.
+- **One Euro Temporal Smoothing**: Eliminates joint jitter at rest while preserving instantaneous response during explosive movements.
+- **Modular Exercise Recognition**: State-machine repetition counting, hold timers, and form feedback for Squats, Sit-to-Stand, Lunges, Shoulder Abduction, Shoulder Flexion, and Single-Leg Balance.
+- **Synchronized Video + Skeleton Replay**: High-performance IndexedDB video recording paired with animated skeletal telemetry replay, frame scrubbing, and playback speed control.
+- **Privacy by Design**: 100% browser sandbox execution. Zero video frames or biomechanical telemetry uploaded to external servers.
+
+### Run KineLab Motion:
+```bash
+python apps/kinelab-motion/serve.py 4173
+```
+Open [http://localhost:4173](http://localhost:4173) in Google Chrome, Microsoft Edge, or Safari.
+
+### Run Tests:
+```bash
+node --test apps/kinelab-motion/tests/*.test.mjs
+```
+*74 automated unit, integration, and kinematics benchmark tests on Node.js 20+ with zero npm dependencies.*
+
+For complete module architecture maps and settings references, see [KineLab Motion Documentation](apps/kinelab-motion/README.md).
+
+---
 
 ### Don't own an RTSP camera yet?
 Try it out with this feed: https://webcam.elcat.kg/Too-Ashu_Tunnel_North/index.m3u8 (https://kg.camera)

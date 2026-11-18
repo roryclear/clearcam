@@ -67,6 +67,7 @@ Modular state-machine architecture with configurable thresholds, hysteresis, and
 apps/kinelab-motion/
 ├── index.html                 # Semantic dark cinematic studio shell
 ├── styles.css                 # Responsive CSS grid/flexbox with neon accents
+├── serve.py                   # Multi-threaded no-cache development server
 ├── README.md                  # System documentation & developer guide
 ├── src/
 │   ├── app.mjs                # Application orchestrator
@@ -117,6 +118,7 @@ apps/kinelab-motion/
 │       ├── extension-contracts.mjs  # Feature flags and extensibility interfaces
 │       └── movement-challenge.mjs   # Interactive target acquisition challenge
 └── tests/
+    ├── dom-contract.test.mjs           # Verifies all DOM IDs queried in app.mjs exist in index.html
     ├── angle-calculations-3d.test.mjs  # 3D metric space and depth vector tests
     ├── mediapipe-scaling.test.mjs      # High-throughput resolution decoupling tests
     ├── framing-assistant.test.mjs      # Body framing radar & upper-body decoupling tests
@@ -140,11 +142,13 @@ apps/kinelab-motion/
 
 ## 3. Run Locally
 
-From the repository root:
+From the repository root, start the multi-threaded development server with no-cache headers:
 
 ```bash
-python3 -m http.server 4173 --directory apps/kinelab-motion
+python apps/kinelab-motion/serve.py 4173
 ```
+
+*(Alternatively: `python3 -m http.server 4173 --directory apps/kinelab-motion`)*
 
 Open <http://localhost:4173> in Google Chrome, Microsoft Edge, or Safari.
 Click **Start camera**, grant browser camera permission, and position your body inside the frame.
@@ -161,7 +165,7 @@ Run the complete test suite:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-All 71 automated tests run natively on Node.js 20+ without external npm dependencies.
+All 74 automated tests run natively on Node.js 20+ without external npm dependencies.
 
 ---
 
