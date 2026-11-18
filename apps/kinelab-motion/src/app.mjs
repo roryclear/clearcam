@@ -929,6 +929,7 @@ nodes.showArcs.addEventListener('change', () => {
 // Analytics Drawer Listeners
 nodes.openRecordingsBtn.addEventListener('click', () => {
   nodes.analyticsDrawer.hidden = !nodes.analyticsDrawer.hidden;
+  nodes.analyticsDrawer.classList.toggle('open', !nodes.analyticsDrawer.hidden);
   if (!nodes.analyticsDrawer.hidden) {
     updateSessionsList();
     nodes.analyticsDrawer.scrollIntoView({ behavior: 'smooth' });
@@ -937,6 +938,7 @@ nodes.openRecordingsBtn.addEventListener('click', () => {
 
 nodes.closeAnalyticsBtn.addEventListener('click', () => {
   nodes.analyticsDrawer.hidden = true;
+  nodes.analyticsDrawer.classList.remove('open');
   player.pause();
 });
 
@@ -1148,7 +1150,7 @@ nodes.clearAllSessionsBtn.addEventListener('click', async () => {
   await videoStore.clearAll();
   updateSessionsList();
   populateSettingsForm();
-  announce('All local sessions cleared.');
+  announce('All local sessions and stored videos cleared.');
 });
 
 window.addEventListener('pagehide', stopCamera);

@@ -10,7 +10,7 @@ export class ShoulderAbductionExercise extends BaseExercise {
   constructor(options = {}) {
     super({
       id: 'shoulder_abduction',
-      name: 'Shoulder Flexion / Abduction',
+      name: 'Shoulder Abduction',
       type: 'repetition',
       recommendedCamera: 'front',
       description: 'Tracks arm elevation from sides to overhead with left/right range comparison. Front camera recommended.',
