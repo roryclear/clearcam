@@ -5,7 +5,8 @@
  */
 
 import { ANGLE_DEFINITIONS, SKELETON_CONNECTIONS } from './pose-math.mjs';
-import { getJointAngles, trackingStatus } from './biomechanics/angle-calculations.mjs';
+import { getJointAngles, getJointAngles3D, trackingStatus } from './biomechanics/angle-calculations.mjs';
+import { defaultFramingAssistant } from './tracking/framing-assistant.mjs';
 import { analyzeSymmetry } from './biomechanics/symmetry-analyzer.mjs';
 import { PoseFilter } from './filters/pose-filter.mjs';
 import { PerformanceMonitor } from './tracking/performance-monitor.mjs';
@@ -44,6 +45,7 @@ const nodes = {
 
   // HUD
   hudState: el('hud-state'),
+  hudAngleMode: el('hud-angle-mode'),
   inferenceFps: el('inference-fps'),
   modelName: el('model-name'),
   latencyDisplay: el('latency-display'),
@@ -55,6 +57,10 @@ const nodes = {
   showArcs: el('show-arcs'),
 
   // Telemetry & Insight
+  angleDimToggle: el('angle-dim-toggle'),
+  dim3d: el('dim-3d'),
+  dim2d: el('dim-2d'),
+  telemetryNote: el('telemetry-note'),
   angleList: el('angle-list'),
   insightTitle: el('insight-title'),
   exerciseBadge: el('exercise-badge'),
@@ -82,6 +88,7 @@ const nodes = {
   cfgTrackAutoFallback: el('cfg-track-autofallback'),
   cfgTrackSmoothing: el('cfg-track-smoothing'),
   cfgTrackConfidence: el('cfg-track-confidence'),
+  cfgTrackAngleDim: el('cfg-track-angledim'),
   cfgOverlaySkeleton: el('cfg-overlay-skeleton'),
   cfgOverlayJoints: el('cfg-overlay-joints'),
   cfgOverlayLabels: el('cfg-overlay-labels'),
@@ -178,16 +185,44 @@ function announce(message, isError = false) {
   nodes.message.classList.toggle('is-error', isError);
 }
 
-function updateTrackingHUD(status) {
-  const text = status === 'good' ? 'Body visible · Tracking stable'
+function updateTrackingHUD(status, framing = null) {
+  let text = status === 'good' ? 'Body visible · Tracking stable'
     : status === 'partial' ? 'Partial body · Angles may be missing'
     : status === 'lost' ? 'Move into frame · Full body needed'
     : 'Waiting for camera';
 
+  let hudText = status === 'good' ? 'TRACKING' : status === 'partial' ? 'PARTIAL' : status === 'lost' ? 'NO POSE' : 'STANDBY';
+
+  if (framing && framing.status && framing.status !== 'optimal') {
+    text = framing.guidance;
+    if (status === 'good') {
+      hudText = 'ADJUST';
+    }
+  }
+
   nodes.trackingPill.lastChild.textContent = text;
-  nodes.trackingPill.classList.toggle('is-good', status === 'good');
-  nodes.trackingPill.classList.toggle('is-warning', status === 'partial' || status === 'lost');
-  nodes.hudState.textContent = status === 'good' ? 'TRACKING' : status === 'partial' ? 'PARTIAL' : status === 'lost' ? 'NO POSE' : 'STANDBY';
+  nodes.trackingPill.classList.toggle('is-good', status === 'good' && (!framing || framing.status === 'optimal'));
+  nodes.trackingPill.classList.toggle('is-warning', status === 'partial' || status === 'lost' || Boolean(framing && framing.status !== 'optimal'));
+  nodes.hudState.textContent = hudText;
+}
+
+function updateAngleDimUI(dimension = '3d') {
+  const is3D = dimension === '3d';
+  if (nodes.hudAngleMode) {
+    nodes.hudAngleMode.textContent = is3D ? '3D METRIC' : '2D ANGLES';
+  }
+  if (nodes.dim3d && nodes.dim2d) {
+    nodes.dim3d.classList.toggle('active', is3D);
+    nodes.dim2d.classList.toggle('active', !is3D);
+  }
+  if (nodes.telemetryNote) {
+    nodes.telemetryNote.textContent = is3D
+      ? '3D metric vector angles derived from pelvis-centered coordinates. Perspective invariant.'
+      : 'Projected 2D angles on camera plane. May experience perspective foreshortening.';
+  }
+  if (nodes.cfgTrackAngleDim) {
+    nodes.cfgTrackAngleDim.value = dimension;
+  }
 }
 
 function renderTelemetry(angles) {
@@ -379,8 +414,22 @@ function frameLoop() {
     filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
     const smoothedLandmarks = filter.filter(rawResult.landmarks, now);
 
-    const quality = trackingStatus(smoothedLandmarks, cfg.tracking.confidenceThreshold);
-    const angles = getJointAngles(smoothedLandmarks, video.videoWidth, video.videoHeight, cfg.tracking.confidenceThreshold);
+    const activeExerciseId = cfg.exercise.activeExercise || 'squat';
+    const quality = trackingStatus(smoothedLandmarks, cfg.tracking.confidenceThreshold, activeExerciseId);
+    const framing = defaultFramingAssistant.evaluate(smoothedLandmarks, activeExerciseId);
+
+    // Compute angles: 3D metric vector space (perspective invariant) or 2D image plane
+    const angles2D = getJointAngles(smoothedLandmarks, video.videoWidth, video.videoHeight, cfg.tracking.confidenceThreshold);
+    let angles = angles2D;
+    if (cfg.tracking.angleDimension === '3d' && rawResult.worldLandmarks) {
+      const angles3D = getJointAngles3D(rawResult.worldLandmarks, cfg.tracking.confidenceThreshold);
+      angles = { ...angles2D };
+      for (const [k, v] of Object.entries(angles3D)) {
+        if (Number.isFinite(v)) {
+          angles[k] = v;
+        }
+      }
+    }
 
     // Render Master Overlays
     const isMirrored = cfg.camera.mirroring === 'on' ||
@@ -390,6 +439,7 @@ function frameLoop() {
       landmarks: smoothedLandmarks,
       angles,
       timestampMs: now,
+      framing,
     }, {
       showSkeleton: cfg.overlays.showSkeleton,
       showJointMarkers: cfg.overlays.showJointMarkers,
@@ -405,7 +455,7 @@ function frameLoop() {
     appState.lastAngles = angles;
     renderTelemetry(angles);
     renderSymmetry(angles);
-    updateTrackingHUD(quality);
+    updateTrackingHUD(quality, framing);
     handleExerciseFrame(smoothedLandmarks, angles, video.videoWidth, video.videoHeight, now, quality);
 
     // Record telemetry frame if recording is active
@@ -1001,6 +1051,9 @@ function populateSettingsForm() {
   nodes.cfgTrackAutoFallback.checked = cfg.tracking.autoFallback;
   nodes.cfgTrackSmoothing.value = cfg.tracking.smoothing;
   nodes.cfgTrackConfidence.value = String(cfg.tracking.confidenceThreshold);
+  if (nodes.cfgTrackAngleDim) {
+    nodes.cfgTrackAngleDim.value = cfg.tracking.angleDimension || '3d';
+  }
 
   nodes.cfgOverlaySkeleton.checked = cfg.overlays.showSkeleton;
   nodes.cfgOverlayJoints.checked = cfg.overlays.showJointMarkers;
@@ -1033,6 +1086,7 @@ function bindSettingsInputs() {
         autoFallback: nodes.cfgTrackAutoFallback.checked,
         smoothing: nodes.cfgTrackSmoothing.value,
         confidenceThreshold: Number(nodes.cfgTrackConfidence.value),
+        angleDimension: nodes.cfgTrackAngleDim ? nodes.cfgTrackAngleDim.value : '3d',
       },
       overlays: {
         showSkeleton: nodes.cfgOverlaySkeleton.checked,
@@ -1050,10 +1104,11 @@ function bindSettingsInputs() {
       },
     });
 
-    // Update Quick Controls
+    // Update Quick Controls & Angle Dim UI
     nodes.showAngles.checked = nodes.cfgOverlayLabels.checked;
     nodes.showArcs.checked = nodes.cfgOverlayArcs.checked;
     nodes.modelChoice.value = nodes.cfgTrackModel.value;
+    updateAngleDimUI(settings.get().tracking.angleDimension);
 
     audio.setEnabled(nodes.cfgExerciseAudio.checked);
   };
@@ -1066,9 +1121,19 @@ function bindSettingsInputs() {
     nodes.cfgOverlaySymHud, nodes.cfgOverlayGhost,
     nodes.cfgExerciseSensitivity, nodes.cfgExerciseAudio,
   ];
+  if (nodes.cfgTrackAngleDim) inputs.push(nodes.cfgTrackAngleDim);
 
   for (const input of inputs) {
     input.addEventListener('change', save);
+  }
+
+  if (nodes.angleDimToggle) {
+    nodes.angleDimToggle.addEventListener('click', () => {
+      const cur = settings.get().tracking.angleDimension || '3d';
+      const next = cur === '3d' ? '2d' : '3d';
+      settings.update({ tracking: { angleDimension: next } });
+      updateAngleDimUI(next);
+    });
   }
 }
 
@@ -1093,4 +1158,5 @@ bindSettingsInputs();
 clearMetricsUI();
 setLiveUI(false);
 updateSessionsList();
+updateAngleDimUI(settings.get().tracking.angleDimension);
 switchExercise(settings.get().exercise.activeExercise);

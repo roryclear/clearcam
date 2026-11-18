@@ -157,11 +157,22 @@ export function calculateTrunkAngle(landmarks, width, height, threshold = 0.55) 
   return Math.round((angleRad * 180 / Math.PI) * 10) / 10;
 }
 
+const UPPER_BODY_EXERCISES = new Set(['shoulder-abduction', 'shoulder_abduction', 'shoulder-flexion', 'shoulder_flexion']);
+const UPPER_KEY_INDICES = Object.freeze([11, 12, 13, 14, 15, 16, 23, 24]);
+
 /**
  * Assesses overall body visibility and tracking stability.
+ * Decouples upper-body movements so seated or waist-up framing tracks accurately.
  */
-export function trackingStatus(landmarks, threshold = 0.55) {
+export function trackingStatus(landmarks, threshold = 0.55, exerciseId = null) {
   if (!Array.isArray(landmarks) || landmarks.length < 29) return 'lost';
+
+  if (exerciseId && UPPER_BODY_EXERCISES.has(exerciseId)) {
+    const trackedUpper = UPPER_KEY_INDICES.filter(index => reliable(landmarks[index], threshold)).length;
+    if (trackedUpper >= 5) return 'good';
+    return trackedUpper >= 3 ? 'partial' : 'lost';
+  }
+
   const tracked = KEY_TRACKED_INDICES.filter(index => reliable(landmarks[index], threshold)).length;
   if (tracked >= 10) return 'good';
   return tracked >= 5 ? 'partial' : 'lost';

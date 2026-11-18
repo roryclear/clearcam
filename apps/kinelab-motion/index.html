@@ -7,7 +7,7 @@
   <meta name="referrer" content="no-referrer" />
   <meta name="description" content="KineLab Motion 2.0: Modular, real-time, single-camera motion intelligence, multi-exercise recognition, and movement analytics." />
   <title>KineLab Motion 2.0 — Motion Intelligence Studio</title>
-  <link rel="stylesheet" href="./styles.css?v=2.1" />
+  <link rel="stylesheet" href="./styles.css?v=2.2" />
   <script type="module" src="./src/app.mjs"></script>
 </head>
 <body>
@@ -82,7 +82,7 @@
               <span id="render-fps">--</span> RENDER <span class="hud-sep">·</span>
               <span id="dropped-frames">0</span> DROPPED
             </div>
-            <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 1€ SMOOTHED <span class="hud-sep">·</span> 2D ANGLES</div>
+            <div class="hud hud-bottom-left">33 BODY LANDMARKS <span class="hud-sep">·</span> 1€ SMOOTHED <span class="hud-sep">·</span> <span id="hud-angle-mode">3D METRIC</span></div>
 
             <div class="frame-corner top-left" aria-hidden="true"></div>
             <div class="frame-corner top-right" aria-hidden="true"></div>
@@ -142,9 +142,16 @@
               <p class="side-eyebrow">LIVE TELEMETRY</p>
               <h2 id="telemetry-title">Joint angles<span class="heading-accent">.</span></h2>
             </div>
-            <span class="angle-unit">DEG</span>
+            <div class="telemetry-controls-group">
+              <button type="button" id="angle-dim-toggle" class="angle-dim-toggle" title="Toggle between 3D Real-World Metric and 2D Screen Projection">
+                <span class="dim-badge active" id="dim-3d">3D METRIC</span>
+                <span class="dim-sep">/</span>
+                <span class="dim-badge" id="dim-2d">2D SCREEN</span>
+              </button>
+              <span class="angle-unit">DEG</span>
+            </div>
           </div>
-          <p class="panel-note">Projected 2D angles from one camera. Unavailable joints show —.</p>
+          <p class="panel-note" id="telemetry-note">3D metric vector angles derived from pelvis-centered coordinates. Perspective invariant.</p>
 
           <div class="angles" id="angle-list" aria-label="Joint angles"></div>
 
@@ -398,6 +405,17 @@
                   <option value="0.55">0.55 (Standard)</option>
                   <option value="0.45">0.45 (Lenient)</option>
                   <option value="0.65">0.65 (Strict)</option>
+                </select>
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Angle Calculation Coordinate Space</span>
+                  <span class="setting-desc">3D metric vectors (perspective invariant) vs 2D camera plane</span>
+                </div>
+                <select id="cfg-track-angledim">
+                  <option value="3d">3D Metric Space (Recommended)</option>
+                  <option value="2d">2D Camera Screen Projection</option>
                 </select>
               </label>
             </div>

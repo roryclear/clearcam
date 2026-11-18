@@ -167,6 +167,23 @@ a { color: inherit; text-decoration: none; }
 .telemetry-heading { display: flex; align-items: center; justify-content: space-between; }
 .telemetry-heading h2 { font-size: 20px; letter-spacing: -.04em; line-height: 1.15; margin: 0; font-weight: 660; }
 .heading-accent { color: #83f5d9; }
+.telemetry-controls-group { display: flex; align-items: center; gap: 8px; }
+.angle-dim-toggle {
+  background: rgba(18, 28, 42, 0.75);
+  border: 1px solid #34435a;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: 700 9px/1.2 ui-monospace, monospace;
+  transition: all 0.2s ease;
+}
+.angle-dim-toggle:hover { border-color: #83f5d9; background: rgba(24, 38, 56, 0.9); }
+.angle-dim-toggle .dim-badge { color: #62748e; transition: color 0.2s ease; }
+.angle-dim-toggle .dim-badge.active { color: #83f5d9; font-weight: 800; text-shadow: 0 0 8px rgba(131, 245, 217, 0.35); }
+.angle-dim-toggle .dim-sep { color: #3b4b63; font-weight: 400; }
 .angle-unit { font: 800 10px/1 ui-monospace, monospace; color: #7384a0; border: 1px solid #34435a; padding: 6px; border-radius: 6px; }
 .panel-note { color: #8798ae; font-size: 11px; line-height: 1.6; margin: 8px 0 16px; }
 

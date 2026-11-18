@@ -80,3 +80,20 @@ test('analyzeSymmetry detects bilateral limb imbalances', () => {
   assert.equal(asymReport.pairs.knee.isSymmetric, false);
   assert.equal(asymReport.pairs.knee.diffDeg, 40);
 });
+
+test('trackingStatus evaluates whole body and decouples upper-body exercises', () => {
+  const pose = Array.from({ length: 33 }, () => point(0.5, 0.5, 0.1)); // all low visibility
+  assert.equal(trackingStatus(pose), 'lost');
+
+  // Upper body joints visible (11, 12, 13, 14, 15, 16, 23, 24)
+  [11, 12, 13, 14, 15, 16, 23, 24].forEach(idx => {
+    pose[idx] = point(0.5, 0.5, 0.95);
+  });
+
+  // Default requires 10 tracked indices for 'good', so 8 indices is 'partial'
+  assert.equal(trackingStatus(pose, 0.55), 'partial');
+
+  // For shoulder exercises, upper body visibility qualifies as 'good'
+  assert.equal(trackingStatus(pose, 0.55, 'shoulder-abduction'), 'good');
+  assert.equal(trackingStatus(pose, 0.55, 'shoulder-flexion'), 'good');
+});
