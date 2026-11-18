@@ -21,6 +21,7 @@ import { ChartRenderer } from './sessions/chart-renderer.mjs';
 import { exportToCSV, exportToJSON, downloadFile } from './sessions/export-helpers.mjs';
 import { compareSessions } from './sessions/session-compare.mjs';
 import { defaultAudioSynthesizer } from './integrations/audio-cues.mjs';
+import { defaultVideoStore } from './sessions/video-store.mjs';
 
 const el = id => document.getElementById(id);
 
@@ -98,6 +99,17 @@ const nodes = {
   analyticsDrawer: el('analytics-drawer'),
   sessionCountBadge: el('session-count-badge'),
   activeSessionTitle: el('active-session-title'),
+  sessionSelectTop: el('session-select-top'),
+  workoutResultsCard: el('workout-results-card'),
+  resExerciseTag: el('res-exercise-tag'),
+  resTimestamp: el('res-timestamp'),
+  resRepCount: el('res-rep-count'),
+  resDuration: el('res-duration'),
+  resPeakAngle: el('res-peak-angle'),
+  resSymmetry: el('res-symmetry'),
+  replayVideo: el('replay-video'),
+  replayCanvas: el('replay-canvas'),
+  replayNoVideo: el('replay-no-video'),
   playPauseBtn: el('play-pause-btn'),
   stepBackBtn: el('step-back-btn'),
   stepFwdBtn: el('step-fwd-btn'),
@@ -119,9 +131,12 @@ const perf = new PerformanceMonitor();
 const adaptive = new AdaptiveController();
 const runner = new MediaPipeRunner();
 const overlay = new OverlayRenderer(nodes.canvas);
+const replayOverlay = new OverlayRenderer(nodes.replayCanvas);
 const recorder = new SessionRecorder();
 const storage = defaultSessionStorage;
+const videoStore = defaultVideoStore;
 const player = new TimelinePlayer();
+player.attachVideoElement(nodes.replayVideo);
 const chart = new ChartRenderer(nodes.chartCanvas);
 const audio = defaultAudioSynthesizer;
 
@@ -545,7 +560,7 @@ async function startCamera() {
 function startRecording() {
   if (!appState.active) return;
   const cfg = settings.get();
-  recorder.start({ exerciseId: cfg.exercise.activeExercise });
+  recorder.start({ exerciseId: cfg.exercise.activeExercise, mediaStream: appState.stream });
   nodes.recordBtn.classList.add('is-recording');
   nodes.recordBtn.querySelector('span:last-child').textContent = 'Stop REC';
   nodes.recIndicator.hidden = false;
@@ -559,20 +574,24 @@ function startRecording() {
     nodes.recTimer.textContent = `${m}:${s}`;
   }, 500);
 
-  announce('Session recording started. Frames and joint telemetry stored locally.');
+  announce('Session recording started. Video and joint telemetry storing locally.');
 }
 
-function stopRecording() {
+async function stopRecording() {
   clearInterval(appState.recTimerInterval);
   nodes.recIndicator.hidden = true;
   nodes.recordBtn.classList.remove('is-recording');
   nodes.recordBtn.querySelector('span:last-child').textContent = 'Record';
 
-  const sessionData = recorder.stop();
+  const sessionData = await recorder.stop();
   if (sessionData && sessionData.frameCount > 0) {
+    if (sessionData.hasVideo && sessionData.videoBlob) {
+      await videoStore.saveVideo(sessionData.id, sessionData.videoBlob);
+    }
     storage.saveSession(sessionData);
     updateSessionsList();
     announce(`Session recorded: ${sessionData.frameCount} frames, ${sessionData.finalReps} reps saved.`);
+    await loadSessionForPlayback(sessionData.id);
   }
 }
 
@@ -580,6 +599,16 @@ function updateSessionsList() {
   const index = storage.getIndex();
   nodes.sessionCountBadge.textContent = String(index.length);
   nodes.savedSessionsList.innerHTML = '';
+
+  if (nodes.sessionSelectTop) {
+    const curId = appState.currentSessionViewing?.id || '';
+    nodes.sessionSelectTop.innerHTML = '<option value="">-- Choose a session --</option>' +
+      index.map(item => `<option value="${item.id}">${item.exerciseId.toUpperCase()} · ${item.recordedAt ? new Date(item.recordedAt).toLocaleTimeString() : item.id} (${item.finalReps} reps)</option>`).join('');
+    if (curId && index.some(item => item.id === curId)) {
+      nodes.sessionSelectTop.value = curId;
+    }
+  }
+
   for (const selId of ['compare-a', 'compare-b']) {
     const sel = document.getElementById(selId);
     if (sel) {
@@ -607,7 +636,7 @@ function updateSessionsList() {
     const meta = document.createElement('span');
     meta.className = 'session-meta';
     const durSec = (item.durationMs / 1000).toFixed(1);
-    meta.textContent = `${durSec}s · ${item.frameCount} frames`;
+    meta.textContent = `${durSec}s · ${item.frameCount} frames ${item.hasVideo ? '📹 Video' : ''}`;
 
     info.append(title, meta);
 
@@ -622,7 +651,7 @@ function updateSessionsList() {
   }
 }
 
-function loadSessionForPlayback(sessionId) {
+async function loadSessionForPlayback(sessionId) {
   const fullSession = storage.getSession(sessionId);
   if (!fullSession) return;
 
@@ -631,6 +660,70 @@ function loadSessionForPlayback(sessionId) {
   nodes.activeSessionTitle.textContent = `${fullSession.exerciseId.toUpperCase()} · ${fullSession.frameCount} frames`;
   nodes.timelineScrubber.max = String(Math.max(0, fullSession.frameCount - 1));
   nodes.timelineScrubber.value = '0';
+
+  if (nodes.sessionSelectTop) {
+    nodes.sessionSelectTop.value = sessionId;
+  }
+
+  // Populate Workout Results Summary Card
+  if (nodes.workoutResultsCard) {
+    nodes.resExerciseTag.textContent = `${fullSession.exerciseId.toUpperCase()} SESSION RESULTS`;
+    nodes.resTimestamp.textContent = fullSession.recordedAt ? new Date(fullSession.recordedAt).toLocaleString() : 'Recorded session';
+    nodes.resRepCount.textContent = String(fullSession.finalReps ?? 0).padStart(2, '0');
+    const durSec = (fullSession.durationMs / 1000).toFixed(1);
+    const m = Math.floor(fullSession.durationMs / 60000);
+    const s = Math.floor((fullSession.durationMs % 60000) / 1000);
+    nodes.resDuration.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} (${durSec}s)`;
+
+    // Calculate peak depth / angle from frames
+    let peakDeg = null;
+    let symSum = 0;
+    let symCount = 0;
+    for (const f of fullSession.frames || []) {
+      const a = f.angles || {};
+      const knee = [a.leftKnee, a.rightKnee].filter(Number.isFinite);
+      const shoulder = [a.leftShoulder, a.rightShoulder].filter(Number.isFinite);
+      if (['squat', 'sit-to-stand', 'lunge'].includes(fullSession.exerciseId)) {
+        if (knee.length) {
+          const minKnee = Math.min(...knee);
+          if (peakDeg === null || minKnee < peakDeg) peakDeg = minKnee;
+        }
+      } else if (shoulder.length) {
+        const maxArm = Math.max(...shoulder);
+        if (peakDeg === null || maxArm > peakDeg) peakDeg = maxArm;
+      }
+      if (Number.isFinite(a.leftKnee) && Number.isFinite(a.rightKnee)) {
+        symSum += Math.abs(a.leftKnee - a.rightKnee);
+        symCount++;
+      }
+    }
+    nodes.resPeakAngle.textContent = peakDeg !== null ? `${Math.round(peakDeg)}°` : '—';
+    if (symCount > 0) {
+      const avgSym = Math.round((symSum / symCount) * 10) / 10;
+      nodes.resSymmetry.textContent = avgSym <= 10 ? `Balanced (±${avgSym}°)` : `Asymmetric (±${avgSym}°)`;
+    } else {
+      nodes.resSymmetry.textContent = 'Stable';
+    }
+  }
+
+  // Load video if present in videoStore
+  const videoBlob = await videoStore.getVideo(sessionId);
+  if (videoBlob && nodes.replayVideo) {
+    if (nodes.replayVideo.src && nodes.replayVideo.src.startsWith('blob:')) {
+      URL.revokeObjectURL(nodes.replayVideo.src);
+    }
+    nodes.replayVideo.src = URL.createObjectURL(videoBlob);
+    nodes.replayVideo.hidden = false;
+    nodes.replayNoVideo.hidden = true;
+    nodes.replayVideo.onloadedmetadata = () => {
+      nodes.replayCanvas.width = nodes.replayVideo.videoWidth || 640;
+      nodes.replayCanvas.height = nodes.replayVideo.videoHeight || 480;
+    };
+  } else if (nodes.replayVideo) {
+    nodes.replayVideo.src = '';
+    nodes.replayVideo.hidden = true;
+    nodes.replayNoVideo.hidden = false;
+  }
 
   chart.render({
     frames: fullSession.frames,
@@ -653,9 +746,23 @@ player.subscribe((frame, isPlaying) => {
   const totSec = (appState.currentSessionViewing?.durationMs / 1000 || 0).toFixed(1);
   nodes.timelineTime.textContent = `${curSec}s / ${totSec}s [f:${frame.index}]`;
 
-  // Draw frame on canvas if live camera is not running
+  const cfg = settings.get();
+
+  // Render on replay canvas overlay
+  replayOverlay.render({
+    landmarks: frame.landmarks,
+    angles: frame.angles,
+    timestampMs: frame.timeMs,
+  }, {
+    showSkeleton: cfg.overlays.showSkeleton,
+    showJointMarkers: cfg.overlays.showJointMarkers,
+    showDegreeLabels: cfg.overlays.showDegreeLabels,
+    showAngleArcs: cfg.overlays.showAngleArcs,
+    mirrored: false,
+  });
+
+  // Also draw on main canvas if live camera is not running
   if (!appState.active) {
-    const cfg = settings.get();
     overlay.render({
       landmarks: frame.landmarks,
       angles: frame.angles,
@@ -829,14 +936,32 @@ nodes.setGhostBtn.addEventListener('click', () => {
   }
 });
 
-nodes.deleteSessionBtn.addEventListener('click', () => {
+if (nodes.sessionSelectTop) {
+  nodes.sessionSelectTop.addEventListener('change', (e) => {
+    if (e.target.value) {
+      loadSessionForPlayback(e.target.value);
+    }
+  });
+}
+
+nodes.deleteSessionBtn.addEventListener('click', async () => {
   if (!appState.currentSessionViewing) return;
   const id = appState.currentSessionViewing.id;
   storage.deleteSession(id);
+  await videoStore.deleteVideo(id);
   appState.currentSessionViewing = null;
   player.stop();
+  if (nodes.replayVideo) nodes.replayVideo.src = '';
+  replayOverlay.clear();
   updateSessionsList();
   nodes.activeSessionTitle.textContent = 'Session deleted.';
+  if (nodes.workoutResultsCard) {
+    nodes.resRepCount.textContent = '--';
+    nodes.resDuration.textContent = '--:--';
+    nodes.resPeakAngle.textContent = '--°';
+    nodes.resSymmetry.textContent = '--';
+    nodes.resTimestamp.textContent = 'No session selected';
+  }
   chart.render({ frames: [] });
   announce('Session deleted from local storage.');
 });

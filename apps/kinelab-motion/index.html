@@ -7,7 +7,7 @@
   <meta name="referrer" content="no-referrer" />
   <meta name="description" content="KineLab Motion 2.0: Modular, real-time, single-camera motion intelligence, multi-exercise recognition, and movement analytics." />
   <title>KineLab Motion 2.0 — Motion Intelligence Studio</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=2.1" />
   <script type="module" src="./src/app.mjs"></script>
 </head>
 <body>
@@ -188,10 +188,55 @@
             <h2 id="analytics-heading">Movement Replay &amp; Analytics</h2>
             <span id="active-session-title" class="subtle-text">No session selected</span>
           </div>
-          <button type="button" id="close-analytics" class="btn-close" aria-label="Close analytics drawer">✕</button>
+          <div class="analytics-header-controls">
+            <label class="session-selector-label">
+              <span>SELECT SESSION:</span>
+              <select id="session-select-top" class="session-select-top" aria-label="Select session to inspect">
+                <option value="">(No session)</option>
+              </select>
+            </label>
+            <button type="button" id="close-analytics" class="btn-close" aria-label="Close analytics drawer">✕</button>
+          </div>
         </div>
 
         <div class="analytics-body">
+          <!-- Workout Results Summary Card -->
+          <div class="workout-results-card" id="workout-results-card">
+            <div class="results-header">
+              <span class="results-badge-tag" id="res-exercise-tag">SESSION RESULTS</span>
+              <span class="results-timestamp" id="res-timestamp">No session selected</span>
+            </div>
+            <div class="results-grid">
+              <div class="result-metric">
+                <span class="metric-label">REPETITIONS</span>
+                <span class="metric-value highlight" id="res-rep-count">--</span>
+              </div>
+              <div class="result-metric">
+                <span class="metric-label">DURATION</span>
+                <span class="metric-value" id="res-duration">--:--</span>
+              </div>
+              <div class="result-metric">
+                <span class="metric-label">PEAK DEPTH</span>
+                <span class="metric-value" id="res-peak-angle">--°</span>
+              </div>
+              <div class="result-metric">
+                <span class="metric-label">BILATERAL SYMMETRY</span>
+                <span class="metric-value" id="res-symmetry">--</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Synchronized Video + Skeletal Replay Stage -->
+          <div class="replay-stage-wrapper" id="replay-stage-wrapper">
+            <div class="replay-stage" id="replay-stage">
+              <video id="replay-video" class="replay-video" playsinline muted></video>
+              <canvas id="replay-canvas" class="replay-canvas" width="640" height="480"></canvas>
+              <div id="replay-no-video" class="replay-no-video" hidden>
+                <span>Telemetry Replay (No camera video stream recorded)</span>
+              </div>
+            </div>
+          </div>
+
           <div class="timeline-controls">
             <button type="button" id="play-pause-btn" class="btn btn-ghost">▶ Play</button>
             <button type="button" id="step-back-btn" class="btn btn-ghost" title="Previous frame">‹</button>
