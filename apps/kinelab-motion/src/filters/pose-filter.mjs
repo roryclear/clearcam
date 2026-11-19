@@ -6,11 +6,18 @@
 import { OneEuroPoint2D } from './one-euro-filter.mjs';
 import { OutlierFilter } from './outlier-filter.mjs';
 
+/**
+ * One Euro parameters for normalized image coordinates (0..1). Landmark speeds
+ * during exercise are ~0.1-1 units/s, so beta must be tens for the cutoff to
+ * rise with motion; the previous values (beta 0.003-0.015) barely adapted and
+ * lagged by 150+ ms, under-reading squat depth by 6-15°. Tuned with
+ * bench/accuracy-bench.mjs: lowest knee-angle RMSE at standing jitter ~1°.
+ */
 export const SMOOTHING_PRESETS = Object.freeze({
   off: { minCutoff: 30.0, beta: 0.0, dCutoff: 1.0, label: 'Off / Direct' },
-  low: { minCutoff: 1.6, beta: 0.015, dCutoff: 1.0, label: 'Low (Fastest)' },
-  medium: { minCutoff: 1.0, beta: 0.007, dCutoff: 1.0, label: 'Medium (Balanced)' },
-  high: { minCutoff: 0.5, beta: 0.003, dCutoff: 1.0, label: 'High (Smooth)' },
+  low: { minCutoff: 1.0, beta: 60, dCutoff: 1.0, label: 'Low (Fastest)' },
+  medium: { minCutoff: 0.5, beta: 40, dCutoff: 1.0, label: 'Medium (Balanced)' },
+  high: { minCutoff: 0.3, beta: 20, dCutoff: 1.0, label: 'High (Smooth)' },
 });
 
 export class PoseFilter {

@@ -55,15 +55,22 @@ test('SettingsManager loads, updates, persists, and notifies subscribers', () =>
   assert.equal(manager2.get().tracking.smoothing, 'high');
 });
 
-test('validateSettings validates angleDimension defaulting to 3d', () => {
+test('validateSettings validates angleDimension defaulting to auto', () => {
   const result = validateSettings({});
-  assert.equal(result.tracking.angleDimension, '3d');
+  assert.equal(result.tracking.angleDimension, 'auto');
 
   const custom2D = validateSettings({ tracking: { angleDimension: '2d' } });
   assert.equal(custom2D.tracking.angleDimension, '2d');
 
   const invalid = validateSettings({ tracking: { angleDimension: '4d' } });
-  assert.equal(invalid.tracking.angleDimension, '3d');
+  assert.equal(invalid.tracking.angleDimension, 'auto');
+});
+
+test('validateSettings migrates the old v2 default 3d to auto but keeps an explicit v3 choice', () => {
+  assert.equal(validateSettings({ version: 2, tracking: { angleDimension: '3d' } }).tracking.angleDimension, 'auto');
+  assert.equal(validateSettings({ version: 3, tracking: { angleDimension: '3d' } }).tracking.angleDimension, '3d');
+  assert.equal(validateSettings({ version: 2, tracking: { angleDimension: '2d' } }).tracking.angleDimension, '2d');
+  assert.equal(validateSettings({ tracking: { model: 'lite' } }).tracking.model, 'lite');
 });
 
 test('validateSettings validates voiceCoach option', () => {

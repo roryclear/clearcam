@@ -9,9 +9,14 @@ export const CDN_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${
 export const MODEL_URLS = Object.freeze({
   heavy: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task',
   full: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+  lite: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
 });
 
+/** Most to least accurate; each step is faster. */
+export const MODEL_LADDER = Object.freeze(['heavy', 'full', 'lite']);
+
 export const INFERENCE_PRESETS = Object.freeze({
+  adaptive: { width: null, height: null, label: 'Adaptive (subject-size aware)' },
   speed: { width: 360, height: 270, label: 'Speed (360p)' },
   balanced: { width: 480, height: 360, label: 'Balanced (480p)' },
   high: { width: 720, height: 540, label: 'High (720p)' },
@@ -22,13 +27,14 @@ export class MediaPipeRunner {
   constructor({
     confidenceThreshold = 0.55,
     preferredModel = 'heavy',
-    inferencePreset = 'balanced',
+    inferencePreset = 'adaptive',
     loadVision = () => import(`${CDN_BASE}/+esm`),
   } = {}) {
     this.loadVision = loadVision;
     // Incremented by every initialize()/close(); an initialization only installs its
     // landmarker if no newer initialize() or close() happened while it was loading.
     this.generation = 0;
+    this.subjectExtent = null;
     this.confidenceThreshold = confidenceThreshold;
     this.preferredModel = preferredModel;
 
@@ -46,8 +52,30 @@ export class MediaPipeRunner {
     this.offscreenCtx = null;
   }
 
+  /**
+   * Tells the runner how tall the person is in the frame (normalized 0..1), from the
+   * previous result. The landmark model crops the person to a 256x256 input; if the
+   * downscaled frame gives that crop fewer source pixels than it needs, detail is
+   * lost to upsampling. Adaptive mode picks the smallest frame size that still
+   * leaves the person >= minSubjectPx tall, so a near subject is cheap and a far one
+   * keeps native detail.
+   */
+  setSubjectExtent(normHeight) {
+    this.subjectExtent = Number.isFinite(normHeight) && normHeight > 0.05 ? Math.min(1, normHeight) : null;
+  }
+
+  /** Target inference height for adaptive mode, quantized to limit canvas reallocations. */
+  adaptiveTargetHeight(nativeHeight) {
+    const minSubjectPx = 320;
+    const floor = 288;
+    const native = Math.max(floor, nativeHeight || 480);
+    if (!this.subjectExtent) return Math.min(native, 480); // no person yet: cheap detection pass
+    const needed = Math.ceil(minSubjectPx / this.subjectExtent / 48) * 48;
+    return Math.max(floor, Math.min(native, needed));
+  }
+
   setInferencePreset(preset) {
-    this.inferencePreset = preset in INFERENCE_PRESETS ? preset : 'balanced';
+    this.inferencePreset = preset in INFERENCE_PRESETS ? preset : 'adaptive';
     const cfg = INFERENCE_PRESETS[this.inferencePreset];
     if (cfg && cfg.width) {
       this.targetWidth = cfg.width;
@@ -68,7 +96,8 @@ export class MediaPipeRunner {
     const { FilesetResolver, PoseLandmarker } = await this.loadVision();
     const fileset = await FilesetResolver.forVisionTasks(`${CDN_BASE}/wasm`);
 
-    const modelsToTry = modelChoice === 'heavy' ? ['heavy', 'full'] : ['full'];
+    const start = Math.max(0, MODEL_LADDER.indexOf(modelChoice));
+    const modelsToTry = MODEL_LADDER.slice(start);
     let lastError = null;
 
     for (const model of modelsToTry) {
@@ -130,8 +159,16 @@ export class MediaPipeRunner {
     const vh = video.videoHeight || 480;
     const aspect = vw / vh;
 
-    const tw = this.targetWidth;
-    const th = Math.round(tw / aspect);
+    let tw;
+    let th;
+    if (this.inferencePreset === 'adaptive') {
+      th = this.adaptiveTargetHeight(vh);
+      if (th >= vh) return video; // full resolution needed: skip the extra copy
+      tw = Math.round(th * aspect);
+    } else {
+      tw = this.targetWidth;
+      th = Math.round(tw / aspect);
+    }
 
     if (!this.offscreenCanvas) {
       this.offscreenCanvas = document.createElement('canvas');

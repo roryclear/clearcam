@@ -2,7 +2,7 @@
  * Settings schema, validation rules, and default preferences.
  */
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 export const STORAGE_KEY = 'kinelab_motion_settings_v2';
 
 function deepFreeze(obj) {
@@ -20,11 +20,11 @@ export const DEFAULT_SETTINGS = deepFreeze({
     resolution: '720p', // '480p' | '720p' | '1080p'
   },
   tracking: {
-    model: 'heavy', // 'heavy' | 'full'
+    model: 'heavy', // 'heavy' | 'full' | 'lite'
     autoFallback: true,
     smoothing: 'medium', // 'off' | 'low' | 'medium' | 'high'
     confidenceThreshold: 0.55,
-    angleDimension: '3d', // '3d' | '2d' (3D metric vectors vs 2D image plane)
+    angleDimension: 'auto', // 'auto' (view-aware 2D/3D blend) | '3d' | '2d'
   },
   overlays: {
     showSkeleton: true,
@@ -75,7 +75,7 @@ export function validateSettings(raw) {
   };
 
   const tracking = {
-    model: ['heavy', 'full'].includes(raw.tracking?.model)
+    model: ['heavy', 'full', 'lite'].includes(raw.tracking?.model)
       ? raw.tracking.model
       : DEFAULT_SETTINGS.tracking.model,
     autoFallback: Boolean(raw.tracking?.autoFallback ?? DEFAULT_SETTINGS.tracking.autoFallback),
@@ -88,9 +88,12 @@ export function validateSettings(raw) {
       raw.tracking.confidenceThreshold <= 0.9
         ? raw.tracking.confidenceThreshold
         : DEFAULT_SETTINGS.tracking.confidenceThreshold,
-    angleDimension: ['3d', '2d'].includes(raw.tracking?.angleDimension)
-      ? raw.tracking.angleDimension
-      : DEFAULT_SETTINGS.tracking.angleDimension,
+    // v2 stored '3d' as the default for everyone; move those users to the new 'auto' default.
+    angleDimension: (raw.version ?? 0) < 3 && raw.tracking?.angleDimension === '3d'
+      ? 'auto'
+      : ['auto', '3d', '2d'].includes(raw.tracking?.angleDimension)
+        ? raw.tracking.angleDimension
+        : DEFAULT_SETTINGS.tracking.angleDimension,
   };
 
   const overlays = {
