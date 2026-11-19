@@ -23,7 +23,12 @@ export class MediaPipeRunner {
     confidenceThreshold = 0.55,
     preferredModel = 'heavy',
     inferencePreset = 'balanced',
+    loadVision = () => import(`${CDN_BASE}/+esm`),
   } = {}) {
+    this.loadVision = loadVision;
+    // Incremented by every initialize()/close(); an initialization only installs its
+    // landmarker if no newer initialize() or close() happened while it was loading.
+    this.generation = 0;
     this.confidenceThreshold = confidenceThreshold;
     this.preferredModel = preferredModel;
 
@@ -56,10 +61,11 @@ export class MediaPipeRunner {
    * @param {Function} [onStatusUpdate] Callback for loading progress strings
    */
   async initialize(modelChoice = this.preferredModel, onStatusUpdate = () => {}) {
+    const generation = ++this.generation;
     this.isInitializing = true;
     onStatusUpdate('Loading MediaPipe vision tasks library…');
 
-    const { FilesetResolver, PoseLandmarker } = await import(`${CDN_BASE}/+esm`);
+    const { FilesetResolver, PoseLandmarker } = await this.loadVision();
     const fileset = await FilesetResolver.forVisionTasks(`${CDN_BASE}/wasm`);
 
     const modelsToTry = modelChoice === 'heavy' ? ['heavy', 'full'] : ['full'];
@@ -81,6 +87,13 @@ export class MediaPipeRunner {
             minTrackingConfidence: this.confidenceThreshold,
             outputSegmentationMasks: false,
           });
+
+          if (generation !== this.generation) {
+            // Superseded by a newer initialize() or close(): discard instead of
+            // replacing the tracker that the newer call installed.
+            landmarker.close();
+            return { success: false, stale: true, model, delegate };
+          }
 
           if (this.landmarker) {
             this.landmarker.close();
@@ -156,6 +169,7 @@ export class MediaPipeRunner {
   }
 
   close() {
+    this.generation++;
     if (this.landmarker) {
       this.landmarker.close();
       this.landmarker = null;

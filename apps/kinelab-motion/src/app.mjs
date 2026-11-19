@@ -555,12 +555,9 @@ function switchToFallbackModel(reason) {
   announce(`Performance notice: ${reason} Switching to Full model for responsiveness.`);
   // The current landmarker keeps running until the Full model is ready, then is replaced.
   runner.initialize('full', () => {})
-    .then(() => {
-      if (token !== appState.sessionToken) {
-        // Camera was stopped while the Full model loaded; don't leave it running.
-        if (!appState.active && !appState.starting) runner.close();
-        return;
-      }
+    .then(result => {
+      // The runner discards a stale load itself; also ignore results from an older camera session.
+      if (result?.stale || token !== appState.sessionToken) return;
       adaptive.setCurrentModel('full');
       settings.update({ tracking: { model: 'full' } });
       nodes.modelChoice.value = 'full';

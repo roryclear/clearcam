@@ -6,6 +6,7 @@ import { SessionStorage } from '../src/sessions/session-storage.mjs';
 import { SessionRecorder } from '../src/sessions/session-recorder.mjs';
 import { TimelinePlayer } from '../src/sessions/timeline-player.mjs';
 import { SitToStandExercise } from '../src/exercises/sit-to-stand-exercise.mjs';
+import { MediaPipeRunner } from '../src/tracking/mediapipe-runner.mjs';
 
 class QuotaStorage {
   constructor(maxChars = Infinity) {
@@ -188,4 +189,49 @@ test('SitToStandExercise does not count a rep when the user starts standing and 
   for (let t = 1000; t < 1400; t += 100) state = sts.update(state, frame(170, 170, t));
   for (let t = 1400; t < 1800; t += 100) state = sts.update(state, frame(90, 90, t));
   assert.equal(state.reps, 1);
+});
+
+test('MediaPipeRunner discards a stale initialize() that finishes after a newer one', async () => {
+  const gates = [];
+  const created = [];
+  const PoseLandmarker = {
+    createFromOptions: (_fs, opts) => new Promise(resolve => gates.push(() => {
+      const lm = { model: opts.baseOptions.modelAssetPath, closed: false, close() { this.closed = true; } };
+      created.push(lm);
+      resolve(lm);
+    })),
+  };
+  const runner = new MediaPipeRunner({
+    loadVision: async () => ({ FilesetResolver: { forVisionTasks: async () => ({}) }, PoseLandmarker }),
+  });
+
+  const fallback = runner.initialize('full');        // e.g. auto-fallback still loading
+  await new Promise(r => setTimeout(r, 0));
+  const restart = runner.initialize('heavy');        // user restarted the camera
+  await new Promise(r => setTimeout(r, 0));
+  gates[1]();                                        // heavy finishes first
+  assert.equal((await restart).model, 'heavy');
+  gates[0]();                                        // stale full finishes last
+  const stale = await fallback;
+
+  assert.equal(stale.stale, true);
+  assert.equal(runner.activeModel, 'heavy');
+  assert.match(runner.landmarker.model, /heavy/);
+  assert.equal(created.find(l => /full/.test(l.model)).closed, true);
+});
+
+test('MediaPipeRunner does not install a landmarker after close()', async () => {
+  let release;
+  const PoseLandmarker = {
+    createFromOptions: () => new Promise(resolve => { release = () => resolve({ close() { this.closed = true; } }); }),
+  };
+  const runner = new MediaPipeRunner({
+    loadVision: async () => ({ FilesetResolver: { forVisionTasks: async () => ({}) }, PoseLandmarker }),
+  });
+  const pending = runner.initialize('full');
+  await new Promise(r => setTimeout(r, 0));
+  runner.close();
+  release();
+  assert.equal((await pending).stale, true);
+  assert.equal(runner.landmarker, null);
 });
