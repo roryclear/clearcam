@@ -17,6 +17,13 @@ export class TimelinePlayer {
 
     this.videoEl = null;
     this._videoHandlers = null;
+    this._videoFrameCallbackId = 0;
+    // True when the attached video failed to play and the RAF clock drives playback instead.
+    this._rafFallback = false;
+  }
+
+  _videoDriven() {
+    return Boolean(this.videoEl) && !this._rafFallback;
   }
 
   attachVideoElement(videoEl) {
@@ -28,6 +35,7 @@ export class TimelinePlayer {
 
     const onTimeUpdate = () => {
       if (!this.session || !this.session.frames || !this.session.frames.length) return;
+      if (this._rafFallback) return;
       const targetMs = (this.videoEl.currentTime || 0) * 1000;
       const frames = this.session.frames;
 
@@ -56,6 +64,7 @@ export class TimelinePlayer {
 
     const onPlay = () => {
       this.isPlaying = true;
+      this._scheduleVideoFrameSync();
       this.notify();
     };
 
@@ -67,14 +76,44 @@ export class TimelinePlayer {
     this._videoHandlers = { onTimeUpdate, onEnded, onPlay, onPause };
 
     this.videoEl.addEventListener('timeupdate', onTimeUpdate);
+    this.videoEl.addEventListener('seeked', onTimeUpdate);
     this.videoEl.addEventListener('ended', onEnded);
     this.videoEl.addEventListener('play', onPlay);
     this.videoEl.addEventListener('pause', onPause);
   }
 
+  /**
+   * 'timeupdate' fires only ~4 times per second, which makes the skeleton overlay
+   * visibly lag the video. When available, requestVideoFrameCallback syncs the
+   * overlay on every presented video frame.
+   */
+  _scheduleVideoFrameSync() {
+    const video = this.videoEl;
+    if (!video || typeof video.requestVideoFrameCallback !== 'function' || this._videoFrameCallbackId) return;
+    this._videoFrameCallbackId = video.requestVideoFrameCallback(() => {
+      this._videoFrameCallbackId = 0;
+      if (this.videoEl !== video || !this.isPlaying) return;
+      this._videoHandlers?.onTimeUpdate();
+      this._scheduleVideoFrameSync();
+    });
+  }
+
+  _cancelVideoFrameSync() {
+    if (this._videoFrameCallbackId && this.videoEl && typeof this.videoEl.cancelVideoFrameCallback === 'function') {
+      this.videoEl.cancelVideoFrameCallback(this._videoFrameCallbackId);
+    }
+    this._videoFrameCallbackId = 0;
+  }
+
   detachVideoElement() {
-    if (!this.videoEl || !this._videoHandlers) return;
+    this._rafFallback = false;
+    if (!this.videoEl || !this._videoHandlers) {
+      this.videoEl = null;
+      return;
+    }
+    this._cancelVideoFrameSync();
     this.videoEl.removeEventListener('timeupdate', this._videoHandlers.onTimeUpdate);
+    this.videoEl.removeEventListener('seeked', this._videoHandlers.onTimeUpdate);
     this.videoEl.removeEventListener('ended', this._videoHandlers.onEnded);
     this.videoEl.removeEventListener('play', this._videoHandlers.onPlay);
     this.videoEl.removeEventListener('pause', this._videoHandlers.onPause);
@@ -84,6 +123,7 @@ export class TimelinePlayer {
 
   loadSession(session) {
     this.stop();
+    this._rafFallback = false;
     this.session = session;
     this.currentFrameIdx = 0;
     this.playbackTimeMs = 0;
@@ -103,12 +143,16 @@ export class TimelinePlayer {
     if (!this.session || !this.session.frames.length || this.isPlaying) return;
     this.isPlaying = true;
 
-    if (this.videoEl) {
-      this.videoEl.playbackRate = this.playbackSpeed;
-      const playPromise = this.videoEl.play();
-      if (playPromise !== undefined) {
+    if (this._videoDriven()) {
+      const video = this.videoEl;
+      video.playbackRate = this.playbackSpeed;
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
         playPromise.catch(err => {
-          console.warn('[TimelinePlayer] Video play failed, falling back to RAF:', err);
+          if (this.videoEl !== video || !this.isPlaying) return;
+          console.warn('[TimelinePlayer] Video play failed, falling back to telemetry clock:', err);
+          this._rafFallback = true;
+          this.playbackTimeMs = this.session.frames[this.currentFrameIdx]?.timeMs ?? 0;
           this.lastTickTime = performance.now();
           this.loop();
         });
@@ -116,12 +160,18 @@ export class TimelinePlayer {
       return;
     }
 
+    if (this.currentFrameIdx >= this.session.frames.length - 1) {
+      // Restart from the beginning when play is pressed at the end of the session.
+      this.currentFrameIdx = 0;
+    }
+    this.playbackTimeMs = this.session.frames[this.currentFrameIdx]?.timeMs ?? 0;
     this.lastTickTime = performance.now();
     this.loop();
   }
 
   pause() {
     this.isPlaying = false;
+    this._cancelVideoFrameSync();
     if (this.videoEl && !this.videoEl.paused) {
       this.videoEl.pause();
     }
@@ -136,7 +186,7 @@ export class TimelinePlayer {
     this.pause();
     this.currentFrameIdx = 0;
     this.playbackTimeMs = 0;
-    if (this.videoEl) {
+    if (this._videoDriven()) {
       this.videoEl.currentTime = 0;
     }
     this.notify();
@@ -157,7 +207,7 @@ export class TimelinePlayer {
     const targetMs = this.session.frames[clamped].timeMs;
     this.playbackTimeMs = targetMs;
 
-    if (this.videoEl) {
+    if (this._videoDriven()) {
       this.videoEl.currentTime = targetMs / 1000;
     }
 
@@ -170,7 +220,7 @@ export class TimelinePlayer {
   }
 
   loop() {
-    if (!this.isPlaying || this.videoEl) return;
+    if (!this.isPlaying || this._videoDriven() || !this.session) return;
     const now = performance.now();
     const dt = (now - this.lastTickTime) * this.playbackSpeed;
     this.lastTickTime = now;

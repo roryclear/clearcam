@@ -141,9 +141,14 @@ export class SessionRecorder {
 
     // Synchronous path when no video was recorded (preserves backwards compatibility)
     if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+      // The recorder may already have stopped on its own (e.g. the camera track ended);
+      // keep whatever video chunks it delivered instead of discarding them.
+      const videoBlob = this.videoChunks.length > 0
+        ? new Blob(this.videoChunks, { type: this.videoMimeType || 'video/webm' })
+        : null;
       this.isRecordingVideo = false;
       this.mediaRecorder = null;
-      return this._buildSessionData(null);
+      return this._buildSessionData(videoBlob);
     }
 
     // Asynchronous path when finalizing video recording

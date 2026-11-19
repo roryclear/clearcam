@@ -443,6 +443,8 @@ python apps/kinelab-motion/serve.py 4173
 
 On Windows, `python` or `py` may be the available launcher instead of `python3`.
 
+`serve.py` binds to `127.0.0.1` so the app directory is not exposed on your network. To reach it from another device, pass `--host 0.0.0.0`; note that browsers only allow camera access over HTTPS or `localhost`, so a phone on plain-HTTP LAN will not get the camera.
+
 Open **http://localhost:4173**, select an exercise, press **Start camera**, and approve the browser permission request. The first model download may take longer than subsequent starts.
 
 **Note:** This runs KineLab only. To run the original Clearcam NVR, follow the repository's root [README](../../README.md); it uses a separate Python process and port.
@@ -520,7 +522,7 @@ apps/kinelab-motion/
 ├── README.md
 ├── index.html                # Studio interface, controls, settings and analytics
 ├── styles.css                # Dark responsive visual system
-├── serve.py                  # Multi-threaded development server with no-cache headers
+├── serve.py                  # Multi-threaded no-cache dev server; binds 127.0.0.1 (use --host to change)
 ├── src/
 │   ├── app.mjs               # Runtime orchestrator, camera and UI events
 │   ├── pose-math.mjs         # Backward-compatible geometry re-exports
@@ -618,7 +620,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **20 Node test files and 82 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **21 Node test files and 90 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
@@ -628,7 +630,7 @@ Run them from the repository root:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~300ms across all 82 tests.
+Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~300ms across all 90 tests. Tests resolve paths relative to their own files, so they can be run from any directory.
 
 ### Known limits and caveats
 

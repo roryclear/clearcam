@@ -28,6 +28,9 @@ export class SitToStandExercise extends BaseExercise {
   createState() {
     return {
       phase: 'seated', // 'seated' | 'rising' | 'standing' | 'sitting'
+      // A stand only counts once a seated posture has actually been observed, so a
+      // user who starts standing and sits down is not credited with a repetition.
+      seatedConfirmed: false,
       reps: 0,
       seatedFrames: 0,
       standingFrames: 0,
@@ -45,6 +48,7 @@ export class SitToStandExercise extends BaseExercise {
     if (trackingQuality === 'lost') {
       next.status = 'tracking-lost';
       next.phase = 'seated';
+      next.seatedConfirmed = false;
       next.standingFrames = 0;
       next.seatedFrames = 0;
       next.kneeAngle = null;
@@ -71,7 +75,12 @@ export class SitToStandExercise extends BaseExercise {
 
     switch (state.phase) {
       case 'seated':
-        if (knee > sitThreshold + 15) {
+        if (knee <= sitThreshold) {
+          next.seatedConfirmed = true;
+        }
+        if (!next.seatedConfirmed) {
+          next.status = 'sit-to-begin';
+        } else if (knee > sitThreshold + 15) {
           next.phase = 'rising';
           next.status = 'rising';
           next.standingFrames = 0;
@@ -133,6 +142,7 @@ export class SitToStandExercise extends BaseExercise {
     }
     const map = {
       waiting: 'Start seated on a stable chair with side profile to camera.',
+      'sit-to-begin': 'Sit down on the chair to begin. Counting starts from a seated position.',
       'seated-ready': 'Seated position detected. Stand up smoothly to begin.',
       rising: 'Rising... Extend hips and knees fully into standing.',
       'standing-hold': 'Standing detected. Now sit back down in a controlled motion.',

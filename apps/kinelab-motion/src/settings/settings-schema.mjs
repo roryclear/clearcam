@@ -5,7 +5,14 @@
 export const SETTINGS_VERSION = 2;
 export const STORAGE_KEY = 'kinelab_motion_settings_v2';
 
-export const DEFAULT_SETTINGS = Object.freeze({
+function deepFreeze(obj) {
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object') deepFreeze(value);
+  }
+  return Object.freeze(obj);
+}
+
+export const DEFAULT_SETTINGS = deepFreeze({
   version: SETTINGS_VERSION,
   camera: {
     facingMode: 'environment', // 'environment' | 'user'
@@ -42,9 +49,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   },
 });
 
+/**
+ * Returns a fresh, mutable deep copy of the defaults. A shallow spread of
+ * DEFAULT_SETTINGS shares its nested objects, so callers could mutate the defaults.
+ */
+export function createDefaultSettings() {
+  return validateSettings(DEFAULT_SETTINGS);
+}
+
 export function validateSettings(raw) {
   if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_SETTINGS };
+    return createDefaultSettings();
   }
 
   const camera = {

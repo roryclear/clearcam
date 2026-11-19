@@ -1,4 +1,4 @@
-import unicodedata, re, math, typing, sys, cv2, time
+import codecs, unicodedata, re, math, typing, sys, cv2, time
 import numpy as np
 from tinygrad import Tensor, nn, TinyJit, Variable, dtypes
 Tensor.manual_seed(42)

@@ -39,7 +39,7 @@ export class ChartRenderer {
     const chartH = height - padTop - padBottom;
 
     const maxTime = frames[frames.length - 1].timeMs || 1;
-    const minAngle = 40;
+    const minAngle = 0; // shoulder angles at rest sit well below 40°
     const maxAngle = 180;
 
     // Draw horizontal grid lines and degree labels
@@ -49,7 +49,7 @@ export class ChartRenderer {
     ctx.font = '9px ui-monospace, monospace';
     ctx.textAlign = 'right';
 
-    for (const deg of [60, 90, 120, 150, 180]) {
+    for (const deg of [0, 45, 90, 135, 180]) {
       const y = padTop + chartH - ((deg - minAngle) / (maxAngle - minAngle)) * chartH;
       ctx.beginPath();
       ctx.moveTo(padLeft, y);

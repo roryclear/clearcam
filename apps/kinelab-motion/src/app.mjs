@@ -163,7 +163,6 @@ const recorder = new SessionRecorder();
 const storage = defaultSessionStorage;
 const videoStore = defaultVideoStore;
 const player = new TimelinePlayer();
-player.attachVideoElement(nodes.replayVideo);
 const chart = new ChartRenderer(nodes.chartCanvas);
 const audio = defaultAudioSynthesizer;
 
@@ -186,7 +185,13 @@ const appState = {
   currentSessionViewing: null,
   recStartTime: 0,
   recTimerInterval: 0,
+  stoppingRecording: null,
+  fallbackSessionToken: null, // camera session whose Full-model fallback is loading
 };
+
+const KNEE_EXERCISES = new Set(['squat', 'sit_to_stand', 'lunge']);
+const SHOULDER_EXERCISES = new Set(['shoulder_abduction', 'shoulder_flexion']);
+const normalizeExerciseId = id => String(id || '').replace(/-/g, '_');
 
 // UI Angle Row Cache
 const angleRows = new Map();
@@ -351,9 +356,8 @@ function renderDynamicTelemetry(items) {
 }
 
 function switchExercise(exerciseId) {
-  const cfg = settings.get();
-  cfg.exercise.activeExercise = exerciseId;
-  settings.update({ exercise: { activeExercise: exerciseId } });
+  const cfg = settings.update({ exercise: { activeExercise: exerciseId } });
+  if (nodes.analysisMode.value !== exerciseId) nodes.analysisMode.value = exerciseId;
 
   if (exerciseId === 'free') {
     appState.activeExerciseInstance = null;
@@ -430,7 +434,13 @@ function frameLoop() {
 
   // 1. Decoupled 60/120 FPS High-Fluidity Overlay Rendering
   const renderedLandmarks = interpolator.step(now);
-  if (renderedLandmarks && appState.lastAngles) {
+  if (!renderedLandmarks) {
+    // No pose in view: clear the last skeleton instead of leaving it frozen on screen.
+    overlay.render({ landmarks: null }, {
+      showGhost: cfg.overlays.showGhost,
+      mirrored: cfg.camera.mirroring === 'on' || (cfg.camera.mirroring === 'auto' && cfg.camera.facingMode === 'user'),
+    });
+  } else if (appState.lastAngles) {
     const isMirrored = cfg.camera.mirroring === 'on' ||
       (cfg.camera.mirroring === 'auto' && cfg.camera.facingMode === 'user');
 
@@ -476,11 +486,13 @@ function frameLoop() {
     if (droppedEl) droppedEl.textContent = String(metrics.droppedFrames);
 
     // Adaptive Performance Check
-    const adaptEval = adaptive.evaluate(metrics);
-    if (adaptEval.shouldFallback) {
-      announce(`Performance notice: ${adaptEval.reason} Switching to Full model for responsiveness.`);
-      settings.update({ tracking: { model: 'full' } });
-      nodes.modelChoice.value = 'full';
+    adaptive.autoFallbackEnabled = cfg.tracking.autoFallback;
+    // Don't let evaluate() consume its one-shot fallback while this session's switch is loading.
+    if (appState.fallbackSessionToken !== appState.sessionToken) {
+      const adaptEval = adaptive.evaluate(metrics);
+      if (adaptEval.shouldFallback) {
+        switchToFallbackModel(adaptEval.reason);
+      }
     }
 
     // 1 Euro and Outlier Filtering on 2D image coordinates
@@ -512,10 +524,8 @@ function frameLoop() {
       }
     }
 
-    // Supply target pose to 60/120 FPS interpolator
-    if (smoothedLandmarks) {
-      interpolator.setTarget(smoothedLandmarks, now);
-    }
+    // Supply target pose to 60/120 FPS interpolator (null clears it when the person leaves frame)
+    interpolator.setTarget(smoothedLandmarks, now);
 
     appState.lastAngles = angles;
     renderTelemetry(angles, smoothedLandmarks, constrainedWorldLandmarks, is3D, video.videoWidth, video.videoHeight);
@@ -539,6 +549,30 @@ function frameLoop() {
     stopCamera();
     announce('Inference stopped due to an error. Select Full model and restart.', true);
   }
+}
+
+function switchToFallbackModel(reason) {
+  const token = appState.sessionToken;
+  if (appState.fallbackSessionToken === token) return;
+  appState.fallbackSessionToken = token;
+  announce(`Performance notice: ${reason} Switching to Full model for responsiveness.`);
+  // The current landmarker keeps running until the Full model is ready, then is replaced.
+  runner.initialize('full', () => {})
+    .then(result => {
+      // The runner discards a stale load itself; also ignore results from an older camera session.
+      if (result?.stale || token !== appState.sessionToken) return;
+      adaptive.setCurrentModel('full');
+      settings.update({ tracking: { model: 'full' } });
+      nodes.modelChoice.value = 'full';
+      nodes.modelName.textContent = runner.activeModel.toUpperCase();
+      announce('Switched to Full model for responsiveness.');
+    })
+    .catch(error => {
+      console.warn('Fallback model initialization failed:', error);
+    })
+    .finally(() => {
+      if (appState.fallbackSessionToken === token) appState.fallbackSessionToken = null;
+    });
 }
 
 // Camera Lifecycle
@@ -584,8 +618,15 @@ function stopCamera() {
   runner.close();
   overlay.clear();
   filter.reset();
+  kinematicFilter.reset();
+  interpolator.reset();
   perf.reset();
   adaptive.reset();
+  appState.lastAngles = null;
+  appState.lastFraming = null;
+  appState.lastVideoTime = -1;
+  appState.lastInferenceAt = -Infinity;
+  appState.fallbackSessionToken = null;
 
   clearMetricsUI();
   setLiveUI(false);
@@ -597,6 +638,10 @@ async function startCamera() {
     announce('Camera access requires HTTPS or localhost and a supported browser.', true);
     return;
   }
+
+  // Create/resume the AudioContext inside the click gesture; browsers (notably iOS
+  // Safari) keep contexts created later from the render loop suspended.
+  if (settings.get().exercise.audioCues) audio.ensureContext();
 
   appState.starting = true;
   const currentToken = ++appState.sessionToken;
@@ -643,10 +688,11 @@ async function startCamera() {
 
     filter.setPreset(cfg.tracking.smoothing);
     filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
-    adaptive.setCurrentModel(cfg.tracking.model);
-
     await runner.initialize(cfg.tracking.model, statusStr => announce(statusStr));
     if (appState.sessionToken !== currentToken) return;
+    // initialize() may itself fall back from Heavy to Full if Heavy fails to load.
+    adaptive.setCurrentModel(runner.activeModel);
+    adaptive.autoFallbackEnabled = cfg.tracking.autoFallback;
 
     nodes.modelName.textContent = runner.activeModel.toUpperCase();
     appState.starting = false;
@@ -673,7 +719,9 @@ async function startCamera() {
 
 // Recording & Sessions
 function startRecording() {
-  if (!appState.active) return;
+  // Wait for the previous recording to finish saving; otherwise its pending stop
+  // would swallow the stop request for the new recording.
+  if (!appState.active || appState.stoppingRecording || recorder.isRecording) return;
   const cfg = settings.get();
   recorder.start({ exerciseId: cfg.exercise.activeExercise, mediaStream: appState.stream });
   nodes.recordBtn.classList.add('is-recording');
@@ -692,22 +740,47 @@ function startRecording() {
   announce('Session recording started. Video and joint telemetry storing locally.');
 }
 
-async function stopRecording() {
+function stopRecording() {
+  if (appState.stoppingRecording) return appState.stoppingRecording;
+  nodes.recordBtn.disabled = true;
+  appState.stoppingRecording = finishRecording().finally(() => {
+    appState.stoppingRecording = null;
+    nodes.recordBtn.disabled = !appState.active;
+  });
+  return appState.stoppingRecording;
+}
+
+async function finishRecording() {
   clearInterval(appState.recTimerInterval);
   nodes.recIndicator.hidden = true;
   nodes.recordBtn.classList.remove('is-recording');
   nodes.recordBtn.querySelector('span:last-child').textContent = 'Record';
 
   const sessionData = await recorder.stop();
-  if (sessionData && sessionData.frameCount > 0) {
-    if (sessionData.hasVideo && sessionData.videoBlob) {
-      await videoStore.saveVideo(sessionData.id, sessionData.videoBlob);
-    }
-    storage.saveSession(sessionData);
-    updateSessionsList();
-    announce(`Session recorded: ${sessionData.frameCount} frames, ${sessionData.finalReps} reps saved.`);
-    await loadSessionForPlayback(sessionData.id);
+  if (!sessionData || sessionData.frameCount === 0) {
+    announce('Recording stopped. No frames were captured, so nothing was saved.');
+    return;
   }
+
+  const saved = storage.saveSession(sessionData, {
+    onEvict: id => { videoStore.deleteVideo(id); },
+  });
+  if (!saved) {
+    announce('Session could not be saved: browser storage is full. Delete older sessions or record a shorter clip.', true);
+    return;
+  }
+  if (sessionData.hasVideo && sessionData.videoBlob) {
+    await videoStore.saveVideo(sessionData.id, sessionData.videoBlob);
+  }
+  updateSessionsList();
+  announce(`Session recorded: ${sessionData.frameCount} frames, ${sessionData.finalReps} reps saved.`);
+  await loadSessionForPlayback(sessionData.id);
+}
+
+function fillSelect(select, items, placeholder = null) {
+  select.replaceChildren();
+  if (placeholder !== null) select.append(new Option(placeholder, ''));
+  for (const [value, label] of items) select.append(new Option(label, value));
 }
 
 function updateSessionsList() {
@@ -717,8 +790,10 @@ function updateSessionsList() {
 
   if (nodes.sessionSelectTop) {
     const curId = appState.currentSessionViewing?.id || '';
-    nodes.sessionSelectTop.innerHTML = '<option value="">-- Choose a session --</option>' +
-      index.map(item => `<option value="${item.id}">${item.exerciseId.toUpperCase()} · ${item.recordedAt ? new Date(item.recordedAt).toLocaleTimeString() : item.id} (${item.finalReps} reps)</option>`).join('');
+    fillSelect(nodes.sessionSelectTop, index.map(item => [
+      item.id,
+      `${String(item.exerciseId).toUpperCase()} · ${item.recordedAt ? new Date(item.recordedAt).toLocaleTimeString() : item.id} (${item.finalReps} reps)`,
+    ]), '-- Choose a session --');
     if (curId && index.some(item => item.id === curId)) {
       nodes.sessionSelectTop.value = curId;
     }
@@ -728,7 +803,10 @@ function updateSessionsList() {
     const sel = document.getElementById(selId);
     if (sel) {
       const prev = sel.value;
-      sel.innerHTML = index.map(item => `<option value="${item.id}">${item.exerciseId.toUpperCase()} · ${item.recordedAt ?? item.id}</option>`).join('');
+      fillSelect(sel, index.map(item => [
+        item.id,
+        `${String(item.exerciseId).toUpperCase()} · ${item.recordedAt ? new Date(item.recordedAt).toLocaleString() : item.id}`,
+      ]));
       if (index.some(item => item.id === prev)) sel.value = prev;
     }
   }
@@ -746,7 +824,7 @@ function updateSessionsList() {
 
     const title = document.createElement('span');
     title.className = 'session-title';
-    title.textContent = `${item.exerciseId.toUpperCase()} (${item.finalReps} reps)`;
+    title.textContent = `${String(item.exerciseId).toUpperCase()} (${item.finalReps} reps)`;
 
     const meta = document.createElement('span');
     meta.className = 'session-meta';
@@ -764,6 +842,35 @@ function updateSessionsList() {
     div.append(info, btn);
     nodes.savedSessionsList.append(div);
   }
+}
+
+function releaseReplayVideo() {
+  const src = nodes.replayVideo.getAttribute('src');
+  if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
+  // Assigning '' would resolve to the page URL and make the video element fetch it.
+  nodes.replayVideo.removeAttribute('src');
+  nodes.replayVideo.load();
+}
+
+function resetReplayView(title) {
+  appState.currentSessionViewing = null;
+  player.stop();
+  player.detachVideoElement();
+  player.loadSession(null);
+  releaseReplayVideo();
+  nodes.replayVideo.hidden = true;
+  nodes.replayNoVideo.hidden = false;
+  replayOverlay.clear();
+  nodes.activeSessionTitle.textContent = title;
+  if (nodes.workoutResultsCard) {
+    nodes.resRepCount.textContent = '--';
+    nodes.resDuration.textContent = '--:--';
+    nodes.resPeakAngle.textContent = '--°';
+    nodes.resSymmetry.textContent = '--';
+    nodes.resTimestamp.textContent = 'No session selected';
+  }
+  chart.render({ frames: [] });
+  updateSessionsList();
 }
 
 async function loadSessionForPlayback(sessionId) {
@@ -798,12 +905,13 @@ async function loadSessionForPlayback(sessionId) {
       const a = f.angles || {};
       const knee = [a.leftKnee, a.rightKnee].filter(Number.isFinite);
       const shoulder = [a.leftShoulder, a.rightShoulder].filter(Number.isFinite);
-      if (['squat', 'sit-to-stand', 'lunge'].includes(fullSession.exerciseId)) {
+      const exerciseKey = normalizeExerciseId(fullSession.exerciseId);
+      if (KNEE_EXERCISES.has(exerciseKey)) {
         if (knee.length) {
           const minKnee = Math.min(...knee);
           if (peakDeg === null || minKnee < peakDeg) peakDeg = minKnee;
         }
-      } else if (shoulder.length) {
+      } else if (SHOULDER_EXERCISES.has(exerciseKey) && shoulder.length) {
         const maxArm = Math.max(...shoulder);
         if (peakDeg === null || maxArm > peakDeg) peakDeg = maxArm;
       }
@@ -823,10 +931,9 @@ async function loadSessionForPlayback(sessionId) {
 
   // Load video if present in videoStore
   const videoBlob = await videoStore.getVideo(sessionId);
-  if (videoBlob && nodes.replayVideo) {
-    if (nodes.replayVideo.src && nodes.replayVideo.src.startsWith('blob:')) {
-      URL.revokeObjectURL(nodes.replayVideo.src);
-    }
+  if (appState.currentSessionViewing?.id !== sessionId) return; // a newer load started meanwhile
+  releaseReplayVideo();
+  if (videoBlob) {
     nodes.replayVideo.src = URL.createObjectURL(videoBlob);
     nodes.replayVideo.hidden = false;
     nodes.replayNoVideo.hidden = true;
@@ -834,8 +941,10 @@ async function loadSessionForPlayback(sessionId) {
       nodes.replayCanvas.width = nodes.replayVideo.videoWidth || 640;
       nodes.replayCanvas.height = nodes.replayVideo.videoHeight || 480;
     };
-  } else if (nodes.replayVideo) {
-    nodes.replayVideo.src = '';
+    player.attachVideoElement(nodes.replayVideo);
+  } else {
+    // Telemetry-only session: the player must drive playback from its own clock.
+    player.detachVideoElement();
     nodes.replayVideo.hidden = true;
     nodes.replayNoVideo.hidden = false;
   }
@@ -1066,20 +1175,7 @@ nodes.deleteSessionBtn.addEventListener('click', async () => {
   const id = appState.currentSessionViewing.id;
   storage.deleteSession(id);
   await videoStore.deleteVideo(id);
-  appState.currentSessionViewing = null;
-  player.stop();
-  if (nodes.replayVideo) nodes.replayVideo.src = '';
-  replayOverlay.clear();
-  updateSessionsList();
-  nodes.activeSessionTitle.textContent = 'Session deleted.';
-  if (nodes.workoutResultsCard) {
-    nodes.resRepCount.textContent = '--';
-    nodes.resDuration.textContent = '--:--';
-    nodes.resPeakAngle.textContent = '--°';
-    nodes.resSymmetry.textContent = '--';
-    nodes.resTimestamp.textContent = 'No session selected';
-  }
-  chart.render({ frames: [] });
+  resetReplayView('Session deleted.');
   announce('Session deleted from local storage.');
 });
 
@@ -1142,6 +1238,25 @@ function populateSettingsForm() {
   nodes.storageEstimateLabel.textContent = `${usage.count} sessions stored (~${kb} KB locally)`;
 }
 
+/**
+ * Pushes persisted settings into quick controls and live subsystems so the UI
+ * matches storage on load, after edits, and after a reset.
+ */
+function applySettingsToUI() {
+  const cfg = settings.get();
+  nodes.analysisMode.value = cfg.exercise.activeExercise;
+  nodes.showAngles.checked = cfg.overlays.showDegreeLabels;
+  nodes.showArcs.checked = cfg.overlays.showAngleArcs;
+  if (!appState.active && !appState.starting) nodes.modelChoice.value = cfg.tracking.model;
+  updateAngleDimUI(cfg.tracking.angleDimension);
+  filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
+  if (filter.presetName !== cfg.tracking.smoothing) filter.setPreset(cfg.tracking.smoothing);
+  adaptive.autoFallbackEnabled = cfg.tracking.autoFallback;
+  audio.setEnabled(cfg.exercise.audioCues);
+  audio.setVoiceCoachEnabled(cfg.exercise.voiceCoach);
+  appState.activeExerciseInstance?.setSensitivity(cfg.exercise.sensitivity);
+}
+
 // Bind Settings Form Changes
 function bindSettingsInputs() {
   const save = () => {
@@ -1175,16 +1290,7 @@ function bindSettingsInputs() {
       },
     });
 
-    // Update Quick Controls & Angle Dim UI
-    nodes.showAngles.checked = nodes.cfgOverlayLabels.checked;
-    nodes.showArcs.checked = nodes.cfgOverlayArcs.checked;
-    nodes.modelChoice.value = nodes.cfgTrackModel.value;
-    updateAngleDimUI(settings.get().tracking.angleDimension);
-
-    audio.setEnabled(nodes.cfgExerciseAudio.checked);
-    if (nodes.cfgExerciseVoice) {
-      audio.setVoiceCoachEnabled(nodes.cfgExerciseVoice.checked);
-    }
+    applySettingsToUI();
   };
 
   const inputs = [
@@ -1215,13 +1321,15 @@ function bindSettingsInputs() {
 nodes.resetDefaultsBtn.addEventListener('click', () => {
   settings.reset();
   populateSettingsForm();
+  applySettingsToUI();
+  switchExercise(settings.get().exercise.activeExercise);
   announce('Settings reset to defaults.');
 });
 
 nodes.clearAllSessionsBtn.addEventListener('click', async () => {
   storage.clearAll();
   await videoStore.clearAll();
-  updateSessionsList();
+  resetReplayView('No session loaded.');
   populateSettingsForm();
   announce('All local sessions and stored videos cleared.');
 });
@@ -1234,5 +1342,5 @@ bindSettingsInputs();
 clearMetricsUI();
 setLiveUI(false);
 updateSessionsList();
-updateAngleDimUI(settings.get().tracking.angleDimension);
+applySettingsToUI();
 switchExercise(settings.get().exercise.activeExercise);
