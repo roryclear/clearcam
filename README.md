@@ -77,9 +77,15 @@ https://x.com/RoryClear/status/1959249250811785405
 1. pip install -r requirements.txt
 2. python3 clearcam.py
 3. open localhost:8080 in your browser
-4. (optional) enter your Clearcam premium userID in the web UI settings (viewable in iOS app settings page) to receive streams and notifications
+4. (optional) enter your Clearcam premium userID in the web UI settings (viewable in iOS app settings page) to receive notifications and clips in the Clearcam iOS and Android app.
 - use DEV=AMD / DEV=NV python3 clearcam.py if your CPU is being used instead of your GPU
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
+
+## Add notifications via your browser (**New**)
+1. Open settings in Clearcam
+2. Press Generate VAPID Key and copy the generated key
+3. Using the device you would like to receive notifications on, open https://roryclear.github.io/selfnotify/subscribe.html
+4. Copy the downloaded keys.json file into Clearcam/notify_keys on your computer
 
 ## Bring your own notifications!
 - You can now change the URL notifications are sent to in settings.
