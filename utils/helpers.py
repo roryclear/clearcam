@@ -12,10 +12,13 @@ import struct
 from datetime import datetime
 import cv2
 import numpy as np
+import selfnotify
 BASE_DIR = Path(__file__).parent.parent / "data"
 from tinygrad import Tensor, TinyJit
 
 def send_notif(session_token: str, text=None, body_text=None, host="https://clearcam.org", img=None):
+    if os.path.exists("notify_keys"): selfnotify.send(f"Clearcam: {text}", body_text if body_text is not None else "Open to view")
+    if not session_token and host == "https://clearcam.org": return
     https = host.startswith("https://")
     if host.startswith("http"): host = host[host.index("//")+2:] # remove https:// / http:
     endpoint = "/send" #/test
