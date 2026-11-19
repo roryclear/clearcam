@@ -23,7 +23,7 @@ test('MediaPipeRunner supports inference resolution scaling via offscreen canvas
   const runner = new MediaPipeRunner();
   runner.landmarker = new MockLandmarker();
 
-  assert.equal(runner.inferencePreset, 'balanced'); // default preset
+  assert.equal(runner.inferencePreset, 'adaptive'); // default preset
 
   runner.setInferencePreset('speed');
   assert.equal(runner.targetWidth, 360);

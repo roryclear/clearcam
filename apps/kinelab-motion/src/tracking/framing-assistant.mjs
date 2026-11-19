@@ -41,7 +41,14 @@ export class FramingAssistant {
     return count >= Math.max(1, Math.floor(indices.length / 2));
   }
 
-  evaluate(landmarks, exerciseId = 'free') {
+  /**
+   * @param {Array<Object>|null} landmarks
+   * @param {string} [exerciseId]
+   * @param {Object} [view]
+   * @param {number|null} [view.yawDeg] body yaw from ViewOrientationEstimator (0 = side-on)
+   * @param {'side'|'front'|'any'} [view.recommendedView] the exercise's camera recommendation
+   */
+  evaluate(landmarks, exerciseId = 'free', { yawDeg = null, recommendedView = 'any' } = {}) {
     if (!Array.isArray(landmarks) || landmarks.length === 0) {
       return {
         status: 'inadequate',
@@ -82,11 +89,25 @@ export class FramingAssistant {
       }
     }
 
+    // Camera orientation: single-camera knee error is ~2.5x higher on the far leg in a
+    // lateral view and grows quickly as the view turns oblique, so ask for the view
+    // each exercise is measured in once the body itself is framed well.
+    if (status === 'optimal' && Number.isFinite(yawDeg)) {
+      if (recommendedView === 'side' && yawDeg > 40) {
+        status = 'partial';
+        guidance = `Turn side-on to the camera for accurate ${prettyName} angles`;
+      } else if (recommendedView === 'front' && yawDeg < 50) {
+        status = 'partial';
+        guidance = `Face the camera for accurate ${prettyName} tracking`;
+      }
+    }
+
     return {
       status,
       missingSegments,
       guidance,
       segments,
+      yawDeg: Number.isFinite(yawDeg) ? yawDeg : null,
     };
   }
 }

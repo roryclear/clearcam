@@ -69,16 +69,16 @@ This table distinguishes **implemented code** from features that are merely conc
 | --- | --- | --- |
 | One live camera | **Implemented** | Starts a phone or webcam through browser permission |
 | Front/rear camera choice | **Implemented** | Prefers the selected facing mode when supported; Flip restarts capture |
-| Full / Heavy MediaPipe models | **Implemented** | Heavy is preferred; Full can be chosen or used as initialization fallback |
+| Heavy / Full / Lite MediaPipe models | **Implemented** | Heavy is preferred; initialization and the live auto-fallback step down Heavy → Full → Lite |
 | 33-point body pose | **Implemented** | Uses Google's Pose Landmarker; visual overlay uses a subset of connections/points |
 | Skeleton, joints, labels and arcs | **Implemented** | Real-time canvas graphics over the live preview |
 | Motion trails / direction arrows | **Implemented** | Optional overlays for wrist/ankle movement |
-| Eight joint-angle values | **Implemented** | Left/right knees, hips, elbows, shoulders; **3D metric vector space** (default, perspective invariant) or **2D camera plane** (toggleable) |
+| Eight joint-angle values | **Implemented** | Left/right knees, hips, elbows, shoulders. **Auto** (default) uses precise 2D image angles side-on and 3D world angles when the body turns oblique; **3D** and **2D** can be forced. The more visible leg is used instead of averaging both. |
 | Segment biomechanics & alignment | **Implemented** | Shank (tibial) angle and Trunk (spine) inclination relative to vertical gravity; parallel alignment evaluation |
 | Kinematic bone-length invariance filter | **Implemented** | Physics-informed constraint model that eliminates 3D depth jitter and limb elasticity along direction rays |
 | Decoupled 60/120 FPS pose interpolation | **Implemented** | Native display rate LERP follower decoupling 30 FPS inference from canvas rendering for liquid smooth motion |
 | Tracking confidence states | **Implemented** | Shows good, partial or lost tracking; unavailable angles appear as `—` |
-| One Euro filtering / outlier rejection | **Implemented** | Smooths accepted points and rejects certain transient jumps |
+| One Euro filtering / outlier rejection | **Implemented** | Smooths 2D landmarks and, separately, 3D world landmarks (lower depth cutoff); presets tuned on `bench/accuracy-bench.mjs`. See [docs/accuracy-speed-research.md](docs/accuracy-speed-research.md) |
 | Smart body framing radar | **Implemented** | On-canvas position guidance; upper-body decoupling for seated/close-up exercises |
 | Repetition/hold modules | **Implemented, experimental** | Squat, sit-to-stand, lunge, shoulder abduction, shoulder flexion, single-leg balance |
 | Free Tracking | **Implemented** | Skeleton and angle exploration without exercise counting |
@@ -186,7 +186,7 @@ The app uses a dark, motion-focused interface. Its main screen has a large **Liv
 ### Quick controls
 
 - **EXERCISE MODULE:** Squat, Sit-to-Stand, Lunge, Shoulder Abduction, Shoulder Flexion, Single-Leg Balance, or Free Tracking.
-- **TRACKER MODEL:** High Accuracy / Heavy or Faster / Full.
+- **TRACKER MODEL:** High Accuracy / Heavy, Faster / Full, or Fastest / Lite.
 - **Angle badges:** Quick on/off control for floating degree numbers.
 - **Angle arcs:** Quick on/off control for geometric sweep arcs.
 
@@ -266,12 +266,12 @@ The camera request uses `audio: false`, requests roughly 30 FPS as an ideal inpu
 
 | Setting | Available options | Default | Meaning |
 | --- | --- | --- | --- |
-| **MediaPipe Model** | Heavy; Full | **Heavy** | Prefer model accuracy or lighter processing |
+| **MediaPipe Model** | Heavy; Full; Lite | **Heavy** | Prefer model accuracy or lighter processing |
 | **Adaptive Performance Fallback** | On; Off | **On** | Watch high latency or low inference FPS |
 | **Temporal Smoothing (1€ filter)** | Off; Low; Medium; High | **Medium** | Reduce landmark movement jitter |
 | **Confidence Threshold** | 0.45 Lenient; 0.55 Standard; 0.65 Strict | **0.55** | Minimum confidence required for usable landmarks/angles |
 
-**Model fallback nuance:** On initial load, Heavy can fall back to Full when initialization fails. During an active run, the adaptive controller currently updates the **saved Full-model preference** after sustained poor performance; the visible code does **not** immediately reinitialize the running detector. Restarting the camera is therefore needed to reliably apply that change. Treat automatic switching as a partial implementation until verified/fixed.
+**Model fallback:** On initial load, a model that fails to initialize falls back down the ladder Heavy → Full → Lite. During a run, sustained high latency or low FPS makes the adaptive controller load the next faster model in the background and swap it in without restarting the camera (when *Auto fallback* is on).
 
 **Smoothing nuance:** Smoothing can make motion visually steadier but may delay fast changes. Even “Off” smoothing still passes through certain confidence/outlier checks.
 
@@ -495,6 +495,8 @@ A **front-facing selfie camera** may be mirrored; use consistent mirroring and c
 
 The **pose inference** and **motion-session persistence** are designed for local execution in the browser. The current KineLab module does not define a backend API for uploading camera frames or saved sessions.
 
+MediaPipe Tasks keeps camera frames on-device, but per its own privacy notice it **sends performance and usage metrics about the API to Google**.
+
 However, the site **downloads its JavaScript library/WASM and machine-learning models from external hosts**. That is a network dependency; “local inference” is not the same as “fully offline from first use.” A normal hosted website also exposes ordinary page-request metadata to its hosting provider.
 
 ### Recording consent
@@ -609,7 +611,7 @@ apps/kinelab-motion/
 - [Google MediaPipe Tasks Vision](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker): Pose Landmarker engine.
 - `@mediapipe/tasks-vision@1.2.3`: SDK version referenced directly by the current loader.
 - jsDelivr: The configured JavaScript/WASM delivery host.
-- `storage.googleapis.com/mediapipe-models/`: Configured Heavy/Full model file host.
+- `storage.googleapis.com/mediapipe-models/`: Configured Heavy/Full/Lite model file host.
 - Browser APIs: `getUserMedia`, `HTMLVideoElement`, `CanvasRenderingContext2D`, `requestAnimationFrame`, `localStorage`, `Web Audio`, Blob downloads.
 
 The repository presently references fixed SDK/model URLs, **but this README does not claim that asset integrity hashes are enforced**, since no such independent verification was established in this documentation audit.
@@ -620,7 +622,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **21 Node test files and 90 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **22 Node test files and 107 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
@@ -630,7 +632,7 @@ Run them from the repository root:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~300ms across all 90 tests. Tests resolve paths relative to their own files, so they can be run from any directory.
+Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all 107 tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
 
 ### Known limits and caveats
 
@@ -748,7 +750,7 @@ No. A built-in phone or laptop camera is sufficient for trying the current singl
 No. It checks approximate knee-angle transitions using hand-written thresholds. It does not validate knee loading, actual 3D alignment, pain, safety, or clinical appropriateness.
 
 **Are joint angles actual 3D measurements?**  
-Both modes are provided. By default, KineLab 2.0 calculates 3D metric vector angles derived from MediaPipe's pelvis-centered metric world landmarks ($X, Y, Z$ in meters), making angles perspective-invariant. A live toggle on the HUD allows switching back to 2D screen-plane projection.
+Three modes are provided. **Auto** (default) estimates how the body is turned relative to the camera. Knee and hip angles come from the 2D image when side-on, where 2D is most precise, and from 3D world landmarks ($X, Y, Z$ in meters, pelvis-centred) as the view turns oblique, where 2D foreshortens. **3D** and **2D** force one source. The HUD toggle cycles Auto → 3D → 2D. On the synthetic benchmark, Auto cut side-view knee RMSE from 13.4° to 3.2°; see [docs/accuracy-speed-research.md](docs/accuracy-speed-research.md).
 
 **Can it track two people simultaneously?**  
 Not as separate participants in the current configuration. The MediaPipe runner sets `numPoses: 1`.
@@ -769,7 +771,7 @@ Yes, in a basic way: reps, duration and paired angle-sample deltas. The present 
 A faint reference skeleton from **one selected saved frame**, overlaid on the current view when enabled.
 
 **Why does Heavy look slow?**  
-Heavy is a more computationally demanding model. Try Full, reduce capture resolution, improve device cooling/lighting, or restart after fallback. Real performance varies.
+Heavy is a more computationally demanding model. Try Full or Lite, reduce capture resolution, or improve device cooling and lighting. With *Auto fallback* on, the app steps down automatically. Inference resolution adapts to how large you appear in frame. Real performance varies.
 
 **Can it work completely offline?**  
 Inference is local once the SDK/WASM/model are loaded, but the current app is configured to obtain those assets from the internet; guaranteed first-run offline operation is not yet provided.

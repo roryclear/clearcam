@@ -303,3 +303,57 @@ export function dominantKneeAngle(angles) {
   if (!values.length) return null;
   return Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 10) / 10;
 }
+
+const SIDE_JOINTS = Object.freeze({
+  Knee: { left: [JOINTS.leftHip, JOINTS.leftKnee, JOINTS.leftAnkle], right: [JOINTS.rightHip, JOINTS.rightKnee, JOINTS.rightAnkle] },
+  Hip: { left: [JOINTS.leftShoulder, JOINTS.leftHip, JOINTS.leftKnee], right: [JOINTS.rightShoulder, JOINTS.rightHip, JOINTS.rightKnee] },
+  Shoulder: { left: [JOINTS.leftElbow, JOINTS.leftShoulder, JOINTS.leftHip], right: [JOINTS.rightElbow, JOINTS.rightShoulder, JOINTS.rightHip] },
+  Elbow: { left: [JOINTS.leftShoulder, JOINTS.leftElbow, JOINTS.leftWrist], right: [JOINTS.rightShoulder, JOINTS.rightElbow, JOINTS.rightWrist] },
+});
+
+function meanVisibility(landmarks, indices) {
+  if (!Array.isArray(landmarks)) return null;
+  let sum = 0;
+  for (const i of indices) {
+    const p = landmarks[i];
+    if (!p) return 0;
+    sum += Math.min(p.visibility ?? 1, p.presence ?? 1);
+  }
+  return sum / indices.length;
+}
+
+/**
+ * Picks the bilateral angle to trust. In a lateral view the far limb is occluded:
+ * MediaPipe still reports it with moderate visibility, but its knee angle error is
+ * roughly 2.5x the near limb's (10.7° vs 25.1° RMSE, Dill et al., Sensors 2024).
+ * Averaging both legs therefore mixes in the bad estimate. When one side is clearly
+ * more visible, use it alone; otherwise average.
+ * @param {Object} angles  e.g. { leftKnee, rightKnee }
+ * @param {Array<Object>|null} landmarks image landmarks carrying visibility
+ * @param {'Knee'|'Hip'|'Shoulder'|'Elbow'} joint
+ * @param {number} [margin=0.12] visibility difference that counts as "clearly"
+ * @returns {number|null}
+ */
+export function selectBilateralAngle(angles, landmarks, joint = 'Knee', margin = 0.12) {
+  const side = bilateralSide(angles, landmarks, joint, margin);
+  if (side === null) return null;
+  if (side === 'left') return angles[`left${joint}`];
+  if (side === 'right') return angles[`right${joint}`];
+  return Math.round(((angles[`left${joint}`] + angles[`right${joint}`]) / 2) * 10) / 10;
+}
+
+/**
+ * Which side selectBilateralAngle trusts: 'left', 'right', 'both' (averaged) or null.
+ * @returns {'left'|'right'|'both'|null}
+ */
+export function bilateralSide(angles, landmarks, joint = 'Knee', margin = 0.12) {
+  const hasL = Number.isFinite(angles?.[`left${joint}`]);
+  const hasR = Number.isFinite(angles?.[`right${joint}`]);
+  if (!hasL && !hasR) return null;
+  if (hasL !== hasR) return hasL ? 'left' : 'right';
+  const sides = SIDE_JOINTS[joint];
+  const vl = sides ? meanVisibility(landmarks, sides.left) : null;
+  const vr = sides ? meanVisibility(landmarks, sides.right) : null;
+  if (vl !== null && vr !== null && Math.abs(vl - vr) >= margin) return vl > vr ? 'left' : 'right';
+  return 'both';
+}

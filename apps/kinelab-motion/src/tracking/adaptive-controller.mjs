@@ -3,6 +3,8 @@
  * based on device capabilities and measured latency.
  */
 
+const LADDER = ['heavy', 'full', 'lite'];
+
 export class AdaptiveController {
   /**
    * @param {Object} options
@@ -30,19 +32,24 @@ export class AdaptiveController {
   setCurrentModel(model) {
     this.currentModel = model;
     this.violationCount = 0;
-    if (model === 'heavy') {
-      this.hasFallenBack = false;
-    }
+    this.hasFallenBack = false;
+  }
+
+  /** Next faster model, or null when already on the fastest. */
+  nextModel() {
+    const i = LADDER.indexOf(this.currentModel);
+    return i >= 0 && i < LADDER.length - 1 ? LADDER[i + 1] : null;
   }
 
   /**
    * Evaluates current performance metrics.
    * @param {Object} metrics { inferenceFps, avgLatencyMs }
-   * @returns {{ shouldFallback: boolean, reason: string|null }}
+   * @returns {{ shouldFallback: boolean, reason: string|null, nextModel: string|null }}
    */
   evaluate(metrics) {
-    if (!this.autoFallbackEnabled || this.currentModel !== 'heavy' || this.hasFallenBack) {
-      return { shouldFallback: false, reason: null };
+    const nextModel = this.nextModel();
+    if (!this.autoFallbackEnabled || !nextModel || this.hasFallenBack) {
+      return { shouldFallback: false, reason: null, nextModel: null };
     }
 
     const isLatencyHigh = metrics.avgLatencyMs > this.highLatencyThresholdMs;
@@ -55,13 +62,13 @@ export class AdaptiveController {
         const reason = isLatencyHigh
           ? `Inference latency (${metrics.avgLatencyMs}ms) exceeded ${this.highLatencyThresholdMs}ms.`
           : `Inference frame rate (${metrics.inferenceFps} FPS) dropped below ${this.lowFpsThreshold} FPS.`;
-        return { shouldFallback: true, reason };
+        return { shouldFallback: true, reason, nextModel };
       }
     } else if (metrics.avgLatencyMs < this.highLatencyThresholdMs * 0.7) {
       this.violationCount = Math.max(0, this.violationCount - 1);
     }
 
-    return { shouldFallback: false, reason: null };
+    return { shouldFallback: false, reason: null, nextModel: null };
   }
 
   reset() {

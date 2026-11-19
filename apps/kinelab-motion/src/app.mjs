@@ -14,8 +14,11 @@ import {
   calculateShankAngle,
   calculateShankAngle3D,
   evaluateSquatBiomechanics,
-  dominantKneeAngle,
+  selectBilateralAngle,
+  bilateralSide,
 } from './biomechanics/angle-calculations.mjs';
+import { ViewOrientationEstimator, blendAnglesByView } from './biomechanics/view-orientation.mjs';
+import { WorldPoseFilter } from './filters/world-pose-filter.mjs';
 import { defaultFramingAssistant } from './tracking/framing-assistant.mjs';
 import { analyzeSymmetry } from './biomechanics/symmetry-analyzer.mjs';
 import { PoseFilter } from './filters/pose-filter.mjs';
@@ -61,6 +64,8 @@ const nodes = {
   inferenceFps: el('inference-fps'),
   modelName: el('model-name'),
   latencyDisplay: el('latency-display'),
+  renderFps: el('render-fps'),
+  droppedFrames: el('dropped-frames'),
 
   // Quick Controls
   analysisMode: el('analysis-mode'),
@@ -70,6 +75,7 @@ const nodes = {
 
   // Telemetry & Insight
   angleDimToggle: el('angle-dim-toggle'),
+  dimAuto: el('dim-auto'),
   dim3d: el('dim-3d'),
   dim2d: el('dim-2d'),
   telemetryNote: el('telemetry-note'),
@@ -152,7 +158,9 @@ const nodes = {
 // Subsystem Instances
 const settings = defaultSettingsManager;
 const filter = new PoseFilter();
+const worldFilter = new WorldPoseFilter();
 const kinematicFilter = new KinematicBoneFilter();
+const viewEstimator = new ViewOrientationEstimator();
 const interpolator = new PoseInterpolator({ lambda: 32.0 });
 const perf = new PerformanceMonitor();
 const adaptive = new AdaptiveController();
@@ -186,12 +194,28 @@ const appState = {
   recStartTime: 0,
   recTimerInterval: 0,
   stoppingRecording: null,
-  fallbackSessionToken: null, // camera session whose Full-model fallback is loading
+  fallbackSessionToken: null, // camera session whose faster-model fallback is loading
+  lastUiAt: -Infinity, // DOM telemetry is throttled; pose math still runs every frame
+  lastView: null,
 };
 
 const KNEE_EXERCISES = new Set(['squat', 'sit_to_stand', 'lunge']);
 const SHOULDER_EXERCISES = new Set(['shoulder_abduction', 'shoulder_flexion']);
 const normalizeExerciseId = id => String(id || '').replace(/-/g, '_');
+const UI_INTERVAL_MS = 80; // ~12 Hz is plenty for numbers; avoids rebuilding DOM at inference rate
+
+/** Vertical extent of the reliably detected body, in normalized image units. */
+function subjectExtent(landmarks, minVisibility) {
+  if (!Array.isArray(landmarks)) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of landmarks) {
+    if (!p || !Number.isFinite(p.y) || (p.visibility ?? 1) < minVisibility) continue;
+    if (p.y < lo) lo = p.y;
+    if (p.y > hi) hi = p.y;
+  }
+  return hi > lo ? hi - lo : null;
+}
 
 // UI Angle Row Cache
 const angleRows = new Map();
@@ -235,26 +259,35 @@ function updateTrackingHUD(status, framing = null) {
   nodes.hudState.textContent = hudText;
 }
 
-function updateAngleDimUI(dimension = '3d') {
-  const is3D = dimension === '3d';
+const ANGLE_MODES = ['auto', '3d', '2d'];
+
+function updateAngleDimUI(dimension = 'auto', view = null) {
+  const mode = ANGLE_MODES.includes(dimension) ? dimension : 'auto';
   if (nodes.hudAngleMode) {
-    nodes.hudAngleMode.textContent = is3D ? '3D METRIC' : '2D ANGLES';
+    nodes.hudAngleMode.textContent = mode === 'auto' ? 'AUTO VIEW' : mode === '3d' ? '3D METRIC' : '2D ANGLES';
   }
-  if (nodes.dim3d && nodes.dim2d) {
-    nodes.dim3d.classList.toggle('active', is3D);
-    nodes.dim2d.classList.toggle('active', !is3D);
-  }
+  nodes.dimAuto?.classList.toggle('active', mode === 'auto');
+  nodes.dim3d?.classList.toggle('active', mode === '3d');
+  nodes.dim2d?.classList.toggle('active', mode === '2d');
   if (nodes.telemetryNote) {
-    nodes.telemetryNote.textContent = is3D
-      ? '3D metric vector angles derived from pelvis-centered coordinates. Perspective invariant.'
-      : 'Projected 2D angles on camera plane. May experience perspective foreshortening.';
+    if (mode === 'auto') {
+      const yaw = view?.yawDeg;
+      const source = !Number.isFinite(yaw) ? '' : view.sagittal2DWeight >= 0.5
+        ? ` · body ~${Math.round(yaw)}° from side-on → knee/hip from precise 2D image`
+        : ` · body ~${Math.round(yaw)}° from side-on → knee/hip from 3D world`;
+      nodes.telemetryNote.textContent = `Auto: 2D image angles in side views, 3D world angles when turned oblique${source}.`;
+    } else {
+      nodes.telemetryNote.textContent = mode === '3d'
+        ? '3D world angles from pelvis-centred coordinates. No foreshortening, but monocular depth is noisy.'
+        : 'Projected 2D angles on the camera plane. Most precise side-on; foreshortened when oblique.';
+    }
   }
   if (nodes.cfgTrackAngleDim) {
-    nodes.cfgTrackAngleDim.value = dimension;
+    nodes.cfgTrackAngleDim.value = mode;
   }
 }
 
-function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, is3D = true, width = 640, height = 480) {
+function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, use3DSegments = true, width = 640, height = 480) {
   for (const def of ANGLE_DEFINITIONS) {
     const valueEl = angleRows.get(def.key);
     const measured = angles?.[def.key];
@@ -263,12 +296,14 @@ function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null
   }
 
   // Segment angles (Trunk & Shank) and Squat Alignment Evaluation
-  const trunk = is3D && worldLandmarks
+  const trunk = use3DSegments && worldLandmarks
     ? calculateTrunkAngle3D(worldLandmarks)
     : calculateTrunkAngle(smoothedLandmarks, width, height);
-  const shank = is3D && worldLandmarks
-    ? calculateShankAngle3D(worldLandmarks, 'left')
-    : calculateShankAngle(smoothedLandmarks, width, height, 'left');
+  // Measure the shank on the more visible side; the occluded leg is unreliable side-on.
+  const shankSide = bilateralSide(angles, smoothedLandmarks, 'Knee') === 'right' ? 'right' : 'left';
+  const shank = use3DSegments && worldLandmarks
+    ? calculateShankAngle3D(worldLandmarks, shankSide)
+    : calculateShankAngle(smoothedLandmarks, width, height, shankSide);
 
   if (nodes.valTrunkLean) {
     nodes.valTrunkLean.textContent = Number.isFinite(trunk) ? `${Math.round(trunk)}°` : '—';
@@ -277,7 +312,7 @@ function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null
     nodes.valShankTilt.textContent = Number.isFinite(shank) ? `${Math.round(shank)}°` : '—';
   }
   if (nodes.valSquatAlign) {
-    const knee = dominantKneeAngle(angles);
+    const knee = selectBilateralAngle(angles, smoothedLandmarks, 'Knee');
     const evalResult = evaluateSquatBiomechanics({ kneeAngle: knee, trunkAngle: trunk, shankAngle: shank });
     nodes.valSquatAlign.textContent = evalResult.alignmentScore;
     nodes.valSquatAlign.classList.toggle('warn', evalResult.alignmentScore === 'TORSO LEAN');
@@ -411,7 +446,9 @@ function handleExerciseFrame(landmarks, angles, width, height, timestampMs, trac
     }
   }
 
-  // Update Telemetry Display
+  // Update Telemetry Display (throttled, but always on a rep change)
+  const repChanged = nextState.reps !== prevState?.reps;
+  if (!appState.uiDue && !repChanged) return;
   if (appState.activeExerciseInstance.type === 'hold') {
     nodes.repCount.textContent = String(Math.floor(nextState.currentHoldSec)).padStart(2, '0');
   } else {
@@ -478,12 +515,14 @@ function frameLoop() {
     perf.endInference(tStart);
 
     const metrics = perf.getMetrics();
-    nodes.inferenceFps.textContent = String(metrics.inferenceFps);
-    nodes.latencyDisplay.textContent = `${Math.round(metrics.lastLatencyMs)}ms`;
-    const renderEl = document.getElementById('render-fps');
-    if (renderEl) renderEl.textContent = String(metrics.renderFps);
-    const droppedEl = document.getElementById('dropped-frames');
-    if (droppedEl) droppedEl.textContent = String(metrics.droppedFrames);
+    appState.uiDue = now - appState.lastUiAt >= UI_INTERVAL_MS;
+    if (appState.uiDue) {
+      appState.lastUiAt = now;
+      nodes.inferenceFps.textContent = String(metrics.inferenceFps);
+      nodes.latencyDisplay.textContent = `${Math.round(metrics.lastLatencyMs)}ms`;
+      if (nodes.renderFps) nodes.renderFps.textContent = String(metrics.renderFps);
+      if (nodes.droppedFrames) nodes.droppedFrames.textContent = String(metrics.droppedFrames);
+    }
 
     // Adaptive Performance Check
     adaptive.autoFallbackEnabled = cfg.tracking.autoFallback;
@@ -491,7 +530,7 @@ function frameLoop() {
     if (appState.fallbackSessionToken !== appState.sessionToken) {
       const adaptEval = adaptive.evaluate(metrics);
       if (adaptEval.shouldFallback) {
-        switchToFallbackModel(adaptEval.reason);
+        switchToFallbackModel(adaptEval.reason, adaptEval.nextModel);
       }
     }
 
@@ -499,38 +538,56 @@ function frameLoop() {
     filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
     const smoothedLandmarks = filter.filter(rawResult.landmarks, now);
 
-    // Kinematic Bone-Length Invariance Filter on 3D metric coordinates
+    runner.setSubjectExtent(subjectExtent(smoothedLandmarks, cfg.tracking.confidenceThreshold));
+
+    // 3D world landmarks: temporal smoothing (depth is the noisiest axis), then
+    // the bone-length constraint.
+    worldFilter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
     let constrainedWorldLandmarks = rawResult.worldLandmarks;
     if (rawResult.worldLandmarks) {
-      constrainedWorldLandmarks = kinematicFilter.filter(rawResult.worldLandmarks, now);
+      constrainedWorldLandmarks = kinematicFilter.filter(worldFilter.filter(rawResult.worldLandmarks, now), now);
+    } else {
+      worldFilter.reset();
     }
+    const view = viewEstimator.update(constrainedWorldLandmarks, now);
+    appState.lastView = view;
 
     const activeExerciseId = cfg.exercise.activeExercise || 'squat';
     const quality = trackingStatus(smoothedLandmarks, cfg.tracking.confidenceThreshold, activeExerciseId);
-    const framing = defaultFramingAssistant.evaluate(smoothedLandmarks, activeExerciseId);
+    const framing = defaultFramingAssistant.evaluate(smoothedLandmarks, activeExerciseId, {
+      yawDeg: view.yawDeg,
+      recommendedView: appState.activeExerciseInstance?.recommendedCamera,
+    });
     appState.lastFraming = framing;
 
-    // Compute angles: 3D metric vector space (perspective invariant) or 2D image plane
+    // Angles: 'auto' blends precise 2D image angles (side views) with 3D world angles
+    // (oblique views) per joint; '3d' and '2d' force one source.
     const angles2D = getJointAngles(smoothedLandmarks, video.videoWidth, video.videoHeight, cfg.tracking.confidenceThreshold);
+    const mode = cfg.tracking.angleDimension;
     let angles = angles2D;
-    const is3D = cfg.tracking.angleDimension === '3d';
-    if (is3D && constrainedWorldLandmarks) {
+    if (mode !== '2d' && constrainedWorldLandmarks) {
       const angles3D = getJointAngles3D(constrainedWorldLandmarks, cfg.tracking.confidenceThreshold);
-      angles = { ...angles2D };
-      for (const [k, v] of Object.entries(angles3D)) {
-        if (Number.isFinite(v)) {
-          angles[k] = v;
+      if (mode === 'auto') {
+        angles = blendAnglesByView(angles2D, angles3D, view);
+      } else {
+        angles = { ...angles2D };
+        for (const [k, v] of Object.entries(angles3D)) {
+          if (Number.isFinite(v)) angles[k] = v;
         }
       }
     }
+    const use3DSegments = mode === '3d' || (mode === 'auto' && view.sagittal2DWeight < 0.5);
 
     // Supply target pose to 60/120 FPS interpolator (null clears it when the person leaves frame)
     interpolator.setTarget(smoothedLandmarks, now);
 
     appState.lastAngles = angles;
-    renderTelemetry(angles, smoothedLandmarks, constrainedWorldLandmarks, is3D, video.videoWidth, video.videoHeight);
-    renderSymmetry(angles);
-    updateTrackingHUD(quality, framing);
+    if (appState.uiDue) {
+      renderTelemetry(angles, smoothedLandmarks, constrainedWorldLandmarks, use3DSegments, video.videoWidth, video.videoHeight);
+      renderSymmetry(angles);
+      updateTrackingHUD(quality, framing);
+      if (mode === 'auto') updateAngleDimUI('auto', view);
+    }
     handleExerciseFrame(smoothedLandmarks, angles, video.videoWidth, video.videoHeight, now, quality);
 
     // Record telemetry frame if recording is active
@@ -551,21 +608,22 @@ function frameLoop() {
   }
 }
 
-function switchToFallbackModel(reason) {
+function switchToFallbackModel(reason, nextModel = 'full') {
   const token = appState.sessionToken;
   if (appState.fallbackSessionToken === token) return;
   appState.fallbackSessionToken = token;
-  announce(`Performance notice: ${reason} Switching to Full model for responsiveness.`);
-  // The current landmarker keeps running until the Full model is ready, then is replaced.
-  runner.initialize('full', () => {})
+  const label = nextModel.charAt(0).toUpperCase() + nextModel.slice(1);
+  announce(`Performance notice: ${reason} Switching to ${label} model for responsiveness.`);
+  // The current landmarker keeps running until the faster model is ready, then is replaced.
+  runner.initialize(nextModel, () => {})
     .then(result => {
       // The runner discards a stale load itself; also ignore results from an older camera session.
       if (result?.stale || token !== appState.sessionToken) return;
-      adaptive.setCurrentModel('full');
-      settings.update({ tracking: { model: 'full' } });
-      nodes.modelChoice.value = 'full';
+      adaptive.setCurrentModel(runner.activeModel);
+      settings.update({ tracking: { model: runner.activeModel } });
+      nodes.modelChoice.value = runner.activeModel;
       nodes.modelName.textContent = runner.activeModel.toUpperCase();
-      announce('Switched to Full model for responsiveness.');
+      announce(`Switched to ${runner.activeModel.toUpperCase()} model for responsiveness.`);
     })
     .catch(error => {
       console.warn('Fallback model initialization failed:', error);
@@ -619,6 +677,9 @@ function stopCamera() {
   overlay.clear();
   filter.reset();
   kinematicFilter.reset();
+  worldFilter.reset();
+  viewEstimator.reset();
+  runner.setSubjectExtent(null);
   interpolator.reset();
   perf.reset();
   adaptive.reset();
@@ -1215,7 +1276,7 @@ function populateSettingsForm() {
   nodes.cfgTrackSmoothing.value = cfg.tracking.smoothing;
   nodes.cfgTrackConfidence.value = String(cfg.tracking.confidenceThreshold);
   if (nodes.cfgTrackAngleDim) {
-    nodes.cfgTrackAngleDim.value = cfg.tracking.angleDimension || '3d';
+    nodes.cfgTrackAngleDim.value = cfg.tracking.angleDimension || 'auto';
   }
 
   nodes.cfgOverlaySkeleton.checked = cfg.overlays.showSkeleton;
@@ -1248,9 +1309,10 @@ function applySettingsToUI() {
   nodes.showAngles.checked = cfg.overlays.showDegreeLabels;
   nodes.showArcs.checked = cfg.overlays.showAngleArcs;
   if (!appState.active && !appState.starting) nodes.modelChoice.value = cfg.tracking.model;
-  updateAngleDimUI(cfg.tracking.angleDimension);
+  updateAngleDimUI(cfg.tracking.angleDimension, appState.lastView);
   filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
   if (filter.presetName !== cfg.tracking.smoothing) filter.setPreset(cfg.tracking.smoothing);
+  if (worldFilter.presetName !== cfg.tracking.smoothing) worldFilter.setPreset(cfg.tracking.smoothing);
   adaptive.autoFallbackEnabled = cfg.tracking.autoFallback;
   audio.setEnabled(cfg.exercise.audioCues);
   audio.setVoiceCoachEnabled(cfg.exercise.voiceCoach);
@@ -1271,7 +1333,7 @@ function bindSettingsInputs() {
         autoFallback: nodes.cfgTrackAutoFallback.checked,
         smoothing: nodes.cfgTrackSmoothing.value,
         confidenceThreshold: Number(nodes.cfgTrackConfidence.value),
-        angleDimension: nodes.cfgTrackAngleDim ? nodes.cfgTrackAngleDim.value : '3d',
+        angleDimension: nodes.cfgTrackAngleDim ? nodes.cfgTrackAngleDim.value : 'auto',
       },
       overlays: {
         showSkeleton: nodes.cfgOverlaySkeleton.checked,
@@ -1310,10 +1372,10 @@ function bindSettingsInputs() {
 
   if (nodes.angleDimToggle) {
     nodes.angleDimToggle.addEventListener('click', () => {
-      const cur = settings.get().tracking.angleDimension || '3d';
-      const next = cur === '3d' ? '2d' : '3d';
+      const cur = settings.get().tracking.angleDimension || 'auto';
+      const next = ANGLE_MODES[(ANGLE_MODES.indexOf(cur) + 1) % ANGLE_MODES.length];
       settings.update({ tracking: { angleDimension: next } });
-      updateAngleDimUI(next);
+      updateAngleDimUI(next, appState.lastView);
     });
   }
 }

@@ -5,7 +5,7 @@
 
 import { BaseExercise } from './exercise-base.mjs';
 import { JOINTS } from '../biomechanics/landmark-indices.mjs';
-import { dominantKneeAngle } from '../biomechanics/angle-calculations.mjs';
+import { selectBilateralAngle } from '../biomechanics/angle-calculations.mjs';
 
 export class SitToStandExercise extends BaseExercise {
   constructor(options = {}) {
@@ -42,7 +42,7 @@ export class SitToStandExercise extends BaseExercise {
     };
   }
 
-  update(state, { angles, timestampMs, trackingQuality }) {
+  update(state, { angles, landmarks, timestampMs, trackingQuality }) {
     const next = { ...state };
 
     if (trackingQuality === 'lost') {
@@ -56,9 +56,10 @@ export class SitToStandExercise extends BaseExercise {
       return next;
     }
 
-    const knee = dominantKneeAngle(angles);
-    const hipValues = [angles?.leftHip, angles?.rightHip].filter(Number.isFinite);
-    const hip = hipValues.length ? Math.round(hipValues.reduce((a, b) => a + b, 0) / hipValues.length) : null;
+    // Side-on, the far leg is occluded and unreliable: use the clearly more visible side.
+    const knee = selectBilateralAngle(angles, landmarks, 'Knee');
+    const hipRaw = selectBilateralAngle(angles, landmarks, 'Hip');
+    const hip = Number.isFinite(hipRaw) ? Math.round(hipRaw) : null;
 
     next.kneeAngle = knee;
     next.hipAngle = hip;

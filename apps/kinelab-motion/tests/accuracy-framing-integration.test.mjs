@@ -7,9 +7,9 @@ import { defaultFramingAssistant } from '../src/tracking/framing-assistant.mjs';
 const pt2D = (x, y, visibility = 0.99) => ({ x, y, visibility, presence: 0.99 });
 const pt3D = (x, y, z, visibility = 0.99) => ({ x, y, z, visibility, presence: 0.99 });
 
-test('Integration: Settings schema defaults to 3D metric angle calculations', () => {
+test('Integration: Settings schema defaults to view-aware angle calculations', () => {
   const settings = validateSettings({});
-  assert.equal(settings.tracking.angleDimension, '3d');
+  assert.equal(settings.tracking.angleDimension, 'auto');
 });
 
 test('Integration: 3D metric space resolves depth that collapses in 2D image plane', () => {
