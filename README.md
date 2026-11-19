@@ -81,10 +81,11 @@ https://x.com/RoryClear/status/1959249250811785405
 - use DEV=AMD / DEV=NV python3 clearcam.py if your CPU is being used instead of your GPU
 - use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
 
-## Add notifications via your browser (**New**)
+## Add notifications via your browser (**New**) (Beta)
 1. Open settings in Clearcam
-2. Press Generate VAPID Key and copy the generated key
-3. Using the device you would like to receive notifications on, open https://roryclear.github.io/selfnotify/subscribe.html
+2. Press Generate Vapid key and copy the generated key
+3. Using the device you would like to receive notifications on, open https://roryclear.github.io/selfnotify/subscribe.html, copy the generated Vapid key, and press generate
+    - if using an iOS device, you must add the homepage to your home screen to generate the keys.json file
 4. Copy the downloaded keys.json file into Clearcam/notify_keys on your computer
 
 ## Bring your own notifications!
