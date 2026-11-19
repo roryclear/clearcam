@@ -119,7 +119,7 @@ class KalmanBoxTracker(object):
                 if previous_box is None:
                     previous_box = self.last_observation
                 """
-                  Estimate the track speed direction with observations \Delta t steps away
+                  Estimate the track speed direction with observations delta-t steps away
                 """
                 dist, self.velocity = speed_direction(previous_box, bbox)
                 self.avg_vel = [s + d / float(self.age) for s, d in zip(self.avg_vel, dist)]

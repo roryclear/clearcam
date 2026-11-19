@@ -3,7 +3,7 @@
  */
 
 import {
-  DEFAULT_SETTINGS,
+  createDefaultSettings,
   STORAGE_KEY,
   validateSettings,
 } from './settings-schema.mjs';
@@ -16,15 +16,15 @@ export class SettingsManager {
   }
 
   load() {
-    if (!this.storage) return { ...DEFAULT_SETTINGS };
+    if (!this.storage) return createDefaultSettings();
     try {
       const serialized = this.storage.getItem(STORAGE_KEY);
-      if (!serialized) return { ...DEFAULT_SETTINGS };
+      if (!serialized) return createDefaultSettings();
       const parsed = JSON.parse(serialized);
       return validateSettings(parsed);
     } catch (err) {
       console.warn('Failed to parse stored settings, restoring defaults:', err);
-      return { ...DEFAULT_SETTINGS };
+      return createDefaultSettings();
     }
   }
 
@@ -57,7 +57,7 @@ export class SettingsManager {
   }
 
   reset() {
-    this.current = { ...DEFAULT_SETTINGS };
+    this.current = createDefaultSettings();
     this.save();
     this.notify();
     return this.current;

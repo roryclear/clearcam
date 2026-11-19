@@ -4,6 +4,7 @@
 
 const SESSIONS_INDEX_KEY = 'kinelab_sessions_index_v1';
 const SESSION_DATA_PREFIX = 'kinelab_session_data_';
+const MAX_SESSIONS = 20;
 
 export class SessionStorage {
   constructor({ storage = (typeof localStorage !== 'undefined' ? localStorage : null) } = {}) {
@@ -20,32 +21,72 @@ export class SessionStorage {
     }
   }
 
-  saveSession(session) {
+  /**
+   * Persists a session and its index entry. Session data is written before the
+   * index so the index never references missing data. When localStorage runs out
+   * of quota, the oldest sessions are evicted until the new one fits.
+   * @param {Object} session
+   * @param {Object} [options]
+   * @param {(id: string) => void} [options.onEvict] Called for each evicted session id
+   *   so callers can delete associated data (e.g. stored videos).
+   * @returns {boolean} true when the session was stored
+   */
+  saveSession(session, { onEvict = null } = {}) {
     if (!this.storage || !session || !session.id) return false;
-    try {
-      const summary = {
-        id: session.id,
-        recordedAt: session.recordedAt,
-        exerciseId: session.exerciseId,
-        frameCount: session.frameCount,
-        durationMs: session.durationMs,
-        finalReps: session.finalReps,
-      };
 
-      const index = this.getIndex().filter(s => s.id !== session.id);
-      index.unshift(summary);
+    const summary = {
+      id: session.id,
+      recordedAt: session.recordedAt,
+      exerciseId: session.exerciseId,
+      frameCount: session.frameCount,
+      durationMs: session.durationMs,
+      finalReps: session.finalReps,
+      hasVideo: Boolean(session.hasVideo),
+    };
+    // Blobs serialize to "{}"; video bytes live in the VideoStore, not here.
+    const { videoBlob, ...persisted } = session;
+    const serialized = JSON.stringify(persisted);
+    const dataKey = `${SESSION_DATA_PREFIX}${session.id}`;
 
-      // Keep up to 20 recorded sessions in index
-      if (index.length > 20) {
-        const removed = index.pop();
-        this.storage.removeItem(`${SESSION_DATA_PREFIX}${removed.id}`);
+    let index = this.getIndex().filter(s => s.id !== session.id);
+    const evict = (item) => {
+      this.storage.removeItem(`${SESSION_DATA_PREFIX}${item.id}`);
+      if (typeof onEvict === 'function') {
+        try { onEvict(item.id); } catch (err) { console.warn('onEvict failed:', err); }
       }
+    };
 
+    // Keep up to MAX_SESSIONS recorded sessions (including the new one).
+    while (index.length >= MAX_SESSIONS) evict(index.pop());
+
+    for (;;) {
+      try {
+        this.storage.setItem(dataKey, serialized);
+        break;
+      } catch (err) {
+        if (index.length === 0) {
+          console.warn('Failed to save session to local storage:', err);
+          this._writeIndex(index);
+          return false;
+        }
+        evict(index.pop()); // free space by dropping the oldest session, then retry
+      }
+    }
+
+    index.unshift(summary);
+    if (!this._writeIndex(index)) {
+      this.storage.removeItem(dataKey);
+      return false;
+    }
+    return true;
+  }
+
+  _writeIndex(index) {
+    try {
       this.storage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(index));
-      this.storage.setItem(`${SESSION_DATA_PREFIX}${session.id}`, JSON.stringify(session));
       return true;
     } catch (err) {
-      console.warn('Failed to save session to local storage:', err);
+      console.warn('Failed to write session index:', err);
       return false;
     }
   }
