@@ -77,6 +77,40 @@ test('SessionStorage returns false and keeps index consistent when a session can
   assert.equal(manager.getSession('huge'), null);
 });
 
+test('SessionStorage failed save restores existing sessions and does not report evictions', () => {
+  const small = JSON.stringify(makeSession('s0', 5)).length;
+  const storage = new QuotaStorage(small * 3);
+  const manager = new SessionStorage({ storage });
+  assert.equal(manager.saveSession(makeSession('keep1', 5)), true);
+  assert.equal(manager.saveSession(makeSession('keep2', 5)), true);
+  const evicted = [];
+
+  assert.equal(manager.saveSession(makeSession('huge', 400), { onEvict: id => evicted.push(id) }), false);
+  assert.deepEqual(evicted, []);
+  assert.deepEqual(manager.getIndex().map(s => s.id), ['keep2', 'keep1']);
+  assert.ok(manager.getSession('keep1'));
+  assert.ok(manager.getSession('keep2'));
+  assert.equal(manager.getSession('huge'), null);
+});
+
+test('SessionStorage rolls back when the index write fails after the data write', () => {
+  const storage = new QuotaStorage();
+  const manager = new SessionStorage({ storage });
+  assert.equal(manager.saveSession(makeSession('keep', 5)), true);
+  const realSet = storage.setItem.bind(storage);
+  storage.setItem = (k, v) => {
+    if (k === 'kinelab_sessions_index_v1') throw Object.assign(new Error('quota'), { name: 'QuotaExceededError' });
+    realSet(k, v);
+  };
+  const evicted = [];
+  assert.equal(manager.saveSession(makeSession('new', 5), { onEvict: id => evicted.push(id) }), false);
+  storage.setItem = realSet;
+  assert.deepEqual(evicted, []);
+  assert.deepEqual(manager.getIndex().map(s => s.id), ['keep']);
+  assert.ok(manager.getSession('keep'));
+  assert.equal(manager.getSession('new'), null);
+});
+
 test('SessionStorage index records hasVideo and persisted data omits the video blob', () => {
   const manager = new SessionStorage({ storage: new QuotaStorage() });
   manager.saveSession(makeSession('v1'));

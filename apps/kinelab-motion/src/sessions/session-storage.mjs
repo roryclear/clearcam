@@ -48,44 +48,72 @@ export class SessionStorage {
     const serialized = JSON.stringify(persisted);
     const dataKey = `${SESSION_DATA_PREFIX}${session.id}`;
 
-    let index = this.getIndex().filter(s => s.id !== session.id);
-    const evict = (item) => {
-      this.storage.removeItem(`${SESSION_DATA_PREFIX}${item.id}`);
-      if (typeof onEvict === 'function') {
-        try { onEvict(item.id); } catch (err) { console.warn('onEvict failed:', err); }
+    const originalIndexRaw = this.storage.getItem(SESSIONS_INDEX_KEY);
+    const index = this.getIndex().filter(s => s.id !== session.id);
+    // Evictions are tentative until the new data and index are both written:
+    // removed entries are kept in memory and restored if the save fails, so a
+    // recording that can never fit does not destroy existing sessions.
+    const evicted = [];
+    const evictOldest = () => {
+      const item = index.pop();
+      const key = `${SESSION_DATA_PREFIX}${item.id}`;
+      evicted.push({ item, key, raw: this.storage.getItem(key) });
+      this.storage.removeItem(key);
+    };
+    const rollback = () => {
+      this.storage.removeItem(dataKey);
+      for (const { key, raw } of evicted.reverse()) {
+        if (raw !== null) {
+          try { this.storage.setItem(key, raw); } catch (err) { console.warn('Failed to restore session:', err); }
+        }
+      }
+      try {
+        if (originalIndexRaw === null) this.storage.removeItem(SESSIONS_INDEX_KEY);
+        else this.storage.setItem(SESSIONS_INDEX_KEY, originalIndexRaw);
+      } catch (err) {
+        console.warn('Failed to restore session index:', err);
       }
     };
 
     // Keep up to MAX_SESSIONS recorded sessions (including the new one).
-    while (index.length >= MAX_SESSIONS) evict(index.pop());
+    while (index.length >= MAX_SESSIONS) evictOldest();
 
+    let committed = false;
     for (;;) {
       try {
         this.storage.setItem(dataKey, serialized);
-        break;
+        if (this._writeIndex([summary, ...index], { throwOnError: true })) {
+          committed = true;
+          break;
+        }
       } catch (err) {
         if (index.length === 0) {
           console.warn('Failed to save session to local storage:', err);
-          this._writeIndex(index);
-          return false;
+          break;
         }
-        evict(index.pop()); // free space by dropping the oldest session, then retry
+        this.storage.removeItem(dataKey);
+        evictOldest(); // free space by dropping the oldest session, then retry
       }
     }
 
-    index.unshift(summary);
-    if (!this._writeIndex(index)) {
-      this.storage.removeItem(dataKey);
+    if (!committed) {
+      rollback();
       return false;
+    }
+    if (typeof onEvict === 'function') {
+      for (const { item } of evicted) {
+        try { onEvict(item.id); } catch (err) { console.warn('onEvict failed:', err); }
+      }
     }
     return true;
   }
 
-  _writeIndex(index) {
+  _writeIndex(index, { throwOnError = false } = {}) {
     try {
       this.storage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(index));
       return true;
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn('Failed to write session index:', err);
       return false;
     }
