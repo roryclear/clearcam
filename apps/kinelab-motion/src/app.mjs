@@ -186,7 +186,7 @@ const appState = {
   recStartTime: 0,
   recTimerInterval: 0,
   stoppingRecording: null,
-  switchingModel: false,
+  fallbackSessionToken: null, // camera session whose Full-model fallback is loading
 };
 
 const KNEE_EXERCISES = new Set(['squat', 'sit_to_stand', 'lunge']);
@@ -487,9 +487,12 @@ function frameLoop() {
 
     // Adaptive Performance Check
     adaptive.autoFallbackEnabled = cfg.tracking.autoFallback;
-    const adaptEval = adaptive.evaluate(metrics);
-    if (adaptEval.shouldFallback) {
-      switchToFallbackModel(adaptEval.reason);
+    // Don't let evaluate() consume its one-shot fallback while this session's switch is loading.
+    if (appState.fallbackSessionToken !== appState.sessionToken) {
+      const adaptEval = adaptive.evaluate(metrics);
+      if (adaptEval.shouldFallback) {
+        switchToFallbackModel(adaptEval.reason);
+      }
     }
 
     // 1 Euro and Outlier Filtering on 2D image coordinates
@@ -549,9 +552,9 @@ function frameLoop() {
 }
 
 function switchToFallbackModel(reason) {
-  if (appState.switchingModel) return;
-  appState.switchingModel = true;
   const token = appState.sessionToken;
+  if (appState.fallbackSessionToken === token) return;
+  appState.fallbackSessionToken = token;
   announce(`Performance notice: ${reason} Switching to Full model for responsiveness.`);
   // The current landmarker keeps running until the Full model is ready, then is replaced.
   runner.initialize('full', () => {})
@@ -568,7 +571,7 @@ function switchToFallbackModel(reason) {
       console.warn('Fallback model initialization failed:', error);
     })
     .finally(() => {
-      appState.switchingModel = false;
+      if (appState.fallbackSessionToken === token) appState.fallbackSessionToken = null;
     });
 }
 
@@ -623,6 +626,7 @@ function stopCamera() {
   appState.lastFraming = null;
   appState.lastVideoTime = -1;
   appState.lastInferenceAt = -Infinity;
+  appState.fallbackSessionToken = null;
 
   clearMetricsUI();
   setLiveUI(false);
@@ -715,7 +719,9 @@ async function startCamera() {
 
 // Recording & Sessions
 function startRecording() {
-  if (!appState.active) return;
+  // Wait for the previous recording to finish saving; otherwise its pending stop
+  // would swallow the stop request for the new recording.
+  if (!appState.active || appState.stoppingRecording || recorder.isRecording) return;
   const cfg = settings.get();
   recorder.start({ exerciseId: cfg.exercise.activeExercise, mediaStream: appState.stream });
   nodes.recordBtn.classList.add('is-recording');
@@ -736,8 +742,10 @@ function startRecording() {
 
 function stopRecording() {
   if (appState.stoppingRecording) return appState.stoppingRecording;
+  nodes.recordBtn.disabled = true;
   appState.stoppingRecording = finishRecording().finally(() => {
     appState.stoppingRecording = null;
+    nodes.recordBtn.disabled = !appState.active;
   });
   return appState.stoppingRecording;
 }
