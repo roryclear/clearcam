@@ -196,6 +196,30 @@ function settleIndex(samples, countIdx, i, profile) {
 }
 
 /**
+ * Index where the counted movement started: walking back from the count, skip the
+ * arrival at rest (counters that fire on return, e.g. sit-to-stand), then the movement
+ * itself, and stop at the last rest frame before it. Earlier movements in the window
+ * (an aborted raise, setup) are excluded. Returns { idx, found }.
+ */
+function movementStart(samples, countIdx, endIdx, profile) {
+  const isMin = profile.direction === 'min';
+  let rest = null;
+  for (let k = 0; k <= endIdx; k++) {
+    const a = samples[k].angle;
+    if (a !== null && (rest === null || (isMin ? a > rest : a < rest))) rest = a;
+  }
+  if (rest === null) return { idx: 0, found: false };
+  const atRest = a => (isMin ? a >= rest - REST_TOLERANCE_DEG : a <= rest + REST_TOLERANCE_DEG);
+  let k = countIdx;
+  while (k >= 0 && (samples[k].angle === null || atRest(samples[k].angle))) k--;
+  while (k >= 0 && (samples[k].angle === null || !atRest(samples[k].angle))) k--;
+  if (k < 0) return { idx: 0, found: false };
+  // Keep the whole rest plateau so the start posture is measured at its most rested.
+  while (k > 0 && (samples[k - 1].angle === null || atRest(samples[k - 1].angle))) k--;
+  return { idx: k, found: true };
+}
+
+/**
  * Splits samples at rep-counter increments (extended until settled, see hasSettled)
  * and summarizes each completed rep.
  * @param {Array<Object>} frames recorded or live frames { timeMs|timestampMs, angles, landmarks, reps }
@@ -220,8 +244,15 @@ export function summarizeSession(reps) {
   const sdRom = ok.length > 1
     ? Math.sqrt(ok.reduce((s, r) => s + (r.romDeg - avgRom) ** 2, 0) / (ok.length - 1))
     : null;
-  // Cadence from rep-start to rep-start intervals (excludes the last rep's own duration).
-  const span = reps.length > 1 ? reps[reps.length - 1].startMs - reps[0].startMs : null;
+  // Cadence from rep-start to rep-start intervals within each set (excludes the last
+  // rep's own duration and rests between sets).
+  let intervals = 0;
+  let span = 0;
+  for (let k = 1; k < reps.length; k++) {
+    if ((reps[k].set ?? 1) !== (reps[k - 1].set ?? 1)) continue;
+    intervals++;
+    span += reps[k].startMs - reps[k - 1].startMs;
+  }
   return {
     total: reps.length,
     reliable: ok.length,
@@ -230,7 +261,7 @@ export function summarizeSession(reps) {
     romCvPct: sdRom === null || !avgRom ? null : round1((sdRom / avgRom) * 100),
     avgPhase1Ms: ok.length ? Math.round(mean(ok.map(r => r.phase1Ms))) : null,
     avgPhase2Ms: ok.length ? Math.round(mean(ok.map(r => r.phase2Ms))) : null,
-    repsPerMin: span && span > 0 ? round1(((reps.length - 1) / span) * 60000) : null,
+    repsPerMin: intervals && span > 0 ? round1((intervals / span) * 60000) : null,
   };
 }
 
@@ -253,6 +284,9 @@ export class RepTracker {
     this.pendingCountIdx = null;
     this.postLoss = false;
     this.partialRep = false;
+    // The current window may begin mid-movement (start of tracking, a new set, or
+    // history evicted from the buffer).
+    this.openStart = true;
     this.set = 1;
     this.lastReps = null;
     this.reps = [];
@@ -264,6 +298,7 @@ export class RepTracker {
     this.pendingCountIdx = null;
     this.postLoss = false;
     this.partialRep = false;
+    this.openStart = true;
     this.set += 1;
   }
 
@@ -272,11 +307,16 @@ export class RepTracker {
     const index = this.samples[countIdx].reps;
     // Consume the recovery flag for this rep whether or not it yields a summary, so it
     // can never carry over to the next, fully observed rep.
-    const partial = this.partialRep;
+    let partial = this.partialRep;
     this.partialRep = false;
-    const rep = summarizeRep(this.samples.slice(0, endIdx + 1), this.profile, { gate: this.gate });
+    const start = movementStart(this.samples, countIdx, endIdx, this.profile);
+    // No rest posture before the counted movement in a window that may have begun
+    // mid-movement: its start was not observed, so ROM and tempo are incomplete.
+    if (!start.found && this.openStart) partial = true;
+    const rep = summarizeRep(this.samples.slice(start.idx, endIdx + 1), this.profile, { gate: this.gate });
     this.samples = this.samples.slice(endIdx);
     this.pendingCountIdx = null;
+    this.openStart = false;
     if (!rep) return null;
     const entry = { set: this.set, index, ...rep };
     if (partial) {
@@ -338,6 +378,7 @@ export class RepTracker {
     this.samples.push(sample);
     if (this.samples.length > this.maxSamples) {
       this.samples.shift();
+      this.openStart = true;
       if (this.pendingCountIdx !== null) this.pendingCountIdx = Math.max(0, this.pendingCountIdx - 1);
     }
     const i = this.samples.length - 1;

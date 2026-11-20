@@ -293,3 +293,69 @@ test('Recorded compact landmarks are recognised even when the first landmark is 
   const [rep] = analyzeReps(frames, 'squat');
   assert.ok(Math.abs(rep.extremeAngle - 100) < 1, `uses visible left leg: ${rep.extremeAngle}`);
 });
+
+test('A rep whose start was not recorded is flagged, not averaged', () => {
+  // Recording starts at the bottom of a squat; the counter fires at 160° on the way up.
+  const seq = [100, 100, 110, 130, 150, 160, 170, 180, 180, 180];
+  const frames = seq.map((a, i) => ({
+    timeMs: i * 100,
+    angles: { leftKnee: a, rightKnee: a },
+    landmarks: Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 })),
+    reps: a >= 160 && i >= 5 ? 1 : 0,
+  }));
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.equal(rep.partial, true);
+  assert.equal(rep.quality, 'low-confidence');
+  assert.equal(summarizeSession([rep]).reliable, 0);
+});
+
+test('An aborted raise before a counted raise does not lend its peak or timing', async () => {
+  const { ShoulderAbductionExercise } = await import('../src/exercises/shoulder-abduction-exercise.mjs');
+  const ex = new ShoulderAbductionExercise();
+  let state = ex.createState();
+  const ramp = (from, to, n) => Array.from({ length: n }, (_, k) => from + ((to - from) * (k + 1)) / n);
+  // 20 -> 170 -> 20 without the required peak hold, then 20 -> 150 (held) -> 20.
+  const seq = [...Array(5).fill(20), ...ramp(20, 170, 3), ...ramp(170, 20, 3), ...Array(8).fill(20),
+    ...ramp(20, 150, 6), ...Array(5).fill(150), ...ramp(150, 20, 6), ...Array(10).fill(20)];
+  const frames = seq.map((a, i) => {
+    const angles = { leftShoulder: a, rightShoulder: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+    state = ex.update(state, { angles, landmarks, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'shoulder_abduction');
+  assert.ok(Math.abs(rep.extremeAngle - 150) < 1, `peak ${rep.extremeAngle}`);
+  assert.ok(Math.abs(rep.romDeg - 130) < 1, `ROM ${rep.romDeg}`);
+  assert.ok(rep.startMs >= 1800 && rep.phase1Ms <= 1200, `timing of the counted raise: ${rep.startMs} / ${rep.phase1Ms}`);
+});
+
+test('A rep truncated by buffer eviction is flagged', () => {
+  const frames = [];
+  const push = (a, reps) => frames.push({
+    timeMs: frames.length * 33,
+    angles: { leftKnee: a, rightKnee: a },
+    landmarks: Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 })),
+    reps,
+  });
+  for (let k = 0; k < 5; k++) push(180, 0);
+  for (let k = 1; k <= 10; k++) push(180 - 8 * k, 0); // descend to 100
+  for (let k = 0; k < 80; k++) push(100, 0); // long hold: start evicted from a 50-sample buffer
+  for (let k = 1; k <= 10; k++) push(100 + 8 * k, 100 + 8 * k >= 160 ? 1 : 0);
+  for (let k = 0; k < 5; k++) push(180, 1);
+  const [rep] = analyzeReps(frames, 'squat', { maxSamples: 50 });
+  assert.equal(rep.partial, true);
+  assert.equal(rep.quality, 'low-confidence');
+  // Without eviction the same rep is fully observed.
+  const [full] = analyzeReps(frames, 'squat');
+  assert.equal(full.quality, 'ok');
+  assert.ok(Math.abs(full.romDeg - 80) < 1);
+});
+
+test('Cadence ignores the rest between sets', () => {
+  const rep = (set, startMs) => ({ set, startMs, quality: 'ok', romDeg: 80, phase1Ms: 900, phase2Ms: 900 });
+  const reps = [0, 2000, 4000, 6000, 8000].map(t => rep(1, t))
+    .concat([0, 2000, 4000, 6000, 8000].map(t => rep(2, 308000 + t)));
+  const s = summarizeSession(reps);
+  assert.ok(Math.abs(s.repsPerMin - 30) < 0.5, `cadence ${s.repsPerMin}`);
+});
