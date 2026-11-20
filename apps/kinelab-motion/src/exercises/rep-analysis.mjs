@@ -260,15 +260,18 @@ export class RepTracker {
   _finalize(endIdx) {
     const countIdx = this.pendingCountIdx;
     const index = this.samples[countIdx].reps;
+    // Consume the recovery flag for this rep whether or not it yields a summary, so it
+    // can never carry over to the next, fully observed rep.
+    const partial = this.partialRep;
+    this.partialRep = false;
     const rep = summarizeRep(this.samples.slice(0, endIdx + 1), this.profile, { gate: this.gate });
     this.samples = this.samples.slice(endIdx);
     this.pendingCountIdx = null;
     if (!rep) return null;
     const entry = { set: this.set, index, ...rep };
-    if (this.partialRep) {
+    if (partial) {
       entry.quality = 'low-confidence';
       entry.partial = true;
-      this.partialRep = false;
     }
     this.reps.push(entry);
     return entry;

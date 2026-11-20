@@ -623,7 +623,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **23 Node test files and 121 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **23 Node test files and 122 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
@@ -633,7 +633,7 @@ Run them from the repository root:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all 121 tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
+Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all 122 tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
 
 ### Known limits and caveats
 

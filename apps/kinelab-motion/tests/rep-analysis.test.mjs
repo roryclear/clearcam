@@ -235,3 +235,22 @@ test('A rep counted while recovering from tracking loss does not crash and is me
   assert.equal(offline[0].quality, 'low-confidence');
   assert.equal(offline[0].partial, true);
 });
+
+test('A discarded recovery rep does not taint the next fully observed rep', () => {
+  // Devin's sequence on #14, run through the real squat counter.
+  const seq = [180, 180, 150, 120, null, 100, 100, 110, 130, 150, 157, 156, 145, 120, 100, 100, 110, 130, 150, 157, 160, 170, 180, 180, 180, 180];
+  const squat = new SquatExercise();
+  let state = squat.createState();
+  const frames = seq.map((a, i) => {
+    const angles = { leftKnee: a, rightKnee: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.95, presence: 0.99 }));
+    state = squat.update(state, { angles, timestampMs: i * 100, trackingQuality: a === null ? 'lost' : 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  const reps = analyzeReps(frames, 'squat');
+  const last = reps[reps.length - 1];
+  assert.ok(last, 'second rep summarized');
+  assert.equal(last.index, 2);
+  assert.equal(last.quality, 'ok');
+  assert.equal(last.partial, undefined);
+});
