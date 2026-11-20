@@ -201,3 +201,37 @@ test('A counter reset mid-recording starts a new set instead of discarding earli
   assert.deepEqual(reps.slice(6).map(r => r.index), [1, 2, 3, 4, 5, 6]);
   assert.ok(reps.every(r => r.quality === 'ok' && r.romDeg > 75));
 });
+
+test('A rep counted while recovering from tracking loss does not crash and is measured', () => {
+  // Devin's example: tracking lost, squat reaches 100°, returns through 157°/156° (count
+  // fires at 156°), then a 158° frame. Previously this cleared the buffer under a pending rep.
+  // Tracking resumes with the person already at the bottom (100°), so recovery is still
+  // trimming toward the rest posture when the counter fires at 156°.
+  const angles = [180, 180, 150, 120, null, 100, 100, 110, 130, 150, 157, 156, 158, 170, 180, 180, 180, 180];
+  const statusAt = i => (angles[i] === null ? 'tracking-lost' : 'active');
+  const repsAt = i => (i >= 11 ? 1 : 0);
+  const frames = angles.map((a, i) => ({
+    timeMs: i * 100,
+    angles: { leftKnee: a, rightKnee: a },
+    landmarks: Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 })),
+    reps: repsAt(i),
+    status: statusAt(i),
+  }));
+  const tracker = new RepTracker();
+  tracker.reset('squat');
+  const live = [];
+  assert.doesNotThrow(() => {
+    for (const f of frames) {
+      const r = tracker.update({ angles: f.angles, landmarks: f.landmarks, timestampMs: f.timeMs, reps: f.reps, status: f.status });
+      if (r) live.push(r);
+    }
+    const r = tracker.flush();
+    if (r) live.push(r);
+  });
+  const offline = analyzeReps(frames, 'squat');
+  assert.equal(offline.length, 1);
+  assert.deepEqual(live, offline);
+  // The descent happened while tracking was lost: flagged, kept out of averages.
+  assert.equal(offline[0].quality, 'low-confidence');
+  assert.equal(offline[0].partial, true);
+});

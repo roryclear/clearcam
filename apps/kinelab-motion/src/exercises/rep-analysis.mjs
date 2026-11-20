@@ -169,6 +169,7 @@ function returnPeakIndex(samples, countIdx, i, isMin) {
 }
 
 function settleIndex(samples, countIdx, i, profile) {
+  if (!samples[countIdx] || !samples[i]) return i >= 0 ? i : null; // defensive: never throw in the frame loop
   const isMin = profile.direction === 'min';
   const peak = returnPeakIndex(samples, countIdx, i, isMin);
   const s = samples[i];
@@ -241,6 +242,7 @@ export class RepTracker {
     this.samples = [];
     this.pendingCountIdx = null;
     this.postLoss = false;
+    this.partialRep = false;
     this.set = 1;
     this.lastReps = null;
     this.reps = [];
@@ -251,6 +253,7 @@ export class RepTracker {
     this.samples = [];
     this.pendingCountIdx = null;
     this.postLoss = false;
+    this.partialRep = false;
     this.set += 1;
   }
 
@@ -262,6 +265,11 @@ export class RepTracker {
     this.pendingCountIdx = null;
     if (!rep) return null;
     const entry = { set: this.set, index, ...rep };
+    if (this.partialRep) {
+      entry.quality = 'low-confidence';
+      entry.partial = true;
+      this.partialRep = false;
+    }
     this.reps.push(entry);
     return entry;
   }
@@ -289,6 +297,12 @@ export class RepTracker {
       return finished;
     }
 
+    if (this.postLoss && (this.pendingCountIdx !== null || sample.reps > (this.samples[this.samples.length - 1]?.reps ?? sample.reps))) {
+      // A rep was counted during recovery: stop trimming (that would also invalidate
+      // pendingCountIdx). Its movement was only partly observed, so it is flagged.
+      this.postLoss = false;
+      this.partialRep = true;
+    }
     if (this.postLoss && sample.angle !== null) {
       // After an abort the person may still be mid-movement (e.g. at the bottom).
       // Restart the window at the most rested posture seen since, and resume normal
