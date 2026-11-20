@@ -23,7 +23,9 @@ import { JOINTS } from '../biomechanics/landmark-indices.mjs';
 export const REP_PROFILES = Object.freeze({
   squat: { joint: 'Knee', direction: 'min', phases: ['down', 'up'] },
   lunge: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], pick: 'min' },
-  sit_to_stand: { joint: 'Knee', direction: 'max', phases: ['rise', 'sit'] },
+  // Until the seated start is confirmed the person is still setting up (often standing);
+  // those frames must not become the first rep's extreme.
+  sit_to_stand: { joint: 'Knee', direction: 'max', phases: ['rise', 'sit'], setupStatuses: ['waiting', 'sit-to-begin'] },
   // Shoulder counters follow the most elevated arm, so one-arm raises count; measure that arm.
   shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max' },
   shoulder_flexion: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max' },
@@ -55,7 +57,8 @@ function sideConfidence(landmarks, indices) {
 }
 
 function asVisibilityLandmarks(landmarks) {
-  if (!Array.isArray(landmarks) || !Array.isArray(landmarks[0] ?? null)) return landmarks;
+  // Recorded frames store [x, y, z, conf] and may hold nulls, even at index 0.
+  if (!Array.isArray(landmarks) || !landmarks.some(p => Array.isArray(p))) return landmarks;
   return landmarks.map(p => (Array.isArray(p) ? { visibility: p[3] ?? 1 } : p));
 }
 
@@ -93,7 +96,14 @@ export function sampleFrame(profile, { angles, landmarks, timestampMs, reps = 0,
       conf = cl === null || cr === null ? null : (cl + cr) / 2;
     }
   }
-  return { t: timestampMs, angle: Number.isFinite(angle) ? angle : null, conf, reps, lost: status === 'tracking-lost' };
+  return {
+    t: timestampMs,
+    angle: Number.isFinite(angle) ? angle : null,
+    conf,
+    reps,
+    lost: status === 'tracking-lost',
+    setup: status !== null && (profile.setupStatuses ?? []).includes(status),
+  };
 }
 
 const round1 = v => Math.round(v * 10) / 10;
@@ -297,6 +307,12 @@ export class RepTracker {
       if (this.pendingCountIdx !== null) finished = this._finalize(this.samples.length - 1);
       this.samples = [];
       this.postLoss = true;
+      return finished;
+    }
+
+    if (sample.setup && this.pendingCountIdx === null) {
+      // Setup posture before the start position is confirmed: not part of any rep.
+      this.samples = [];
       return finished;
     }
 

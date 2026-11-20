@@ -254,3 +254,42 @@ test('A discarded recovery rep does not taint the next fully observed rep', () =
   assert.equal(last.quality, 'ok');
   assert.equal(last.partial, undefined);
 });
+
+test('Sit-to-stand started while standing measures the counted stand, not the setup', async () => {
+  const { SitToStandExercise } = await import('../src/exercises/sit-to-stand-exercise.mjs');
+  const sts = new SitToStandExercise();
+  let state = sts.createState();
+  const plan = [[175, 600], [90, 900], [175, 900], [90, 900], [90, 600]]; // standing -> seated -> stand -> seated
+  const frames = [];
+  let t = 0;
+  let prev = plan[0][0];
+  for (const [target, ms] of plan) {
+    for (let k = 0; k < ms; k += 33, t += 33) {
+      const a = prev + (target - prev) * Math.min(1, (k + 33) / 300);
+      const angles = { leftKnee: a, rightKnee: a, leftHip: a - 10, rightHip: a - 10 };
+      const landmarks = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+      state = sts.update(state, { angles, landmarks, timestampMs: t, trackingQuality: 'good' });
+      frames.push({ timeMs: t, angles, landmarks, reps: state.reps, status: state.status });
+    }
+    prev = target;
+  }
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'sit_to_stand');
+  assert.ok(rep.romDeg > 75, `ROM ${rep.romDeg}`);
+  assert.ok(rep.phase1Ms > 200, `rise ${rep.phase1Ms}`);
+  assert.ok(rep.extremeMs > 1500, 'extreme is the counted stand, after sitting down');
+});
+
+test('Recorded compact landmarks are recognised even when the first landmark is null', () => {
+  const lm = Array.from({ length: 33 }, () => [0.5, 0.5, 0, 0.95]);
+  lm[0] = null;
+  for (const i of [24, 26, 28]) lm[i] = [0.5, 0.5, 0, 0.6]; // right leg occluded
+  const frames = [];
+  for (let t = 0, i = 0; t <= 3000; t += 50, i++) {
+    const phase = t < 500 ? 0 : t > 2500 ? 1 : (t - 500) / 2000;
+    const left = 180 - 80 * Math.sin(Math.PI * phase);
+    frames.push({ timeMs: t, angles: { leftKnee: left, rightKnee: 140 }, landmarks: lm, reps: t >= 2700 ? 1 : 0 });
+  }
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.ok(Math.abs(rep.extremeAngle - 100) < 1, `uses visible left leg: ${rep.extremeAngle}`);
+});
