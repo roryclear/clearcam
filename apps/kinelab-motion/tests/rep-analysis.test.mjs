@@ -454,3 +454,54 @@ test('A dip while lowering does not cut the raise off its peak', async () => {
   assert.equal(rep.romDeg, 150);
   assert.equal(rep.quality, 'ok');
 });
+
+function runSquat(seq, landmarksFor = () => Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.95, presence: 0.99 })), anglesFor = a => ({ leftKnee: a, rightKnee: a })) {
+  const squat = new SquatExercise();
+  let state = squat.createState();
+  const frames = seq.map((a, i) => {
+    const angles = anglesFor(a, i);
+    const landmarks = landmarksFor(i);
+    state = squat.update(state, { angles, landmarks, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  return { frames, count: state.reps };
+}
+
+test('An aborted dip before a counted squat is not part of that rep', () => {
+  const { frames, count } = runSquat([180, 180, 180, 160, 140, 130, 130, 140, 155, 155, 155, 140, 120, 100, 100, 100, 120, 140, 160, 170, 180, 180, 180]);
+  assert.equal(count, 1);
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.equal(rep.startAngle, 155);
+  assert.equal(rep.romDeg, 55);
+  assert.ok(rep.startMs >= 800, `descent starts after the dip: ${rep.startMs}`);
+});
+
+test('Bilateral side selection is identical live and on replay', async () => {
+  const { SessionRecorder } = await import('../src/sessions/session-recorder.mjs');
+  const lm = () => {
+    const l = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.95, presence: 0.99 }));
+    for (const i of [23, 25, 27]) l[i].visibility = 0.826;
+    for (const i of [24, 26, 28]) l[i].visibility = 0.707;
+    return l;
+  };
+  const seq = [180, 180, 160, 130, 100, 80, 80, 80, 100, 130, 160, 170, 180, 180, 180, 180];
+  // Left knee goes to 80°, right only to 140°.
+  const { frames } = runSquat(seq, lm, a => ({ leftKnee: a, rightKnee: Math.max(a, 140) }));
+  const live = analyzeReps(frames, 'squat');
+  const recorder = new SessionRecorder({ MediaRecorderClass: null });
+  const realNow = performance.now.bind(performance);
+  performance.now = () => 0;
+  try { recorder.start({ exerciseId: 'squat' }); } finally { performance.now = realNow; }
+  for (const f of frames) recorder.recordFrame({ landmarks: f.landmarks, angles: f.angles, timestampMs: f.timeMs, reps: f.reps, status: f.status });
+  const replay = analyzeReps(recorder.stop().frames, 'squat');
+  assert.ok(live.length === 1 && replay.length === 1);
+  assert.equal(replay[0].extremeAngle, live[0].extremeAngle);
+  assert.equal(replay[0].romDeg, live[0].romDeg);
+});
+
+test('Cadence counts counter steps when a rep has no summary', () => {
+  const rep = (index, startMs) => ({ set: 1, index, startMs, quality: 'ok', romDeg: 80, phase1Ms: 900, phase2Ms: 900 });
+  // Rep 2 produced no summary; reps 1 and 3 are two cycles apart.
+  const s = summarizeSession([rep(1, 0), rep(3, 4000), rep(4, 6000)]);
+  assert.ok(Math.abs(s.repsPerMin - 30) < 0.5, `cadence ${s.repsPerMin}`);
+});

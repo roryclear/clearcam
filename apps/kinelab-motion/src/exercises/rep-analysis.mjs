@@ -20,15 +20,22 @@ import { JOINTS } from '../biomechanics/landmark-indices.mjs';
  * (knee flexion) or a 'max' (sit-to-stand knee extension, shoulder elevation).
  * phases: labels for the motion toward and away from that extreme.
  */
+// commitStatuses: the exercise's statuses from the moment its counter commits to a rep
+// (depth or peak reached) until it counts. Reversals inside that span belong to the
+// rep; movements before it (an aborted attempt) do not.
+const SHOULDER_COMMIT = ['peak-reached', 'lowering'];
 export const REP_PROFILES = Object.freeze({
-  squat: { joint: 'Knee', direction: 'min', phases: ['down', 'up'] },
-  lunge: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], pick: 'min' },
+  squat: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], commitStatuses: ['rise', 'finishing'] },
+  lunge: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], pick: 'min', commitStatuses: ['depth-reached', 'rising'] },
   // Until the seated start is confirmed the person is still setting up (often standing);
   // those frames must not become the first rep's extreme.
-  sit_to_stand: { joint: 'Knee', direction: 'max', phases: ['rise', 'sit'], setupStatuses: ['waiting', 'sit-to-begin'] },
+  sit_to_stand: {
+    joint: 'Knee', direction: 'max', phases: ['rise', 'sit'],
+    setupStatuses: ['waiting', 'sit-to-begin'], commitStatuses: ['standing-hold', 'lowering'],
+  },
   // Shoulder counters follow the most elevated arm, so one-arm raises count; measure that arm.
-  shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max' },
-  shoulder_flexion: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max' },
+  shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max', commitStatuses: SHOULDER_COMMIT },
+  shoulder_flexion: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max', commitStatuses: SHOULDER_COMMIT },
 });
 
 export const DEFAULT_QUALITY_GATE = 0.7;
@@ -64,9 +71,11 @@ function sideConfidence(landmarks, indices) {
 }
 
 function asVisibilityLandmarks(landmarks) {
-  // Recorded frames store [x, y, z, conf] and may hold nulls, even at index 0.
-  if (!Array.isArray(landmarks) || !landmarks.some(p => Array.isArray(p))) return landmarks;
-  return landmarks.map(p => (Array.isArray(p) ? { visibility: p[3] ?? 1 } : p));
+  // Live landmarks and recorded [x, y, z, conf] arrays (which may hold nulls, even at
+  // index 0) are both reduced to the quantized gate confidence, so side selection and
+  // the quality gate see identical inputs live and on replay.
+  if (!Array.isArray(landmarks)) return landmarks;
+  return landmarks.map(p => (p ? { visibility: landmarkConfidence(p) } : p));
 }
 
 /**
@@ -109,6 +118,7 @@ export function sampleFrame(profile, { angles, landmarks, timestampMs, reps = 0,
     conf,
     reps,
     lost: status === 'tracking-lost',
+    status,
     setup: status !== null && (profile.setupStatuses ?? []).includes(status),
   };
 }
@@ -244,6 +254,19 @@ function turningPoints(samples, endIdx, isMin) {
   });
 }
 
+/** First frame of the commit-status run that ends at the count, or null. */
+function commitIndex(samples, countIdx, profile) {
+  const commit = profile.commitStatuses;
+  if (!commit) return null;
+  const inCommit = k => commit.includes(samples[k].status);
+  let k = countIdx;
+  // The count frame itself (e.g. 'completed') and a few settling frames may precede the run.
+  while (k >= 0 && countIdx - k <= 2 && !inCommit(k)) k--;
+  if (k < 0 || !inCommit(k)) return null;
+  while (k > 0 && (inCommit(k - 1) || samples[k - 1].status === 'partial-tracking')) k--;
+  return k;
+}
+
 /**
  * Bounds the counted movement: its working extreme is the last turning point at or
  * before the count, and it starts at the rest turning point just before that. Earlier
@@ -257,22 +280,30 @@ function movementStart(samples, countIdx, endIdx, profile) {
   let p = -1;
   for (let j = 0; j < pts.length; j++) if (pts[j].extreme && pts[j].idx <= countIdx) p = j;
   if (p < 0) return { idx: 0, startObserved: false };
-  // A rest turning point is a movement boundary only if it is near the most rested
-  // posture seen so far; a rebound at the bottom or a dip while lowering is a
-  // reversal inside the same counted rep.
   const at = j => samples[pts[j].idx].angle;
-  let restRef = null;
-  let extRef = null;
-  for (let j = 0; j <= p; j++) {
-    const a = at(j);
-    if (pts[j].extreme) { if (extRef === null || (isMin ? a < extRef : a > extRef)) extRef = a; }
-    else if (restRef === null || (isMin ? a > restRef : a < restRef)) restRef = a;
-  }
-  if (restRef === null) return { idx: 0, startObserved: false };
-  const slack = Math.max(REST_TOLERANCE_DEG, 0.25 * Math.abs(restRef - extRef));
+  const better = (a, b, wantMin) => b === null || (wantMin ? a < b : a > b);
   let r = -1;
-  for (let j = p - 1; j >= 0; j--) {
-    if (!pts[j].extreme && Math.abs(at(j) - restRef) <= slack) { r = j; break; }
+  let extRef = null;
+  const commit = commitIndex(samples, countIdx, profile);
+  if (commit !== null) {
+    // The counted rep starts at the last rest turning point before the counter
+    // committed to it; reversals after the commit (a bottom rebound, a dip while
+    // lowering) stay inside the rep, earlier attempts stay out.
+    for (let j = p; j >= 0; j--) if (!pts[j].extreme && pts[j].idx < commit) { r = j; break; }
+    for (let j = Math.max(r, 0); j <= p; j++) if (pts[j].extreme && better(at(j), extRef, isMin)) extRef = at(j);
+  } else {
+    // No exercise statuses (older recordings): a rest turning point is a boundary only
+    // if it is near the most rested posture seen.
+    let restRef = null;
+    for (let j = 0; j <= p; j++) {
+      if (pts[j].extreme) { if (better(at(j), extRef, isMin)) extRef = at(j); }
+      else if (better(at(j), restRef, !isMin)) restRef = at(j);
+    }
+    if (restRef === null) return { idx: 0, startObserved: false };
+    const slack = Math.max(REST_TOLERANCE_DEG, 0.25 * Math.abs(restRef - extRef));
+    for (let j = p - 1; j >= 0; j--) {
+      if (!pts[j].extreme && Math.abs(at(j) - restRef) <= slack) { r = j; break; }
+    }
   }
   if (r < 0) return { idx: 0, startObserved: false };
   const rest = pts[r];
@@ -334,7 +365,8 @@ export function summarizeSession(reps) {
   let span = 0;
   for (let k = 1; k < reps.length; k++) {
     if ((reps[k].set ?? 1) !== (reps[k - 1].set ?? 1)) continue;
-    intervals++;
+    // Counter steps, not pairs: a counted rep that produced no summary still took a cycle.
+    intervals += Math.max(1, (reps[k].index ?? 1) - (reps[k - 1].index ?? 0));
     span += reps[k].startMs - reps[k - 1].startMs;
   }
   return {
