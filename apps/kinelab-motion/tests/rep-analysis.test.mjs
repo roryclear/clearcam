@@ -108,7 +108,7 @@ test('Recorded sessions round-trip through SessionRecorder and export a per-rep 
   assert.ok(reps.every(r => r.quality === 'ok'));
   const csv = exportRepsToCSV(reps, ['down', 'up']).trim().split('\n');
   assert.equal(csv.length, 7);
-  assert.match(csv[0], /^rep,start_ms,end_ms,duration_ms,down_ms,up_ms,start_angle,extreme_angle,rom_deg/);
+  assert.match(csv[0], /^set,rep,start_ms,end_ms,duration_ms,down_ms,up_ms,start_angle,extreme_angle,rom_deg/);
   assert.equal(csv[1].split(',').length, csv[0].split(',').length);
 });
 
@@ -189,4 +189,15 @@ test('Recorded sessions keep the live confidence (min of visibility and presence
   for (const f of frames) recorder.recordFrame({ landmarks: f.landmarks, angles: f.angles, timestampMs: f.timeMs, reps: f.reps, status: f.status });
   const replay = analyzeReps(recorder.stop().frames, 'shoulder_abduction');
   assert.equal(replay[0].quality, 'low-confidence', 'replay must not upgrade a rejected rep');
+});
+
+test('A counter reset mid-recording starts a new set instead of discarding earlier reps', () => {
+  const set1 = squatFrames({ seed: 1 });
+  const offset = set1[set1.length - 1].timeMs + 33;
+  const set2 = squatFrames({ seed: 2 }).map(f => ({ ...f, timeMs: f.timeMs + offset }));
+  const reps = analyzeReps([...set1, ...set2], 'squat');
+  assert.equal(reps.length, 12);
+  assert.deepEqual(reps.map(r => r.set), [...Array(6).fill(1), ...Array(6).fill(2)]);
+  assert.deepEqual(reps.slice(6).map(r => r.index), [1, 2, 3, 4, 5, 6]);
+  assert.ok(reps.every(r => r.quality === 'ok' && r.romDeg > 75));
 });

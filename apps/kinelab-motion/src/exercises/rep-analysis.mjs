@@ -241,7 +241,17 @@ export class RepTracker {
     this.samples = [];
     this.pendingCountIdx = null;
     this.postLoss = false;
+    this.set = 1;
+    this.lastReps = null;
     this.reps = [];
+  }
+
+  /** Clears in-progress segmentation but keeps completed reps (counter reset mid-recording). */
+  _startNewSet() {
+    this.samples = [];
+    this.pendingCountIdx = null;
+    this.postLoss = false;
+    this.set += 1;
   }
 
   _finalize(endIdx) {
@@ -251,7 +261,7 @@ export class RepTracker {
     this.samples = this.samples.slice(endIdx);
     this.pendingCountIdx = null;
     if (!rep) return null;
-    const entry = { index, ...rep };
+    const entry = { set: this.set, index, ...rep };
     this.reps.push(entry);
     return entry;
   }
@@ -260,12 +270,16 @@ export class RepTracker {
   update({ angles, landmarks, timestampMs, reps, status = null }) {
     if (!this.profile) return null;
     const sample = sampleFrame(this.profile, { angles, landmarks, timestampMs, reps: reps ?? 0, status });
-    const prev = this.samples[this.samples.length - 1];
-    if (prev && sample.reps < prev.reps) {
-      this.reset(); // counter was reset
+    const resetDetected = this.lastReps !== null && sample.reps < this.lastReps;
+    this.lastReps = sample.reps;
+    let finished = null;
+    // Compared with the last counter value seen, even if the window was just cleared.
+    if (resetDetected) {
+      // Counter reset (e.g. "Reset count" during a recording): keep earlier sets.
+      if (this.pendingCountIdx !== null) finished = this._finalize(this.samples.length - 1);
+      this._startNewSet();
     }
 
-    let finished = null;
     if (sample.lost) {
       // The exercise aborted its movement: close a counted rep, drop any unfinished one
       // so it cannot lend its depth or timing to the next counted rep.
