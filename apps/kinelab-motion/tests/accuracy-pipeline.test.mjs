@@ -189,3 +189,44 @@ test('FramingAssistant asks for the recommended camera view once the body is fra
   assert.match(fa.evaluate(lm, 'shoulder_abduction', { yawDeg: 10, recommendedView: 'front' }).guidance, /Face the camera/);
   assert.equal(fa.evaluate(lm, 'squat').status, 'optimal', 'no view info: unchanged behaviour');
 });
+
+test('Squat: holding the bottom for 15 s does not complete a repetition', () => {
+  const squat = new SquatExercise();
+  let state = squat.createState();
+  const frame = (hipY, knee, t) => {
+    const lm = Array.from({ length: 33 }, () => pt(0.5, 0.5));
+    lm[23] = pt(0.5, hipY); lm[24] = pt(0.5, hipY);
+    lm[27] = pt(0.5, 0.9); lm[28] = pt(0.5, 0.9);
+    return { angles: { leftKnee: knee, rightKnee: knee }, landmarks: lm, timestampMs: t, trackingQuality: 'good' };
+  };
+  for (let t = 0; t < 1000; t += 33) state = squat.update(state, frame(0.5, 170, t)); // span 0.4
+  for (let t = 1000; t < 16000; t += 33) state = squat.update(state, frame(0.6, 100, t)); // span 0.3, held
+  assert.equal(state.reps, 0);
+  assert.equal(state.phase, 'down');
+  for (let t = 16000; t < 17000; t += 33) state = squat.update(state, frame(0.5, 170, t));
+  assert.equal(state.reps, 1, 'rising afterwards still completes the rep');
+});
+
+test('Adaptive fallback judges the new model on its own samples, not the previous model history', async () => {
+  const { PerformanceMonitor } = await import('../src/tracking/performance-monitor.mjs');
+  const perf = new PerformanceMonitor();
+  const ac = new AdaptiveController({ consecutiveViolationsNeeded: 4 });
+  let clock = 0;
+  const realNow = performance.now.bind(performance);
+  performance.now = () => clock;
+  try {
+    const infer = ms => { const s = clock; clock += ms; perf.endInference(s); };
+    ac.setCurrentModel('heavy');
+    for (let i = 0; i < 30; i++) infer(180); // slow Heavy
+    // Full installs: reset as app.mjs does.
+    ac.setCurrentModel('full');
+    perf.resetInferenceStats();
+    for (let i = 0; i < 40; i++) {
+      infer(20);
+      assert.equal(ac.evaluate(perf.getMetrics()).shouldFallback, false, `frame ${i}`);
+    }
+    assert.ok(perf.getMetrics().avgLatencyMs < 25);
+  } finally {
+    performance.now = realNow;
+  }
+});

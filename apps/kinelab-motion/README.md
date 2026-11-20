@@ -78,6 +78,7 @@ This table distinguishes **implemented code** from features that are merely conc
 | Kinematic bone-length invariance filter | **Implemented** | Physics-informed constraint model that eliminates 3D depth jitter and limb elasticity along direction rays |
 | Decoupled 60/120 FPS pose interpolation | **Implemented** | Native display rate LERP follower decoupling 30 FPS inference from canvas rendering for liquid smooth motion |
 | Tracking confidence states | **Implemented** | Shows good, partial or lost tracking; unavailable angles appear as `—` |
+| Per-rep metrics & quality gate | **Implemented** | ROM, phase tempo, ROM variability and cadence per rep (live log, results card, reps CSV). Reps tracked below the confidence gate are flagged and left out of averages. |
 | One Euro filtering / outlier rejection | **Implemented** | Smooths 2D landmarks and, separately, 3D world landmarks (lower depth cutoff); presets tuned on `bench/accuracy-bench.mjs`. See [docs/accuracy-speed-research.md](docs/accuracy-speed-research.md) |
 | Smart body framing radar | **Implemented** | On-canvas position guidance; upper-body decoupling for seated/close-up exercises |
 | Repetition/hold modules | **Implemented, experimental** | Squat, sit-to-stand, lunge, shoulder abduction, shoulder flexion, single-leg balance |
@@ -622,7 +623,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **22 Node test files and 107 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **23 Node test files and 115 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
@@ -632,7 +633,7 @@ Run them from the repository root:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all 107 tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
+Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all 115 tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
 
 ### Known limits and caveats
 

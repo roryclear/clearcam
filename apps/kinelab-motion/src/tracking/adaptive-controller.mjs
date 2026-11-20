@@ -52,6 +52,12 @@ export class AdaptiveController {
       return { shouldFallback: false, reason: null, nextModel: null };
     }
 
+    // Judge a model only on a full window of its own samples; a fresh model's first
+    // frames would otherwise be averaged with the previous model's history.
+    if (Number.isFinite(metrics.latencySamples) && metrics.latencySamples < (metrics.latencyWindow ?? 30)) {
+      return { shouldFallback: false, reason: null, nextModel: null };
+    }
+
     const isLatencyHigh = metrics.avgLatencyMs > this.highLatencyThresholdMs;
     const isFpsLow = metrics.inferenceFps > 0 && metrics.inferenceFps < this.lowFpsThreshold;
 
