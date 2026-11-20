@@ -87,8 +87,23 @@ export class PerformanceMonitor {
       renderFps: this.currentRenderFps,
       lastLatencyMs: Math.round(this.lastLatencyMs * 10) / 10,
       avgLatencyMs: this.avgLatencyMs,
+      latencySamples: this.inferenceTimes.length,
+      latencyWindow: this.maxLatencySamples,
       droppedFrames: this.droppedFrames,
     };
+  }
+
+  /**
+   * Clears inference latency and FPS history (e.g. after a model swap) so the next
+   * measurements describe the new model only. Render and dropped-frame stats stay.
+   */
+  resetInferenceStats() {
+    this.inferenceTimes = [];
+    this.inferenceFrameCount = 0;
+    this.lastInferenceFpsCalc = 0;
+    this.currentInferenceFps = 0;
+    this.lastLatencyMs = 0;
+    this.avgLatencyMs = 0;
   }
 
   reset() {

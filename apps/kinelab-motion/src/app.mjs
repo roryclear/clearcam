@@ -34,7 +34,8 @@ import { SessionRecorder } from './sessions/session-recorder.mjs';
 import { defaultSessionStorage } from './sessions/session-storage.mjs';
 import { TimelinePlayer } from './sessions/timeline-player.mjs';
 import { ChartRenderer } from './sessions/chart-renderer.mjs';
-import { exportToCSV, exportToJSON, downloadFile } from './sessions/export-helpers.mjs';
+import { exportToCSV, exportToJSON, exportRepsToCSV, downloadFile } from './sessions/export-helpers.mjs';
+import { RepTracker, analyzeReps, summarizeSession, profileFor, countedReps } from './exercises/rep-analysis.mjs';
 import { compareSessions } from './sessions/session-compare.mjs';
 import { defaultAudioSynthesizer } from './integrations/audio-cues.mjs';
 import { defaultVideoStore } from './sessions/video-store.mjs';
@@ -151,6 +152,14 @@ const nodes = {
   savedSessionsList: el('saved-sessions-list'),
   exportJsonBtn: el('export-json-btn'),
   exportCsvBtn: el('export-csv-btn'),
+  exportRepsBtn: el('export-reps-btn'),
+  repLog: el('rep-log'),
+  repLogLast: el('rep-log-last'),
+  repLogSummary: el('rep-log-summary'),
+  resAvgRom: el('res-avg-rom'),
+  resTempo: el('res-tempo'),
+  resTempoLabel: el('res-tempo-label'),
+  resQuality: el('res-quality'),
   setGhostBtn: el('set-ghost-btn'),
   deleteSessionBtn: el('delete-session-btn'),
 };
@@ -161,6 +170,7 @@ const filter = new PoseFilter();
 const worldFilter = new WorldPoseFilter();
 const kinematicFilter = new KinematicBoneFilter();
 const viewEstimator = new ViewOrientationEstimator();
+const repTracker = new RepTracker();
 const interpolator = new PoseInterpolator({ lambda: 32.0 });
 const perf = new PerformanceMonitor();
 const adaptive = new AdaptiveController();
@@ -390,8 +400,38 @@ function renderDynamicTelemetry(items) {
   }
 }
 
+const fmtSec = ms => (Number.isFinite(ms) ? `${(ms / 1000).toFixed(1)}s` : '--');
+
+function resetRepLog(exerciseId) {
+  repTracker.reset(exerciseId);
+  if (nodes.repLog) {
+    nodes.repLog.hidden = true;
+    nodes.repLogLast.textContent = '';
+    nodes.repLogSummary.textContent = '';
+  }
+}
+
+/** Live per-rep line: ROM, tempo and confidence of the rep that just finished. */
+function renderRepLog(rep) {
+  const profile = repTracker.profile;
+  if (!nodes.repLog || !profile || !rep) return;
+  const [p1, p2] = profile.phases;
+  nodes.repLogLast.replaceChildren();
+  nodes.repLogLast.append(`Rep ${rep.index} · ROM ${Math.round(rep.romDeg)}° · ${p1} ${fmtSec(rep.phase1Ms)} / ${p2} ${fmtSec(rep.phase2Ms)} `);
+  const flag = document.createElement('span');
+  flag.className = rep.quality === 'ok' ? 'rep-ok' : 'rep-flag';
+  flag.textContent = rep.quality === 'ok' ? '✓' : '⚠ low confidence';
+  nodes.repLogLast.append(flag);
+  const s = repTracker.summary();
+  nodes.repLogSummary.textContent = s.reliable
+    ? `Avg ROM ${Math.round(s.avgRomDeg)}°${s.romCvPct !== null ? ` (±${Math.round(s.romCvPct)}%)` : ''} · ${p1} ${fmtSec(s.avgPhase1Ms)} / ${p2} ${fmtSec(s.avgPhase2Ms)}${s.repsPerMin !== null ? ` · ${Math.round(s.repsPerMin)}/min` : ''} · ${s.reliable}/${s.total} reliable`
+    : `${s.lowConfidence} low-confidence rep${s.lowConfidence === 1 ? '' : 's'} excluded · improve lighting or framing`;
+  nodes.repLog.hidden = false;
+}
+
 function switchExercise(exerciseId) {
   const cfg = settings.update({ exercise: { activeExercise: exerciseId } });
+  resetRepLog(exerciseId);
   if (nodes.analysisMode.value !== exerciseId) nodes.analysisMode.value = exerciseId;
 
   if (exerciseId === 'free') {
@@ -433,6 +473,9 @@ function handleExerciseFrame(landmarks, angles, width, height, timestampMs, trac
     trackingQuality,
   });
   appState.exerciseState = nextState;
+
+  const finishedRep = repTracker.update({ angles, landmarks, timestampMs, reps: nextState.reps, status: nextState.status });
+  if (finishedRep) renderRepLog(finishedRep);
 
   // Sound cues on rep completion, depth target, or milestone
   if (settings.get().exercise.audioCues) {
@@ -620,6 +663,7 @@ function switchToFallbackModel(reason, nextModel = 'full') {
       // The runner discards a stale load itself; also ignore results from an older camera session.
       if (result?.stale || token !== appState.sessionToken) return;
       adaptive.setCurrentModel(runner.activeModel);
+      perf.resetInferenceStats(); // measure the new model on its own samples
       settings.update({ tracking: { model: runner.activeModel } });
       nodes.modelChoice.value = runner.activeModel;
       nodes.modelName.textContent = runner.activeModel.toUpperCase();
@@ -656,6 +700,9 @@ function clearMetricsUI() {
 }
 
 function stopCamera() {
+  // Report a rep that was still settling when the camera stopped.
+  const pendingRep = repTracker.flush();
+  if (pendingRep) renderRepLog(pendingRep);
   appState.sessionToken++;
   appState.active = false;
   appState.starting = false;
@@ -929,9 +976,34 @@ function resetReplayView(title) {
     nodes.resPeakAngle.textContent = '--°';
     nodes.resSymmetry.textContent = '--';
     nodes.resTimestamp.textContent = 'No session selected';
+    if (nodes.resAvgRom) {
+      nodes.resAvgRom.textContent = '--';
+      nodes.resTempo.textContent = '--';
+      nodes.resQuality.textContent = '--';
+    }
   }
   chart.render({ frames: [] });
   updateSessionsList();
+}
+
+function renderRepResults(reps, profile) {
+  if (!nodes.resAvgRom) return;
+  const s = summarizeSession(reps);
+  const [p1, p2] = profile?.phases ?? ['phase 1', 'phase 2'];
+  nodes.resTempoLabel.textContent = `TEMPO (${p1.toUpperCase()} / ${p2.toUpperCase()})`;
+  if (!s.total) {
+    nodes.resAvgRom.textContent = '—';
+    nodes.resTempo.textContent = '—';
+    nodes.resQuality.textContent = profile ? '0 reps' : 'n/a';
+    return;
+  }
+  nodes.resAvgRom.textContent = s.avgRomDeg !== null
+    ? `${Math.round(s.avgRomDeg)}°${s.romCvPct !== null ? ` ±${Math.round(s.romCvPct)}%` : ''}`
+    : '—';
+  nodes.resTempo.textContent = s.avgPhase1Ms !== null
+    ? `${fmtSec(s.avgPhase1Ms)} / ${fmtSec(s.avgPhase2Ms)}${s.repsPerMin !== null ? ` · ${Math.round(s.repsPerMin)}/min` : ''}`
+    : '—';
+  nodes.resQuality.textContent = `${s.reliable}/${s.total}`;
 }
 
 async function loadSessionForPlayback(sessionId) {
@@ -981,7 +1053,22 @@ async function loadSessionForPlayback(sessionId) {
         symCount++;
       }
     }
+    // Per-rep analysis (recomputed from recorded frames, so older sessions get it too).
+    const reps = analyzeReps(fullSession.frames, fullSession.exerciseId);
+    const repProfile = profileFor(fullSession.exerciseId);
+    const reliableReps = reps.filter(r => r.quality === 'ok');
+    // Peak from reliable reps where the rep extreme is the "peak" (squat/lunge depth,
+    // shoulder elevation); per-frame minima can come from an occluded limb.
+    if (repProfile && normalizeExerciseId(fullSession.exerciseId) !== 'sit_to_stand') {
+      // No reliable rep means no trustworthy peak: show "—" rather than an ungated
+      // frame minimum that may come from an occluded limb.
+      const extremes = reliableReps.map(r => r.extremeAngle);
+      peakDeg = extremes.length ? (repProfile.direction === 'min' ? Math.min(...extremes) : Math.max(...extremes)) : null;
+    }
     nodes.resPeakAngle.textContent = peakDeg !== null ? `${Math.round(peakDeg)}°` : '—';
+    // A counter reset mid-recording starts a new set; show reps across all sets.
+    if (repProfile) nodes.resRepCount.textContent = String(countedReps(fullSession.frames)).padStart(2, '0');
+    renderRepResults(reps, repProfile);
     if (symCount > 0) {
       const avgSym = Math.round((symSum / symCount) * 10) / 10;
       nodes.resSymmetry.textContent = avgSym <= 10 ? `Balanced (±${avgSym}°)` : `Asymmetric (±${avgSym}°)`;
@@ -1099,6 +1186,7 @@ nodes.recordBtn.addEventListener('click', () => {
 nodes.resetReps.addEventListener('click', () => {
   if (appState.activeExerciseInstance) {
     appState.exerciseState = appState.activeExerciseInstance.createState();
+    resetRepLog(repTracker.exerciseId);
     nodes.repCount.textContent = '00';
     nodes.feedback.textContent = appState.activeExerciseInstance.getFeedback(appState.exerciseState);
     renderDynamicTelemetry(appState.activeExerciseInstance.getTelemetry(appState.exerciseState));
@@ -1205,6 +1293,17 @@ nodes.exportJsonBtn.addEventListener('click', () => {
   if (!appState.currentSessionViewing) return;
   const jsonStr = exportToJSON(appState.currentSessionViewing);
   downloadFile(jsonStr, `${appState.currentSessionViewing.id}.json`, 'application/json');
+});
+
+nodes.exportRepsBtn?.addEventListener('click', () => {
+  const session = appState.currentSessionViewing;
+  if (!session) return;
+  const reps = analyzeReps(session.frames, session.exerciseId);
+  if (!reps.length) {
+    announce('No repetitions with enough tracking data to export for this session.');
+    return;
+  }
+  downloadFile(exportRepsToCSV(reps, profileFor(session.exerciseId)?.phases), `${session.id}-reps.csv`, 'text/csv');
 });
 
 nodes.exportCsvBtn.addEventListener('click', () => {

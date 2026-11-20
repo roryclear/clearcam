@@ -42,10 +42,12 @@ export function createSquatState() {
 }
 
 /** Updates the standing hip-ankle reference and returns the depth ratio. */
-export function updateDepthRatio(state, span, timestampMs, decayPerSec = 0.03) {
+export function updateDepthRatio(state, span, timestampMs, decayPerSec = 0.03, { frozen = false } = {}) {
   if (!Number.isFinite(span)) return { standSpan: state.standSpan, standSpanAt: state.standSpanAt, depthRatio: null };
   let ref = state.standSpan;
-  if (Number.isFinite(ref) && Number.isFinite(state.standSpanAt)) {
+  // During a repetition the reference must not decay: holding the bottom would
+  // otherwise slowly turn the unchanged bottom height into "standing".
+  if (!frozen && Number.isFinite(ref) && Number.isFinite(state.standSpanAt)) {
     // Slow decay lets the reference follow a user who steps further from the camera.
     ref *= Math.pow(1 - decayPerSec, Math.max(0, timestampMs - state.standSpanAt) / 1000);
   }
@@ -142,7 +144,9 @@ export class SquatExercise extends BaseExercise {
     }
     // Trust the clearly more visible leg; the occluded one is unreliable in side view.
     const kneeAngle = selectBilateralAngle(angles, landmarks, 'Knee');
-    const depth = updateDepthRatio(state, hipAnkleSpan(landmarks), timestampMs);
+    const depth = updateDepthRatio(state, hipAnkleSpan(landmarks), timestampMs, undefined, {
+      frozen: state.phase !== 'ready',
+    });
     const preset = this.getPresetConfig();
     const config = {
       downThreshold: 115 + preset.angleToleranceDeg,
