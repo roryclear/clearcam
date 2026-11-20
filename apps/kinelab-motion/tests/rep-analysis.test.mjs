@@ -505,3 +505,45 @@ test('Cadence counts counter steps when a rep has no summary', () => {
   const s = summarizeSession([rep(1, 0), rep(3, 4000), rep(4, 6000)]);
   assert.ok(Math.abs(s.repsPerMin - 30) < 0.5, `cadence ${s.repsPerMin}`);
 });
+
+test('A reversal before the peak is confirmed stays inside the same raise', async () => {
+  const { ShoulderFlexionExercise } = await import('../src/exercises/shoulder-flexion-exercise.mjs');
+  const seq = [20, 20, 20, 60, 100, 120, 100, 90, 110, 130, 150, 150, 150, 150, 120, 90, 60, 20, 20, 20];
+  const { frames, count } = await runShoulder(seq);
+  assert.equal(count, 1);
+  const [rep] = analyzeReps(frames, 'shoulder_abduction');
+  assert.equal(rep.startAngle, 20);
+  assert.equal(rep.romDeg, 130);
+  // Shoulder flexion shares the counter.
+  const ex = new ShoulderFlexionExercise();
+  let state = ex.createState();
+  const ff = seq.map((a, i) => {
+    const angles = { leftShoulder: a, rightShoulder: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+    state = ex.update(state, { angles, landmarks, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  assert.equal(analyzeReps(ff, 'shoulder_flexion')[0].romDeg, 130);
+});
+
+test('A rep resumed mid-movement after tracking loss is flagged; a later full rep is not', () => {
+  const seq = [180, 180, 150, 120, 100, 100, 120, 150, 165, 180, 180, 180,
+    null, null, 140, 130, 100, 100, 120, 150, 165, 180, 180, 180,
+    180, 150, 120, 100, 100, 120, 150, 165, 180, 180, 180];
+  const squat = new SquatExercise();
+  let state = squat.createState();
+  const frames = seq.map((a, i) => {
+    const angles = { leftKnee: a, rightKnee: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.95, presence: 0.99 }));
+    state = squat.update(state, { angles, timestampMs: i * 100, trackingQuality: a === null ? 'lost' : 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 3);
+  const reps = analyzeReps(frames, 'squat');
+  assert.equal(reps.length, 3);
+  assert.equal(reps[0].quality, 'ok');
+  assert.equal(reps[1].quality, 'low-confidence', `resumed rep ROM ${reps[1].romDeg}`);
+  assert.equal(reps[2].quality, 'ok');
+  assert.equal(reps[2].romDeg, 80);
+});

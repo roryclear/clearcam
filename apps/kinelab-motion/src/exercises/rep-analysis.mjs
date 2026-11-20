@@ -21,21 +21,30 @@ import { JOINTS } from '../biomechanics/landmark-indices.mjs';
  * phases: labels for the motion toward and away from that extreme.
  */
 // commitStatuses: the exercise's statuses from the moment its counter commits to a rep
-// (depth or peak reached) until it counts. Reversals inside that span belong to the
-// rep; movements before it (an aborted attempt) do not.
+// (depth or peak reached) until it counts. restStatuses: the counter is back at its
+// start posture. A rep starts at the last return to rest before the commit, so an
+// abandoned attempt is excluded while reversals within one attempt are kept.
 const SHOULDER_COMMIT = ['peak-reached', 'lowering'];
+const SHOULDER_REST = ['arms-down', 'completed'];
 export const REP_PROFILES = Object.freeze({
-  squat: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], commitStatuses: ['rise', 'finishing'] },
-  lunge: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], pick: 'min', commitStatuses: ['depth-reached', 'rising'] },
+  squat: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], commitStatuses: ['rise', 'finishing'], restStatuses: ['ready', 'completed'] },
+  lunge: {
+    joint: 'Knee', direction: 'min', phases: ['down', 'up'], pick: 'min',
+    commitStatuses: ['depth-reached', 'rising'], restStatuses: ['standing-ready', 'completed'],
+  },
   // Until the seated start is confirmed the person is still setting up (often standing);
   // those frames must not become the first rep's extreme.
   sit_to_stand: {
     joint: 'Knee', direction: 'max', phases: ['rise', 'sit'],
     setupStatuses: ['waiting', 'sit-to-begin'], commitStatuses: ['standing-hold', 'lowering'],
+    restStatuses: ['seated-ready', 'completed'],
   },
   // Shoulder counters follow the most elevated arm, so one-arm raises count; measure that arm.
-  shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max', commitStatuses: SHOULDER_COMMIT },
-  shoulder_flexion: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max', commitStatuses: SHOULDER_COMMIT },
+  shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max', commitStatuses: SHOULDER_COMMIT, restStatuses: SHOULDER_REST },
+  shoulder_flexion: {
+    joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max',
+    commitStatuses: SHOULDER_COMMIT, restStatuses: SHOULDER_REST,
+  },
 });
 
 export const DEFAULT_QUALITY_GATE = 0.7;
@@ -286,10 +295,13 @@ function movementStart(samples, countIdx, endIdx, profile) {
   let extRef = null;
   const commit = commitIndex(samples, countIdx, profile);
   if (commit !== null) {
-    // The counted rep starts at the last rest turning point before the counter
-    // committed to it; reversals after the commit (a bottom rebound, a dip while
-    // lowering) stay inside the rep, earlier attempts stay out.
-    for (let j = p; j >= 0; j--) if (!pts[j].extreme && pts[j].idx < commit) { r = j; break; }
+    // The counted rep starts at the last rest turning point before the commit where the
+    // counter was back at rest (an abandoned attempt ended there). Reversals inside the
+    // same attempt, before or after the commit, are not boundaries. Without such a
+    // return, the attempt started at the window's first rest turning point.
+    const rested = j => (profile.restStatuses ?? []).includes(samples[pts[j].idx].status);
+    for (let j = p; j >= 0; j--) if (!pts[j].extreme && pts[j].idx < commit && rested(j)) { r = j; break; }
+    if (r < 0) r = pts.findIndex((q, j) => j <= p && !q.extreme);
     for (let j = Math.max(r, 0); j <= p; j++) if (pts[j].extreme && better(at(j), extRef, isMin)) extRef = at(j);
   } else {
     // No exercise statuses (older recordings): a rest turning point is a boundary only
@@ -463,6 +475,7 @@ export class RepTracker {
       if (this.pendingCountIdx !== null) finished = this._finalize(this.samples.length - 1);
       this.samples = [];
       this.postLoss = true;
+      this.openStart = true; // tracking may resume mid-movement
       return finished;
     }
 
