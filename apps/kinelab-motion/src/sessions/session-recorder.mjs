@@ -4,6 +4,8 @@
  * Reference: Sports2D and Rerun data structures for human kinematics.
  */
 
+import { landmarkConfidence } from '../exercises/rep-analysis.mjs';
+
 export class SessionRecorder {
   constructor({ MediaRecorderClass = typeof MediaRecorder !== 'undefined' ? MediaRecorder : null } = {}) {
     this.MediaRecorderClass = MediaRecorderClass;
@@ -92,8 +94,8 @@ export class SessionRecorder {
           Math.round(p.x * 10000) / 10000,
           Math.round(p.y * 10000) / 10000,
           Math.round((p.z ?? 0) * 10000) / 10000,
-          // Store the confidence the live gate uses: min(visibility, presence).
-          Math.round(Math.min(p.visibility ?? 1, p.presence ?? 1) * 100) / 100,
+          // Same quantized min(visibility, presence) the live gate uses.
+          landmarkConfidence(p),
         ];
       });
     }

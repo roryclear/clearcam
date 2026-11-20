@@ -45,11 +45,18 @@ export function profileFor(exerciseId) {
   return REP_PROFILES[String(exerciseId || '').replace(/-/g, '_')] ?? null;
 }
 
-function visibilityOf(p) {
+/**
+ * Landmark confidence for the quality gate: min(visibility, presence), quantized to
+ * 0.01. Recorded sessions store the same quantized value, so a replay makes exactly
+ * the same gate decisions as the live session.
+ */
+export function landmarkConfidence(p) {
   if (!p) return 0;
-  if (Array.isArray(p)) return p[3] ?? 1; // recorded compact form [x, y, z, vis]
-  return Math.min(p.visibility ?? 1, p.presence ?? 1);
+  const v = Array.isArray(p) ? (p[3] ?? 1) : Math.min(p.visibility ?? 1, p.presence ?? 1);
+  return Math.round(v * 100) / 100;
 }
+
+const visibilityOf = landmarkConfidence;
 
 function sideConfidence(landmarks, indices) {
   if (!Array.isArray(landmarks)) return null;
@@ -195,28 +202,88 @@ function settleIndex(samples, countIdx, i, profile) {
   return back ? i : null;
 }
 
+/** Swing (deg) needed to confirm a turning point; filters jitter around thresholds. */
+const SWING_DEG = 2 * REST_TOLERANCE_DEG;
+
 /**
- * Index where the counted movement started: walking back from the count, skip the
- * arrival at rest (counters that fire on return, e.g. sit-to-stand), then the movement
- * itself, and stop at the last rest frame before it. Earlier movements in the window
- * (an aborted raise, setup) are excluded. Returns { idx, found }.
+ * Zig-zag turning points of the angle over samples[0..endIdx] with SWING_DEG
+ * hysteresis. Each point is { idx, extreme } where extreme marks the working end of
+ * the movement (minimum for 'min' profiles, maximum for 'max').
+ */
+function turningPoints(samples, endIdx, isMin) {
+  const pts = [];
+  let lo = null;
+  let hi = null;
+  let cand = null;
+  let trend = 0; // +1 rising, -1 falling, 0 undecided
+  const ang = k => samples[k].angle;
+  for (let k = 0; k <= endIdx; k++) {
+    const a = ang(k);
+    if (a === null) continue;
+    if (trend === 0) {
+      if (lo === null || a < ang(lo)) lo = k;
+      if (hi === null || a > ang(hi)) hi = k;
+      if (ang(hi) - ang(lo) >= SWING_DEG) {
+        trend = hi > lo ? 1 : -1;
+        pts.push(trend === 1 ? lo : hi);
+        cand = trend === 1 ? hi : lo;
+      }
+    } else if (trend === 1) {
+      if (a >= ang(cand)) cand = k;
+      else if (ang(cand) - a >= SWING_DEG) { pts.push(cand); trend = -1; cand = k; }
+    } else if (a <= ang(cand)) cand = k;
+    else if (a - ang(cand) >= SWING_DEG) { pts.push(cand); trend = 1; cand = k; }
+  }
+  if (cand !== null) pts.push(cand);
+  return pts.map(idx => {
+    const prev = pts[pts.indexOf(idx) - 1];
+    const next = pts[pts.indexOf(idx) + 1];
+    const ref = prev ?? next;
+    const isLow = ref === undefined ? false : ang(idx) < ang(ref);
+    return { idx, extreme: isMin ? isLow : !isLow };
+  });
+}
+
+/**
+ * Bounds the counted movement: its working extreme is the last turning point at or
+ * before the count, and it starts at the rest turning point just before that. Earlier
+ * movements in the window (an aborted raise, a previous return) are excluded, and
+ * small wobbles near a threshold cannot become a boundary.
+ * @returns {{ idx: number, startObserved: boolean }}
  */
 function movementStart(samples, countIdx, endIdx, profile) {
   const isMin = profile.direction === 'min';
-  let rest = null;
-  for (let k = 0; k <= endIdx; k++) {
+  const pts = turningPoints(samples, endIdx, isMin);
+  let p = -1;
+  for (let j = 0; j < pts.length; j++) if (pts[j].extreme && pts[j].idx <= countIdx) p = j;
+  if (p < 0) return { idx: 0, startObserved: false };
+  const rest = pts[p - 1];
+  if (!rest) return { idx: 0, startObserved: false };
+  if (p - 1 > 0) return { idx: rest.idx, startObserved: true }; // preceded by an earlier movement
+  // The start is the window's first posture. If the window may have begun mid-movement,
+  // accept it only if it is about as rested as the return (a more relaxed return is fine).
+  const ext = samples[pts[p].idx].angle;
+  let back = null;
+  for (let k = pts[p].idx; k <= endIdx; k++) {
     const a = samples[k].angle;
-    if (a !== null && (rest === null || (isMin ? a > rest : a < rest))) rest = a;
+    if (a !== null && (back === null || (isMin ? a > back : a < back))) back = a;
   }
-  if (rest === null) return { idx: 0, found: false };
-  const atRest = a => (isMin ? a >= rest - REST_TOLERANCE_DEG : a <= rest + REST_TOLERANCE_DEG);
-  let k = countIdx;
-  while (k >= 0 && (samples[k].angle === null || atRest(samples[k].angle))) k--;
-  while (k >= 0 && (samples[k].angle === null || !atRest(samples[k].angle))) k--;
-  if (k < 0) return { idx: 0, found: false };
-  // Keep the whole rest plateau so the start posture is measured at its most rested.
-  while (k > 0 && (samples[k - 1].angle === null || atRest(samples[k - 1].angle))) k--;
-  return { idx: k, found: true };
+  const start = samples[rest.idx].angle;
+  const shortfall = isMin ? back - start : start - back;
+  const allowed = Math.max(REST_TOLERANCE_DEG, 0.25 * Math.abs(back - ext));
+  return { idx: rest.idx, startObserved: shortfall <= allowed };
+}
+
+/** Rep count across counter resets: the final value plus each value before a reset. */
+export function countedReps(frames) {
+  let total = 0;
+  let prev = null;
+  for (const f of frames || []) {
+    const r = f?.reps ?? 0;
+    if (prev !== null && r < prev) total += prev;
+    prev = r;
+  }
+  return total + (prev ?? 0);
 }
 
 /**
@@ -310,9 +377,9 @@ export class RepTracker {
     let partial = this.partialRep;
     this.partialRep = false;
     const start = movementStart(this.samples, countIdx, endIdx, this.profile);
-    // No rest posture before the counted movement in a window that may have begun
-    // mid-movement: its start was not observed, so ROM and tempo are incomplete.
-    if (!start.found && this.openStart) partial = true;
+    // In a window that may have begun mid-movement (tracking start, new set, evicted
+    // history), a counted rep without an observed rest start has incomplete ROM/tempo.
+    if (!start.startObserved && this.openStart) partial = true;
     const rep = summarizeRep(this.samples.slice(start.idx, endIdx + 1), this.profile, { gate: this.gate });
     this.samples = this.samples.slice(endIdx);
     this.pendingCountIdx = null;

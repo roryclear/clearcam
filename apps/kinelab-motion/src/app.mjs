@@ -35,7 +35,7 @@ import { defaultSessionStorage } from './sessions/session-storage.mjs';
 import { TimelinePlayer } from './sessions/timeline-player.mjs';
 import { ChartRenderer } from './sessions/chart-renderer.mjs';
 import { exportToCSV, exportToJSON, exportRepsToCSV, downloadFile } from './sessions/export-helpers.mjs';
-import { RepTracker, analyzeReps, summarizeSession, profileFor } from './exercises/rep-analysis.mjs';
+import { RepTracker, analyzeReps, summarizeSession, profileFor, countedReps } from './exercises/rep-analysis.mjs';
 import { compareSessions } from './sessions/session-compare.mjs';
 import { defaultAudioSynthesizer } from './integrations/audio-cues.mjs';
 import { defaultVideoStore } from './sessions/video-store.mjs';
@@ -1066,6 +1066,8 @@ async function loadSessionForPlayback(sessionId) {
       peakDeg = extremes.length ? (repProfile.direction === 'min' ? Math.min(...extremes) : Math.max(...extremes)) : null;
     }
     nodes.resPeakAngle.textContent = peakDeg !== null ? `${Math.round(peakDeg)}°` : '—';
+    // A counter reset mid-recording starts a new set; show reps across all sets.
+    if (repProfile) nodes.resRepCount.textContent = String(countedReps(fullSession.frames)).padStart(2, '0');
     renderRepResults(reps, repProfile);
     if (symCount > 0) {
       const avgSym = Math.round((symSum / symCount) * 10) / 10;

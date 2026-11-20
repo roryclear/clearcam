@@ -359,3 +359,71 @@ test('Cadence ignores the rest between sets', () => {
   const s = summarizeSession(reps);
   assert.ok(Math.abs(s.repsPerMin - 30) < 0.5, `cadence ${s.repsPerMin}`);
 });
+
+async function runShoulder(seq) {
+  const { ShoulderAbductionExercise } = await import('../src/exercises/shoulder-abduction-exercise.mjs');
+  const ex = new ShoulderAbductionExercise();
+  let state = ex.createState();
+  const frames = seq.map((a, i) => {
+    const angles = { leftShoulder: a, rightShoulder: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+    state = ex.update(state, { angles, landmarks, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  return { frames, count: state.reps };
+}
+
+test('Jitter around the rest threshold at the count does not replace the counted raise', async () => {
+  const { frames, count } = await runShoulder([20, 20, 20, 60, 90, 120, 150, 150, 150, 150, 120, 90, 60, 29, 31, 29, 29]);
+  assert.equal(count, 1);
+  const [rep] = analyzeReps(frames, 'shoulder_abduction');
+  assert.equal(rep.extremeAngle, 150);
+  assert.equal(rep.romDeg, 130);
+  assert.equal(rep.quality, 'ok');
+});
+
+test('A return more relaxed than the start still counts as a fully observed rep', async () => {
+  const { frames, count } = await runShoulder([40, 40, 40, 60, 90, 120, 150, 150, 150, 150, 120, 90, 60, 45, 35, 25, 15, 15]);
+  assert.equal(count, 1);
+  const [rep] = analyzeReps(frames, 'shoulder_abduction');
+  assert.equal(rep.quality, 'ok');
+  assert.equal(rep.partial, undefined);
+  assert.equal(rep.romDeg, 110);
+  // Same for a min-direction profile: squat from 170 that returns to full extension.
+  const seq = [170, 170, 150, 120, 100, 100, 120, 150, 165, 180, 180];
+  const sq = seq.map((a, i) => ({ timeMs: i * 100, angles: { leftKnee: a, rightKnee: a },
+    landmarks: Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 })), reps: i >= 8 ? 1 : 0 }));
+  const [squat] = analyzeReps(sq, 'squat');
+  assert.equal(squat.quality, 'ok');
+  assert.equal(squat.romDeg, 70);
+});
+
+test('Confidence near the gate gets the same verdict live and on replay', async () => {
+  const { SessionRecorder } = await import('../src/sessions/session-recorder.mjs');
+  const seq = [180, 180, 150, 120, 100, 100, 120, 150, 165, 180, 180, 180];
+  const lm = () => {
+    const l = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.95, presence: 0.99 }));
+    for (const [i, v] of [[23, 0.696], [24, 0.696], [25, 0.696], [26, 0.696], [27, 0.706], [28, 0.706]]) l[i].visibility = v;
+    return l;
+  };
+  for (const vis of [lm]) {
+    const frames = seq.map((a, i) => ({ timeMs: i * 100, angles: { leftKnee: a, rightKnee: a }, landmarks: vis(), reps: i >= 8 ? 1 : 0 }));
+    const live = analyzeReps(frames, 'squat');
+    const recorder = new SessionRecorder({ MediaRecorderClass: null });
+    const realNow = performance.now.bind(performance);
+    performance.now = () => 0;
+    try { recorder.start({ exerciseId: 'squat' }); } finally { performance.now = realNow; }
+    for (const f of frames) recorder.recordFrame({ landmarks: f.landmarks, angles: f.angles, timestampMs: f.timeMs, reps: f.reps });
+    const replay = analyzeReps(recorder.stop().frames, 'squat');
+    assert.equal(replay[0].quality, live[0].quality);
+    assert.equal(replay[0].extremeConfidence, live[0].extremeConfidence);
+  }
+});
+
+test('Session rep total includes sets before a counter reset', async () => {
+  const { countedReps } = await import('../src/exercises/rep-analysis.mjs');
+  const reps = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6].map(r => ({ reps: r }));
+  assert.equal(countedReps(reps), 12);
+  assert.equal(countedReps([{ reps: 2 }, { reps: 3 }]), 3);
+  assert.equal(countedReps([]), 0);
+});
