@@ -424,7 +424,7 @@ function renderRepLog(rep) {
   nodes.repLogLast.append(flag);
   const s = repTracker.summary();
   nodes.repLogSummary.textContent = s.reliable
-    ? `Avg ROM ${Math.round(s.avgRomDeg)}°${s.romCvPct !== null ? ` (±${Math.round(s.romCvPct)}%)` : ''} · ${p1} ${fmtSec(s.avgPhase1Ms)} / ${p2} ${fmtSec(s.avgPhase2Ms)} · ${s.reliable}/${s.total} reliable`
+    ? `Avg ROM ${Math.round(s.avgRomDeg)}°${s.romCvPct !== null ? ` (±${Math.round(s.romCvPct)}%)` : ''} · ${p1} ${fmtSec(s.avgPhase1Ms)} / ${p2} ${fmtSec(s.avgPhase2Ms)}${s.repsPerMin !== null ? ` · ${Math.round(s.repsPerMin)}/min` : ''} · ${s.reliable}/${s.total} reliable`
     : `${s.lowConfidence} low-confidence rep${s.lowConfidence === 1 ? '' : 's'} excluded · improve lighting or framing`;
   nodes.repLog.hidden = false;
 }
@@ -1000,7 +1000,9 @@ function renderRepResults(reps, profile) {
   nodes.resAvgRom.textContent = s.avgRomDeg !== null
     ? `${Math.round(s.avgRomDeg)}°${s.romCvPct !== null ? ` ±${Math.round(s.romCvPct)}%` : ''}`
     : '—';
-  nodes.resTempo.textContent = s.avgPhase1Ms !== null ? `${fmtSec(s.avgPhase1Ms)} / ${fmtSec(s.avgPhase2Ms)}` : '—';
+  nodes.resTempo.textContent = s.avgPhase1Ms !== null
+    ? `${fmtSec(s.avgPhase1Ms)} / ${fmtSec(s.avgPhase2Ms)}${s.repsPerMin !== null ? ` · ${Math.round(s.repsPerMin)}/min` : ''}`
+    : '—';
   nodes.resQuality.textContent = `${s.reliable}/${s.total}`;
 }
 
@@ -1057,9 +1059,11 @@ async function loadSessionForPlayback(sessionId) {
     const reliableReps = reps.filter(r => r.quality === 'ok');
     // Peak from reliable reps where the rep extreme is the "peak" (squat/lunge depth,
     // shoulder elevation); per-frame minima can come from an occluded limb.
-    if (reliableReps.length && repProfile && normalizeExerciseId(fullSession.exerciseId) !== 'sit_to_stand') {
+    if (repProfile && normalizeExerciseId(fullSession.exerciseId) !== 'sit_to_stand') {
+      // No reliable rep means no trustworthy peak: show "—" rather than an ungated
+      // frame minimum that may come from an occluded limb.
       const extremes = reliableReps.map(r => r.extremeAngle);
-      peakDeg = repProfile.direction === 'min' ? Math.min(...extremes) : Math.max(...extremes);
+      peakDeg = extremes.length ? (repProfile.direction === 'min' ? Math.min(...extremes) : Math.max(...extremes)) : null;
     }
     nodes.resPeakAngle.textContent = peakDeg !== null ? `${Math.round(peakDeg)}°` : '—';
     renderRepResults(reps, repProfile);

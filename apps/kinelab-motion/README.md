@@ -78,7 +78,7 @@ This table distinguishes **implemented code** from features that are merely conc
 | Kinematic bone-length invariance filter | **Implemented** | Physics-informed constraint model that eliminates 3D depth jitter and limb elasticity along direction rays |
 | Decoupled 60/120 FPS pose interpolation | **Implemented** | Native display rate LERP follower decoupling 30 FPS inference from canvas rendering for liquid smooth motion |
 | Tracking confidence states | **Implemented** | Shows good, partial or lost tracking; unavailable angles appear as `—` |
-| Per-rep metrics & quality gate | **Implemented** | ROM, phase tempo, ROM variability and cadence per rep (live log, results card, reps CSV). Reps tracked below the confidence gate are flagged and left out of averages. |
+| Per-rep metrics & quality gate | **Implemented** | Per rep: ROM, phase tempo, extreme angle and confidence (live log, results card, reps CSV). Per set: average ROM ± variability (CV) and cadence (live log and results card). Reps tracked below the confidence gate are flagged and left out of averages and peak depth. |
 | One Euro filtering / outlier rejection | **Implemented** | Smooths 2D landmarks and, separately, 3D world landmarks (lower depth cutoff); presets tuned on `bench/accuracy-bench.mjs`. See [docs/accuracy-speed-research.md](docs/accuracy-speed-research.md) |
 | Smart body framing radar | **Implemented** | On-canvas position guidance; upper-body decoupling for seated/close-up exercises |
 | Repetition/hold modules | **Implemented, experimental** | Squat, sit-to-stand, lunge, shoulder abduction, shoulder flexion, single-leg balance |
