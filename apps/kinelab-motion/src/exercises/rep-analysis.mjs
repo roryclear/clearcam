@@ -24,8 +24,9 @@ export const REP_PROFILES = Object.freeze({
   squat: { joint: 'Knee', direction: 'min', phases: ['down', 'up'] },
   lunge: { joint: 'Knee', direction: 'min', phases: ['down', 'up'], pick: 'min' },
   sit_to_stand: { joint: 'Knee', direction: 'max', phases: ['rise', 'sit'] },
-  shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'] },
-  shoulder_flexion: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'] },
+  // Shoulder counters follow the most elevated arm, so one-arm raises count; measure that arm.
+  shoulder_abduction: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max' },
+  shoulder_flexion: { joint: 'Shoulder', direction: 'max', phases: ['raise', 'lower'], pick: 'max' },
 });
 
 export const DEFAULT_QUALITY_GATE = 0.7;
@@ -62,7 +63,7 @@ function asVisibilityLandmarks(landmarks) {
  * Reduces one frame to the primary angle for the exercise plus its confidence.
  * @returns {{ t: number, angle: number|null, conf: number|null, reps: number }}
  */
-export function sampleFrame(profile, { angles, landmarks, timestampMs, reps = 0 }) {
+export function sampleFrame(profile, { angles, landmarks, timestampMs, reps = 0, status = null }) {
   const lm = asVisibilityLandmarks(landmarks);
   const l = angles?.[`left${profile.joint}`];
   const r = angles?.[`right${profile.joint}`];
@@ -70,11 +71,13 @@ export function sampleFrame(profile, { angles, landmarks, timestampMs, reps = 0 
   let angle = null;
   let conf = null;
 
-  if (profile.pick === 'min') {
-    // Lunge: the working (front) knee is the more flexed one.
+  if (profile.pick === 'min' || profile.pick === 'max') {
+    // Working limb: the more flexed knee (lunge front leg) or the more elevated arm,
+    // matching what the exercise counter follows; confidence comes from that limb.
+    const better = profile.pick === 'min' ? (a, b) => a < b : (a, b) => a > b;
     const candidates = [[l, pts.left], [r, pts.right]].filter(([a]) => Number.isFinite(a));
     if (candidates.length) {
-      const [a, idx] = candidates.reduce((best, c) => (c[0] < best[0] ? c : best));
+      const [a, idx] = candidates.reduce((best, c) => (better(c[0], best[0]) ? c : best));
       angle = a;
       conf = sideConfidence(lm, idx);
     }
@@ -90,7 +93,7 @@ export function sampleFrame(profile, { angles, landmarks, timestampMs, reps = 0 
       conf = cl === null || cr === null ? null : (cl + cr) / 2;
     }
   }
-  return { t: timestampMs, angle: Number.isFinite(angle) ? angle : null, conf, reps };
+  return { t: timestampMs, angle: Number.isFinite(angle) ? angle : null, conf, reps, lost: status === 'tracking-lost' };
 }
 
 const round1 = v => Math.round(v * 10) / 10;
@@ -148,20 +151,37 @@ export function summarizeRep(samples, profile, { gate = DEFAULT_QUALITY_GATE } =
 
 /**
  * Exercise counters fire before the movement has fully returned (e.g. a squat counts
- * once the knee passes 155°). A rep's window is therefore extended until the angle
- * settles back near its start posture, the next rep is counted, or a timeout passes.
- * @returns {boolean} whether the rep that counted at samples[countIdx] has settled at samples[i]
+ * once the knee passes 155°). After a count, the rep stays open while the limb keeps
+ * returning and closes at the return's turning point: when the angle is back near the
+ * start posture, when it reverses by REST_TOLERANCE_DEG (the next rep has begun), when
+ * the next rep is counted, or after a timeout. Closing at the turning point keeps the
+ * next rep's start and descent in the next rep's window.
  */
-function hasSettled(samples, segStart, countIdx, i, profile) {
-  const s = samples[i];
-  if (i > countIdx && s.reps > samples[countIdx].reps) return true;
-  if (s.t - samples[countIdx].t >= SETTLE_TIMEOUT_MS) return true;
-  if (s.angle === null) return false;
-  const angles = samples.slice(segStart, countIdx + 1).map(x => x.angle).filter(a => a !== null);
-  if (!angles.length) return true;
+function returnPeakIndex(samples, countIdx, i, isMin) {
+  let peak = countIdx;
+  for (let k = countIdx; k <= i; k++) {
+    const a = samples[k].angle;
+    if (a === null) continue;
+    const pa = samples[peak].angle;
+    if (pa === null || (isMin ? a > pa : a < pa)) peak = k;
+  }
+  return peak;
+}
+
+function settleIndex(samples, countIdx, i, profile) {
   const isMin = profile.direction === 'min';
+  const peak = returnPeakIndex(samples, countIdx, i, isMin);
+  const s = samples[i];
+  if (i > countIdx && s.reps > samples[countIdx].reps) return peak;
+  if (s.t - samples[countIdx].t >= SETTLE_TIMEOUT_MS) return peak;
+  if (s.angle === null) return null;
+  const pa = samples[peak].angle;
+  if (pa !== null && (isMin ? pa - s.angle : s.angle - pa) >= REST_TOLERANCE_DEG) return peak; // next rep began
+  const angles = samples.slice(0, countIdx + 1).map(x => x.angle).filter(a => a !== null);
+  if (!angles.length) return i;
   const startAngle = isMin ? Math.max(...angles) : Math.min(...angles);
-  return isMin ? s.angle >= startAngle - REST_TOLERANCE_DEG / 2 : s.angle <= startAngle + REST_TOLERANCE_DEG / 2;
+  const back = isMin ? s.angle >= startAngle - REST_TOLERANCE_DEG / 2 : s.angle <= startAngle + REST_TOLERANCE_DEG / 2;
+  return back ? i : null;
 }
 
 /**
@@ -175,7 +195,7 @@ export function analyzeReps(frames, exerciseId, options = {}) {
   const tracker = new RepTracker(options);
   tracker.reset(exerciseId);
   for (const f of frames) {
-    tracker.update({ angles: f.angles, landmarks: f.landmarks, timestampMs: f.timestampMs ?? f.timeMs, reps: f.reps ?? 0 });
+    tracker.update({ angles: f.angles, landmarks: f.landmarks, timestampMs: f.timestampMs ?? f.timeMs, reps: f.reps ?? 0, status: f.status });
   }
   tracker.flush();
   return tracker.reps;
@@ -220,6 +240,7 @@ export class RepTracker {
     this.profile = profileFor(exerciseId);
     this.samples = [];
     this.pendingCountIdx = null;
+    this.postLoss = false;
     this.reps = [];
   }
 
@@ -236,13 +257,37 @@ export class RepTracker {
   }
 
   /** @returns {Object|null} the rep that just finished settling, if any */
-  update({ angles, landmarks, timestampMs, reps }) {
+  update({ angles, landmarks, timestampMs, reps, status = null }) {
     if (!this.profile) return null;
-    const sample = sampleFrame(this.profile, { angles, landmarks, timestampMs, reps: reps ?? 0 });
+    const sample = sampleFrame(this.profile, { angles, landmarks, timestampMs, reps: reps ?? 0, status });
     const prev = this.samples[this.samples.length - 1];
     if (prev && sample.reps < prev.reps) {
       this.reset(); // counter was reset
     }
+
+    let finished = null;
+    if (sample.lost) {
+      // The exercise aborted its movement: close a counted rep, drop any unfinished one
+      // so it cannot lend its depth or timing to the next counted rep.
+      if (this.pendingCountIdx !== null) finished = this._finalize(this.samples.length - 1);
+      this.samples = [];
+      this.postLoss = true;
+      return finished;
+    }
+
+    if (this.postLoss && sample.angle !== null) {
+      // After an abort the person may still be mid-movement (e.g. at the bottom).
+      // Restart the window at the most rested posture seen since, and resume normal
+      // tracking once the next movement starts away from it.
+      const isMin = this.profile.direction === 'min';
+      const rest = this.samples.reduce((best, x) => (x.angle !== null && (best === null || (isMin ? x.angle > best : x.angle < best)) ? x.angle : best), null);
+      if (rest === null || (isMin ? sample.angle >= rest : sample.angle <= rest)) {
+        this.samples = [];
+      } else if (isMin ? rest - sample.angle >= REST_TOLERANCE_DEG : sample.angle - rest >= REST_TOLERANCE_DEG) {
+        this.postLoss = false;
+      }
+    }
+
     this.samples.push(sample);
     if (this.samples.length > this.maxSamples) {
       this.samples.shift();
@@ -250,11 +295,9 @@ export class RepTracker {
     }
     const i = this.samples.length - 1;
 
-    let finished = null;
-    if (this.pendingCountIdx !== null && hasSettled(this.samples, 0, this.pendingCountIdx, i, this.profile)) {
-      // If the next rep was counted on this very frame, close at the previous frame.
-      const nextCounted = this.samples[i].reps > this.samples[this.pendingCountIdx].reps;
-      finished = this._finalize(nextCounted ? i - 1 : i);
+    if (this.pendingCountIdx !== null) {
+      const end = settleIndex(this.samples, this.pendingCountIdx, i, this.profile);
+      if (end !== null) finished = this._finalize(end);
     }
     const last = this.samples.length - 1;
     if (last > 0 && this.samples[last].reps > this.samples[last - 1].reps && this.pendingCountIdx === null) {

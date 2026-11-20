@@ -474,7 +474,7 @@ function handleExerciseFrame(landmarks, angles, width, height, timestampMs, trac
   });
   appState.exerciseState = nextState;
 
-  const finishedRep = repTracker.update({ angles, landmarks, timestampMs, reps: nextState.reps });
+  const finishedRep = repTracker.update({ angles, landmarks, timestampMs, reps: nextState.reps, status: nextState.status });
   if (finishedRep) renderRepLog(finishedRep);
 
   // Sound cues on rep completion, depth target, or milestone

@@ -111,3 +111,82 @@ test('Recorded sessions round-trip through SessionRecorder and export a per-rep 
   assert.match(csv[0], /^rep,start_ms,end_ms,duration_ms,down_ms,up_ms,start_angle,extreme_angle,rom_deg/);
   assert.equal(csv[1].split(',').length, csv[0].split(',').length);
 });
+
+// Devin review on #14: regression tests built from the reported examples.
+function scripted(segments, { dt = 33, reps = () => 0, status = () => 'active', vis = 0.95, presence = 0.99, joint = 'Knee', other = null } = {}) {
+  const frames = [];
+  let t = 0;
+  let prev = segments[0][0];
+  for (const [angle, ms] of segments) {
+    for (let k = 0; k < ms; k += dt, t += dt) {
+      const a = prev + (angle - prev) * Math.min(1, (k + dt) / Math.max(dt, Math.min(ms, 300)));
+      const lm = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: vis, presence }));
+      const angles = joint === 'Knee'
+        ? { leftKnee: a, rightKnee: a }
+        : { leftShoulder: a, rightShoulder: other ?? a };
+      frames.push({ timeMs: t, angles, landmarks: lm, reps: reps(t, a), status: status(t) });
+    }
+    prev = angle;
+  }
+  return frames;
+}
+
+test('One-arm shoulder raises measure the working arm, not the average of both', () => {
+  const counted = { n: 0, up: false };
+  const repsFn = (t, a) => { if (a > 140) counted.up = true; if (counted.up && a < 50) { counted.n = 1; } return counted.n; };
+  for (const exercise of ['shoulder_abduction', 'shoulder_flexion']) {
+    counted.n = 0; counted.up = false;
+    const frames = scripted([[20, 500], [160, 1000], [20, 1000], [20, 800]], { joint: 'Shoulder', other: 20, reps: repsFn });
+    const [rep] = analyzeReps(frames, exercise);
+    assert.ok(Math.abs(rep.extremeAngle - 160) < 2, `${exercise} peak ${rep.extremeAngle}`);
+    assert.ok(Math.abs(rep.romDeg - 140) < 2, `${exercise} ROM ${rep.romDeg}`);
+  }
+});
+
+test('Back-to-back squats that never return to full standing get separate windows', () => {
+  // 180 -> 100 (hold) -> 160 -> 80 (hold) -> 160: counter fires on each return past 155.
+  let count = 0; let down = false;
+  const repsFn = (t, a) => { if (a <= 115) down = true; if (down && a >= 155) { count++; down = false; } return count; };
+  const frames = scripted([[180, 500], [100, 800], [160, 400], [80, 800], [160, 600], [160, 1800]], { reps: repsFn });
+  const reps = analyzeReps(frames, 'squat');
+  assert.equal(reps.length, 2);
+  assert.ok(Math.abs(reps[0].extremeAngle - 100) < 2, `rep 1 bottom ${reps[0].extremeAngle}`);
+  assert.ok(Math.abs(reps[0].romDeg - 80) < 3, `rep 1 ROM ${reps[0].romDeg}`);
+  assert.ok(Math.abs(reps[1].extremeAngle - 80) < 2, `rep 2 bottom ${reps[1].extremeAngle}`);
+  assert.ok(Math.abs(reps[1].romDeg - 80) < 3, `rep 2 ROM ${reps[1].romDeg}`);
+});
+
+test('Tracking loss discards the aborted movement instead of lending it to the next rep', () => {
+  // 180 -> 70, tracking lost (rep aborted, not counted), back up, then a real squat to 100.
+  let count = 0; let down = false;
+  const lostAt = [1300, 1340];
+  const statusFn = t => (t >= lostAt[0] && t < lostAt[1] ? 'tracking-lost' : 'active');
+  const repsFn = (t, a) => {
+    if (t >= lostAt[0] && t < lostAt[1]) { down = false; return count; }
+    if (t > 2000 && a <= 115) down = true;
+    if (down && a >= 155) { count++; down = false; }
+    return count;
+  };
+  const frames = scripted([[180, 500], [70, 800], [70, 100], [180, 600], [180, 400], [100, 800], [180, 600], [180, 1800]], { reps: repsFn, status: statusFn });
+  const reps = analyzeReps(frames, 'squat');
+  assert.equal(reps.length, 1);
+  assert.ok(Math.abs(reps[0].extremeAngle - 100) < 2, `bottom ${reps[0].extremeAngle}`);
+  assert.ok(Math.abs(reps[0].romDeg - 80) < 3, `ROM ${reps[0].romDeg}`);
+});
+
+test('Recorded sessions keep the live confidence (min of visibility and presence)', async () => {
+  const { SessionRecorder } = await import('../src/sessions/session-recorder.mjs');
+  let count = 0; let up = false;
+  const repsFn = (t, a) => { if (a > 140) up = true; if (up && a < 50) count = 1; return count; };
+  const frames = scripted([[20, 500], [160, 1000], [20, 1000], [20, 800]], { joint: 'Shoulder', reps: repsFn, vis: 0.95, presence: 0.6 });
+  const live = analyzeReps(frames, 'shoulder_abduction');
+  assert.equal(live[0].quality, 'low-confidence');
+
+  const recorder = new SessionRecorder({ MediaRecorderClass: null });
+  const realNow = performance.now.bind(performance);
+  performance.now = () => 0;
+  try { recorder.start({ exerciseId: 'shoulder_abduction' }); } finally { performance.now = realNow; }
+  for (const f of frames) recorder.recordFrame({ landmarks: f.landmarks, angles: f.angles, timestampMs: f.timeMs, reps: f.reps, status: f.status });
+  const replay = analyzeReps(recorder.stop().frames, 'shoulder_abduction');
+  assert.equal(replay[0].quality, 'low-confidence', 'replay must not upgrade a rejected rep');
+});

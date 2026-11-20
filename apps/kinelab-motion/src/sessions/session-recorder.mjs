@@ -92,7 +92,8 @@ export class SessionRecorder {
           Math.round(p.x * 10000) / 10000,
           Math.round(p.y * 10000) / 10000,
           Math.round((p.z ?? 0) * 10000) / 10000,
-          Math.round((p.visibility ?? 1) * 100) / 100,
+          // Store the confidence the live gate uses: min(visibility, presence).
+          Math.round(Math.min(p.visibility ?? 1, p.presence ?? 1) * 100) / 100,
         ];
       });
     }
