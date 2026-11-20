@@ -257,12 +257,29 @@ function movementStart(samples, countIdx, endIdx, profile) {
   let p = -1;
   for (let j = 0; j < pts.length; j++) if (pts[j].extreme && pts[j].idx <= countIdx) p = j;
   if (p < 0) return { idx: 0, startObserved: false };
-  const rest = pts[p - 1];
-  if (!rest) return { idx: 0, startObserved: false };
-  if (p - 1 > 0) return { idx: rest.idx, startObserved: true }; // preceded by an earlier movement
+  // A rest turning point is a movement boundary only if it is near the most rested
+  // posture seen so far; a rebound at the bottom or a dip while lowering is a
+  // reversal inside the same counted rep.
+  const at = j => samples[pts[j].idx].angle;
+  let restRef = null;
+  let extRef = null;
+  for (let j = 0; j <= p; j++) {
+    const a = at(j);
+    if (pts[j].extreme) { if (extRef === null || (isMin ? a < extRef : a > extRef)) extRef = a; }
+    else if (restRef === null || (isMin ? a > restRef : a < restRef)) restRef = a;
+  }
+  if (restRef === null) return { idx: 0, startObserved: false };
+  const slack = Math.max(REST_TOLERANCE_DEG, 0.25 * Math.abs(restRef - extRef));
+  let r = -1;
+  for (let j = p - 1; j >= 0; j--) {
+    if (!pts[j].extreme && Math.abs(at(j) - restRef) <= slack) { r = j; break; }
+  }
+  if (r < 0) return { idx: 0, startObserved: false };
+  const rest = pts[r];
+  if (r > 0) return { idx: rest.idx, startObserved: true }; // preceded by an earlier movement
   // The start is the window's first posture. If the window may have begun mid-movement,
   // accept it only if it is about as rested as the return (a more relaxed return is fine).
-  const ext = samples[pts[p].idx].angle;
+  const ext = extRef;
   let back = null;
   for (let k = pts[p].idx; k <= endIdx; k++) {
     const a = samples[k].angle;

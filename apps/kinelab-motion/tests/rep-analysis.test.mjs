@@ -427,3 +427,30 @@ test('Session rep total includes sets before a counter reset', async () => {
   assert.equal(countedReps([{ reps: 2 }, { reps: 3 }]), 3);
   assert.equal(countedReps([]), 0);
 });
+
+test('A rebound at the bottom of a squat stays inside the counted rep', () => {
+  const seq = [180, 180, 160, 140, 120, 100, 100, 110, 125, 125, 115, 100, 100, 120, 140, 160, 165, 180, 180];
+  const squat = new SquatExercise();
+  let state = squat.createState();
+  const frames = seq.map((a, i) => {
+    const angles = { leftKnee: a, rightKnee: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.95, presence: 0.99 }));
+    state = squat.update(state, { angles, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.equal(rep.romDeg, 80);
+  assert.equal(rep.quality, 'ok');
+  assert.ok(rep.phase1Ms >= 300 && rep.phase2Ms >= 1000, `phases ${rep.phase1Ms}/${rep.phase2Ms}`);
+});
+
+test('A dip while lowering does not cut the raise off its peak', async () => {
+  const hold = Array(4).fill(170);
+  const { frames, count } = await runShoulder([20, 20, 20, 60, 100, 140, 170, ...hold, 120, 80, 110, 80, 50, 20, 20, 20, 20]);
+  assert.equal(count, 1);
+  const [rep] = analyzeReps(frames, 'shoulder_abduction');
+  assert.equal(rep.extremeAngle, 170);
+  assert.equal(rep.romDeg, 150);
+  assert.equal(rep.quality, 'ok');
+});
