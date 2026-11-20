@@ -547,3 +547,38 @@ test('A rep resumed mid-movement after tracking loss is flagged; a later full re
   assert.equal(reps[2].quality, 'ok');
   assert.equal(reps[2].romDeg, 80);
 });
+
+test('A seated return with a missing-hip frame still ends the abandoned stand', async () => {
+  const { SitToStandExercise } = await import('../src/exercises/sit-to-stand-exercise.mjs');
+  const knees = [90, 90, 130, 180, 130, 100, 90, 100, 130, 150, 170, 170, 170, 170, 140, 120, 100, 90, 90, 90];
+  const sts = new SitToStandExercise();
+  let state = sts.createState();
+  const frames = knees.map((k, i) => {
+    const hip = i === 6 ? null : k - 10;
+    const angles = { leftKnee: k, rightKnee: k, leftHip: hip, rightHip: hip };
+    const landmarks = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+    state = sts.update(state, { angles, landmarks, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'sit_to_stand');
+  assert.equal(rep.extremeAngle, 170);
+  assert.ok(rep.extremeMs >= 1000, `counted stand's peak: ${rep.extremeMs}`);
+});
+
+test('A rebound after the commit does not move the rep start forward', () => {
+  const squat = new SquatExercise();
+  squat.sensitivity = 'forgiving';
+  let state = squat.createState();
+  const seq = [180, 160, 130, 155, 130, 120, 118, 150, 90, 120, 160, 180, 180, 180];
+  const frames = seq.map((a, i) => {
+    const angles = { leftKnee: a, rightKnee: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.95, presence: 0.99 }));
+    state = squat.update(state, { angles, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.ok(rep.startMs <= 300, `start ${rep.startMs}`);
+  assert.ok(rep.phase1Ms >= 500, `descent ${rep.phase1Ms}`);
+});

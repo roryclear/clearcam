@@ -138,7 +138,7 @@ const round1 = v => Math.round(v * 10) / 10;
  * Summarizes one repetition from its samples (in time order, rest to rest).
  * @returns {Object|null}
  */
-export function summarizeRep(samples, profile, { gate = DEFAULT_QUALITY_GATE } = {}) {
+export function summarizeRep(samples, profile, { gate = DEFAULT_QUALITY_GATE, startLimit = null } = {}) {
   const valid = samples.map((s, i) => [s, i]).filter(([s]) => s.angle !== null);
   if (valid.length < 3) return null;
   const isMin = profile.direction === 'min';
@@ -155,7 +155,8 @@ export function summarizeRep(samples, profile, { gate = DEFAULT_QUALITY_GATE } =
   // first returns after it, so pauses between reps don't inflate the tempo.
   let startIdx = valid[0][1];
   for (const [s, i] of valid) {
-    if (i >= extIdx) break;
+    // startLimit: the counter's commit; a rebound after it is inside the rep.
+    if (i >= extIdx || (startLimit !== null && i >= startLimit)) break;
     if (atRest(s.angle)) startIdx = i;
   }
   let endIdx = valid[valid.length - 1][1];
@@ -299,9 +300,18 @@ function movementStart(samples, countIdx, endIdx, profile) {
     // counter was back at rest (an abandoned attempt ended there). Reversals inside the
     // same attempt, before or after the commit, are not boundaries. Without such a
     // return, the attempt started at the window's first rest turning point.
-    const rested = j => (profile.restStatuses ?? []).includes(samples[pts[j].idx].status);
+    // The counter is at rest anywhere in the turning point's plateau (frames within
+    // REST_TOLERANCE_DEG of it); a partial-tracking frame at the exact minimum still counts.
+    const restSet = profile.restStatuses ?? [];
+    const rested = j => {
+      const i0 = pts[j].idx;
+      const near = k => samples[k].angle === null || Math.abs(samples[k].angle - samples[i0].angle) <= REST_TOLERANCE_DEG;
+      for (let k = i0; k >= 0 && near(k); k--) if (restSet.includes(samples[k].status)) return true;
+      for (let k = i0 + 1; k < commit && near(k); k++) if (restSet.includes(samples[k].status)) return true;
+      return false;
+    };
     for (let j = p; j >= 0; j--) if (!pts[j].extreme && pts[j].idx < commit && rested(j)) { r = j; break; }
-    if (r < 0) r = pts.findIndex((q, j) => j <= p && !q.extreme);
+    if (r < 0) r = pts.findIndex((q, j) => j <= p && !q.extreme && q.idx < commit);
     for (let j = Math.max(r, 0); j <= p; j++) if (pts[j].extreme && better(at(j), extRef, isMin)) extRef = at(j);
   } else {
     // No exercise statuses (older recordings): a rest turning point is a boundary only
@@ -319,7 +329,7 @@ function movementStart(samples, countIdx, endIdx, profile) {
   }
   if (r < 0) return { idx: 0, startObserved: false };
   const rest = pts[r];
-  if (r > 0) return { idx: rest.idx, startObserved: true }; // preceded by an earlier movement
+  if (r > 0) return { idx: rest.idx, startObserved: true, commit }; // preceded by an earlier movement
   // The start is the window's first posture. If the window may have begun mid-movement,
   // accept it only if it is about as rested as the return (a more relaxed return is fine).
   const ext = extRef;
@@ -331,7 +341,7 @@ function movementStart(samples, countIdx, endIdx, profile) {
   const start = samples[rest.idx].angle;
   const shortfall = isMin ? back - start : start - back;
   const allowed = Math.max(REST_TOLERANCE_DEG, 0.25 * Math.abs(back - ext));
-  return { idx: rest.idx, startObserved: shortfall <= allowed };
+  return { idx: rest.idx, startObserved: shortfall <= allowed, commit };
 }
 
 /** Rep count across counter resets: the final value plus each value before a reset. */
@@ -441,7 +451,8 @@ export class RepTracker {
     // In a window that may have begun mid-movement (tracking start, new set, evicted
     // history), a counted rep without an observed rest start has incomplete ROM/tempo.
     if (!start.startObserved && this.openStart) partial = true;
-    const rep = summarizeRep(this.samples.slice(start.idx, endIdx + 1), this.profile, { gate: this.gate });
+    const startLimit = Number.isInteger(start.commit) ? start.commit - start.idx : null;
+    const rep = summarizeRep(this.samples.slice(start.idx, endIdx + 1), this.profile, { gate: this.gate, startLimit });
     this.samples = this.samples.slice(endIdx);
     this.pendingCountIdx = null;
     this.openStart = false;
