@@ -282,19 +282,20 @@ function commitIndex(samples, countIdx, profile) {
  * before the count, and it starts at the rest turning point just before that. Earlier
  * movements in the window (an aborted raise, a previous return) are excluded, and
  * small wobbles near a threshold cannot become a boundary.
- * @returns {{ idx: number, startObserved: boolean }}
+ * @returns {{ idx: number, startObserved: boolean, commit: number|null }}
  */
 function movementStart(samples, countIdx, endIdx, profile) {
   const isMin = profile.direction === 'min';
   const pts = turningPoints(samples, endIdx, isMin);
+  // The commit caps the start search in summarizeRep, so every return carries it.
+  const commit = commitIndex(samples, countIdx, profile);
   let p = -1;
   for (let j = 0; j < pts.length; j++) if (pts[j].extreme && pts[j].idx <= countIdx) p = j;
-  if (p < 0) return { idx: 0, startObserved: false };
+  if (p < 0) return { idx: 0, startObserved: false, commit };
   const at = j => samples[pts[j].idx].angle;
   const better = (a, b, wantMin) => b === null || (wantMin ? a < b : a > b);
   let r = -1;
   let extRef = null;
-  const commit = commitIndex(samples, countIdx, profile);
   if (commit !== null) {
     // The counted rep starts at the last rest turning point before the commit where the
     // counter was back at rest (an abandoned attempt ended there). Reversals inside the
@@ -321,13 +322,13 @@ function movementStart(samples, countIdx, endIdx, profile) {
       if (pts[j].extreme) { if (better(at(j), extRef, isMin)) extRef = at(j); }
       else if (better(at(j), restRef, !isMin)) restRef = at(j);
     }
-    if (restRef === null) return { idx: 0, startObserved: false };
+    if (restRef === null) return { idx: 0, startObserved: false, commit };
     const slack = Math.max(REST_TOLERANCE_DEG, 0.25 * Math.abs(restRef - extRef));
     for (let j = p - 1; j >= 0; j--) {
       if (!pts[j].extreme && Math.abs(at(j) - restRef) <= slack) { r = j; break; }
     }
   }
-  if (r < 0) return { idx: 0, startObserved: false };
+  if (r < 0) return { idx: 0, startObserved: false, commit };
   const rest = pts[r];
   if (r > 0) return { idx: rest.idx, startObserved: true, commit }; // preceded by an earlier movement
   // The start is the window's first posture. If the window may have begun mid-movement,

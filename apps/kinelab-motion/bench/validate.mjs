@@ -20,12 +20,19 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const v = argv[i + 1];
-    if (k === '--session') { out.session.push(v); i++; }
-    else if (k === '--ref') { out.ref.push(v); i++; }
-    else if (k === '--joint') { out.joint.push(v); i++; }
-    else if (k === '--exercise') { out.exercise = v; i++; }
-    else if (k === '--source') { out.source = v; i++; }
-    else if (k === '--lag-ms') { out.lagMs = Number(v); i++; }
+    const need = () => { if (v === undefined || v.startsWith('--')) throw new Error(`${k} needs a value`); return v; };
+    if (k === '--session') { out.session.push(need()); i++; }
+    else if (k === '--ref') { out.ref.push(need()); i++; }
+    else if (k === '--joint') { out.joint.push(need()); i++; }
+    else if (k === '--exercise') { out.exercise = need(); i++; }
+    else if (k === '--source') {
+      if (v !== 'offline' && v !== 'live') throw new Error(`--source must be offline or live (got ${v ?? 'nothing'})`);
+      out.source = v; i++;
+    } else if (k === '--lag-ms') {
+      const lag = v === undefined || v.trim() === '' ? NaN : Number(v);
+      if (!Number.isFinite(lag)) throw new Error(`--lag-ms needs a finite number of milliseconds (got ${v ?? 'nothing'})`);
+      out.lagMs = lag; i++;
+    }
     else if (k === '--help' || k === '-h') out.help = true;
     else throw new Error(`unknown argument: ${k}`);
   }
@@ -42,12 +49,14 @@ export function runValidation(args, read = p => readFileSync(p, 'utf8')) {
     const session = JSON.parse(read(sp));
     const reference = parseReference(read(args.ref[ti]), args.ref[ti]);
     for (const j of args.joint) {
-      const [refColumn, appKey, transform = defaultTransform(reference.format)] = j.split(':');
+      const [refColumn, appKey, explicit] = j.split(':');
+      const transform = explicit ?? defaultTransform(reference.format, refColumn);
       const res = compareJoint(session, reference, {
         refColumn, appKey, transform, appSource: args.source, lagMs: args.lagMs, exerciseId: args.exercise ?? undefined,
       });
       trials.push({ session: basename(sp), reference: basename(args.ref[ti]), format: reference.format, ...res });
       const key = `${refColumn}:${appKey}`;
+      if (res.alignment === 'failed') continue; // reported per trial, never pooled
       pooled[key] ??= { app: [], ref: [] };
       for (const r of res.repLevel?.reps ?? []) { pooled[key].app.push(r.app); pooled[key].ref.push(r.ref); }
     }

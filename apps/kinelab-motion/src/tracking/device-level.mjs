@@ -91,12 +91,14 @@ export class DeviceLevel {
     this.lastAt = -Infinity;
     this._onMotion = e => this.update(e?.accelerationIncludingGravity);
     this.listening = false;
+    this.generation = 0; // bumped by stop(); a start() pending on permission then gives up
   }
 
   /** Call from a user gesture. Resolves true when motion events may be delivered. */
   async start() {
     const DME = this.target.DeviceMotionEvent;
     if (!DME) return false;
+    const gen = this.generation;
     try {
       if (typeof DME.requestPermission === 'function') {
         const res = await DME.requestPermission();
@@ -105,6 +107,7 @@ export class DeviceLevel {
     } catch {
       return false;
     }
+    if (gen !== this.generation) return false; // stopped while the permission prompt was open
     if (!this.listening) {
       this.target.addEventListener?.('devicemotion', this._onMotion);
       this.listening = true;
@@ -113,6 +116,7 @@ export class DeviceLevel {
   }
 
   stop() {
+    this.generation++;
     if (this.listening) this.target.removeEventListener?.('devicemotion', this._onMotion);
     this.listening = false;
     this.g = null;

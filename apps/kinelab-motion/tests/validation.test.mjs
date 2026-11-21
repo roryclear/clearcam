@@ -173,3 +173,43 @@ test('review fixes: exact sample after a gap; title row before ;/tab tables; unc
   assert.equal(res.repLevel.excluded, 3);
   for (const rep of res.repLevel.reps) close(rep.app - rep.ref, 3, 0.6, 'covered rep');
 });
+
+test('review round 2: CLI operands, OpenSim default transforms, quoted CSV, alignment failure, gaps in a rep (PR #16)', async () => {
+  const { parseArgs } = await import('../bench/validate.mjs');
+  const { defaultTransform } = await import('../src/validation/reference-io.mjs');
+  assert.throws(() => parseArgs(['--source', 'offine']), /offline or live/);
+  assert.throws(() => parseArgs(['--lag-ms', 'abc']), /finite/);
+  assert.throws(() => parseArgs(['--lag-ms']), /finite/);
+  assert.throws(() => parseArgs(['--session']), /needs a value/);
+  assert.equal(parseArgs(['--lag-ms', '-150']).lagMs, -150);
+
+  assert.equal(defaultTransform('opensim', 'knee_angle_r'), 'flexion');
+  assert.equal(defaultTransform('opensim', 'elbow_flex_l'), 'flexion');
+  assert.throws(() => defaultTransform('opensim', 'arm_flex_r'), /explicit|pass ref:app/);
+  assert.equal(defaultTransform('kinovea', 'Shoulder'), 'interior');
+
+  const q = parseKinoveaCsv('Time (ms),"Knee","Say ""hi"", ok"\n0,170,1\n33,160,2\n');
+  assert.deepEqual(q.columns.Knee, [170, 160]);
+  assert.deepEqual(q.columns['Say "hi", ok'], [1, 2]);
+
+  // Clocks that never overlap enough: report the failure instead of scoring at lag 0.
+  const t = Array.from({ length: 301 }, (_, i) => i * 33.3);
+  const sig = tt => 150 + 30 * Math.sin(tt / 400);
+  const session = { frames: t.map(tt => ({ timeMs: tt, angles: { rightKnee: sig(tt) } })) };
+  const far = { timeMs: t.map(tt => tt + 9000), columns: { k: t.map(tt => sig(tt + 9000)) } };
+  const res = compareJoint(session, far, { refColumn: 'k', appKey: 'rightKnee', appSource: 'live' });
+  assert.equal(res.alignment, 'failed');
+  assert.equal(res.frameLevel, null);
+
+  // A 200 ms reference dropout away from the rep's extreme still excludes that rep.
+  const syn = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
+  const rows = syn.mot.split('\n');
+  const drop = rows.filter(l => {
+    if (!/^-?\d/.test(l)) return true;
+    const ms = Number(l.split('\t')[0]) * 1000;
+    return !(ms > 1500 + 400 && ms < 1500 + 600); // rep 1 descent
+  }).join('\n');
+  const r2 = compareJoint(syn.session, parseReference(drop, 'ik.mot'), { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 });
+  assert.equal(r2.repLevel.excluded, 1);
+  assert.equal(r2.repLevel.reps.length, 4);
+});

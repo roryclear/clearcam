@@ -139,3 +139,21 @@ test('Setup guidance: off when disabled; distance/height judged only when standi
   assert.doesNotMatch(res.guidance ?? '', /camera to hip height/);
   assert.equal(res.status, 'optimal');
 });
+
+test('Setup guidance: standing check uses pixel proportions (PR #16 review round 2)', () => {
+  const assistant = new FramingAssistant();
+  const level = { rollDeg: 0, pitchDeg: 2 };
+  const lm = createDummyLandmarks(FULL_BODY);
+  // 1920×1080: hip (0.4, 0.3), knee (0.5, 0.7), ankle (0.5, 0.9) is a ~156° knee, not standing.
+  for (const [h, k, a] of [[JOINTS.leftHip, JOINTS.leftKnee, JOINTS.leftAnkle], [JOINTS.rightHip, JOINTS.rightKnee, JOINTS.rightAnkle]]) {
+    lm[h] = { x: 0.4, y: 0.3, z: 0, visibility: 0.9 };
+    lm[k] = { x: 0.5, y: 0.7, z: 0, visibility: 0.9 };
+    lm[a] = { x: 0.5, y: 0.9, z: 0, visibility: 0.9 };
+  }
+  lm[JOINTS.nose] = { x: 0.5, y: 0.05, z: 0, visibility: 0.9 };
+  const wide = assistant.evaluate(lm, 'squat', { tilt: level, aspect: 1920 / 1080 });
+  assert.doesNotMatch(wide.guidance ?? '', /camera to hip height/);
+  // Straight legs still count as standing in a portrait frame.
+  const tall = createDummyLandmarks(FULL_BODY, { scale: 0.8, shift: -0.2 });
+  assert.match(assistant.evaluate(tall, 'squat', { tilt: level, aspect: 9 / 16 }).guidance, /Raise the camera/);
+});

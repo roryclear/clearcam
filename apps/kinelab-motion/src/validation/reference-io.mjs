@@ -17,6 +17,25 @@ function detectDelimiter(lines) {
   return ',';
 }
 
+/** Splits one delimited line, honouring double quotes ("" = literal quote). */
+function splitFields(line, delimiter) {
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cur += ch;
+    } else if (ch === '"' && cur.trim() === '') { quoted = true; cur = ''; }
+    else if (ch === delimiter) { out.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
 function parseNumber(raw, decimalComma) {
   if (raw === undefined) return null;
   let s = String(raw).trim().replace(/^"|"$/g, '');
@@ -42,7 +61,7 @@ export function parseKinoveaCsv(text, { timeUnit = 'auto' } = {}) {
   const lines = String(text).replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim() !== '');
   if (!lines.length) throw new Error('empty reference file');
   const delimiter = detectDelimiter(lines);
-  const split = l => l.split(delimiter).map(c => c.trim());
+  const split = l => splitFields(l, delimiter);
   // Header = first row whose first cell is not numeric (Kinovea may prepend a title row).
   let h = 0;
   while (h < lines.length && parseNumber(split(lines[h])[0], false) !== null) h++;
@@ -119,7 +138,14 @@ export const REFERENCE_TRANSFORMS = Object.freeze({
   'flexion-abs': x => 180 - Math.abs(x),
 });
 
-/** Default per-format transform. */
-export function defaultTransform(format) {
-  return format === 'opensim' ? 'flexion' : 'interior';
+/**
+ * Default transform for a reference column. OpenSim flexion coordinates map to the
+ * app's interior angle with 180 − x; any other OpenSim coordinate (shoulder elevation,
+ * which already matches the app's 0° = arm down, rotations, translations) has no safe
+ * default and needs an explicit transform.
+ */
+export function defaultTransform(format, column = '') {
+  if (format !== 'opensim') return 'interior';
+  if (/^(knee_angle|elbow_flex|hip_flexion)/i.test(column)) return 'flexion';
+  throw new Error(`no default transform for OpenSim column ${column}; pass ref:app:interior|flexion|flexion-abs`);
 }

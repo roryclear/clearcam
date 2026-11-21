@@ -84,3 +84,24 @@ test('DeviceLevel smooths motion events, needs permission on iOS and goes stale'
   assert.equal(await denied.start(), false);
   assert.equal(await new DeviceLevel({ target: {} }).start(), false);
 });
+
+test('DeviceLevel: stop() during a pending permission prompt prevents a late listener (PR #16)', async () => {
+  let resolve;
+  const added = [];
+  const target = {
+    DeviceMotionEvent: { requestPermission: () => new Promise(r => { resolve = r; }) },
+    addEventListener: (type, fn) => added.push(type),
+    removeEventListener: () => {},
+  };
+  const level = new DeviceLevel({ target });
+  const pending = level.start();
+  level.stop();
+  resolve('granted');
+  assert.equal(await pending, false);
+  assert.deepEqual(added, []);
+  // A normal granted start still attaches.
+  const again = level.start();
+  resolve('granted');
+  assert.equal(await again, true);
+  assert.deepEqual(added, ['devicemotion']);
+});

@@ -56,7 +56,7 @@ export class FramingAssistant {
    * @param {'side'|'front'|'any'} [view.recommendedView] the exercise's camera recommendation
    * @param {{rollDeg:number, pitchDeg:number}|null} [view.tilt] phone tilt (device-level.mjs)
    */
-  evaluate(landmarks, exerciseId = 'free', { yawDeg = null, recommendedView = 'any', tilt = null, setupGuidance = true } = {}) {
+  evaluate(landmarks, exerciseId = 'free', { yawDeg = null, recommendedView = 'any', tilt = null, setupGuidance = true, aspect = 1 } = {}) {
     if (!Array.isArray(landmarks) || landmarks.length === 0) {
       return {
         status: 'inadequate',
@@ -99,7 +99,7 @@ export class FramingAssistant {
 
     // Camera setup: level phone, whole body at a reasonable size, camera at hip height.
     if (status === 'optimal') {
-      const setup = setupGuidance ? this._setupGuidance(landmarks, required, tilt) : null;
+      const setup = setupGuidance ? this._setupGuidance(landmarks, required, tilt, aspect) : null;
       if (setup) {
         status = 'partial';
         guidance = setup;
@@ -128,11 +128,11 @@ export class FramingAssistant {
     };
   }
 
-  _setupGuidance(landmarks, required, tilt) {
+  _setupGuidance(landmarks, required, tilt, aspect = 1) {
     if (tilt && Math.abs(tilt.rollDeg) >= LEVEL_TOLERANCE_DEG) {
       return `Level the phone: tilted ${Math.round(Math.abs(tilt.rollDeg))}° sideways`;
     }
-    if (!required.includes('lowerBody') || !this._standingUpright(landmarks)) return null;
+    if (!required.includes('lowerBody') || !this._standingUpright(landmarks, aspect)) return null;
     const ys = [JOINTS.nose, JOINTS.leftEar, JOINTS.rightEar, JOINTS.leftAnkle, JOINTS.rightAnkle]
       .map(i => landmarks[i]).filter(p => this._isReliable(p)).map(p => p.y);
     if (ys.length >= 3 && Math.max(...ys) - Math.min(...ys) < MIN_BODY_FRACTION) {
@@ -152,15 +152,16 @@ export class FramingAssistant {
 
   // Distance and camera height are judged in the standing posture only: at squat depth
   // or seated, body span and hip height reflect the movement, not the camera setup.
-  _standingUpright(landmarks) {
+  // aspect = frame width / height; normalized x is scaled to pixel proportions.
+  _standingUpright(landmarks, aspect = 1) {
     const knees = [
       [JOINTS.leftHip, JOINTS.leftKnee, JOINTS.leftAnkle],
       [JOINTS.rightHip, JOINTS.rightKnee, JOINTS.rightAnkle],
     ].map(ids => ids.map(i => landmarks[i]))
       .filter(pts => pts.every(p => this._isReliable(p)))
       .map(([h, k, a]) => {
-        const u = [h.x - k.x, h.y - k.y];
-        const v = [a.x - k.x, a.y - k.y];
+        const u = [(h.x - k.x) * aspect, h.y - k.y];
+        const v = [(a.x - k.x) * aspect, a.y - k.y];
         const cos = (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v) || 1);
         return (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
       });

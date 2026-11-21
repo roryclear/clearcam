@@ -144,13 +144,15 @@ function interpAt(xs, ys, x) {
  * grid, filtered, and interpolated back to its own timestamps.
  */
 function filterRun(t, x, dt, cutoffHz, order) {
-  const fs = 1000 / dt;
   let irregular = false;
   for (let k = 1; k < t.length; k++) if (Math.abs(t[k] - t[k - 1] - dt) > 0.25 * dt) { irregular = true; break; }
-  if (!irregular) return filtfilt(x, fs, cutoffHz, order);
-  const grid = [];
-  for (let g = t[0]; g <= t[t.length - 1] + 1e-9; g += dt) grid.push(g);
-  const sm = filtfilt(grid.map(g => interpAt(t, x, g)), fs, cutoffHz, order);
+  if (!irregular) return filtfilt(x, 1000 / dt, cutoffHz, order);
+  // Uniform grid spanning both endpoints, so the first and last frames are grid points.
+  const span = t[t.length - 1] - t[0];
+  const steps = Math.max(1, Math.round(span / dt));
+  const step = span / steps;
+  const grid = Array.from({ length: steps + 1 }, (_, k) => t[0] + k * step);
+  const sm = filtfilt(grid.map(g => interpAt(t, x, g)), 1000 / step, cutoffHz, order);
   return t.map(tt => interpAt(grid, sm, tt));
 }
 
@@ -173,16 +175,23 @@ export function smoothSeriesOffline(t, x, {
   if (!dts.length) return x.map(v => (Number.isFinite(v) ? v : null));
   const dt = median(dts);
   const half = Math.max(1, Math.round(hampelWindowMs / 2 / dt));
-  const filled = fillGaps(t, hampel(x, half, hampelSigma, hampelMinScale), maxGapMs);
-  const out = filled.slice();
-  let i = 0;
-  while (i < n) {
-    if (filled[i] === null) { i++; continue; }
-    let j = i;
-    while (j + 1 < n && filled[j + 1] !== null && t[j + 1] - t[j] <= maxGapMs) j++;
-    const sm = filterRun(t.slice(i, j + 1), filled.slice(i, j + 1), dt, cutoffHz, order);
-    for (let k = 0; k < sm.length; k++) out[i + k] = sm[k];
-    i = j + 1;
+  const out = x.map(v => (Number.isFinite(v) ? v : null));
+  // Capture runs: valid samples whose neighbours are at most maxGapMs apart. Hampel,
+  // gap filling and the low-pass all stay inside one run, so no stage mixes postures
+  // from either side of an interruption.
+  const valid = [];
+  for (let i = 0; i < n; i++) if (out[i] !== null) valid.push(i);
+  let r = 0;
+  while (r < valid.length) {
+    let e = r;
+    while (e + 1 < valid.length && t[valid[e + 1]] - t[valid[e]] <= maxGapMs) e++;
+    const i0 = valid[r];
+    const i1 = valid[e];
+    const tr = t.slice(i0, i1 + 1);
+    const filled = fillGaps(tr, hampel(out.slice(i0, i1 + 1), half, hampelSigma, hampelMinScale), maxGapMs);
+    const sm = filled.length >= 2 ? filterRun(tr, filled, dt, cutoffHz, order) : filled;
+    for (let k = 0; k < sm.length; k++) out[i0 + k] = sm[k];
+    r = e + 1;
   }
   return out;
 }

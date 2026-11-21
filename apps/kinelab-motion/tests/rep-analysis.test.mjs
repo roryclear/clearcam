@@ -582,3 +582,14 @@ test('A rebound after the commit does not move the rep start forward', () => {
   assert.ok(rep.startMs <= 300, `start ${rep.startMs}`);
   assert.ok(rep.phase1Ms >= 500, `descent ${rep.phase1Ms}`);
 });
+
+test('A recording that starts inside the commit keeps the commit limit (PR #16 review)', () => {
+  const vis = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+  const seq = [[100, 'rise', 0], [120, 'rise', 0], [140, 'rise', 0], [100, 'rise', 0], [80, 'rise', 0],
+    [120, 'rise', 0], [160, 'completed', 1], [180, 'completed', 1]];
+  const frames = seq.map(([a, status, reps], i) => ({ timeMs: i * 100, angles: { leftKnee: a, rightKnee: a }, landmarks: vis, status, reps }));
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.ok(rep, 'rep summarized');
+  assert.equal(rep.startMs, 0);
+  assert.equal(rep.phase1Ms, 400);
+});

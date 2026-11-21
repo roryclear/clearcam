@@ -7,6 +7,8 @@
 
 /** Share of a rep's grid points where both series must exist for a rep-level pair. */
 export const MIN_REP_COVERAGE = 0.9;
+/** Longest stretch inside a rep where either series may be missing. */
+export const MAX_REP_GAP_MS = 50;
 import { agreement } from './agreement.mjs';
 import { estimateLag, resample } from './align.mjs';
 import { offlineSessionFrames } from '../sessions/offline-analysis.mjs';
@@ -41,6 +43,10 @@ export function compareJoint(session, reference, spec) {
   if (appX.filter(v => v !== null).length < 10) throw new Error(`app series ${appKey} has too few values`);
 
   const lag = lagMs === null ? estimateLag(appT, appX, refT, refX) : { lagMs, r: NaN };
+  if (lagMs === null && !Number.isFinite(lag.r)) {
+    // No lag within the search range gave enough overlap: report, don't score.
+    return { appKey, refColumn, transform, appSource, exerciseId, alignment: 'failed', lagMs: null, lagCorrelation: null, frameLevel: null, repLevel: null };
+  }
   const refTShifted = refT.map(t => t + lag.lagMs);
 
   // Frame level on the app's time span.
@@ -57,16 +63,20 @@ export function compareJoint(session, reference, spec) {
   if (profile && appKey.toLowerCase().endsWith(profile.joint.toLowerCase())) {
     reps = analyzeReps(frames, exerciseId);
     const pick = profile.direction === 'min' ? Math.min : Math.max;
-    // Extremes come from the same paired samples; reps the reference does not cover
-    // (recording started/ended mid-rep, dropout at the peak) are excluded, not scored.
+    // Extremes come from the same paired samples. A rep is scored only if both series
+    // cover the window with no stretch over MAX_REP_GAP_MS missing, so neither series'
+    // own peak (which for bilateral profiles need not coincide with rep.extremeMs) can
+    // fall in a gap; partially recorded reps are excluded, not scored.
     let excluded = 0;
+    const maxGap = Math.max(1, Math.round(MAX_REP_GAP_MS / gridMs));
     const pairs = reps.map(rep => {
       const idx = [];
       for (let i = 0; i < grid.length; i++) if (grid[i] >= rep.startMs && grid[i] <= rep.endMs) idx.push(i);
       const both = idx.filter(i => a[i] !== null && r[i] !== null);
-      const nearPeak = idx.filter(i => Math.abs(grid[i] - rep.extremeMs) <= 3 * gridMs);
-      const peakCovered = nearPeak.length > 0 && nearPeak.every(i => a[i] !== null && r[i] !== null);
-      if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || !peakCovered) { excluded++; return null; }
+      let run = 0;
+      let longest = 0;
+      for (const i of idx) { run = a[i] !== null && r[i] !== null ? 0 : run + 1; longest = Math.max(longest, run); }
+      if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || longest > maxGap) { excluded++; return null; }
       return { app: pick(...both.map(i => a[i])), ref: pick(...both.map(i => r[i])), quality: rep.quality };
     }).filter(Boolean);
     repLevel = {
@@ -82,6 +92,7 @@ export function compareJoint(session, reference, spec) {
     transform,
     appSource,
     exerciseId,
+    alignment: lagMs === null ? 'estimated' : 'fixed',
     lagMs: lag.lagMs,
     lagCorrelation: lag.r,
     frameLevel,

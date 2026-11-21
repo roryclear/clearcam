@@ -275,10 +275,32 @@ for (const def of ANGLE_DEFINITIONS) {
   angleRowLabels.set(def.key, label);
 }
 
-/** Applies the angle display convention (row labels; values follow on the next frame). */
+/**
+ * Applies the angle display convention: row labels, the open results card's peak and a
+ * paused replay frame are reformatted now; live values follow on the next frame.
+ */
 function applyAngleConvention(convention) {
   setAngleConvention(convention);
   for (const def of ANGLE_DEFINITIONS) angleRowLabels.get(def.key).textContent = angleLabel(def);
+  const peak = appState.resultsPeak;
+  if (peak && nodes.resPeakAngle) nodes.resPeakAngle.textContent = peak.deg !== null ? formatAngle(peak.joint, peak.deg) : '—';
+  const frame = appState.lastReplayFrame;
+  if (frame && !appState.active) renderReplayTelemetry(frame);
+}
+
+/** Recorded [x, y, z, conf] landmarks → objects the reliability checks read. */
+function recordedLandmarks(landmarks) {
+  if (!Array.isArray(landmarks)) return null;
+  return landmarks.map(p => (Array.isArray(p) ? { x: p[0], y: p[1], z: p[2], visibility: p[3] ?? 1 } : p));
+}
+
+/** Replay telemetry: recorded confidence feeds the reliability flags; no live view estimate. */
+function renderReplayTelemetry(frame) {
+  renderTelemetry(frame.angles, null, null, true, 640, 480, {
+    reliabilityLandmarks: recordedLandmarks(frame.landmarks),
+    view: null,
+  });
+  renderSymmetry(frame.angles);
 }
 applyAngleConvention(settings.get().overlays.angleConvention);
 settings.subscribe(cfg => {
@@ -341,8 +363,11 @@ function updateAngleDimUI(dimension = 'auto', view = null) {
   }
 }
 
-function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, use3DSegments = true, width = 640, height = 480) {
-  const reliability = angleReliability(angles, smoothedLandmarks, appState.lastView);
+function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, use3DSegments = true, width = 640, height = 480, {
+  reliabilityLandmarks = smoothedLandmarks,
+  view = appState.lastView,
+} = {}) {
+  const reliability = angleReliability(angles, reliabilityLandmarks, view);
   for (const def of ANGLE_DEFINITIONS) {
     const valueEl = angleRows.get(def.key);
     const measured = angles?.[def.key];
@@ -706,6 +731,7 @@ function processFrame(video, callNow, metadata) {
       recommendedView: appState.activeExerciseInstance?.recommendedCamera,
       tilt: cfg.tracking.levelGuidance ? tilt : null,
       setupGuidance: cfg.tracking.levelGuidance,
+      aspect: video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 1,
     });
     appState.lastFraming = framing;
 
@@ -1129,6 +1155,8 @@ function resetReplayView(title) {
     nodes.resRepCount.textContent = '--';
     nodes.resDuration.textContent = '--:--';
     nodes.resPeakAngle.textContent = '--°';
+    appState.resultsPeak = null;
+    appState.lastReplayFrame = null;
     nodes.resSymmetry.textContent = '--';
     nodes.resTimestamp.textContent = 'No session selected';
     if (nodes.resAvgRom) {
@@ -1222,6 +1250,7 @@ async function loadSessionForPlayback(sessionId) {
       peakDeg = extremes.length ? (repProfile.direction === 'min' ? Math.min(...extremes) : Math.max(...extremes)) : null;
     }
     const peakJoint = repProfile?.joint ?? (/shoulder/.test(normalizeExerciseId(fullSession.exerciseId)) ? 'Shoulder' : 'Knee');
+    appState.resultsPeak = { joint: peakJoint, deg: peakDeg };
     nodes.resPeakAngle.textContent = peakDeg !== null ? formatAngle(peakJoint, peakDeg) : '—';
     // A counter reset mid-recording starts a new set; show reps across all sets.
     if (repProfile) nodes.resRepCount.textContent = String(countedReps(fullSession.frames)).padStart(2, '0');
@@ -1304,8 +1333,8 @@ player.subscribe((frame, isPlaying) => {
       showGhost: cfg.overlays.showGhost,
       mirrored: false,
     });
-    renderTelemetry(frame.angles);
-    renderSymmetry(frame.angles);
+    appState.lastReplayFrame = frame;
+    renderReplayTelemetry(frame);
   }
 
   // Update chart scrubber line

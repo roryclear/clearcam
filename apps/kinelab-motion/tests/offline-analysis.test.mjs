@@ -158,3 +158,20 @@ test('SessionStorage compact fallback: optional rawAngles never evict older sess
   assert.equal(roomy.saveSession(mk('a', true), { compact: stripRawAngles }), true);
   assert.ok(roomy.getSession('a').frames[0].rawAngles);
 });
+
+test('smoothSeriesOffline round 2: Hampel stays inside capture runs; irregular runs keep the last frame (PR #16)', () => {
+  const t = [];
+  const x = [];
+  for (let i = 0; i < 60; i++) { t.push(i * 33); x.push(180); }
+  for (let i = 0; i < 5; i++) { t.push(6000 + i * 33); x.push(90); }
+  const y = smoothSeriesOffline(t, x);
+  assert.deepEqual(y.slice(60).map(v => Math.round(v * 1e6) / 1e6), [90, 90, 90, 90, 90]);
+
+  // Irregular run whose end falls between grid points: the final frame is kept.
+  const ti = [];
+  for (let k = 0; k < 60; k++) ti.push(k * 33 + (k % 7 === 3 ? 12 : 0));
+  ti.push(ti[ti.length - 1] + 50);
+  const ramp = ti.map(tt => 100 + tt * 0.005);
+  const yr = smoothSeriesOffline(ti, ramp, { cutoffHz: 4 });
+  assert.ok(Math.abs(yr[yr.length - 1] - ramp[ramp.length - 1]) < 0.05, `last ${yr[yr.length - 1]} vs ${ramp[ramp.length - 1]}`);
+});
