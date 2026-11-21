@@ -114,7 +114,12 @@ export function compareJoint(session, reference, spec) {
       const gapOk = maxSpacing(appSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS + EDGE_EPS_MS
         && maxSpacing(refSampleT, rep.startMs, rep.endMs) <= REF_MAX_GAP_MS + EDGE_EPS_MS;
       if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || !gapOk) { excluded++; return null; }
-      return { app: pick(...both.map(i => a[i])), ref: pick(...both.map(i => r[i])), quality: rep.quality };
+      // Extremes at the recorded timestamps (not the 10 ms grid), so the app value is the
+      // one its own rep summary reports and the reference value is a measured sample.
+      const inRep = (t, v) => t >= rep.startMs - EDGE_EPS_MS && t <= rep.endMs + EDGE_EPS_MS && v !== null && Number.isFinite(v);
+      const av = appX.filter((v, i) => inRep(appT[i], v));
+      const rv = refX.filter((v, i) => inRep(refTShifted[i], v));
+      return { app: pick(...av), ref: pick(...rv), quality: rep.quality };
     }).filter(Boolean);
     repLevel = {
       excluded,

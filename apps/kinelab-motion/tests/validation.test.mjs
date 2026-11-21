@@ -314,3 +314,30 @@ test('review round 7: tab + decimal-comma tables; 20 fps phase-offset reference 
   assert.equal(res.repLevel.excluded, 0);
   assert.equal(res.repLevel.reps.length, 5);
 });
+
+test('review round 8: rep extremes come from recorded timestamps, matching the app rep summary (PR #16)', () => {
+  // V-shaped squats (sharp bottoms) at 30 fps on off-grid times; the bottom frame of each
+  // rep is dropped so the best remaining frame falls between 10 ms grid points.
+  const squat = new SquatExercise();
+  let state = squat.createState();
+  const frames = [];
+  const mot = ['IK', 'inDegrees=yes', 'endheader', 'time\tknee_angle_r'];
+  const flexAt = t => (t > 1500 && t < 1500 + 5 * 2400 ? 90 * (1 - Math.abs(2 * (((t - 1500) % 2400) / 2400) - 1)) : 0);
+  for (let k = 0; k * 1000 / 30 <= 15000; k++) {
+    const t = Math.round(k * 1000 / 30) + 6; // off the 10 ms grid
+    const knee = 180 - flexAt(t);
+    state = squat.update(state, { angles: { leftKnee: knee, rightKnee: knee }, landmarks: null, timestampMs: t, trackingQuality: 'good' });
+    const bottom = t > 1500 && Math.abs(((t - 1500) % 2400) - 1200) < 17;
+    if (!bottom) frames.push({ timeMs: t, angles: { rightKnee: knee }, landmarks: null, status: state.status, reps: state.reps });
+  }
+  for (let t = 0; t <= 15000; t += 10) mot.push(`${(t / 1000).toFixed(3)}\t${flexAt(t).toFixed(3)}`);
+  const session = { exerciseId: 'squat', frames };
+  const res = compareJoint(session, parseReference(mot.join('\n'), 'ik.mot'), { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', appSource: 'live', lagMs: 0 });
+  const reps = analyzeReps(frames, 'squat');
+  assert.ok(reps.length >= 4);
+  assert.equal(res.repLevel.reps.length, reps.length);
+  res.repLevel.reps.forEach((r, i) => {
+    assert.equal(r.app, reps[i].extremeAngle, `rep ${i + 1} app`);
+    assert.equal(r.ref, 90, `rep ${i + 1} ref (sampled bottom)`);
+  });
+});
