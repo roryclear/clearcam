@@ -152,3 +152,38 @@ test('Predictive overlay tracks a squat-like oscillation better, reversals inclu
   const predicted = run(new PoseInterpolator({ lambda: 32, predictionMs: 40 }));
   assert.ok(predicted < plain / 2, `RMS ${predicted.toFixed(4)} vs ${plain.toFixed(4)}`);
 });
+
+test('Inference cap follows camera cadence, not display-tick callback spacing', async () => {
+  const { sampleClockMs, frameDue } = await import('../src/tracking/frame-clock.mjs');
+  // 30 fps camera on a 75 Hz display: callbacks land on display ticks 27/40 ms apart.
+  const ticks = 1000 / 75;
+  let last = -Infinity;
+  let sampled = 0;
+  let callbackCapped = 0;
+  let lastCb = -Infinity;
+  for (let f = 0; f < 60; f++) {
+    const mediaTime = f / 30; // seconds
+    const cbTime = Math.ceil((f * 1000 / 30) / ticks) * ticks;
+    const clock = sampleClockMs({ mediaTime }, cbTime);
+    if (frameDue(clock, last, 28)) { last = clock; sampled++; }
+    if (cbTime - lastCb >= 28) { lastCb = cbTime; callbackCapped++; }
+  }
+  assert.equal(sampled, 60, 'every 30 fps frame is under the ~35 FPS cap');
+  assert.ok(callbackCapped < 50, `callback-spacing cap drops frames: ${callbackCapped}/60`);
+  // 60 fps camera: every other frame.
+  last = -Infinity; sampled = 0;
+  for (let f = 0; f < 60; f++) if (frameDue(f * 1000 / 60, last, 28)) { last = f * 1000 / 60; sampled++; }
+  assert.equal(sampled, 30);
+  // Without mediaTime the frame time is used; a clock that goes backwards samples.
+  assert.equal(sampleClockMs(null, 123), 123);
+  assert.equal(frameDue(5, 1000, 28), true);
+});
+
+test('A live fallback keeps an Auto preference; explicit models are replaced', async () => {
+  const { modelPreferenceAfterFallback, resolveModelChoice } = await import('../src/tracking/device-profile.mjs');
+  const saved = modelPreferenceAfterFallback('auto', 'lite');
+  assert.equal(saved, 'auto');
+  // Next session starts from the device default again, not Lite.
+  assert.equal(resolveModelChoice(saved, { mobile: true }), 'full');
+  assert.equal(modelPreferenceAfterFallback('heavy', 'full'), 'full');
+});

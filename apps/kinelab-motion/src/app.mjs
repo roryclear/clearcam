@@ -25,8 +25,8 @@ import { PoseFilter } from './filters/pose-filter.mjs';
 import { KinematicBoneFilter } from './filters/kinematic-filter.mjs';
 import { PoseInterpolator } from './filters/pose-interpolator.mjs';
 import { PerformanceMonitor } from './tracking/performance-monitor.mjs';
-import { supportsVideoFrameCallback, selectFrameTime, missedFrames } from './tracking/frame-clock.mjs';
-import { isLikelyMobile, resolveModelChoice } from './tracking/device-profile.mjs';
+import { supportsVideoFrameCallback, selectFrameTime, missedFrames, sampleClockMs, frameDue } from './tracking/frame-clock.mjs';
+import { isLikelyMobile, resolveModelChoice, modelPreferenceAfterFallback } from './tracking/device-profile.mjs';
 import { AdaptiveController } from './tracking/adaptive-controller.mjs';
 import { MediaPipeRunner } from './tracking/mediapipe-runner.mjs';
 import { OverlayRenderer } from './overlays/overlay-renderer.mjs';
@@ -220,6 +220,7 @@ const appState = {
   useVideoFrameCallback: false, // inference runs per camera frame via requestVideoFrameCallback
   vfcHandle: 0,
   lastPresentedFrames: null,
+  lastSampledClock: -Infinity, // media-time clock of the last frame sent to inference
   lastFrameTime: -Infinity, // MediaPipe VIDEO timestamps must strictly increase, across sessions too
   pendingOverlay: null, // { timeMs, clock } of the newest landmarks not yet drawn
 };
@@ -588,7 +589,10 @@ function onVideoFrame(token, metadata) {
   perf.recordDroppedFrame(missedFrames(appState.lastPresentedFrames, metadata?.presentedFrames));
   appState.lastPresentedFrames = metadata?.presentedFrames ?? null;
   const now = performance.now();
-  if (now - appState.lastInferenceAt < appState.FRAME_INTERVAL_MS) return; // 60 fps cameras: every other frame
+  // Cap on the camera's own cadence (60 fps cameras: every other frame), not callback spacing.
+  const clock = sampleClockMs(metadata, selectFrameTime(now, metadata).timeMs);
+  if (!frameDue(clock, appState.lastSampledClock, appState.FRAME_INTERVAL_MS)) return;
+  appState.lastSampledClock = clock;
   processFrame(video, now, metadata);
 }
 
@@ -727,8 +731,10 @@ function switchToFallbackModel(reason, nextModel = 'full') {
       if (result?.stale || token !== appState.sessionToken) return;
       adaptive.setCurrentModel(runner.activeModel);
       perf.resetInferenceStats(); // measure the new model on its own samples
-      settings.update({ tracking: { model: runner.activeModel } });
-      nodes.modelChoice.value = runner.activeModel;
+      // An Auto preference stays Auto; the HUD shows the model actually running.
+      const saved = modelPreferenceAfterFallback(settings.get().tracking.model, runner.activeModel);
+      settings.update({ tracking: { model: saved } });
+      nodes.modelChoice.value = saved;
       nodes.modelName.textContent = runner.activeModel.toUpperCase();
       announce(`Switched to ${runner.activeModel.toUpperCase()} model for responsiveness.`);
     })
@@ -777,6 +783,7 @@ function stopCamera() {
   appState.vfcHandle = 0;
   appState.useVideoFrameCallback = false;
   appState.lastPresentedFrames = null;
+  appState.lastSampledClock = -Infinity;
   appState.pendingOverlay = null;
 
   if (recorder.isRecording) {

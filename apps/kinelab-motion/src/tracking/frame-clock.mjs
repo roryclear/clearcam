@@ -41,6 +41,29 @@ export function selectFrameTime(nowMs, metadata, lastTimeMs = -Infinity) {
 }
 
 /**
+ * Clock for the inference-rate cap: the frame's own media time (camera cadence), so
+ * display-tick jitter in callback spacing can't skip frames below the cap. A 30 fps
+ * camera on a 75 Hz display has callbacks 27/40 ms apart; capping on callback time
+ * at 28 ms dropped every other frame.
+ * @param {Object|null} metadata VideoFrameCallbackMetadata
+ * @param {number} fallbackMs frame time used when mediaTime is unavailable
+ */
+export function sampleClockMs(metadata, fallbackMs) {
+  const media = metadata?.mediaTime;
+  return Number.isFinite(media) && media >= 0 ? media * 1000 : fallbackMs;
+}
+
+/**
+ * True when a frame at clockMs is due under an intervalMs cap. A clock that went
+ * backwards (stream restart) always samples. Half a millisecond of slack absorbs
+ * rounding in media timestamps.
+ */
+export function frameDue(clockMs, lastSampledMs, intervalMs) {
+  if (!Number.isFinite(lastSampledMs) || clockMs < lastSampledMs) return true;
+  return clockMs - lastSampledMs >= intervalMs - 0.5;
+}
+
+/**
  * Camera frames the page never saw between two callbacks, from presentedFrames.
  * @param {number|null} prevPresented
  * @param {number} presented

@@ -31,3 +31,12 @@ export function resolveModelChoice(choice, { mobile }) {
   if (choice === 'heavy' || choice === 'full' || choice === 'lite') return choice;
   return mobile ? 'full' : 'heavy';
 }
+
+/**
+ * Saved model preference after a live fallback. 'auto' is a starting policy, so it
+ * survives (the next session starts from the device default again); an explicit
+ * model is replaced by the faster one the fallback switched to.
+ */
+export function modelPreferenceAfterFallback(saved, activeModel) {
+  return saved === 'auto' ? 'auto' : activeModel;
+}
