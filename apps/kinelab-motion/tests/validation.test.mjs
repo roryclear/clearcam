@@ -226,8 +226,9 @@ test('review round 3: a 100 ms reference dropout bridged by resampling still exc
   const spec = { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 };
   const r100 = compareJoint(syn.session, parseReference(keep(100), 'ik.mot'), spec);
   assert.equal(r100.repLevel.excluded, 1);
-  // One missing 30 fps sample (≈67 ms interval) keeps the rep eligible.
-  const r40 = compareJoint(syn.session, parseReference(keep(40), 'ik.mot'), spec);
+  // A fully sampled 30 Hz reference keeps every rep; one dropped app frame does too.
+  const dropApp = { ...syn.session, frames: syn.session.frames.filter((_, i) => i !== 300) };
+  const r40 = compareJoint(dropApp, parseReference(syn.mot, 'ik.mot'), spec);
   assert.equal(r40.repLevel.excluded, 0);
   assert.equal(r40.repLevel.reps.length, 5);
 });
@@ -278,7 +279,7 @@ test('review round 6: quoted tabs in rows, short decimal-comma rows, edge roundi
   assert.equal(parseOpenSimMot('x\nendheader\ntime\tk\n16.002\t1\n').timeMs[0], 16002);
   assert.equal(maxSpacing([0, 33, 66, 99.9999], 0, 100), 33.9999);
 
-  // One missing reference sample (≈67 ms gap) at a rep's peak excludes it; elsewhere it doesn't.
+  // One missing reference sample (≈67 ms gap) excludes its rep, at the peak or anywhere else.
   const syn = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
   const spec = { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 };
   const lines = syn.mot.split('\n');
@@ -290,6 +291,26 @@ test('review round 6: quoted tabs in rows, short decimal-comma rows, edge roundi
   const atPeak = compareJoint(syn.session, parseReference(drop(nearest(peak2)), 'ik.mot'), spec);
   assert.equal(atPeak.repLevel.excluded, 1);
   const offPeak = compareJoint(syn.session, parseReference(drop(nearest(peak2 - 600)), 'ik.mot'), spec);
-  assert.equal(offPeak.repLevel.excluded, 0);
-  assert.equal(offPeak.repLevel.reps.length, 5);
+  assert.equal(offPeak.repLevel.excluded, 1);
+  assert.equal(offPeak.repLevel.reps.length, 4);
+});
+
+test('review round 7: tab + decimal-comma tables; 20 fps phase-offset reference keeps reps (PR #16)', () => {
+  const tsv = parseKinoveaCsv('Time (s)\tKnee\n0,000\t170,5\n0,033\t168,0\n');
+  assert.deepEqual(tsv.timeMs, [0, 33]);
+  assert.deepEqual(tsv.columns.Knee, [170.5, 168]);
+
+  // 20 fps reference in seconds, starting at 0.000010 s: exact 50 ms spacing must pass.
+  const syn = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
+  const rows = ['Time (s),Knee'];
+  for (let k = 0; k * 50 <= 15000; k++) {
+    const tMs = k * 50 + 0.01;
+    let flex = 0;
+    if (tMs > 1500 && tMs < 1500 + 5 * 2400) flex = 45 * (1 - Math.cos(((tMs - 1500) % 2400) / 2400 * 2 * Math.PI));
+    rows.push(`${(tMs / 1000).toFixed(6)},${(180 - flex).toFixed(3)}`);
+  }
+  const ref = parseKinoveaCsv(rows.join('\n'));
+  const res = compareJoint(syn.session, ref, { refColumn: 'Knee', appKey: 'rightKnee', transform: 'interior', lagMs: 0 });
+  assert.equal(res.repLevel.excluded, 0);
+  assert.equal(res.repLevel.reps.length, 5);
 });

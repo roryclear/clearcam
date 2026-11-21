@@ -8,18 +8,19 @@
 /** Share of a rep's grid points where both series must exist for a rep-level pair. */
 export const MIN_REP_COVERAGE = 0.9;
 /**
- * Longest interval between recorded samples (before any interpolation) allowed inside
- * a rep, per series: one dropped 30 fps frame (66 ms) passes, a 100 ms dropout does not.
+ * Longest interval between recorded app samples (before any interpolation) inside a
+ * rep: one dropped 30 fps frame (≈67 ms) passes, a 100 ms dropout does not. App frame
+ * drops are part of what is measured (the app reports the same clipped value).
  */
 export const MAX_REP_GAP_MS = 80;
 /**
- * Around each series' own extreme (±PEAK_WINDOW_MS) recorded samples must be at most
- * PEAK_GAP_MS apart: jitter passes, a dropped 30 fps frame (≈67 ms) does not. A gap g at
- * the peak clips it by at most ½·|θ''|·(g/2)²; with g ≤ 50 ms that is ≤ 0.6° even for a
- * 90° movement repeated every second (|θ''| ≈ 1800°/s²).
+ * The reference is ground truth, so it must be densely sampled across the whole rep:
+ * recorded samples at most REF_MAX_GAP_MS apart (20 fps or faster, no dropped frame at
+ * 30 fps). Any sampled reference can still miss a true extreme by up to ½·|θ''|·(g/2)²
+ * for spacing g; that is ≤ 0.6° at g = 50 ms when |θ''| ≤ 1800°/s² (a 90° movement
+ * repeated every second). This is an assumption on the movement, not checked here.
  */
-export const PEAK_GAP_MS = 50;
-export const PEAK_WINDOW_MS = 100;
+export const REF_MAX_GAP_MS = 50;
 /** Timestamp tolerance for samples landing on a window edge (seconds→ms rounding). */
 const EDGE_EPS_MS = 0.5;
 
@@ -110,16 +111,10 @@ export function compareJoint(session, reference, spec) {
       const idx = [];
       for (let i = 0; i < grid.length; i++) if (grid[i] >= rep.startMs && grid[i] <= rep.endMs) idx.push(i);
       const both = idx.filter(i => a[i] !== null && r[i] !== null);
-      const gapOk = maxSpacing(appSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS
-        && maxSpacing(refSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS;
+      const gapOk = maxSpacing(appSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS + EDGE_EPS_MS
+        && maxSpacing(refSampleT, rep.startMs, rep.endMs) <= REF_MAX_GAP_MS + EDGE_EPS_MS;
       if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || !gapOk) { excluded++; return null; }
-      // Each series' extreme must sit among densely recorded samples.
-      const extremeAt = series => both.reduce((bi, i) => (pick(series[i], series[bi]) === series[i] ? i : bi), both[0]);
-      const ia = extremeAt(a);
-      const ir = extremeAt(r);
-      const denseAt = (ts, t) => maxSpacing(ts, Math.max(rep.startMs, t - PEAK_WINDOW_MS), Math.min(rep.endMs, t + PEAK_WINDOW_MS)) <= PEAK_GAP_MS;
-      if (!denseAt(appSampleT, grid[ia]) || !denseAt(refSampleT, grid[ir])) { excluded++; return null; }
-      return { app: a[ia], ref: r[ir], quality: rep.quality };
+      return { app: pick(...both.map(i => a[i])), ref: pick(...both.map(i => r[i])), quality: rep.quality };
     }).filter(Boolean);
     repLevel = {
       excluded,

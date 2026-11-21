@@ -22,7 +22,8 @@ function detectDelimiter(lines) {
     const counts = [];
     for (const l of sample) {
       const f = splitFields(l, d);
-      if (f.length >= 2 && (parseTimecode(f[0]) !== null || parseNumber(f[0], d === ';') !== null)) counts.push(f.length);
+      // Decimal commas are possible whenever comma is not the delimiter.
+      if (f.length >= 2 && (parseTimecode(f[0]) !== null || parseNumber(f[0], d !== ',') !== null)) counts.push(f.length);
     }
     const freq = new Map();
     for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
@@ -82,7 +83,7 @@ export function parseKinoveaCsv(text, { timeUnit = 'auto' } = {}) {
   // Header = first row whose first cell is not numeric (Kinovea may prepend a title row).
   let h = 0;
   while (h < lines.length && parseNumber(split(lines[h])[0], false) !== null) h++;
-  while (h + 1 < lines.length && split(lines[h + 1])[0] && parseNumber(split(lines[h + 1])[0], delimiter === ';') === null
+  while (h + 1 < lines.length && split(lines[h + 1])[0] && parseNumber(split(lines[h + 1])[0], delimiter !== ',') === null
     && parseTimecode(split(lines[h + 1])[0]) === null) h++;
   if (h >= lines.length) throw new Error('no header row found');
   const header = split(lines[h]);
@@ -102,7 +103,8 @@ export function parseKinoveaCsv(text, { timeUnit = 'auto' } = {}) {
         unit = steps.length && Math.min(...steps) < 1 ? 's' : 'ms';
       }
     }
-    if (unit === 's') times = times.map(t => (t === null ? null : t * 1000));
+    // Microsecond rounding removes seconds→ms float noise (0.05 s → 50, not 50.000000000000004).
+    if (unit === 's') times = times.map(t => (t === null ? null : Math.round(t * 1e6) / 1e3));
   }
   const columns = {};
   header.slice(1).forEach((name, j) => {

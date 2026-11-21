@@ -637,7 +637,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **27 Node test files and 191 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **27 Node test files and 192 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
