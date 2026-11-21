@@ -78,6 +78,7 @@ export class SessionRecorder {
   recordFrame({
     landmarks,
     angles,
+    rawAngles = null,
     timestampMs = performance.now(),
     phase = 'tracking',
     status = 'active',
@@ -101,12 +102,16 @@ export class SessionRecorder {
     }
 
     // Clean angle values
-    const cleanAngles = {};
-    if (angles && typeof angles === 'object') {
-      for (const [k, v] of Object.entries(angles)) {
-        cleanAngles[k] = Number.isFinite(v) ? Math.round(v * 10) / 10 : null;
+    const clean = src => {
+      const out = {};
+      if (src && typeof src === 'object') {
+        for (const [k, v] of Object.entries(src)) out[k] = Number.isFinite(v) ? Math.round(v * 10) / 10 : null;
       }
-    }
+      return out;
+    };
+    const cleanAngles = clean(angles);
+    // Angles from unfiltered landmarks, for zero-phase re-analysis (offline-analysis.mjs).
+    const cleanRaw = rawAngles ? clean(rawAngles) : null;
 
     // Frame times come from the camera's capture clock, which can precede start() slightly.
     const elapsedMs = Math.max(0, Math.round(timestampMs - this.startTimeMs));
@@ -115,6 +120,7 @@ export class SessionRecorder {
       timeMs: elapsedMs,
       landmarks: compactLandmarks,
       angles: cleanAngles,
+      ...(cleanRaw ? { rawAngles: cleanRaw } : {}),
       phase,
       status,
       reps,
