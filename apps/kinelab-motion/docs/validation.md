@@ -40,8 +40,30 @@ what this project has actually measured. It claims no clinical-grade precision.
   monocular video; any future error report must state the recording modality
   beside every number.
 
+## Validation harness (developer CLI)
+
+`bench/validate.mjs` compares an exported session (JSON) with a reference recording:
+
+```bash
+node apps/kinelab-motion/bench/validate.mjs \
+  --session squat-trial1.json --ref squat-trial1_ik.mot \
+  --joint knee_angle_r:rightKnee --joint knee_angle_l:leftKnee \
+  --exercise squat            # optional; defaults to the session's exercise
+  # --source live             # compare recorded live angles instead of offline re-analysis
+  # --lag-ms 0                # fixed clock offset instead of estimation
+```
+
+- Readers: Kinovea "Export to spreadsheet" CSV/TSV (`;` + decimal comma, `,`, tab; time in ms, s or timecode) and OpenSim `.mot`/`.sto` (degrees or radians).
+- Joint spec `refColumn:appKey[:transform]`: `interior` (default for Kinovea angle tool), `flexion` = 180 − x (default for OpenSim `knee_angle_*`, `elbow_flex_*`), `flexion-abs`. OpenSim `hip_flexion` is thigh vs pelvis while the app hip is trunk–thigh: a hip comparison includes pelvic tilt and lumbar flexion.
+- Clocks are aligned by maximising cross-correlation over ±2 s (10 ms grid).
+- Output (JSON): per trial and joint, frame-level agreement (descriptive only: frames are autocorrelated) and rep-level agreement of each rep's extreme angle; rep pairs are pooled across trials. Statistics: bias, SD, 95% LoA with CIs (bias: t·SD/√n; limits: t·√(3SD²/n)), RMSE, MAE, ICC(A,1) with McGraw–Wong CI, Koo & Li label on the CI lower bound, SEM = SD·√(1 − ICC), MDC95 = 1.96·√2·SEM.
+- Checked against pingouin 0.7.0 / scipy 1.18.1 to 1e-9 (`tests/validation.test.mjs`). Pooling several reps per subject violates independence; for subject-level claims report one value per subject or use a repeated-measures model.
+
+Candidate reference data (not yet downloaded or run): OpenCap LabValidation (SimTK; squat, sit-to-stand; 5 video views with marker mocap and OpenSim IK; requires a SimTK login), REHAB24-6 (Zenodo; shoulder abduction, lunge; non-commercial licence), and an in-house set recorded with Kinovea or a goniometer.
+
 ## Next validation steps (in order)
 
+0. Run `bench/validate.mjs` on OpenCap LabValidation squat/sit-to-stand trials (side and 45° views) and publish the rep-level table here with view, model and n.
 1. Confirm RepCount usage terms with SVIP Lab; if cleared, sample a small
    set of squat/sit-to-stand videos, run MediaPipe + this engine offline,
    and report rep-count error (counted vs annotated) per video.
