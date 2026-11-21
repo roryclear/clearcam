@@ -10,19 +10,26 @@
  */
 
 /**
- * Delimiter of the table: the candidate (quote-aware) that splits the most of the first
- * lines into the same number (≥ 2) of fields. A title row or a delimiter inside quotes
- * does not decide it. Ties prefer tab, then semicolon (decimal-comma exports), then comma.
+ * Delimiter of the table, judged on what it produces: the candidate under which the
+ * most of the first lines are data rows (≥ 2 quote-aware fields with a parseable time in
+ * the first). Title rows, quoted delimiters and short rows (missing trailing cells) do
+ * not decide it. Ties go to the more consistent field count, then tab, semicolon, comma.
  */
 function detectDelimiter(lines) {
-  const sample = lines.slice(0, 12);
-  let best = { d: ',', score: -1 };
+  const sample = lines.slice(0, 20);
+  let best = { d: ',', rows: -1, consistency: -1 };
   for (const d of ['\t', ';', ',']) {
-    const counts = sample.map(l => splitFields(l, d).length);
+    const counts = [];
+    for (const l of sample) {
+      const f = splitFields(l, d);
+      if (f.length >= 2 && (parseTimecode(f[0]) !== null || parseNumber(f[0], d === ';') !== null)) counts.push(f.length);
+    }
     const freq = new Map();
-    for (const c of counts) if (c >= 2) freq.set(c, (freq.get(c) ?? 0) + 1);
-    const score = Math.max(0, ...freq.values());
-    if (score > best.score) best = { d, score };
+    for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
+    const consistency = Math.max(0, ...freq.values());
+    if (counts.length > best.rows || (counts.length === best.rows && consistency > best.consistency)) {
+      best = { d, rows: counts.length, consistency };
+    }
   }
   return best.d;
 }
@@ -125,7 +132,8 @@ export function parseOpenSimMot(text) {
     if (j === timeIdx) return;
     columns[n] = rows.map(r => (Number.isFinite(r[j]) ? (inDegrees ? r[j] : (r[j] * 180) / Math.PI) : null));
   });
-  return { timeMs: rows.map(r => r[timeIdx] * 1000), columns, inDegrees };
+  // Microsecond rounding removes seconds→ms float noise (16.002 s → 16002, not 16001.999…).
+  return { timeMs: rows.map(r => Math.round(r[timeIdx] * 1e6) / 1e3), columns, inDegrees };
 }
 
 /** Picks a parser from the file name / content. */

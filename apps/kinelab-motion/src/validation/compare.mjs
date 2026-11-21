@@ -12,6 +12,16 @@ export const MIN_REP_COVERAGE = 0.9;
  * a rep, per series: one dropped 30 fps frame (66 ms) passes, a 100 ms dropout does not.
  */
 export const MAX_REP_GAP_MS = 80;
+/**
+ * Around each series' own extreme (±PEAK_WINDOW_MS) recorded samples must be at most
+ * PEAK_GAP_MS apart: jitter passes, a dropped 30 fps frame (≈67 ms) does not. A gap g at
+ * the peak clips it by at most ½·|θ''|·(g/2)²; with g ≤ 50 ms that is ≤ 0.6° even for a
+ * 90° movement repeated every second (|θ''| ≈ 1800°/s²).
+ */
+export const PEAK_GAP_MS = 50;
+export const PEAK_WINDOW_MS = 100;
+/** Timestamp tolerance for samples landing on a window edge (seconds→ms rounding). */
+const EDGE_EPS_MS = 0.5;
 
 /**
  * Largest interval between consecutive sorted sample times ts that overlaps [t0, t1].
@@ -22,11 +32,11 @@ export function maxSpacing(ts, t0, t1) {
   let prev = null;
   let worst = 0;
   for (const t of ts) {
-    if (t <= t0) { prev = t; continue; }
+    if (t <= t0 + EDGE_EPS_MS) { prev = t; continue; }
     if (prev === null) return Infinity; // starts inside the window
     worst = Math.max(worst, t - prev);
     prev = t;
-    if (t >= t1) return worst;
+    if (t >= t1 - EDGE_EPS_MS) return worst;
   }
   return Infinity; // ends inside the window
 }
@@ -103,7 +113,13 @@ export function compareJoint(session, reference, spec) {
       const gapOk = maxSpacing(appSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS
         && maxSpacing(refSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS;
       if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || !gapOk) { excluded++; return null; }
-      return { app: pick(...both.map(i => a[i])), ref: pick(...both.map(i => r[i])), quality: rep.quality };
+      // Each series' extreme must sit among densely recorded samples.
+      const extremeAt = series => both.reduce((bi, i) => (pick(series[i], series[bi]) === series[i] ? i : bi), both[0]);
+      const ia = extremeAt(a);
+      const ir = extremeAt(r);
+      const denseAt = (ts, t) => maxSpacing(ts, Math.max(rep.startMs, t - PEAK_WINDOW_MS), Math.min(rep.endMs, t + PEAK_WINDOW_MS)) <= PEAK_GAP_MS;
+      if (!denseAt(appSampleT, grid[ia]) || !denseAt(refSampleT, grid[ir])) { excluded++; return null; }
+      return { app: a[ia], ref: r[ir], quality: rep.quality };
     }).filter(Boolean);
     repLevel = {
       excluded,

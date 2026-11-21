@@ -262,3 +262,34 @@ test('review round 5: delimiter from the table, not a title or quoted text; refe
   assert.equal(r.repLevel.excluded, 1);
   assert.equal(r.repLevel.reps.length, 4);
 });
+
+test('review round 6: quoted tabs in rows, short decimal-comma rows, edge rounding, dropout at a peak (PR #16)', async () => {
+  const { maxSpacing } = await import('../src/validation/compare.mjs');
+  const qt = parseKinoveaCsv('Time (ms);Knee;"Note\ttext"\n0;170;"a\tb"\n33;160;"c\td"\n');
+  assert.deepEqual(qt.timeMs, [0, 33]);
+  assert.deepEqual(qt.columns.Knee, [170, 160]);
+  const rows = ['Time (ms);Knee;Hip'];
+  for (let i = 0; i < 5; i++) rows.push(`${i * 33};170,5;90`);
+  for (let i = 5; i < 11; i++) rows.push(`${i * 33};165,5`);
+  const short = parseKinoveaCsv(rows.join('\n'));
+  assert.equal(short.columns.Knee.length, 11);
+  assert.deepEqual(short.columns.Hip.slice(4, 6), [90, null]);
+
+  assert.equal(parseOpenSimMot('x\nendheader\ntime\tk\n16.002\t1\n').timeMs[0], 16002);
+  assert.equal(maxSpacing([0, 33, 66, 99.9999], 0, 100), 33.9999);
+
+  // One missing reference sample (≈67 ms gap) at a rep's peak excludes it; elsewhere it doesn't.
+  const syn = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
+  const spec = { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 };
+  const lines = syn.mot.split('\n');
+  const header = lines.filter(l => !/^-?\d/.test(l));
+  const data = lines.filter(l => /^-?\d/.test(l));
+  const nearest = ms => data.reduce((b, l, i) => (Math.abs(Number(l.split('\t')[0]) * 1000 - ms) < Math.abs(Number(data[b].split('\t')[0]) * 1000 - ms) ? i : b), 0);
+  const drop = i => [...header, ...data.filter((_, k) => k !== i)].join('\n');
+  const peak2 = 1500 + 2400 + 1200; // second rep's bottom
+  const atPeak = compareJoint(syn.session, parseReference(drop(nearest(peak2)), 'ik.mot'), spec);
+  assert.equal(atPeak.repLevel.excluded, 1);
+  const offPeak = compareJoint(syn.session, parseReference(drop(nearest(peak2 - 600)), 'ik.mot'), spec);
+  assert.equal(offPeak.repLevel.excluded, 0);
+  assert.equal(offPeak.repLevel.reps.length, 5);
+});
