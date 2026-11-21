@@ -229,3 +229,12 @@ test('review round 3: a 100 ms reference dropout bridged by resampling still exc
   assert.equal(r40.repLevel.excluded, 0);
   assert.equal(r40.repLevel.reps.length, 5);
 });
+
+test('maxSpacing: gaps crossing a rep boundary count in full (PR #16 review round 4)', async () => {
+  const { maxSpacing } = await import('../src/validation/compare.mjs');
+  assert.equal(maxSpacing([0, 33, 66, 100], 0, 100), 34);
+  assert.equal(maxSpacing([0, 100, 133, 166, 200], 60, 200), 100); // dropout 0–100 overlaps the start
+  assert.equal(maxSpacing([0, 33, 66, 166], 0, 120), 100); // dropout 66–166 overlaps the end
+  assert.equal(maxSpacing([50, 83], 0, 100), 50); // no sample before the window: edge bounds it
+  assert.equal(maxSpacing([], 0, 100), 100);
+});

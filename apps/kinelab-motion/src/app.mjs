@@ -1662,6 +1662,13 @@ function bindSettingsInputs() {
   for (const input of inputs) {
     input.addEventListener('change', save);
   }
+  // Enabling a sensor feature mid-capture starts motion sensing from this user gesture
+  // (iOS grants DeviceMotion only from one); start() is a no-op when already listening.
+  for (const input of [nodes.cfgTrackLevel, nodes.cfgTrackTiltFix]) {
+    input.addEventListener('change', () => {
+      if (input.checked && appState.active) deviceLevel.start();
+    });
+  }
 
   if (nodes.angleDimToggle) {
     nodes.angleDimToggle.addEventListener('click', () => {
