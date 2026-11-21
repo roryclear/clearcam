@@ -69,14 +69,15 @@ This table distinguishes **implemented code** from features that are merely conc
 | --- | --- | --- |
 | One live camera | **Implemented** | Starts a phone or webcam through browser permission |
 | Front/rear camera choice | **Implemented** | Prefers the selected facing mode when supported; Flip restarts capture |
-| Heavy / Full / Lite MediaPipe models | **Implemented** | Heavy is preferred; initialization and the live auto-fallback step down Heavy → Full → Lite |
+| Heavy / Full / Lite MediaPipe models | **Implemented** | **Auto** (default) starts phones on Full (about 2× faster) and desktops on Heavy; initialization and the live auto-fallback step down Heavy → Full → Lite |
 | 33-point body pose | **Implemented** | Uses Google's Pose Landmarker; visual overlay uses a subset of connections/points |
 | Skeleton, joints, labels and arcs | **Implemented** | Real-time canvas graphics over the live preview |
 | Motion trails / direction arrows | **Implemented** | Optional overlays for wrist/ankle movement |
 | Eight joint-angle values | **Implemented** | Left/right knees, hips, elbows, shoulders. **Auto** (default) uses precise 2D image angles side-on and 3D world angles when the body turns oblique; **3D** and **2D** can be forced. The more visible leg is used instead of averaging both. |
 | Segment biomechanics & alignment | **Implemented** | Shank (tibial) angle and Trunk (spine) inclination relative to vertical gravity; parallel alignment evaluation |
 | Kinematic bone-length invariance filter | **Implemented** | Physics-informed constraint model that eliminates 3D depth jitter and limb elasticity along direction rays |
-| Decoupled 60/120 FPS pose interpolation | **Implemented** | Native display rate LERP follower decoupling 30 FPS inference from canvas rendering for liquid smooth motion |
+| Decoupled 60/120 FPS pose interpolation | **Implemented** | Native display rate LERP follower decoupling 30 FPS inference from canvas rendering for liquid smooth motion. **Predictive overlay** (default on) extrapolates the drawn skeleton up to 40 ms; display only |
+| Per-frame inference scheduling | **Implemented** | Inference runs once per camera frame via `requestVideoFrameCallback` (Chrome 83, Safari 15.4, Firefox 132), with rAF polling as fallback; pipeline timestamps use the frame's capture time |
 | Tracking confidence states | **Implemented** | Shows good, partial or lost tracking; unavailable angles appear as `—` |
 | Per-rep metrics & quality gate | **Implemented** | Live log: last rep's ROM, phase tempo and reliability, plus running average ROM ± CV, tempo and cadence. Results card: session aggregates (average ROM ± CV, average tempo, within-set cadence, reliable/total). Reps CSV: every rep's start/extreme angle, ROM, phase durations, extreme confidence and quality. Reps below the confidence gate, or whose start was not observed, are flagged and left out of averages and peak depth. |
 | One Euro filtering / outlier rejection | **Implemented** | Smooths 2D landmarks and, separately, 3D world landmarks (lower depth cutoff); presets tuned on `bench/accuracy-bench.mjs`. See [docs/accuracy-speed-research.md](docs/accuracy-speed-research.md) |
@@ -90,7 +91,7 @@ This table distinguishes **implemented code** from features that are merely conc
 | Replay and graphs | **Implemented** | Scrub, step, play at 0.5×/1×/2×, inspect angle vs time |
 | Session comparison / ghost pose | **Implemented, basic** | Frame-index comparison and a selected frozen reference skeleton |
 | CSV / JSON export and deletion | **Implemented** | Download measurements; remove saved browser sessions |
-| Performance metrics | **Implemented, partial caveats** | Inference/render FPS and latency displayed; see limitations |
+| Performance metrics | **Implemented, partial caveats** | Inference/render FPS, model-call latency, **E2E** camera→overlay latency (p50; hover for p95 and camera→landmarks) and camera frames missed. E2E excludes sensor exposure and display scan-out; see limitations. `?input=direct` skips the 2D-canvas downscale for A/B tests |
 | Dual video & telemetry recording | **Implemented** | HTML5 MediaRecorder captures video stream saved to IndexedDB; timeline player synchronizes video and skeletal canvas replay |
 | Multiple cameras / calibrated 3D | **Not in scope** | There is no synchronized multiview reconstruction |
 | Automated clinical “correct form” decision | **Not implemented or validated** | Feedback is based on simple geometry and movement-state rules |
@@ -171,7 +172,7 @@ The app uses a dark, motion-focused interface. Its main screen has a large **Liv
 - **Empty state:** Setup instructions shown when the camera is not active.
 - **Status chip:** OFFLINE/LIVE and tracking feedback.
 - **Tracking HUD:** STANDBY, TRACKING, PARTIAL, or NO POSE depending on recognized landmark coverage.
-- **Performance HUD:** Inference FPS, active model, last inference latency, render FPS, and a dropped-frame counter.
+- **Performance HUD:** Inference FPS, active model, last model-call latency, E2E camera→overlay latency (p50), render FPS, and camera frames the page missed.
 - **Overlay legend:** Reminds the user that the interface works with 33 body landmarks, smoothing, and 2D angles.
 
 ### Capture buttons
@@ -267,7 +268,7 @@ The camera request uses `audio: false`, requests roughly 30 FPS as an ideal inpu
 
 | Setting | Available options | Default | Meaning |
 | --- | --- | --- | --- |
-| **MediaPipe Model** | Heavy; Full; Lite | **Heavy** | Prefer model accuracy or lighter processing |
+| **MediaPipe Model** | Auto; Heavy; Full; Lite | **Auto** | Auto = Full on phones/tablets, Heavy on desktop; or force a model |
 | **Adaptive Performance Fallback** | On; Off | **On** | Watch high latency or low inference FPS |
 | **Temporal Smoothing (1€ filter)** | Off; Low; Medium; High | **Medium** | Reduce landmark movement jitter |
 | **Confidence Threshold** | 0.45 Lenient; 0.55 Standard; 0.65 Strict | **0.55** | Minimum confidence required for usable landmarks/angles |
@@ -350,8 +351,10 @@ The app reports absolute left/right angle differences for available paired joint
 - **Camera FPS:** Frames the device actually captures and sends to the video element.
 - **Inference FPS:** Frames the AI tracker analyzes each second.
 - **Render FPS:** Frequency at which the UI render loop executes, not necessarily how frequently a new pose is estimated.
-- **Latency (ms):** Time used by a measured inference pass.
-- **Dropped frames:** A counter has a display and monitoring method, but the present live loop does not visibly invoke `recordDroppedFrame()` for skipped frames. Do not interpret a zero as proof of no dropped camera frames.
+- **Latency (ms):** Time used by one model call (`detectForVideo`).
+- **E2E (ms):** Median time from the frame's camera capture clock (`requestVideoFrameCallback` `captureTime`, else `presentationTime`) to the overlay being drawn. Hover for p95 and camera→landmarks. It excludes sensor exposure and display scan-out (tens of ms on phones); verify a device once with 240 fps slow-motion video of the screen. Without `requestVideoFrameCallback` the clock is the callback time and under-reports.
+- **Dropped frames:** Camera frames the page never received, from gaps in `presentedFrames`. Frames skipped on purpose by the ~35 FPS inference cap are not counted. Always 0 without `requestVideoFrameCallback`.
+- **A/B input path:** `?input=direct` feeds the `<video>` straight to MediaPipe instead of the adaptive 2D-canvas downscale; compare E2E and FPS on the same device.
 
 ---
 
@@ -623,7 +626,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **23 Node test files and 139 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **24 Node test files and 149 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 

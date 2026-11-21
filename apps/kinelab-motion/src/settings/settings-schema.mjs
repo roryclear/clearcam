@@ -2,7 +2,7 @@
  * Settings schema, validation rules, and default preferences.
  */
 
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 4;
 export const STORAGE_KEY = 'kinelab_motion_settings_v2';
 
 function deepFreeze(obj) {
@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS = deepFreeze({
     resolution: '720p', // '480p' | '720p' | '1080p'
   },
   tracking: {
-    model: 'heavy', // 'heavy' | 'full' | 'lite'
+    model: 'auto', // 'auto' (Full on phones, Heavy on desktop) | 'heavy' | 'full' | 'lite'
     autoFallback: true,
     smoothing: 'medium', // 'off' | 'low' | 'medium' | 'high'
     confidenceThreshold: 0.55,
@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS = deepFreeze({
     showDirection: false,
     showSymmetryHUD: true,
     showGhost: false,
+    predictiveOverlay: true, // extrapolate the drawn skeleton to hide inference lag (display only)
   },
   exercise: {
     activeExercise: 'squat', // 'squat' | 'sit_to_stand' | 'lunge' | 'shoulder_abduction' | 'shoulder_flexion' | 'single_leg_balance' | 'free'
@@ -75,9 +76,13 @@ export function validateSettings(raw) {
   };
 
   const tracking = {
-    model: ['heavy', 'full', 'lite'].includes(raw.tracking?.model)
-      ? raw.tracking.model
-      : DEFAULT_SETTINGS.tracking.model,
+    // Before v4 every user had 'heavy' stored as the default; move them to 'auto' so
+    // phones start on Full. Explicit Full/Lite choices are kept.
+    model: (raw.version ?? 0) < 4 && raw.tracking?.model === 'heavy'
+      ? 'auto'
+      : ['auto', 'heavy', 'full', 'lite'].includes(raw.tracking?.model)
+        ? raw.tracking.model
+        : DEFAULT_SETTINGS.tracking.model,
     autoFallback: Boolean(raw.tracking?.autoFallback ?? DEFAULT_SETTINGS.tracking.autoFallback),
     smoothing: ['off', 'low', 'medium', 'high'].includes(raw.tracking?.smoothing)
       ? raw.tracking.smoothing
@@ -105,6 +110,7 @@ export function validateSettings(raw) {
     showDirection: Boolean(raw.overlays?.showDirection ?? DEFAULT_SETTINGS.overlays.showDirection),
     showSymmetryHUD: Boolean(raw.overlays?.showSymmetryHUD ?? DEFAULT_SETTINGS.overlays.showSymmetryHUD),
     showGhost: Boolean(raw.overlays?.showGhost ?? DEFAULT_SETTINGS.overlays.showGhost),
+    predictiveOverlay: Boolean(raw.overlays?.predictiveOverlay ?? DEFAULT_SETTINGS.overlays.predictiveOverlay),
   };
 
   const validExercises = ['squat', 'sit_to_stand', 'lunge', 'shoulder_abduction', 'shoulder_flexion', 'single_leg_balance', 'free'];

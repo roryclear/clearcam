@@ -24,7 +24,7 @@ class MockStorage {
 test('validateSettings returns defaults on null or corrupt input', () => {
   const result = validateSettings(null);
   assert.equal(result.version, DEFAULT_SETTINGS.version);
-  assert.equal(result.tracking.model, 'heavy');
+  assert.equal(result.tracking.model, 'auto');
   assert.equal(result.exercise.activeExercise, 'squat');
 
   const corrupt = { camera: { facingMode: 'alien-dimension' }, tracking: { confidenceThreshold: -99 } };

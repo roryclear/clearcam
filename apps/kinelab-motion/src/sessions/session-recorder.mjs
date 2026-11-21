@@ -108,7 +108,8 @@ export class SessionRecorder {
       }
     }
 
-    const elapsedMs = Math.round(timestampMs - this.startTimeMs);
+    // Frame times come from the camera's capture clock, which can precede start() slightly.
+    const elapsedMs = Math.max(0, Math.round(timestampMs - this.startTimeMs));
 
     this.frames.push({
       timeMs: elapsedMs,

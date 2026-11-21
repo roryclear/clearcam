@@ -64,7 +64,7 @@ Smoothing-lag effect on reported squat depth, measured separately (`medium` pres
 | 8 | **Sit-to-stand power / velocity** (hip vertical velocity × body mass). | Medium: proposed as a strength proxy [Hwang 2026 PMC12834695] | S | Hip-height cue from change #5 already gives normalized vertical displacement. |
 | 9 | **Experimental RTMPose/RTMW backend** (ONNX Runtime Web, WebGPU) behind a flag. | Possibly better 2D keypoints and foot points; no world landmarks | L | Keep MediaPipe for 3D; benchmark both on #5 data before switching. |
 | 10 | **Optional second phone (stereo).** | Large 3D gain (56 → 30 mm) [Dill 2024] | L | Needs sync + calibration UX. |
-| 11 | **Speed:** `requestVideoFrameCallback` scheduling; WebGPU delegate when it ships for Tasks; Worker inference on non-iOS. | Medium | M | Measure on real phones first; headless CPU numbers here are not representative. |
+| 11 | ✅ **Partly done** (see §6): `requestVideoFrameCallback` scheduling, capture-clock E2E latency, predictive overlay, Auto model. MediaPipe has no WebGPU delegate for vision tasks and none is planned ([#5826](https://github.com/google-ai-edge/mediapipe/issues/5826)), so that part is dropped. Worker inference is still open; the iOS exclusion is outdated (MediaPipe uses OffscreenCanvas WebGL on Safari ≥17, [#5292](https://github.com/google-ai-edge/mediapipe/issues/5292)). | Medium | M | Measure on real phones first; headless CPU numbers here are not representative. |
 
 ## 5. Reproduce
 
@@ -73,3 +73,41 @@ node bench/accuracy-bench.mjs           # table of all candidate pipelines
 node bench/accuracy-bench.mjs --json    # machine-readable
 node --test tests/*.test.mjs            # includes the benchmark regression gate
 ```
+
+## 6. Research round 2 (Nov 2026): resources for accuracy, speed and latency
+
+Four parallel literature/tool searches (Firecrawl). Evidence numbers are from the cited sources; "unverified" items were not confirmed on a primary page.
+
+### 6.1 Implemented in this change
+
+| Change | Evidence | Files |
+|---|---|---|
+| Inference scheduled per camera frame with `requestVideoFrameCallback`; rAF polling fallback | Fires once per new frame; removes rAF polling offset (≈0–16 ms, estimate) and gives exact frame times ([web.dev](https://web.dev/articles/requestvideoframecallback-rvfc)) | `app.mjs` `onVideoFrame`/`processFrame`, `tracking/frame-clock.mjs` |
+| Pipeline time = frame `captureTime` (fallback `presentationTime`, then callback time), strictly increasing | Naive emit-time stamping under-reports latency by 20–50 ms ([arXiv 2608.11566](https://arxiv.org/abs/2608.11566)) | `tracking/frame-clock.mjs` |
+| E2E latency in the HUD: camera→landmarks and camera→overlay p50/p95; frames the page never saw (`presentedFrames` gaps) | Same; excludes exposure and scan-out (Android preview alone is 57–106 ms glass-to-glass, [inovex](https://www.inovex.de/de/blog/the-glass-to-glass-latency-on-android/)) | `tracking/performance-monitor.mjs`, `index.html` |
+| Predictive overlay: chase the target extrapolated at its velocity, ≤40 ms past capture, offset ≤0.05; display only | The λ=32 chase trails by ~1/λ = 31 ms plus frame age and inference. Synthetic 0.5 Hz squat, 25 ms inference: overlay RMS error 22 → 5 (×10⁻³ image units); constant speed lag 66 → 10 ms. Prediction degrades past ~20–50 ms ([DAQRI](https://medium.com/@DAQRI/motion-to-photon-latency-in-mobile-ar-and-vr-99f82c480926)) | `filters/pose-interpolator.mjs`, setting `overlays.predictiveOverlay` |
+| Model setting **Auto** (default, settings v4): Full on phones, Heavy on desktop; stored v≤3 `heavy` default migrates to Auto | Heavy ≈2× slower than Full (BlazePose MediaPipe runtime: Pixel 5 32/22 FPS lite/full; MacBook Pro 2019 92/81/38) ([tfjs-models](https://github.com/tensorflow/tfjs-models/blob/master/pose-detection/src/blazepose_mediapipe/README.md)) | `tracking/device-profile.mjs`, `settings/settings-schema.mjs` |
+| `?input=direct` A/B switch: feed `<video>` straight to the GPU delegate | The video→canvas copy cost ~7 ms in a TF.js case ([tfjs#5948](https://github.com/tensorflow/tfjs/issues/5948)); unverified for MediaPipe, so measure with the E2E figure before changing the default | `app.mjs` |
+
+Headless Chrome (software GL) check: capture clock is reported for getUserMedia frames; fallback path reports `callback`. Headless numbers (400–1400 ms) only show the plumbing works; measure on real phones.
+
+### 6.2 Next, ranked by value per effort
+
+| # | Addition | Evidence | Effort |
+|---|---|---|---|
+| 1 | Offline zero-phase pipeline for recorded sessions and rep metrics: Hampel outlier rejection → gap fill ≤~300 ms → Butterworth `filtfilt` 4–6 Hz or Savitzky–Golay | Fit3D: One Euro raised PA-MPJPE slightly, SG lowered it 66.7 → 62.1 mm; median 66.7 → 60.4 mm ([arXiv 2611.02929](https://arxiv.org/abs/2611.02929)); Sports2D/OpenCap use 4–6 Hz Butterworth ([Sports2D](https://github.com/davidpagnon/Sports2D), [arXiv 2603.24733](https://arxiv.org/abs/2603.24733)) | S |
+| 2 | Camera setup UX (hip height, 2–3 m, never front-oblique) + gravity roll correction (`DeviceOrientationEvent`) for trunk/shank angles | 3 m / 0.8 m: hip MAE 1.9°, knee 2.4° ([PMC10886083](https://pmc.ncbi.nlm.nih.gov/articles/PMC10886083/)); front-oblique 23.8° vs 14–15° ([PMC11819822](https://pmc.ncbi.nlm.nih.gov/articles/PMC11819822/)) | S |
+| 3 | Clinical conventions (knee flexion = 180 − interior; hip labelled trunk–thigh) and occlusion-aware angle uncertainty (near/far side, yaw, visibility) | ISB ([PMID 11934426](https://pubmed.ncbi.nlm.nih.gov/11934426/)); far-side error spread +69% knee, +108% hip ([PMC10635560](https://pmc.ncbi.nlm.nih.gov/articles/PMC10635560/)) | S |
+| 4 | Real-data validation harness (roadmap #5): OpenCap LabValidation (squat, STS; 5 views; mocap/OpenSim GT; OpenCap Monocular 4.8° MAE baseline), REHAB24-6 (shoulder abduction, lunge; non-commercial), Kinovea CSV + Pose2Sim rig for in-house n ≥ 30; JS ICC/Bland–Altman checked against pingouin | [SimTK](https://simtk.org/frs/?group_id=2385), [REHAB24-6](https://zenodo.org/records/13305826), [Pose2Sim](https://github.com/perfanalytics/pose2sim), [pingouin](https://pingouin-stats.org/generated/pingouin.intraclass_corr.html); thresholds [Koo & Li 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4913118/), COSMIN | M |
+| 5 | Real-phone speed matrix: BrowserStack camera video injection + Chrome fake camera in CI, logging the new E2E p50/p95 | [BrowserStack](https://www.browserstack.com/docs/automate/selenium/camera-injection) | M |
+| 6 | Replace `KinematicBoneFilter` (fixes length, not direction) with 2D-ray + bone-ratio fusion | BlazePose angle error 12.3° → 10.6°, bone-length variance −94% ([arXiv 2512.06783](https://arxiv.org/abs/2512.06783)) | M |
+| 7 | MotionAGFormer-XS 2D→3D lifter on BlazePose 2D, offline first | Most accurate method in an exercise study: 2D knee MAE 8.5° ([Rode 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12589393/)); 2.2M params, Apache-2.0 ([repo](https://github.com/TaatiTeam/MotionAGFormer)); ONNX export unverified | M |
+| 8 | Worker inference (MediaStreamTrackProcessor on Chrome/Safari 18, ImageBitmap/VideoFrame on Firefox) | Frees the main thread; gain unproven | M–L |
+| 9 | Angle-dependent linear bias correction, fitted per camera setup after #4 | MoveNet side view: RMSE 11.6 → 4.0° hip, 10.9 → 3.9° knee ([PMC13347614](https://pmc.ncbi.nlm.nih.gov/articles/PMC13347614/)) | S after #4 |
+
+Later: RTMPose-m Halpe26 via ONNX Runtime Web behind a flag (small 2D gain, foot points; checkpoint licence [mmpose#3275](https://github.com/open-mmlab/mmpose/issues/3275) open); stereo + OpenCap marker enhancer (4.34° RMSE).
+
+Skip: MediaPipe WebGPU delegate (not planned), WebNN (not shipped by default anywhere), int8 pose models (only float16 hosted), YOLO-pose (AGPL; worst lifter input), Sapiens / VideoPose3D / SmoothNet (non-commercial), ViTPose live (too heavy for phones), LiteRT.js / ORT WebGPU backends for speed (no proven browser pose speedup).
+
+Open questions: `captureTime` coverage on Safari/Firefox; 60 fps front camera on iOS Safari; whether the 7 ms canvas-copy saving applies to MediaPipe.
+
