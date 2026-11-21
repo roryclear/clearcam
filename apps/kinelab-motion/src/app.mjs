@@ -276,16 +276,17 @@ for (const def of ANGLE_DEFINITIONS) {
 }
 
 /**
- * Applies the angle display convention: row labels, the open results card's peak and a
- * paused replay frame are reformatted now; live values follow on the next frame.
+ * Applies the angle display convention: row labels and the open results card's peak are
+ * reformatted now. A paused replay re-emits its current frame, so the replay canvas and
+ * telemetry redraw together from the selected recording; live values and a running
+ * replay follow on their next frame.
  */
 function applyAngleConvention(convention) {
   setAngleConvention(convention);
   for (const def of ANGLE_DEFINITIONS) angleRowLabels.get(def.key).textContent = angleLabel(def);
   const peak = appState.resultsPeak;
   if (peak && nodes.resPeakAngle) nodes.resPeakAngle.textContent = peak.deg !== null ? formatAngle(peak.joint, peak.deg) : '—';
-  const frame = appState.lastReplayFrame;
-  if (frame && !appState.active) renderReplayTelemetry(frame);
+  if (player.session && !player.isPlaying) player.seek(player.currentFrameIdx);
 }
 
 /** Recorded [x, y, z, conf] landmarks → objects the reliability checks read. */
@@ -1156,7 +1157,6 @@ function resetReplayView(title) {
     nodes.resDuration.textContent = '--:--';
     nodes.resPeakAngle.textContent = '--°';
     appState.resultsPeak = null;
-    appState.lastReplayFrame = null;
     nodes.resSymmetry.textContent = '--';
     nodes.resTimestamp.textContent = 'No session selected';
     if (nodes.resAvgRom) {
@@ -1333,7 +1333,6 @@ player.subscribe((frame, isPlaying) => {
       showGhost: cfg.overlays.showGhost,
       mirrored: false,
     });
-    appState.lastReplayFrame = frame;
     renderReplayTelemetry(frame);
   }
 
