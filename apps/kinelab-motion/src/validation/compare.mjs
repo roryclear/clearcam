@@ -7,8 +7,24 @@
 
 /** Share of a rep's grid points where both series must exist for a rep-level pair. */
 export const MIN_REP_COVERAGE = 0.9;
-/** Longest stretch inside a rep where either series may be missing. */
-export const MAX_REP_GAP_MS = 50;
+/**
+ * Longest interval between recorded samples (before any interpolation) allowed inside
+ * a rep, per series: one dropped 30 fps frame (66 ms) passes, a 100 ms dropout does not.
+ */
+export const MAX_REP_GAP_MS = 80;
+
+/** Largest spacing of the sorted sample times ts across [t0, t1], edges included. */
+function maxSpacing(ts, t0, t1) {
+  let prev = t0;
+  let worst = 0;
+  for (const t of ts) {
+    if (t < t0) continue;
+    if (t > t1) break;
+    worst = Math.max(worst, t - prev);
+    prev = t;
+  }
+  return Math.max(worst, t1 - prev);
+}
 import { agreement } from './agreement.mjs';
 import { estimateLag, resample } from './align.mjs';
 import { offlineSessionFrames } from '../sessions/offline-analysis.mjs';
@@ -38,6 +54,12 @@ export function compareJoint(session, reference, spec) {
   const refT = reference.timeMs;
 
   const frames = appSource === 'offline' ? offlineSessionFrames(session.frames).frames : session.frames;
+  // Times of samples the app actually measured (offline re-analysis fills short gaps,
+  // so coverage is judged on the series it smoothed).
+  const usesRaw = appSource === 'offline' && session.frames.some(f => f?.rawAngles && Object.keys(f.rawAngles).length);
+  const appSampleT = session.frames
+    .filter(f => Number.isFinite((usesRaw ? f.rawAngles : f.angles)?.[appKey]))
+    .map(f => f.timeMs);
   const appT = frames.map(f => f.timeMs);
   const appX = frames.map(f => (Number.isFinite(f.angles?.[appKey]) ? f.angles[appKey] : null));
   if (appX.filter(v => v !== null).length < 10) throw new Error(`app series ${appKey} has too few values`);
@@ -63,20 +85,19 @@ export function compareJoint(session, reference, spec) {
   if (profile && appKey.toLowerCase().endsWith(profile.joint.toLowerCase())) {
     reps = analyzeReps(frames, exerciseId);
     const pick = profile.direction === 'min' ? Math.min : Math.max;
-    // Extremes come from the same paired samples. A rep is scored only if both series
-    // cover the window with no stretch over MAX_REP_GAP_MS missing, so neither series'
-    // own peak (which for bilateral profiles need not coincide with rep.extremeMs) can
-    // fall in a gap; partially recorded reps are excluded, not scored.
+    // Extremes come from the same paired samples. A rep is scored only if both series'
+    // recorded samples (not interpolated values) span the window with no interval over
+    // MAX_REP_GAP_MS, so neither series' own peak (which for bilateral profiles need not
+    // coincide with rep.extremeMs) can fall in a dropout; such reps are excluded.
     let excluded = 0;
-    const maxGap = Math.max(1, Math.round(MAX_REP_GAP_MS / gridMs));
+    const refSampleT = refTShifted.filter((_, i) => refX[i] !== null && Number.isFinite(refX[i])).sort((p, q) => p - q);
     const pairs = reps.map(rep => {
       const idx = [];
       for (let i = 0; i < grid.length; i++) if (grid[i] >= rep.startMs && grid[i] <= rep.endMs) idx.push(i);
       const both = idx.filter(i => a[i] !== null && r[i] !== null);
-      let run = 0;
-      let longest = 0;
-      for (const i of idx) { run = a[i] !== null && r[i] !== null ? 0 : run + 1; longest = Math.max(longest, run); }
-      if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || longest > maxGap) { excluded++; return null; }
+      const gapOk = maxSpacing(appSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS
+        && maxSpacing(refSampleT, rep.startMs, rep.endMs) <= MAX_REP_GAP_MS;
+      if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || !gapOk) { excluded++; return null; }
       return { app: pick(...both.map(i => a[i])), ref: pick(...both.map(i => r[i])), quality: rep.quality };
     }).filter(Boolean);
     repLevel = {

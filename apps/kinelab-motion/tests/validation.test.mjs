@@ -213,3 +213,19 @@ test('review round 2: CLI operands, OpenSim default transforms, quoted CSV, alig
   assert.equal(r2.repLevel.excluded, 1);
   assert.equal(r2.repLevel.reps.length, 4);
 });
+
+test('review round 3: a 100 ms reference dropout bridged by resampling still excludes the rep (PR #16)', () => {
+  const syn = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
+  const keep = maxMs => syn.mot.split('\n').filter(l => {
+    if (!/^-?\d/.test(l)) return true;
+    const ms = Number(l.split('\t')[0]) * 1000;
+    return !(ms > 1500 + 3 * 2400 + 500 && ms < 1500 + 3 * 2400 + 500 + maxMs); // rep 4
+  }).join('\n');
+  const spec = { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 };
+  const r100 = compareJoint(syn.session, parseReference(keep(100), 'ik.mot'), spec);
+  assert.equal(r100.repLevel.excluded, 1);
+  // One missing 30 fps sample (≈67 ms interval) keeps the rep eligible.
+  const r40 = compareJoint(syn.session, parseReference(keep(40), 'ik.mot'), spec);
+  assert.equal(r40.repLevel.excluded, 0);
+  assert.equal(r40.repLevel.reps.length, 5);
+});

@@ -277,16 +277,16 @@ for (const def of ANGLE_DEFINITIONS) {
 
 /**
  * Applies the angle display convention: row labels and the open results card's peak are
- * reformatted now. A paused replay re-emits its current frame, so the replay canvas and
- * telemetry redraw together from the selected recording; live values and a running
- * replay follow on their next frame.
+ * reformatted now. A paused replay re-emits its current frame (without seeking, so the
+ * video position is kept), so the replay canvas and telemetry redraw together from the
+ * selected recording; live values and a running replay follow on their next frame.
  */
 function applyAngleConvention(convention) {
   setAngleConvention(convention);
   for (const def of ANGLE_DEFINITIONS) angleRowLabels.get(def.key).textContent = angleLabel(def);
   const peak = appState.resultsPeak;
   if (peak && nodes.resPeakAngle) nodes.resPeakAngle.textContent = peak.deg !== null ? formatAngle(peak.joint, peak.deg) : '—';
-  if (player.session && !player.isPlaying) player.seek(player.currentFrameIdx);
+  if (player.session && !player.isPlaying) player.notify();
 }
 
 /** Recorded [x, y, z, conf] landmarks → objects the reliability checks read. */
