@@ -80,6 +80,7 @@
               <span id="inference-fps">--</span> FPS <span class="hud-sep">/</span>
               <span id="model-name">HEAVY</span> <span class="hud-sep">·</span>
               <span id="latency-display">--ms</span> <span class="hud-sep">·</span>
+              <span id="e2e-latency" title="Camera → overlay latency (p50)">--ms</span> E2E <span class="hud-sep">·</span>
               <span id="render-fps">--</span> RENDER <span class="hud-sep">·</span>
               <span id="dropped-frames">0</span> DROPPED
             </div>
@@ -119,6 +120,7 @@
             <label class="input-field">
               <span>TRACKER MODEL</span>
               <select id="model-choice">
+                <option value="auto">Auto · Full on phones, Heavy on desktop</option>
                 <option value="heavy">High accuracy · Heavy</option>
                 <option value="full">Faster · Full</option>
                 <option value="lite">Fastest · Lite</option>
@@ -403,9 +405,10 @@
               <label class="setting-row">
                 <div class="setting-info">
                   <span class="setting-name">MediaPipe Model</span>
-                  <span class="setting-desc">Heavy prefers high accuracy, Full is lightweight</span>
+                  <span class="setting-desc">Auto starts phones on Full (about 2× faster than Heavy) and desktops on Heavy</span>
                 </div>
                 <select id="cfg-track-model">
+                  <option value="auto">Auto (Full on phones, Heavy on desktop)</option>
                   <option value="heavy">Heavy (High precision)</option>
                   <option value="full">Full (Performance)</option>
                   <option value="lite">Lite (Low-end devices)</option>
@@ -498,6 +501,14 @@
                   <span class="setting-desc">Show velocity trails on wrists and ankles</span>
                 </div>
                 <input type="checkbox" id="cfg-overlay-trails" />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Predictive Overlay</span>
+                  <span class="setting-desc">Extrapolates the drawn skeleton up to 40 ms to hide inference lag. Display only; angles and reps use measured landmarks.</span>
+                </div>
+                <input type="checkbox" id="cfg-overlay-predict" />
               </label>
 
               <label class="setting-row">

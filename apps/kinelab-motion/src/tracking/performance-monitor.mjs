@@ -26,6 +26,31 @@ export class PerformanceMonitor {
     this.droppedFrames = 0;
     this.lastLatencyMs = 0;
     this.avgLatencyMs = 0;
+
+    // End-to-end latency from the frame's capture clock (see frame-clock.mjs).
+    this.maxPipelineSamples = 120;
+    this.pipeline = { landmarks: [], overlay: [] };
+    this.pipelineClock = { landmarks: null, overlay: null };
+    this.latencyClock = null;
+  }
+
+  /**
+   * Records an end-to-end latency sample.
+   * @param {'landmarks'|'overlay'} stage capture→landmarks or capture→overlay drawn
+   * @param {number} ms
+   * @param {string} [clock] which frame clock the sample is measured from
+   */
+  recordPipelineLatency(stage, ms, clock) {
+    if (!this.pipeline[stage] || !Number.isFinite(ms) || ms < 0) return;
+    // Samples from different frame clocks aren't comparable: a clock change starts a new history.
+    if (clock && clock !== this.pipelineClock[stage]) {
+      this.pipeline[stage] = [];
+      this.pipelineClock[stage] = clock;
+    }
+    const buf = this.pipeline[stage];
+    buf.push(ms);
+    if (buf.length > this.maxPipelineSamples) buf.shift();
+    if (stage === 'landmarks') this.latencyClock = this.pipelineClock.landmarks;
   }
 
   /**
@@ -77,8 +102,8 @@ export class PerformanceMonitor {
     }
   }
 
-  recordDroppedFrame() {
-    this.droppedFrames++;
+  recordDroppedFrame(count = 1) {
+    if (Number.isFinite(count) && count > 0) this.droppedFrames += count;
   }
 
   getMetrics() {
@@ -90,6 +115,12 @@ export class PerformanceMonitor {
       latencySamples: this.inferenceTimes.length,
       latencyWindow: this.maxLatencySamples,
       droppedFrames: this.droppedFrames,
+      captureToLandmarksP50: percentile(this.pipeline.landmarks, 50),
+      captureToLandmarksP95: percentile(this.pipeline.landmarks, 95),
+      captureToOverlayP50: percentile(this.pipeline.overlay, 50),
+      captureToOverlayP95: percentile(this.pipeline.overlay, 95),
+      latencyClock: this.latencyClock,
+      overlayLatencyClock: this.pipelineClock.overlay,
     };
   }
 
@@ -104,6 +135,8 @@ export class PerformanceMonitor {
     this.currentInferenceFps = 0;
     this.lastLatencyMs = 0;
     this.avgLatencyMs = 0;
+    this.pipeline = { landmarks: [], overlay: [] };
+    this.pipelineClock = { landmarks: null, overlay: null };
   }
 
   reset() {
@@ -117,5 +150,16 @@ export class PerformanceMonitor {
     this.droppedFrames = 0;
     this.lastLatencyMs = 0;
     this.avgLatencyMs = 0;
+    this.pipeline = { landmarks: [], overlay: [] };
+    this.pipelineClock = { landmarks: null, overlay: null };
+    this.latencyClock = null;
   }
+}
+
+/** Nearest-rank percentile, rounded to 0.1 ms; null when there are no samples. */
+export function percentile(samples, p) {
+  if (!samples?.length) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return Math.round(sorted[idx] * 10) / 10;
 }

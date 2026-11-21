@@ -25,6 +25,8 @@ import { PoseFilter } from './filters/pose-filter.mjs';
 import { KinematicBoneFilter } from './filters/kinematic-filter.mjs';
 import { PoseInterpolator } from './filters/pose-interpolator.mjs';
 import { PerformanceMonitor } from './tracking/performance-monitor.mjs';
+import { supportsVideoFrameCallback, selectFrameTime, missedFrames, FrameSampler } from './tracking/frame-clock.mjs';
+import { isLikelyMobile, resolveModelChoice, modelPreferenceAfterFallback } from './tracking/device-profile.mjs';
 import { AdaptiveController } from './tracking/adaptive-controller.mjs';
 import { MediaPipeRunner } from './tracking/mediapipe-runner.mjs';
 import { OverlayRenderer } from './overlays/overlay-renderer.mjs';
@@ -67,6 +69,7 @@ const nodes = {
   latencyDisplay: el('latency-display'),
   renderFps: el('render-fps'),
   droppedFrames: el('dropped-frames'),
+  e2eLatency: el('e2e-latency'),
 
   // Quick Controls
   analysisMode: el('analysis-mode'),
@@ -113,6 +116,7 @@ const nodes = {
   cfgOverlayLabels: el('cfg-overlay-labels'),
   cfgOverlayArcs: el('cfg-overlay-arcs'),
   cfgOverlayTrails: el('cfg-overlay-trails'),
+  cfgOverlayPredict: el('cfg-overlay-predict'),
   cfgOverlayDirection: el('cfg-overlay-direction'),
   cfgOverlaySymHud: el('cfg-overlay-symhud'),
   cfgOverlayGhost: el('cfg-overlay-ghost'),
@@ -175,6 +179,12 @@ const interpolator = new PoseInterpolator({ lambda: 32.0 });
 const perf = new PerformanceMonitor();
 const adaptive = new AdaptiveController();
 const runner = new MediaPipeRunner();
+// A/B switch for the inference input: ?input=direct feeds the <video> straight to the GPU
+// delegate (no 2D-canvas downscale); compare the E2E figure in the HUD against the default.
+{
+  const inputPreset = new URLSearchParams(globalThis.location?.search ?? '').get('input');
+  if (inputPreset) runner.setInferencePreset(inputPreset);
+}
 const overlay = new OverlayRenderer(nodes.canvas);
 const replayOverlay = new OverlayRenderer(nodes.replayCanvas);
 const recorder = new SessionRecorder();
@@ -207,7 +217,16 @@ const appState = {
   fallbackSessionToken: null, // camera session whose faster-model fallback is loading
   lastUiAt: -Infinity, // DOM telemetry is throttled; pose math still runs every frame
   lastView: null,
+  useVideoFrameCallback: false, // inference runs per camera frame via requestVideoFrameCallback
+  vfcHandle: 0,
+  lastPresentedFrames: null,
+  frameSampler: null, // FrameSampler: inference cap on camera cadence (set in startCamera)
+  lastFrameTime: -Infinity, // MediaPipe VIDEO timestamps must strictly increase, across sessions too
+  pendingOverlay: null, // { timeMs, clock } of the newest landmarks not yet drawn
 };
+
+/** Overlay extrapolation cap; prediction is reliable only over short horizons. */
+const OVERLAY_PREDICTION_MS = 40;
 
 const KNEE_EXERCISES = new Set(['squat', 'sit_to_stand', 'lunge']);
 const SHOULDER_EXERCISES = new Set(['shoulder_abduction', 'shoulder_flexion']);
@@ -502,7 +521,9 @@ function handleExerciseFrame(landmarks, angles, width, height, timestampMs, trac
   renderDynamicTelemetry(appState.activeExerciseInstance.getTelemetry(nextState));
 }
 
-// Main RequestAnimationFrame Loop
+// Display loop (requestAnimationFrame): draws the overlay at the display rate. Inference
+// runs once per camera frame in onVideoFrame(), or here by polling when the browser
+// lacks requestVideoFrameCallback.
 function frameLoop() {
   if (!appState.active) return;
   appState.raf = window.requestAnimationFrame(frameLoop);
@@ -513,6 +534,7 @@ function frameLoop() {
   const cfg = settings.get();
 
   // 1. Decoupled 60/120 FPS High-Fluidity Overlay Rendering
+  interpolator.setPrediction(cfg.overlays.predictiveOverlay ? OVERLAY_PREDICTION_MS : 0);
   const renderedLandmarks = interpolator.step(now);
   if (!renderedLandmarks) {
     // No pose in view: clear the last skeleton instead of leaving it frozen on screen.
@@ -541,28 +563,70 @@ function frameLoop() {
       minVisibility: cfg.tracking.confidenceThreshold,
     });
   }
+  if (renderedLandmarks && appState.pendingOverlay) {
+    // Capture → overlay drawn (the canvas is composited with this display frame).
+    perf.recordPipelineLatency('overlay', performance.now() - appState.pendingOverlay.timeMs, appState.pendingOverlay.clock);
+    appState.pendingOverlay = null;
+  }
 
-  // 2. Camera & Pose Inference Scheduling (bounded at target ~35 FPS)
+  // 2. Fallback inference scheduling: poll for a new video frame (bounded at ~35 FPS).
+  if (appState.useVideoFrameCallback) return;
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
       video.currentTime === appState.lastVideoTime ||
       now - appState.lastInferenceAt < appState.FRAME_INTERVAL_MS) {
     return;
   }
-
   appState.lastVideoTime = video.currentTime;
-  appState.lastInferenceAt = now;
+  processFrame(video, now, null);
+}
+
+/** requestVideoFrameCallback handler: runs once per new camera frame. */
+function onVideoFrame(token, metadata) {
+  // The token stops a callback chain from an earlier camera session.
+  if (!appState.active || !appState.useVideoFrameCallback || token !== appState.sessionToken) return;
+  const video = nodes.video;
+  appState.vfcHandle = video.requestVideoFrameCallback((_, m) => onVideoFrame(token, m));
+  perf.recordDroppedFrame(missedFrames(appState.lastPresentedFrames, metadata?.presentedFrames));
+  appState.lastPresentedFrames = metadata?.presentedFrames ?? null;
+  const now = performance.now();
+  // Cap on the camera's own cadence (60 fps cameras: every other frame), not callback spacing.
+  if (!appState.frameSampler.due(metadata, selectFrameTime(now, metadata).timeMs)) return;
+  processFrame(video, now, metadata);
+}
+
+/**
+ * Runs pose inference and analysis on the current video frame.
+ * @param {HTMLVideoElement} video
+ * @param {number} callNow performance.now() when processing started (UI throttling)
+ * @param {Object|null} metadata VideoFrameCallbackMetadata, or null when polling
+ */
+function processFrame(video, callNow, metadata) {
+  const cfg = settings.get();
+  appState.lastInferenceAt = callNow;
+  // Pipeline time is the frame's capture time when the browser reports it, so filter dt,
+  // rep timing and latency all refer to when the movement happened.
+  const frame = selectFrameTime(callNow, metadata, appState.lastFrameTime);
+  appState.lastFrameTime = frame.timeMs;
+  const now = frame.timeMs;
 
   const tStart = perf.startInference();
   try {
     const rawResult = runner.detectForVideo(video, now);
     perf.endInference(tStart);
+    perf.recordPipelineLatency('landmarks', performance.now() - now, frame.clock);
 
     const metrics = perf.getMetrics();
-    appState.uiDue = now - appState.lastUiAt >= UI_INTERVAL_MS;
+    appState.uiDue = callNow - appState.lastUiAt >= UI_INTERVAL_MS;
     if (appState.uiDue) {
-      appState.lastUiAt = now;
+      appState.lastUiAt = callNow;
       nodes.inferenceFps.textContent = String(metrics.inferenceFps);
       nodes.latencyDisplay.textContent = `${Math.round(metrics.lastLatencyMs)}ms`;
+      if (nodes.e2eLatency && metrics.captureToOverlayP50 !== null) {
+        nodes.e2eLatency.textContent = `${Math.round(metrics.captureToOverlayP50)}ms`;
+        nodes.e2eLatency.title = `Camera → overlay p50 ${metrics.captureToOverlayP50} ms, p95 ${metrics.captureToOverlayP95} ms; ` +
+          `camera → landmarks p50 ${metrics.captureToLandmarksP50} ms (clock: ${metrics.latencyClock}). ` +
+          'Excludes sensor exposure and display scan-out.';
+      }
       if (nodes.renderFps) nodes.renderFps.textContent = String(metrics.renderFps);
       if (nodes.droppedFrames) nodes.droppedFrames.textContent = String(metrics.droppedFrames);
     }
@@ -623,6 +687,7 @@ function frameLoop() {
 
     // Supply target pose to 60/120 FPS interpolator (null clears it when the person leaves frame)
     interpolator.setTarget(smoothedLandmarks, now);
+    appState.pendingOverlay = smoothedLandmarks ? { timeMs: now, clock: frame.clock } : null;
 
     appState.lastAngles = angles;
     if (appState.uiDue) {
@@ -664,8 +729,10 @@ function switchToFallbackModel(reason, nextModel = 'full') {
       if (result?.stale || token !== appState.sessionToken) return;
       adaptive.setCurrentModel(runner.activeModel);
       perf.resetInferenceStats(); // measure the new model on its own samples
-      settings.update({ tracking: { model: runner.activeModel } });
-      nodes.modelChoice.value = runner.activeModel;
+      // An Auto preference stays Auto; the HUD shows the model actually running.
+      const saved = modelPreferenceAfterFallback(settings.get().tracking.model, runner.activeModel);
+      settings.update({ tracking: { model: saved } });
+      nodes.modelChoice.value = saved;
       nodes.modelName.textContent = runner.activeModel.toUpperCase();
       announce(`Switched to ${runner.activeModel.toUpperCase()} model for responsiveness.`);
     })
@@ -708,6 +775,13 @@ function stopCamera() {
   appState.starting = false;
   window.cancelAnimationFrame(appState.raf);
   appState.raf = 0;
+  if (appState.vfcHandle && typeof nodes.video.cancelVideoFrameCallback === 'function') {
+    nodes.video.cancelVideoFrameCallback(appState.vfcHandle);
+  }
+  appState.vfcHandle = 0;
+  appState.useVideoFrameCallback = false;
+  appState.lastPresentedFrames = null;
+  appState.pendingOverlay = null;
 
   if (recorder.isRecording) {
     stopRecording();
@@ -796,7 +870,7 @@ async function startCamera() {
 
     filter.setPreset(cfg.tracking.smoothing);
     filter.setVisibilityThreshold(cfg.tracking.confidenceThreshold);
-    await runner.initialize(cfg.tracking.model, statusStr => announce(statusStr));
+    await runner.initialize(resolveModelChoice(cfg.tracking.model, { mobile: isLikelyMobile() }), statusStr => announce(statusStr));
     if (appState.sessionToken !== currentToken) return;
     // initialize() may itself fall back from Heavy to Full if Heavy fails to load.
     adaptive.setCurrentModel(runner.activeModel);
@@ -808,6 +882,12 @@ async function startCamera() {
     setLiveUI(true);
 
     switchExercise(cfg.exercise.activeExercise);
+    appState.useVideoFrameCallback = supportsVideoFrameCallback(nodes.video);
+    if (appState.useVideoFrameCallback) {
+      const token = appState.sessionToken;
+      appState.frameSampler = new FrameSampler(appState.FRAME_INTERVAL_MS);
+      appState.vfcHandle = nodes.video.requestVideoFrameCallback((_, m) => onVideoFrame(token, m));
+    }
     frameLoop();
   } catch (error) {
     if (currentToken !== appState.sessionToken) return;
@@ -1383,6 +1463,7 @@ function populateSettingsForm() {
   nodes.cfgOverlayLabels.checked = cfg.overlays.showDegreeLabels;
   nodes.cfgOverlayArcs.checked = cfg.overlays.showAngleArcs;
   nodes.cfgOverlayTrails.checked = cfg.overlays.showMotionTrails;
+  nodes.cfgOverlayPredict.checked = cfg.overlays.predictiveOverlay;
   if (nodes.cfgOverlayDirection) nodes.cfgOverlayDirection.checked = cfg.overlays.showDirection;
   nodes.cfgOverlaySymHud.checked = cfg.overlays.showSymmetryHUD;
   nodes.cfgOverlayGhost.checked = cfg.overlays.showGhost;
@@ -1440,6 +1521,7 @@ function bindSettingsInputs() {
         showDegreeLabels: nodes.cfgOverlayLabels.checked,
         showAngleArcs: nodes.cfgOverlayArcs.checked,
         showMotionTrails: nodes.cfgOverlayTrails.checked,
+        predictiveOverlay: nodes.cfgOverlayPredict.checked,
         showDirection: nodes.cfgOverlayDirection ? nodes.cfgOverlayDirection.checked : false,
         showSymmetryHUD: nodes.cfgOverlaySymHud.checked,
         showGhost: nodes.cfgOverlayGhost.checked,
@@ -1458,7 +1540,7 @@ function bindSettingsInputs() {
     nodes.cfgCameraFacing, nodes.cfgCameraMirror, nodes.cfgCameraRes,
     nodes.cfgTrackModel, nodes.cfgTrackAutoFallback, nodes.cfgTrackSmoothing,
     nodes.cfgTrackConfidence, nodes.cfgOverlaySkeleton, nodes.cfgOverlayJoints,
-    nodes.cfgOverlayLabels, nodes.cfgOverlayArcs, nodes.cfgOverlayTrails, nodes.cfgOverlayDirection,
+    nodes.cfgOverlayLabels, nodes.cfgOverlayArcs, nodes.cfgOverlayTrails, nodes.cfgOverlayPredict, nodes.cfgOverlayDirection,
     nodes.cfgOverlaySymHud, nodes.cfgOverlayGhost,
     nodes.cfgExerciseSensitivity, nodes.cfgExerciseAudio,
   ];
