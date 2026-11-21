@@ -189,6 +189,8 @@ a { color: inherit; text-decoration: none; }
 
 .angles { display: grid; gap: 0; }
 .angle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #263247; gap: 10px; }
+.angle-row.is-uncertain .angle-value { opacity: 0.55; text-decoration: underline dotted; }
+.angle-row.is-uncertain .angle-label::after { content: ' ?'; color: #f4c06a; }
 .angle-label { font-size: 10px; color: #aab7c9; font-weight: 740; letter-spacing: .05em; }
 .angle-value { font: 650 17px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -.04em; font-variant-numeric: tabular-nums; color: #e5f7f1; }
 .angle-value.unavailable { color: #526075; }

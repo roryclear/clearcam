@@ -29,9 +29,21 @@ export class SessionStorage {
    * @param {Object} [options]
    * @param {(id: string) => void} [options.onEvict] Called for each evicted session id
    *   so callers can delete associated data (e.g. stored videos).
+   * @param {(session: Object) => Object} [options.compact] Smaller form of the session
+   *   (e.g. without optional fields). When given, the full session is stored only if it
+   *   fits without evicting anything; otherwise the compact form is saved with the
+   *   normal eviction, so optional data never costs the user older sessions.
    * @returns {boolean} true when the session was stored
    */
-  saveSession(session, { onEvict = null } = {}) {
+  saveSession(session, { onEvict = null, compact = null } = {}) {
+    if (typeof compact === 'function') {
+      if (this._save(session, { onEvict, evictForSpace: false })) return true;
+      return this._save(compact(session) ?? session, { onEvict, evictForSpace: true });
+    }
+    return this._save(session, { onEvict, evictForSpace: true });
+  }
+
+  _save(session, { onEvict, evictForSpace }) {
     if (!this.storage || !session || !session.id) return false;
 
     const summary = {
@@ -87,8 +99,8 @@ export class SessionStorage {
           break;
         }
       } catch (err) {
-        if (index.length === 0) {
-          console.warn('Failed to save session to local storage:', err);
+        if (index.length === 0 || !evictForSpace) {
+          if (evictForSpace) console.warn('Failed to save session to local storage:', err);
           break;
         }
         this.storage.removeItem(dataKey);

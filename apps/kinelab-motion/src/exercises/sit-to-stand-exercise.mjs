@@ -3,6 +3,7 @@
  * Detects transition from seated to full upright standing and return.
  */
 
+import { formatAngle } from '../biomechanics/angle-convention.mjs';
 import { BaseExercise } from './exercise-base.mjs';
 import { JOINTS } from '../biomechanics/landmark-indices.mjs';
 import { selectBilateralAngle } from '../biomechanics/angle-calculations.mjs';
@@ -157,8 +158,8 @@ export class SitToStandExercise extends BaseExercise {
     return [
       { label: 'STANDS', value: state.reps, highlight: true },
       { label: 'PHASE', value: state.phase.toUpperCase() },
-      { label: 'KNEE', value: Number.isFinite(state.kneeAngle) ? `${Math.round(state.kneeAngle)}°` : '—' },
-      { label: 'HIP', value: Number.isFinite(state.hipAngle) ? `${Math.round(state.hipAngle)}°` : '—' },
+      { label: 'KNEE', value: formatAngle('Knee', state.kneeAngle) },
+      { label: 'HIP', value: formatAngle('Hip', state.hipAngle) },
     ];
   }
 }

@@ -91,19 +91,25 @@ Four parallel literature/tool searches (Firecrawl). Evidence numbers are from th
 
 Headless Chrome (software GL) check: capture clock is reported for getUserMedia frames; fallback path reports `callback`. Headless numbers (400–1400 ms) only show the plumbing works; measure on real phones.
 
-### 6.2 Next, ranked by value per effort
+### 6.2 Done in this round (items 1–4 of the previous ranking)
+
+| Change | Measured / verified | Where |
+|---|---|---|
+| Offline zero-phase pipeline: Hampel (±3 MAD, 0.5 s) → linear gap fill ≤300 ms → 4th-order Butterworth `filtfilt` (odd-reflection padding), 4 Hz on angles from unfiltered landmarks, 6 Hz on live angles of older sessions | Synthetic squat RMSE / rep-peak error (yaw 0°, 45°, 90°): live view-blend 3.2/1.3°, 10.6/10.2°, 10.5/3.3° → offline 2.2/1.1°, 10.8/8.7°, 10.7/3.5°; side-view jitter 1.12 → 0.50°. Gain is mainly lag and jitter; peaks change little | `filters/zero-phase.mjs`, `sessions/offline-analysis.mjs`, `bench/accuracy-bench.mjs` |
+| Setup prompts (level ±3°, 2–3 m, hip height) and gravity roll correction (beta, off) | Tilt from `DeviceMotionEvent.accelerationIncludingGravity` + screen angle. Roll sign for front/rear cameras is a model assumption, unverified on devices | `tracking/device-level.mjs`, `tracking/framing-assistant.mjs` |
+| Clinical convention display (exports stay interior) and reliability flags (far side in side view, confidence < 0.7) | Unit tests | `biomechanics/angle-convention.mjs`, `biomechanics/angle-reliability.mjs` |
+| Validation harness: Kinovea CSV / OpenSim `.mot` readers, cross-correlation lag, frame- and rep-level Bland–Altman (bias, LoA, CIs), ICC(A,1) + CI, SEM, MDC95 | ICC, CIs, LoA match pingouin 0.7 / scipy 1.18 to 1e-9; synthetic end-to-end recovers a 300 ms clock offset and a +3° bias. No real-data numbers yet | `validation/*.mjs`, `bench/validate.mjs`, `docs/validation.md` |
+
+### 6.3 Next, ranked by value per effort
 
 | # | Addition | Evidence | Effort |
 |---|---|---|---|
-| 1 | Offline zero-phase pipeline for recorded sessions and rep metrics: Hampel outlier rejection → gap fill ≤~300 ms → Butterworth `filtfilt` 4–6 Hz or Savitzky–Golay | Fit3D: One Euro raised PA-MPJPE slightly, SG lowered it 66.7 → 62.1 mm; median 66.7 → 60.4 mm ([arXiv 2611.02929](https://arxiv.org/abs/2611.02929)); Sports2D/OpenCap use 4–6 Hz Butterworth ([Sports2D](https://github.com/davidpagnon/Sports2D), [arXiv 2603.24733](https://arxiv.org/abs/2603.24733)) | S |
-| 2 | Camera setup UX (hip height, 2–3 m, never front-oblique) + gravity roll correction (`DeviceOrientationEvent`) for trunk/shank angles | 3 m / 0.8 m: hip MAE 1.9°, knee 2.4° ([PMC10886083](https://pmc.ncbi.nlm.nih.gov/articles/PMC10886083/)); front-oblique 23.8° vs 14–15° ([PMC11819822](https://pmc.ncbi.nlm.nih.gov/articles/PMC11819822/)) | S |
-| 3 | Clinical conventions (knee flexion = 180 − interior; hip labelled trunk–thigh) and occlusion-aware angle uncertainty (near/far side, yaw, visibility) | ISB ([PMID 11934426](https://pubmed.ncbi.nlm.nih.gov/11934426/)); far-side error spread +69% knee, +108% hip ([PMC10635560](https://pmc.ncbi.nlm.nih.gov/articles/PMC10635560/)) | S |
-| 4 | Real-data validation harness (roadmap #5): OpenCap LabValidation (squat, STS; 5 views; mocap/OpenSim GT; OpenCap Monocular 4.8° MAE baseline), REHAB24-6 (shoulder abduction, lunge; non-commercial), Kinovea CSV + Pose2Sim rig for in-house n ≥ 30; JS ICC/Bland–Altman checked against pingouin | [SimTK](https://simtk.org/frs/?group_id=2385), [REHAB24-6](https://zenodo.org/records/13305826), [Pose2Sim](https://github.com/perfanalytics/pose2sim), [pingouin](https://pingouin-stats.org/generated/pingouin.intraclass_corr.html); thresholds [Koo & Li 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4913118/), COSMIN | M |
-| 5 | Real-phone speed matrix: BrowserStack camera video injection + Chrome fake camera in CI, logging the new E2E p50/p95 | [BrowserStack](https://www.browserstack.com/docs/automate/selenium/camera-injection) | M |
-| 6 | Replace `KinematicBoneFilter` (fixes length, not direction) with 2D-ray + bone-ratio fusion | BlazePose angle error 12.3° → 10.6°, bone-length variance −94% ([arXiv 2512.06783](https://arxiv.org/abs/2512.06783)) | M |
-| 7 | MotionAGFormer-XS 2D→3D lifter on BlazePose 2D, offline first | Most accurate method in an exercise study: 2D knee MAE 8.5° ([Rode 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12589393/)); 2.2M params, Apache-2.0 ([repo](https://github.com/TaatiTeam/MotionAGFormer)); ONNX export unverified | M |
-| 8 | Worker inference (MediaStreamTrackProcessor on Chrome/Safari 18, ImageBitmap/VideoFrame on Firefox) | Frees the main thread; gain unproven | M–L |
-| 9 | Angle-dependent linear bias correction, fitted per camera setup after #4 | MoveNet side view: RMSE 11.6 → 4.0° hip, 10.9 → 3.9° knee ([PMC13347614](https://pmc.ncbi.nlm.nih.gov/articles/PMC13347614/)) | S after #4 |
+| 1 | Run the harness on OpenCap LabValidation (squat, STS; mocap/OpenSim GT; OpenCap Monocular 4.8° MAE baseline) and REHAB24-6 (shoulder abduction, lunge; non-commercial), then an in-house Kinovea/goniometer set, n ≥ 30 | [SimTK](https://simtk.org/frs/?group_id=2385), [REHAB24-6](https://zenodo.org/records/13305826); thresholds [Koo & Li 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4913118/), COSMIN | M (data access) |
+| 2 | Real-phone speed matrix: BrowserStack camera video injection + Chrome fake camera in CI, logging the new E2E p50/p95 | [BrowserStack](https://www.browserstack.com/docs/automate/selenium/camera-injection) | M |
+| 3 | Replace `KinematicBoneFilter` (fixes length, not direction) with 2D-ray + bone-ratio fusion | BlazePose angle error 12.3° → 10.6°, bone-length variance −94% ([arXiv 2512.06783](https://arxiv.org/abs/2512.06783)) | M |
+| 4 | MotionAGFormer-XS 2D→3D lifter on BlazePose 2D, offline first | Most accurate method in an exercise study: 2D knee MAE 8.5° ([Rode 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12589393/)); 2.2M params, Apache-2.0 ([repo](https://github.com/TaatiTeam/MotionAGFormer)); ONNX export unverified | M |
+| 5 | Worker inference (MediaStreamTrackProcessor on Chrome/Safari 18, ImageBitmap/VideoFrame on Firefox) | Frees the main thread; gain unproven | M–L |
+| 6 | Angle-dependent linear bias correction, fitted per camera setup after #1 | MoveNet side view: RMSE 11.6 → 4.0° hip, 10.9 → 3.9° knee ([PMC13347614](https://pmc.ncbi.nlm.nih.gov/articles/PMC13347614/)) | S after #1 |
 
 Later: RTMPose-m Halpe26 via ONNX Runtime Web behind a flag (small 2D gain, foot points; checkpoint licence [mmpose#3275](https://github.com/open-mmlab/mmpose/issues/3275) open); stereo + OpenCap marker enhancer (4.34° RMSE).
 

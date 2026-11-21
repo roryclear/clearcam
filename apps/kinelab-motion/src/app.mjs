@@ -27,6 +27,9 @@ import { PoseInterpolator } from './filters/pose-interpolator.mjs';
 import { PerformanceMonitor } from './tracking/performance-monitor.mjs';
 import { supportsVideoFrameCallback, selectFrameTime, missedFrames, FrameSampler } from './tracking/frame-clock.mjs';
 import { isLikelyMobile, resolveModelChoice, modelPreferenceAfterFallback } from './tracking/device-profile.mjs';
+import { DeviceLevel, correctImageRoll, correctWorldRoll } from './tracking/device-level.mjs';
+import { setAngleConvention, getAngleConvention, formatAngle, angleLabel } from './biomechanics/angle-convention.mjs';
+import { angleReliability } from './biomechanics/angle-reliability.mjs';
 import { AdaptiveController } from './tracking/adaptive-controller.mjs';
 import { MediaPipeRunner } from './tracking/mediapipe-runner.mjs';
 import { OverlayRenderer } from './overlays/overlay-renderer.mjs';
@@ -38,6 +41,7 @@ import { TimelinePlayer } from './sessions/timeline-player.mjs';
 import { ChartRenderer } from './sessions/chart-renderer.mjs';
 import { exportToCSV, exportToJSON, exportRepsToCSV, downloadFile } from './sessions/export-helpers.mjs';
 import { RepTracker, analyzeReps, summarizeSession, profileFor, countedReps } from './exercises/rep-analysis.mjs';
+import { offlineSessionFrames, stripRawAngles } from './sessions/offline-analysis.mjs';
 import { compareSessions } from './sessions/session-compare.mjs';
 import { defaultAudioSynthesizer } from './integrations/audio-cues.mjs';
 import { defaultVideoStore } from './sessions/video-store.mjs';
@@ -111,12 +115,15 @@ const nodes = {
   cfgTrackSmoothing: el('cfg-track-smoothing'),
   cfgTrackConfidence: el('cfg-track-confidence'),
   cfgTrackAngleDim: el('cfg-track-angledim'),
+  cfgTrackLevel: el('cfg-track-level'),
+  cfgTrackTiltFix: el('cfg-track-tiltfix'),
   cfgOverlaySkeleton: el('cfg-overlay-skeleton'),
   cfgOverlayJoints: el('cfg-overlay-joints'),
   cfgOverlayLabels: el('cfg-overlay-labels'),
   cfgOverlayArcs: el('cfg-overlay-arcs'),
   cfgOverlayTrails: el('cfg-overlay-trails'),
   cfgOverlayPredict: el('cfg-overlay-predict'),
+  cfgOverlayConvention: el('cfg-overlay-convention'),
   cfgOverlayDirection: el('cfg-overlay-direction'),
   cfgOverlaySymHud: el('cfg-overlay-symhud'),
   cfgOverlayGhost: el('cfg-overlay-ghost'),
@@ -173,12 +180,15 @@ const settings = defaultSettingsManager;
 const filter = new PoseFilter();
 const worldFilter = new WorldPoseFilter();
 const kinematicFilter = new KinematicBoneFilter();
+// Separate bone-length state for the unfiltered angles recorded for offline re-analysis.
+const rawKinematicFilter = new KinematicBoneFilter();
 const viewEstimator = new ViewOrientationEstimator();
 const repTracker = new RepTracker();
 const interpolator = new PoseInterpolator({ lambda: 32.0 });
 const perf = new PerformanceMonitor();
 const adaptive = new AdaptiveController();
 const runner = new MediaPipeRunner();
+const deviceLevel = new DeviceLevel();
 // A/B switch for the inference input: ?input=direct feeds the <video> straight to the GPU
 // delegate (no 2D-canvas downscale); compare the E2E figure in the HUD against the default.
 {
@@ -206,6 +216,7 @@ const appState = {
   FRAME_INTERVAL_MS: 28, // High-throughput ~35 FPS real-time motion tracking
   lastAngles: null,
   lastFraming: null,
+  lastTilt: null, // { rollDeg, pitchDeg } from the gravity sensor, or null
   lastWorldLandmarks: null,
   lastSmoothedLandmarks: null,
   activeExerciseInstance: null,
@@ -248,6 +259,7 @@ function subjectExtent(landmarks, minVisibility) {
 
 // UI Angle Row Cache
 const angleRows = new Map();
+const angleRowLabels = new Map();
 for (const def of ANGLE_DEFINITIONS) {
   const row = document.createElement('div');
   row.className = 'angle-row';
@@ -260,7 +272,43 @@ for (const def of ANGLE_DEFINITIONS) {
   row.append(label, value);
   nodes.angleList.append(row);
   angleRows.set(def.key, value);
+  angleRowLabels.set(def.key, label);
 }
+
+/**
+ * Applies the angle display convention: row labels and the open results card's peak are
+ * reformatted now. A paused replay re-emits its current frame (without seeking, so the
+ * video position is kept), so the replay canvas and telemetry redraw together from the
+ * selected recording; live values and a running replay follow on their next frame.
+ */
+function applyAngleConvention(convention) {
+  setAngleConvention(convention);
+  for (const def of ANGLE_DEFINITIONS) angleRowLabels.get(def.key).textContent = angleLabel(def);
+  const peak = appState.resultsPeak;
+  if (peak && nodes.resPeakAngle) nodes.resPeakAngle.textContent = peak.deg !== null ? formatAngle(peak.joint, peak.deg) : '—';
+  if (player.session && !player.isPlaying) player.notify();
+}
+
+/** Recorded [x, y, z, conf] landmarks → objects the reliability checks read. */
+function recordedLandmarks(landmarks) {
+  if (!Array.isArray(landmarks)) return null;
+  return landmarks.map(p => (Array.isArray(p) ? { x: p[0], y: p[1], z: p[2], visibility: p[3] ?? 1 } : p));
+}
+
+/** Replay telemetry: recorded confidence feeds the reliability flags; no live view estimate. */
+function renderReplayTelemetry(frame) {
+  renderTelemetry(frame.angles, null, null, true, 640, 480, {
+    reliabilityLandmarks: recordedLandmarks(frame.landmarks),
+    view: null,
+  });
+  renderSymmetry(frame.angles);
+}
+applyAngleConvention(settings.get().overlays.angleConvention);
+settings.subscribe(cfg => {
+  if (cfg?.overlays?.angleConvention && cfg.overlays.angleConvention !== getAngleConvention()) {
+    applyAngleConvention(cfg.overlays.angleConvention);
+  }
+});
 
 function announce(message, isError = false) {
   nodes.message.textContent = message;
@@ -316,15 +364,29 @@ function updateAngleDimUI(dimension = 'auto', view = null) {
   }
 }
 
-function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, use3DSegments = true, width = 640, height = 480) {
+function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null, use3DSegments = true, width = 640, height = 480, {
+  reliabilityLandmarks = smoothedLandmarks,
+  view = appState.lastView,
+} = {}) {
+  const reliability = angleReliability(angles, reliabilityLandmarks, view);
   for (const def of ANGLE_DEFINITIONS) {
     const valueEl = angleRows.get(def.key);
     const measured = angles?.[def.key];
-    valueEl.textContent = Number.isFinite(measured) ? `${Math.round(measured)}°` : '—';
+    valueEl.textContent = formatAngle(def.key, measured);
     valueEl.classList.toggle('unavailable', !Number.isFinite(measured));
+    const rel = reliability[def.key];
+    valueEl.parentElement.classList.toggle('is-uncertain', Boolean(rel?.low));
+    valueEl.parentElement.title = rel?.reason ?? '';
   }
 
-  // Segment angles (Trunk & Shank) and Squat Alignment Evaluation
+  // Segment angles (Trunk & Shank) and Squat Alignment Evaluation. Phone roll adds 1:1 to
+  // angles measured against the image vertical; optionally undo it (beta).
+  const cfg = settings.get();
+  const roll = cfg.tracking.tiltCorrection ? appState.lastTilt?.rollDeg : null;
+  if (Number.isFinite(roll)) {
+    smoothedLandmarks = correctImageRoll(smoothedLandmarks, roll, width, height, cfg.camera.facingMode);
+    worldLandmarks = correctWorldRoll(worldLandmarks, roll, cfg.camera.facingMode);
+  }
   const trunk = use3DSegments && worldLandmarks
     ? calculateTrunkAngle3D(worldLandmarks)
     : calculateTrunkAngle(smoothedLandmarks, width, height);
@@ -352,8 +414,10 @@ function renderTelemetry(angles, smoothedLandmarks = null, worldLandmarks = null
     const knee = [angles?.leftKnee, angles?.rightKnee].filter(Number.isFinite);
     const hip = [angles?.leftHip, angles?.rightHip].filter(Number.isFinite);
     if (baseline && knee.length && hip.length) {
-      const dKnee = Math.round((knee.reduce((s, v) => s + v, 0) / knee.length - baseline.standingKneeDeg) * 10) / 10;
-      const dHip = Math.round((hip.reduce((s, v) => s + v, 0) / hip.length - baseline.standingHipDeg) * 10) / 10;
+      // Flexion runs opposite to the interior angle, so its deltas flip sign.
+      const k = getAngleConvention() === 'clinical' ? -1 : 1;
+      const dKnee = Math.round(k * (knee.reduce((s, v) => s + v, 0) / knee.length - baseline.standingKneeDeg) * 10) / 10;
+      const dHip = Math.round(k * (hip.reduce((s, v) => s + v, 0) / hip.length - baseline.standingHipDeg) * 10) / 10;
       baselineEl.textContent = `Baseline Δ knee ${dKnee > 0 ? '+' : ''}${dKnee}° · hip ${dHip > 0 ? '+' : ''}${dHip}°`;
     } else {
       baselineEl.textContent = baseline ? 'Baseline Δ — (angles unavailable)' : '';
@@ -378,8 +442,8 @@ function renderSymmetry(angles) {
     const valGroup = document.createElement('span');
     valGroup.className = 'sym-vals';
 
-    const lText = Number.isFinite(data.left) ? `${Math.round(data.left)}°` : '—';
-    const rText = Number.isFinite(data.right) ? `${Math.round(data.right)}°` : '—';
+    const lText = formatAngle(id, data.left);
+    const rText = formatAngle(id, data.right);
     valGroup.textContent = `L: ${lText} / R: ${rText}`;
 
     if (Number.isFinite(data.diffDeg)) {
@@ -661,9 +725,14 @@ function processFrame(video, callNow, metadata) {
 
     const activeExerciseId = cfg.exercise.activeExercise || 'squat';
     const quality = trackingStatus(smoothedLandmarks, cfg.tracking.confidenceThreshold, activeExerciseId);
+    const tilt = deviceLevel.tilt();
+    appState.lastTilt = tilt;
     const framing = defaultFramingAssistant.evaluate(smoothedLandmarks, activeExerciseId, {
       yawDeg: view.yawDeg,
       recommendedView: appState.activeExerciseInstance?.recommendedCamera,
+      tilt: cfg.tracking.levelGuidance ? tilt : null,
+      setupGuidance: cfg.tracking.levelGuidance,
+      aspect: video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 1,
     });
     appState.lastFraming = framing;
 
@@ -703,6 +772,7 @@ function processFrame(video, callNow, metadata) {
       recorder.recordFrame({
         landmarks: smoothedLandmarks,
         angles,
+        rawAngles: rawJointAngles(rawResult, video, cfg, view, now),
         timestampMs: now,
         phase: appState.exerciseState?.phase ?? 'tracking',
         status: appState.exerciseState?.status ?? 'active',
@@ -806,6 +876,8 @@ function stopCamera() {
   adaptive.reset();
   appState.lastAngles = null;
   appState.lastFraming = null;
+  appState.lastTilt = null;
+  deviceLevel.stop();
   appState.lastVideoTime = -1;
   appState.lastInferenceAt = -Infinity;
   appState.fallbackSessionToken = null;
@@ -824,6 +896,8 @@ async function startCamera() {
   // Create/resume the AudioContext inside the click gesture; browsers (notably iOS
   // Safari) keep contexts created later from the render loop suspended.
   if (settings.get().exercise.audioCues) audio.ensureContext();
+  // iOS only grants motion sensors from a user gesture, so ask before the first await.
+  if (settings.get().tracking.levelGuidance || settings.get().tracking.tiltCorrection) deviceLevel.start();
 
   appState.starting = true;
   const currentToken = ++appState.sessionToken;
@@ -906,7 +980,34 @@ async function startCamera() {
 }
 
 // Recording & Sessions
+/** Recorded frames re-smoothed offline for results and exports (cached per session). */
+const analysisCache = new WeakMap();
+function analysisFrames(session) {
+  if (!session?.frames) return [];
+  if (!analysisCache.has(session)) analysisCache.set(session, offlineSessionFrames(session.frames).frames);
+  return analysisCache.get(session);
+}
+
+/**
+ * Joint angles from unfiltered landmarks (same 2D/3D/view blend as the live angles,
+ * no temporal smoothing), recorded so the session can be re-analysed with a
+ * zero-phase filter that has no lag.
+ */
+function rawJointAngles(rawResult, video, cfg, view, now) {
+  if (!rawResult?.landmarks) return null;
+  const thr = cfg.tracking.confidenceThreshold;
+  const a2 = getJointAngles(rawResult.landmarks, video.videoWidth, video.videoHeight, thr);
+  const mode = cfg.tracking.angleDimension;
+  if (mode === '2d' || !rawResult.worldLandmarks) return a2;
+  const a3 = getJointAngles3D(rawKinematicFilter.filter(rawResult.worldLandmarks, now), thr);
+  if (mode === 'auto') return blendAnglesByView(a2, a3, view);
+  const out = { ...a2 };
+  for (const [k, v] of Object.entries(a3)) if (Number.isFinite(v)) out[k] = v;
+  return out;
+}
+
 function startRecording() {
+  rawKinematicFilter.reset();
   // Wait for the previous recording to finish saving; otherwise its pending stop
   // would swallow the stop request for the new recording.
   if (!appState.active || appState.stoppingRecording || recorder.isRecording) return;
@@ -952,6 +1053,7 @@ async function finishRecording() {
 
   const saved = storage.saveSession(sessionData, {
     onEvict: id => { videoStore.deleteVideo(id); },
+    compact: stripRawAngles,
   });
   if (!saved) {
     announce('Session could not be saved: browser storage is full. Delete older sessions or record a shorter clip.', true);
@@ -1054,6 +1156,7 @@ function resetReplayView(title) {
     nodes.resRepCount.textContent = '--';
     nodes.resDuration.textContent = '--:--';
     nodes.resPeakAngle.textContent = '--°';
+    appState.resultsPeak = null;
     nodes.resSymmetry.textContent = '--';
     nodes.resTimestamp.textContent = 'No session selected';
     if (nodes.resAvgRom) {
@@ -1114,7 +1217,7 @@ async function loadSessionForPlayback(sessionId) {
     let peakDeg = null;
     let symSum = 0;
     let symCount = 0;
-    for (const f of fullSession.frames || []) {
+    for (const f of analysisFrames(fullSession)) {
       const a = f.angles || {};
       const knee = [a.leftKnee, a.rightKnee].filter(Number.isFinite);
       const shoulder = [a.leftShoulder, a.rightShoulder].filter(Number.isFinite);
@@ -1133,8 +1236,9 @@ async function loadSessionForPlayback(sessionId) {
         symCount++;
       }
     }
-    // Per-rep analysis (recomputed from recorded frames, so older sessions get it too).
-    const reps = analyzeReps(fullSession.frames, fullSession.exerciseId);
+    // Per-rep analysis, recomputed from recorded frames with zero-phase smoothing
+    // (no causal lag), so older sessions get it too.
+    const reps = analyzeReps(analysisFrames(fullSession), fullSession.exerciseId);
     const repProfile = profileFor(fullSession.exerciseId);
     const reliableReps = reps.filter(r => r.quality === 'ok');
     // Peak from reliable reps where the rep extreme is the "peak" (squat/lunge depth,
@@ -1145,7 +1249,9 @@ async function loadSessionForPlayback(sessionId) {
       const extremes = reliableReps.map(r => r.extremeAngle);
       peakDeg = extremes.length ? (repProfile.direction === 'min' ? Math.min(...extremes) : Math.max(...extremes)) : null;
     }
-    nodes.resPeakAngle.textContent = peakDeg !== null ? `${Math.round(peakDeg)}°` : '—';
+    const peakJoint = repProfile?.joint ?? (/shoulder/.test(normalizeExerciseId(fullSession.exerciseId)) ? 'Shoulder' : 'Knee');
+    appState.resultsPeak = { joint: peakJoint, deg: peakDeg };
+    nodes.resPeakAngle.textContent = peakDeg !== null ? formatAngle(peakJoint, peakDeg) : '—';
     // A counter reset mid-recording starts a new set; show reps across all sets.
     if (repProfile) nodes.resRepCount.textContent = String(countedReps(fullSession.frames)).padStart(2, '0');
     renderRepResults(reps, repProfile);
@@ -1227,8 +1333,7 @@ player.subscribe((frame, isPlaying) => {
       showGhost: cfg.overlays.showGhost,
       mirrored: false,
     });
-    renderTelemetry(frame.angles);
-    renderSymmetry(frame.angles);
+    renderReplayTelemetry(frame);
   }
 
   // Update chart scrubber line
@@ -1378,7 +1483,7 @@ nodes.exportJsonBtn.addEventListener('click', () => {
 nodes.exportRepsBtn?.addEventListener('click', () => {
   const session = appState.currentSessionViewing;
   if (!session) return;
-  const reps = analyzeReps(session.frames, session.exerciseId);
+  const reps = analyzeReps(analysisFrames(session), session.exerciseId);
   if (!reps.length) {
     announce('No repetitions with enough tracking data to export for this session.');
     return;
@@ -1454,6 +1559,8 @@ function populateSettingsForm() {
   nodes.cfgTrackAutoFallback.checked = cfg.tracking.autoFallback;
   nodes.cfgTrackSmoothing.value = cfg.tracking.smoothing;
   nodes.cfgTrackConfidence.value = String(cfg.tracking.confidenceThreshold);
+  nodes.cfgTrackLevel.checked = cfg.tracking.levelGuidance;
+  nodes.cfgTrackTiltFix.checked = cfg.tracking.tiltCorrection;
   if (nodes.cfgTrackAngleDim) {
     nodes.cfgTrackAngleDim.value = cfg.tracking.angleDimension || 'auto';
   }
@@ -1464,6 +1571,8 @@ function populateSettingsForm() {
   nodes.cfgOverlayArcs.checked = cfg.overlays.showAngleArcs;
   nodes.cfgOverlayTrails.checked = cfg.overlays.showMotionTrails;
   nodes.cfgOverlayPredict.checked = cfg.overlays.predictiveOverlay;
+  nodes.cfgOverlayConvention.value = cfg.overlays.angleConvention;
+  applyAngleConvention(cfg.overlays.angleConvention);
   if (nodes.cfgOverlayDirection) nodes.cfgOverlayDirection.checked = cfg.overlays.showDirection;
   nodes.cfgOverlaySymHud.checked = cfg.overlays.showSymmetryHUD;
   nodes.cfgOverlayGhost.checked = cfg.overlays.showGhost;
@@ -1514,6 +1623,8 @@ function bindSettingsInputs() {
         smoothing: nodes.cfgTrackSmoothing.value,
         confidenceThreshold: Number(nodes.cfgTrackConfidence.value),
         angleDimension: nodes.cfgTrackAngleDim ? nodes.cfgTrackAngleDim.value : 'auto',
+        levelGuidance: nodes.cfgTrackLevel.checked,
+        tiltCorrection: nodes.cfgTrackTiltFix.checked,
       },
       overlays: {
         showSkeleton: nodes.cfgOverlaySkeleton.checked,
@@ -1522,6 +1633,7 @@ function bindSettingsInputs() {
         showAngleArcs: nodes.cfgOverlayArcs.checked,
         showMotionTrails: nodes.cfgOverlayTrails.checked,
         predictiveOverlay: nodes.cfgOverlayPredict.checked,
+        angleConvention: nodes.cfgOverlayConvention.value,
         showDirection: nodes.cfgOverlayDirection ? nodes.cfgOverlayDirection.checked : false,
         showSymmetryHUD: nodes.cfgOverlaySymHud.checked,
         showGhost: nodes.cfgOverlayGhost.checked,
@@ -1539,8 +1651,8 @@ function bindSettingsInputs() {
   const inputs = [
     nodes.cfgCameraFacing, nodes.cfgCameraMirror, nodes.cfgCameraRes,
     nodes.cfgTrackModel, nodes.cfgTrackAutoFallback, nodes.cfgTrackSmoothing,
-    nodes.cfgTrackConfidence, nodes.cfgOverlaySkeleton, nodes.cfgOverlayJoints,
-    nodes.cfgOverlayLabels, nodes.cfgOverlayArcs, nodes.cfgOverlayTrails, nodes.cfgOverlayPredict, nodes.cfgOverlayDirection,
+    nodes.cfgTrackConfidence, nodes.cfgTrackLevel, nodes.cfgTrackTiltFix, nodes.cfgOverlaySkeleton, nodes.cfgOverlayJoints,
+    nodes.cfgOverlayLabels, nodes.cfgOverlayArcs, nodes.cfgOverlayTrails, nodes.cfgOverlayPredict, nodes.cfgOverlayConvention, nodes.cfgOverlayDirection,
     nodes.cfgOverlaySymHud, nodes.cfgOverlayGhost,
     nodes.cfgExerciseSensitivity, nodes.cfgExerciseAudio,
   ];
@@ -1549,6 +1661,13 @@ function bindSettingsInputs() {
 
   for (const input of inputs) {
     input.addEventListener('change', save);
+  }
+  // Enabling a sensor feature mid-capture starts motion sensing from this user gesture
+  // (iOS grants DeviceMotion only from one); start() is a no-op when already listening.
+  for (const input of [nodes.cfgTrackLevel, nodes.cfgTrackTiltFix]) {
+    input.addEventListener('change', () => {
+      if (input.checked && appState.active) deviceLevel.start();
+    });
   }
 
   if (nodes.angleDimToggle) {

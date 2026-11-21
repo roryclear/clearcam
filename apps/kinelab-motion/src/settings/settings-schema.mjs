@@ -25,6 +25,8 @@ export const DEFAULT_SETTINGS = deepFreeze({
     smoothing: 'medium', // 'off' | 'low' | 'medium' | 'high'
     confidenceThreshold: 0.55,
     angleDimension: 'auto', // 'auto' (view-aware 2D/3D blend) | '3d' | '2d'
+    levelGuidance: true, // phone-tilt / distance / hip-height setup prompts (gravity sensor)
+    tiltCorrection: false, // beta: undo phone roll in trunk/shank angles (not yet device-verified)
   },
   overlays: {
     showSkeleton: true,
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS = deepFreeze({
     showSymmetryHUD: true,
     showGhost: false,
     predictiveOverlay: true, // extrapolate the drawn skeleton to hide inference lag (display only)
+    angleConvention: 'clinical', // 'clinical' (knee/hip/elbow flexion, 0° = straight) | 'interior' (180° = straight)
   },
   exercise: {
     activeExercise: 'squat', // 'squat' | 'sit_to_stand' | 'lunge' | 'shoulder_abduction' | 'shoulder_flexion' | 'single_leg_balance' | 'free'
@@ -99,6 +102,8 @@ export function validateSettings(raw) {
       : ['auto', '3d', '2d'].includes(raw.tracking?.angleDimension)
         ? raw.tracking.angleDimension
         : DEFAULT_SETTINGS.tracking.angleDimension,
+    levelGuidance: Boolean(raw.tracking?.levelGuidance ?? DEFAULT_SETTINGS.tracking.levelGuidance),
+    tiltCorrection: Boolean(raw.tracking?.tiltCorrection ?? DEFAULT_SETTINGS.tracking.tiltCorrection),
   };
 
   const overlays = {
@@ -111,6 +116,9 @@ export function validateSettings(raw) {
     showSymmetryHUD: Boolean(raw.overlays?.showSymmetryHUD ?? DEFAULT_SETTINGS.overlays.showSymmetryHUD),
     showGhost: Boolean(raw.overlays?.showGhost ?? DEFAULT_SETTINGS.overlays.showGhost),
     predictiveOverlay: Boolean(raw.overlays?.predictiveOverlay ?? DEFAULT_SETTINGS.overlays.predictiveOverlay),
+    angleConvention: ['clinical', 'interior'].includes(raw.overlays?.angleConvention)
+      ? raw.overlays.angleConvention
+      : DEFAULT_SETTINGS.overlays.angleConvention,
   };
 
   const validExercises = ['squat', 'sit_to_stand', 'lunge', 'shoulder_abduction', 'shoulder_flexion', 'single_leg_balance', 'free'];

@@ -547,3 +547,67 @@ test('A rep resumed mid-movement after tracking loss is flagged; a later full re
   assert.equal(reps[2].quality, 'ok');
   assert.equal(reps[2].romDeg, 80);
 });
+
+test('A seated return with a missing-hip frame still ends the abandoned stand', async () => {
+  const { SitToStandExercise } = await import('../src/exercises/sit-to-stand-exercise.mjs');
+  const knees = [90, 90, 130, 180, 130, 100, 90, 100, 130, 150, 170, 170, 170, 170, 140, 120, 100, 90, 90, 90];
+  const sts = new SitToStandExercise();
+  let state = sts.createState();
+  const frames = knees.map((k, i) => {
+    const hip = i === 6 ? null : k - 10;
+    const angles = { leftKnee: k, rightKnee: k, leftHip: hip, rightHip: hip };
+    const landmarks = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+    state = sts.update(state, { angles, landmarks, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'sit_to_stand');
+  assert.equal(rep.extremeAngle, 170);
+  assert.ok(rep.extremeMs >= 1000, `counted stand's peak: ${rep.extremeMs}`);
+});
+
+test('A rebound after the commit does not move the rep start forward', () => {
+  const squat = new SquatExercise();
+  squat.sensitivity = 'forgiving';
+  let state = squat.createState();
+  const seq = [180, 160, 130, 155, 130, 120, 118, 150, 90, 120, 160, 180, 180, 180];
+  const frames = seq.map((a, i) => {
+    const angles = { leftKnee: a, rightKnee: a };
+    const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.95, presence: 0.99 }));
+    state = squat.update(state, { angles, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks, reps: state.reps, status: state.status };
+  });
+  assert.equal(state.reps, 1);
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.ok(rep.startMs <= 300, `start ${rep.startMs}`);
+  assert.ok(rep.phase1Ms >= 500, `descent ${rep.phase1Ms}`);
+});
+
+test('A recording that starts inside the commit keeps the commit limit (PR #16 review)', () => {
+  const vis = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+  const seq = [[100, 'rise', 0], [120, 'rise', 0], [140, 'rise', 0], [100, 'rise', 0], [80, 'rise', 0],
+    [120, 'rise', 0], [160, 'completed', 1], [180, 'completed', 1]];
+  const frames = seq.map(([a, status, reps], i) => ({ timeMs: i * 100, angles: { leftKnee: a, rightKnee: a }, landmarks: vis, status, reps }));
+  const [rep] = analyzeReps(frames, 'squat');
+  assert.ok(rep, 'rep summarized');
+  assert.equal(rep.startMs, 0);
+  assert.equal(rep.phase1Ms, 400);
+});
+
+test('A tracking dropout before the first committed frame does not move the commit cap (PR #16 review)', async () => {
+  const { SitToStandExercise } = await import('../src/exercises/sit-to-stand-exercise.mjs');
+  const vis = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+  const knees = [...Array(10).fill(90), 90, 130, 90, 90, 90, 90, 90, 130, 170, 170, 170, 140, 120, 100, 90, 90];
+  const ex = new SitToStandExercise();
+  let st = ex.createState();
+  const frames = knees.map((k, i) => {
+    const hip = i >= 12 && i <= 16 ? null : k - 10; // hips lost while still seated/rising
+    const angles = { leftKnee: k, rightKnee: k, leftHip: hip, rightHip: hip };
+    st = ex.update(st, { angles, landmarks: vis, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks: vis, status: st.status, reps: st.reps };
+  });
+  assert.ok(frames.some(f => f.status === 'partial-tracking'));
+  const [rep] = analyzeReps(frames, 'sit_to_stand');
+  assert.equal(rep.startMs, 1600);
+  assert.equal(rep.phase1Ms, 200);
+});

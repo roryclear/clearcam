@@ -8,7 +8,7 @@
 > **Real-Time Single-Camera Motion Intelligence, 3D Biomechanics & Synchronized Video Replay Studio**  
 > 33-Landmark Pose Tracking • Kinematic Bone-Length Invariance Filter • Decoupled 60/120 FPS Interpolation • Depth Audio Ping & Web Speech Voice Coach • Segment Angles (Shank & Trunk) • Dual Video + Telemetry Replay  
 > 🚀 **Quick Start:** `python apps/kinelab-motion/serve.py 4173` → [http://localhost:4173](http://localhost:4173)  
-> 📖 **Read the Documentation:** [KineLab Motion 2.0 Studio Guide](apps/kinelab-motion/README.md) • [154 Passing Automated Tests](apps/kinelab-motion/README.md#13-testing-known-limitations-and-verification-status)
+> 📖 **Read the Documentation:** [KineLab Motion 2.0 Studio Guide](apps/kinelab-motion/README.md) • [193 Passing Automated Tests](apps/kinelab-motion/README.md#13-testing-known-limitations-and-verification-status)
 
 <table align="center" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
 <tr valign="top">

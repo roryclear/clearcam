@@ -80,6 +80,12 @@ This table distinguishes **implemented code** from features that are merely conc
 | Per-frame inference scheduling | **Implemented** | Inference runs once per camera frame via `requestVideoFrameCallback` (Chrome 83, Safari 15.4, Firefox 132), with rAF polling as fallback; pipeline timestamps use the frame's capture time |
 | Tracking confidence states | **Implemented** | Shows good, partial or lost tracking; unavailable angles appear as `—` |
 | Per-rep metrics & quality gate | **Implemented** | Live log: last rep's ROM, phase tempo and reliability, plus running average ROM ± CV, tempo and cadence. Results card: session aggregates (average ROM ± CV, average tempo, within-set cadence, reliable/total). Reps CSV: every rep's start/extreme angle, ROM, phase durations, extreme confidence and quality. Reps below the confidence gate, or whose start was not observed, are flagged and left out of averages and peak depth. |
+| Offline re-analysis of recordings | **Implemented** | Results card, rep analysis and Reps CSV use zero-phase smoothing (Hampel outliers → gap fill ≤300 ms → 4th-order Butterworth `filtfilt`, 4 Hz) of angles from unfiltered landmarks; no live-filter lag. Synthetic side-view squat: knee RMSE 3.2° → 2.2°, jitter 1.12° → 0.50°. Older recordings: live angles at 6 Hz |
+| Camera setup guidance | **Implemented** | Prompts to level the phone (gravity sensor, ±3°), stand 2–3 m away, and place the camera at hip height |
+| Camera tilt correction | **Implemented, beta (off)** | Rotates landmarks by the phone's measured roll before angles; sign convention unverified on devices, so check that a vertical trunk reads ≈0° |
+| Clinical angle display | **Implemented** | Default **Clinical**: knee/elbow/hip flexion = 180° − interior (0° = straight), hip labelled trunk–thigh, shoulder as elevation. **Interior** shows raw interior angles. Exports always stay interior |
+| Angle reliability flags | **Implemented** | Far-side (occluded) limb in side views and joints below 0.7 confidence are dimmed with a reason tooltip |
+| Validation harness | **Implemented (developer CLI)** | `bench/validate.mjs` compares a session export with Kinovea CSV or OpenSim `.mot` (time alignment, frame- and rep-level bias, LoA, ICC(A,1), SEM, MDC95). No real-data results yet; see [docs/validation.md](docs/validation.md) |
 | One Euro filtering / outlier rejection | **Implemented** | Smooths 2D landmarks and, separately, 3D world landmarks (lower depth cutoff); presets tuned on `bench/accuracy-bench.mjs`. See [docs/accuracy-speed-research.md](docs/accuracy-speed-research.md) |
 | Smart body framing radar | **Implemented** | On-canvas position guidance; upper-body decoupling for seated/close-up exercises |
 | Repetition/hold modules | **Implemented, experimental** | Squat, sit-to-stand, lunge, shoulder abduction, shoulder flexion, single-leg balance |
@@ -272,6 +278,8 @@ The camera request uses `audio: false`, requests roughly 30 FPS as an ideal inpu
 | **Adaptive Performance Fallback** | On; Off | **On** | Watch high latency or low inference FPS |
 | **Temporal Smoothing (1€ filter)** | Off; Low; Medium; High | **Medium** | Reduce landmark movement jitter |
 | **Confidence Threshold** | 0.45 Lenient; 0.55 Standard; 0.65 Strict | **0.55** | Minimum confidence required for usable landmarks/angles |
+| **Camera Level Guidance** | On; Off | **On** | Uses the phone's gravity sensor to prompt leveling (iOS asks permission on Start) |
+| **Tilt Correction (beta)** | On; Off | **Off** | Corrects measured camera roll before computing angles |
 
 **Model fallback:** On initial load, a model that fails to initialize falls back down the ladder Heavy → Full → Lite. During a run, sustained high latency or low FPS makes the adaptive controller load the next faster model in the background and swap it in without restarting the camera (when *Auto fallback* is on).
 
@@ -289,6 +297,7 @@ The camera request uses `audio: false`, requests roughly 30 FPS as an ideal inpu
 | Movement Direction | **Off** | Small wrist/ankle directional indicators |
 | Bilateral Symmetry HUD | **On** | Left/right knee, hip, elbow, shoulder differences |
 | Ghost Reference Skeleton | **Off** | One manually chosen, faint reference pose |
+| Angle Convention | **Clinical** | Clinical (flexion, 0° = straight) or Interior (180° = straight) for labels, arcs, telemetry and results |
 
 Quick controls for badges and arcs also exist outside Settings.
 
@@ -329,6 +338,8 @@ MediaPipe Pose Landmarker produces estimates for **33 anatomical reference point
 | Left / Right Shoulder | Elbow → **Shoulder** → Hip |
 
 The implementation computes the **internal angle between two projected limb vectors** using pixel-aspect-corrected coordinates. Approximate 180° commonly represents a straight knee or elbow in the chosen view; orientation and landmark geometry change the reading.
+
+With the default **Clinical** convention the display shows knee, elbow and hip flexion as 180° − interior (0° = straight; the hip value is trunk–thigh, so it includes trunk lean) and the shoulder as elevation; the Interior convention shows the raw interior angle. Readouts on the occluded far-side limb in a side view, or below 0.7 confidence, are dimmed with a reason tooltip.
 
 The implementation also includes a helper for estimated **trunk inclination relative to vertical**, but it is not one of the eight primary live sidebar angles.
 
@@ -415,7 +426,7 @@ Select two saved sessions and a joint. The comparison reports:
 
 | Format | Contains | Does not contain |
 | --- | --- | --- |
-| **JSON** | Session metadata, timestamps, compact landmarks, angles, phases, statuses and reps | Original camera video |
+| **JSON** | Session metadata, timestamps, compact landmarks, live angles, angles from unfiltered landmarks (`rawAngles`, dropped when storage is too full to keep them without evicting older sessions), phases, statuses and reps | Original camera video |
 | **CSV** | Row per frame with elapsed time, phase, status, reps, eight joint-angle fields | Raw landmark-coordinate arrays or original video |
 
 There is no built-in MP4 export, 3D animation export, PDF clinical report, or cloud backup in the current KineLab module.
@@ -626,7 +637,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **24 Node test files and 154 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **27 Node test files and 193 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 
@@ -636,7 +647,7 @@ Run them from the repository root:
 node --test apps/kinelab-motion/tests/*.test.mjs
 ```
 
-Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all 139 tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
+Node.js **20+** is a reasonable baseline. The test runner comes with Node; this standalone module has no npm install step for these tests. Execution takes ~2 s across all tests (the synthetic accuracy benchmark dominates). Tests resolve paths relative to their own files, so they can be run from any directory.
 
 ### Known limits and caveats
 

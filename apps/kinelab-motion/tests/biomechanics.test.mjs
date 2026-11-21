@@ -97,3 +97,37 @@ test('trackingStatus evaluates whole body and decouples upper-body exercises', (
   assert.equal(trackingStatus(pose, 0.55, 'shoulder-abduction'), 'good');
   assert.equal(trackingStatus(pose, 0.55, 'shoulder-flexion'), 'good');
 });
+
+test('Clinical convention: knee/hip/elbow as flexion, shoulder unchanged, labels', async () => {
+  const { displayAngle, formatAngle, angleLabel, setAngleConvention, getAngleConvention } = await import('../src/biomechanics/angle-convention.mjs');
+  assert.equal(displayAngle('leftKnee', 95, 'clinical'), 85);
+  assert.equal(displayAngle('rightHip', 170, 'clinical'), 10);
+  assert.equal(displayAngle('leftElbow', 180, 'clinical'), 0);
+  assert.equal(displayAngle('leftShoulder', 150, 'clinical'), 150);
+  assert.equal(displayAngle('Knee', 95, 'interior'), 95);
+  assert.equal(displayAngle('leftKnee', NaN), null);
+  assert.equal(formatAngle('leftKnee', null), '—');
+  assert.equal(angleLabel({ key: 'leftHip', label: 'LEFT HIP' }, 'clinical'), 'LEFT HIP FLEX (TRUNK–THIGH)');
+  assert.equal(angleLabel({ key: 'leftKnee', label: 'LEFT KNEE' }, 'interior'), 'LEFT KNEE');
+  setAngleConvention('interior');
+  assert.equal(getAngleConvention(), 'interior');
+  assert.equal(formatAngle('leftKnee', 95.4), '95°');
+  setAngleConvention('clinical');
+  assert.equal(formatAngle('leftKnee', 95.4), '85°');
+});
+
+test('Angle reliability flags the far-side limb side-on and low-confidence joints', async () => {
+  const { angleReliability } = await import('../src/biomechanics/angle-reliability.mjs');
+  const lm = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.95 }));
+  for (const i of [24, 26, 28]) lm[i] = { x: 0.5, y: 0.5, visibility: 0.6 }; // right leg hidden
+  const angles = { leftKnee: 100, rightKnee: 120, leftHip: 90, rightHip: 95, leftShoulder: 20 };
+  const side = angleReliability(angles, lm, { sagittal2DWeight: 1 });
+  assert.equal(side.rightKnee.low, true);
+  assert.match(side.rightKnee.reason, /Far-side/);
+  assert.equal(side.leftKnee.low, false);
+  // Facing the camera: no far side, but the hidden leg is still low confidence.
+  const front = angleReliability(angles, lm, { sagittal2DWeight: 0 });
+  assert.match(front.rightKnee.reason, /Low landmark confidence/);
+  assert.equal(front.leftKnee.low, false);
+  assert.equal(front.rightElbow.low, false, 'missing angle is not flagged');
+});

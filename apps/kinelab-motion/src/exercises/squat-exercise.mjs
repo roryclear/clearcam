@@ -3,6 +3,7 @@
  * Preserves the exact algorithm and behavior of the existing KineLab squat prototype.
  */
 
+import { formatAngle } from '../biomechanics/angle-convention.mjs';
 import { BaseExercise } from './exercise-base.mjs';
 import { JOINTS } from '../biomechanics/landmark-indices.mjs';
 import { selectBilateralAngle, reliable } from '../biomechanics/angle-calculations.mjs';
@@ -177,7 +178,7 @@ export class SquatExercise extends BaseExercise {
     return [
       { label: 'REPS', value: state.reps, highlight: true },
       { label: 'PHASE', value: state.phase.toUpperCase() },
-      { label: 'KNEE ANGLE', value: Number.isFinite(state.lastKneeAngle) ? `${Math.round(state.lastKneeAngle)}°` : '—' },
+      { label: 'KNEE', value: formatAngle('Knee', state.lastKneeAngle) },
     ];
   }
 }
