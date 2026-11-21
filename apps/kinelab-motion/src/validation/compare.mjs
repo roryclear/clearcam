@@ -119,6 +119,9 @@ export function compareJoint(session, reference, spec) {
       const inRep = (t, v) => t >= rep.startMs - EDGE_EPS_MS && t <= rep.endMs + EDGE_EPS_MS && v !== null && Number.isFinite(v);
       const av = appX.filter((v, i) => inRep(appT[i], v));
       const rv = refX.filter((v, i) => inRep(refTShifted[i], v));
+      // Bracketing samples can satisfy coverage without any measurement inside a very short
+      // window; a rep pair needs at least one measured value per series.
+      if (!av.length || !rv.length) { excluded++; return null; }
       return { app: pick(...av), ref: pick(...rv), quality: rep.quality };
     }).filter(Boolean);
     repLevel = {
