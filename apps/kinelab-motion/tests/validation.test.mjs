@@ -8,6 +8,8 @@ import { compareJoint } from '../src/validation/compare.mjs';
 import { runValidation } from '../bench/validate.mjs';
 import { SquatExercise } from '../src/exercises/squat-exercise.mjs';
 import { mulberry32 } from '../bench/synthetic-pose.mjs';
+import { analyzeReps } from '../src/exercises/rep-analysis.mjs';
+import { offlineSessionFrames } from '../src/sessions/offline-analysis.mjs';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -235,6 +237,28 @@ test('maxSpacing: gaps crossing a rep boundary count in full (PR #16 review roun
   assert.equal(maxSpacing([0, 33, 66, 100], 0, 100), 34);
   assert.equal(maxSpacing([0, 100, 133, 166, 200], 60, 200), 100); // dropout 0–100 overlaps the start
   assert.equal(maxSpacing([0, 33, 66, 166], 0, 120), 100); // dropout 66–166 overlaps the end
-  assert.equal(maxSpacing([50, 83], 0, 100), 50); // no sample before the window: edge bounds it
-  assert.equal(maxSpacing([], 0, 100), 100);
+  assert.equal(maxSpacing([40, 73, 106], 0, 100), Infinity); // series starts inside the window
+  assert.equal(maxSpacing([0, 33, 66], 0, 100), Infinity); // series ends inside the window
+  assert.equal(maxSpacing([], 0, 100), Infinity);
+});
+
+test('review round 5: delimiter from the table, not a title or quoted text; reference starting inside a rep (PR #16)', () => {
+  const titled = parseKinoveaCsv('Knee angle; trial\nTime (ms),Knee\n0,170\n200,160\n');
+  assert.deepEqual(titled.columns.Knee, [170, 160]);
+  const quoted = parseKinoveaCsv('Time (ms),"Knee","Note; detail"\n0,170,1\n33,160,2\n');
+  assert.deepEqual(quoted.columns.Knee, [170, 160]);
+  assert.deepEqual(quoted.columns['Note; detail'], [1, 2]);
+  const quotedTab = parseKinoveaCsv('Time (ms);Knee;"a\tb"\n0;170,5;1\n33;160;2\n');
+  assert.deepEqual(quotedTab.columns.Knee, [170.5, 160]);
+  // Decimal-comma semicolon export still detected as semicolon.
+  assert.deepEqual(parseKinoveaCsv('Time (ms);Angle\n0;170,5\n33;168,0\n').columns.Angle, [170.5, 168]);
+
+  // Reference recording starts 40 ms after the first rep starts: that rep is excluded.
+  const syn = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
+  const spec = { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 };
+  const [first] = analyzeReps(offlineSessionFrames(syn.session.frames).frames, 'squat');
+  const late = syn.mot.split('\n').filter(l => !/^-?\d/.test(l) || Number(l.split('\t')[0]) * 1000 >= first.startMs + 40).join('\n');
+  const r = compareJoint(syn.session, parseReference(late, 'ik.mot'), spec);
+  assert.equal(r.repLevel.excluded, 1);
+  assert.equal(r.repLevel.reps.length, 4);
 });

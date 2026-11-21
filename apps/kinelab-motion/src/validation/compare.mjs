@@ -15,19 +15,20 @@ export const MAX_REP_GAP_MS = 80;
 
 /**
  * Largest interval between consecutive sorted sample times ts that overlaps [t0, t1].
- * Intervals crossing a boundary count in full (the samples just outside the window
- * bound them); without a sample beyond an edge the window edge bounds it.
+ * Intervals crossing a boundary count in full. A series with no sample at or before t0,
+ * or none at or after t1, does not cover the window: Infinity.
  */
 export function maxSpacing(ts, t0, t1) {
   let prev = null;
   let worst = 0;
   for (const t of ts) {
     if (t <= t0) { prev = t; continue; }
-    worst = Math.max(worst, t - (prev ?? t0));
+    if (prev === null) return Infinity; // starts inside the window
+    worst = Math.max(worst, t - prev);
     prev = t;
     if (t >= t1) return worst;
   }
-  return Math.max(worst, t1 - (prev ?? t0));
+  return Infinity; // ends inside the window
 }
 import { agreement } from './agreement.mjs';
 import { estimateLag, resample } from './align.mjs';

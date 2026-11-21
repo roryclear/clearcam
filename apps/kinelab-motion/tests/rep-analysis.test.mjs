@@ -593,3 +593,21 @@ test('A recording that starts inside the commit keeps the commit limit (PR #16 r
   assert.equal(rep.startMs, 0);
   assert.equal(rep.phase1Ms, 400);
 });
+
+test('A tracking dropout before the first committed frame does not move the commit cap (PR #16 review)', async () => {
+  const { SitToStandExercise } = await import('../src/exercises/sit-to-stand-exercise.mjs');
+  const vis = Array.from({ length: 33 }, () => ({ visibility: 0.95, presence: 0.99 }));
+  const knees = [...Array(10).fill(90), 90, 130, 90, 90, 90, 90, 90, 130, 170, 170, 170, 140, 120, 100, 90, 90];
+  const ex = new SitToStandExercise();
+  let st = ex.createState();
+  const frames = knees.map((k, i) => {
+    const hip = i >= 12 && i <= 16 ? null : k - 10; // hips lost while still seated/rising
+    const angles = { leftKnee: k, rightKnee: k, leftHip: hip, rightHip: hip };
+    st = ex.update(st, { angles, landmarks: vis, timestampMs: i * 100, trackingQuality: 'good' });
+    return { timeMs: i * 100, angles, landmarks: vis, status: st.status, reps: st.reps };
+  });
+  assert.ok(frames.some(f => f.status === 'partial-tracking'));
+  const [rep] = analyzeReps(frames, 'sit_to_stand');
+  assert.equal(rep.startMs, 1600);
+  assert.equal(rep.phase1Ms, 200);
+});

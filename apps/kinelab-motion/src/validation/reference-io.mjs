@@ -9,12 +9,22 @@
  * All readers return { timeMs: number[], columns: { [name]: (number|null)[] } }.
  */
 
-/** Delimiter from the first table lines (a title row may contain none). */
+/**
+ * Delimiter of the table: the candidate (quote-aware) that splits the most of the first
+ * lines into the same number (≥ 2) of fields. A title row or a delimiter inside quotes
+ * does not decide it. Ties prefer tab, then semicolon (decimal-comma exports), then comma.
+ */
 function detectDelimiter(lines) {
-  const sample = lines.slice(0, 10);
-  if (sample.some(l => l.includes('\t'))) return '\t';
-  if (sample.some(l => l.includes(';'))) return ';';
-  return ',';
+  const sample = lines.slice(0, 12);
+  let best = { d: ',', score: -1 };
+  for (const d of ['\t', ';', ',']) {
+    const counts = sample.map(l => splitFields(l, d).length);
+    const freq = new Map();
+    for (const c of counts) if (c >= 2) freq.set(c, (freq.get(c) ?? 0) + 1);
+    const score = Math.max(0, ...freq.values());
+    if (score > best.score) best = { d, score };
+  }
+  return best.d;
 }
 
 /** Splits one delimited line, honouring double quotes ("" = literal quote). */

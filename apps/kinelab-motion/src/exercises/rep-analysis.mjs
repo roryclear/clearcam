@@ -273,8 +273,14 @@ function commitIndex(samples, countIdx, profile) {
   // The count frame itself (e.g. 'completed') and a few settling frames may precede the run.
   while (k >= 0 && countIdx - k <= 2 && !inCommit(k)) k--;
   if (k < 0 || !inCommit(k)) return null;
-  while (k > 0 && (inCommit(k - 1) || samples[k - 1].status === 'partial-tracking')) k--;
-  return k;
+  // Partial-tracking frames are bridged only when committed frames precede them (a
+  // dropout inside the commitment); a dropout before the first committed frame is not
+  // evidence of commitment and must not move the start cap earlier.
+  let first = k;
+  for (let j = k - 1; j >= 0 && (inCommit(j) || samples[j].status === 'partial-tracking'); j--) {
+    if (inCommit(j)) first = j;
+  }
+  return first;
 }
 
 /**
