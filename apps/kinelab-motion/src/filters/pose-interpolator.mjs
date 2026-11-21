@@ -136,13 +136,16 @@ export class PoseInterpolator {
     const tgt = this.target[i];
     const v = this.velocity?.[i];
     if (!tgt || !v) return tgt;
-    const clamp = d => Math.max(-MAX_PREDICTED_OFFSET, Math.min(MAX_PREDICTED_OFFSET, d));
-    return {
-      ...tgt,
-      x: tgt.x + clamp(v.vx * horizonMs),
-      y: tgt.y + clamp(v.vy * horizonMs),
-      z: (tgt.z ?? 0) + clamp(v.vz * horizonMs),
-    };
+    let dx = v.vx * horizonMs;
+    let dy = v.vy * horizonMs;
+    let dz = v.vz * horizonMs;
+    // Cap the offset vector's length (not each axis) so diagonal motion obeys the bound.
+    const len = Math.hypot(dx, dy, dz);
+    if (len > MAX_PREDICTED_OFFSET) {
+      const k = MAX_PREDICTED_OFFSET / len;
+      dx *= k; dy *= k; dz *= k;
+    }
+    return { ...tgt, x: tgt.x + dx, y: tgt.y + dy, z: (tgt.z ?? 0) + dz };
   }
 
   _updateVelocity(next, timestampMs) {

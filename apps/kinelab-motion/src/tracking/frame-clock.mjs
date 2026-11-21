@@ -41,13 +41,49 @@ export function selectFrameTime(nowMs, metadata, lastTimeMs = -Infinity) {
 }
 
 /**
- * Clock for the inference-rate cap: the frame's own media time (camera cadence), so
- * display-tick jitter in callback spacing can't skip frames below the cap. A 30 fps
- * camera on a 75 Hz display has callbacks 27/40 ms apart; capping on callback time
- * at 28 ms dropped every other frame.
- * @param {Object|null} metadata VideoFrameCallbackMetadata
- * @param {number} fallbackMs frame time used when mediaTime is unavailable
+ * Inference-rate cap on the camera's own cadence. The clock is the frame's mediaTime
+ * while it advances, so display-tick jitter in callback spacing can't skip frames below
+ * the cap (a 30 fps camera on a 75 Hz display has callbacks 27/40 ms apart; capping on
+ * callback time at 28 ms dropped every other frame). Live streams may report a constant
+ * mediaTime (e.g. 0); once it stops advancing the sampler switches, for the rest of the
+ * session, to the frame time, starting a fresh history so the two timelines never mix.
  */
+export class FrameSampler {
+  constructor(intervalMs) {
+    this.intervalMs = intervalMs;
+    this.reset();
+  }
+
+  reset() {
+    this.mode = 'media';
+    this.lastMedia = null;
+    this.lastSampled = -Infinity;
+  }
+
+  /**
+   * @param {Object|null} metadata VideoFrameCallbackMetadata
+   * @param {number} frameTimeMs frame time on the performance.now() timeline
+   * @returns {boolean} true if this frame should go to inference
+   */
+  due(metadata, frameTimeMs) {
+    let clock = frameTimeMs;
+    if (this.mode === 'media') {
+      const media = metadata?.mediaTime;
+      if (Number.isFinite(media) && media >= 0 && (this.lastMedia === null || media > this.lastMedia)) {
+        this.lastMedia = media;
+        clock = media * 1000;
+      } else {
+        this.mode = 'frame';
+        this.lastSampled = -Infinity;
+      }
+    }
+    if (!frameDue(clock, this.lastSampled, this.intervalMs)) return false;
+    this.lastSampled = clock;
+    return true;
+  }
+}
+
+/** mediaTime-based sampling clock in ms, or the fallback when mediaTime is unusable. */
 export function sampleClockMs(metadata, fallbackMs) {
   const media = metadata?.mediaTime;
   return Number.isFinite(media) && media >= 0 ? media * 1000 : fallbackMs;

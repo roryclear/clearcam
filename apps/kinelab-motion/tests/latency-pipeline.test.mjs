@@ -187,3 +187,42 @@ test('A live fallback keeps an Auto preference; explicit models are replaced', a
   assert.equal(resolveModelChoice(saved, { mobile: true }), 'full');
   assert.equal(modelPreferenceAfterFallback('heavy', 'full'), 'full');
 });
+
+test('Predicted offset is capped by vector length, including diagonal motion', () => {
+  const interp = new PoseInterpolator({ lambda: 32, predictionMs: 40 });
+  interp.setTarget([{ x: 0.1, y: 0.1 }], 0);
+  interp.setTarget([{ x: 0.15, y: 0.15 }], 33);
+  const p = interp._predict(0, 40);
+  const len = Math.hypot(p.x - 0.15, p.y - 0.15);
+  assert.ok(len <= 0.05 + 1e-9, `offset length ${len}`);
+  assert.ok(Math.abs((p.x - 0.15) - (p.y - 0.15)) < 1e-9, 'direction preserved');
+  // Small offsets are untouched.
+  const q = new PoseInterpolator({ predictionMs: 40 });
+  q.setTarget([{ x: 0.1, y: 0.1 }], 0);
+  q.setTarget([{ x: 0.101, y: 0.1 }], 33);
+  assert.ok(Math.abs(q._predict(0, 33).x - 0.102) < 1e-9);
+});
+
+test('Latency percentiles never mix frame clocks', () => {
+  const perf = new PerformanceMonitor();
+  for (let i = 0; i < 100; i++) perf.recordPipelineLatency('landmarks', 80, 'capture');
+  perf.recordPipelineLatency('landmarks', 5, 'callback');
+  const m = perf.getMetrics();
+  assert.equal(m.captureToLandmarksP50, 5);
+  assert.equal(m.latencyClock, 'callback');
+  perf.recordPipelineLatency('overlay', 90, 'capture');
+  assert.equal(perf.getMetrics().overlayLatencyClock, 'capture');
+});
+
+test('A stalled mediaTime (e.g. constant 0) does not stop sampling', async () => {
+  const { FrameSampler } = await import('../src/tracking/frame-clock.mjs');
+  const s = new FrameSampler(28);
+  let sampled = 0;
+  for (let f = 0; f < 30; f++) if (s.due({ mediaTime: 0 }, 1000 + f * 33.3)) sampled++;
+  assert.ok(sampled >= 29, `sampled ${sampled}/30`);
+  // Advancing mediaTime still follows camera cadence; reset restores media mode.
+  s.reset();
+  sampled = 0;
+  for (let f = 0; f < 60; f++) if (s.due({ mediaTime: f / 60 }, 5000 + f)) sampled++;
+  assert.equal(sampled, 30);
+});

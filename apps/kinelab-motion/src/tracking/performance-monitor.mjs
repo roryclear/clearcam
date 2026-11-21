@@ -30,6 +30,7 @@ export class PerformanceMonitor {
     // End-to-end latency from the frame's capture clock (see frame-clock.mjs).
     this.maxPipelineSamples = 120;
     this.pipeline = { landmarks: [], overlay: [] };
+    this.pipelineClock = { landmarks: null, overlay: null };
     this.latencyClock = null;
   }
 
@@ -40,11 +41,16 @@ export class PerformanceMonitor {
    * @param {string} [clock] which frame clock the sample is measured from
    */
   recordPipelineLatency(stage, ms, clock) {
+    if (!this.pipeline[stage] || !Number.isFinite(ms) || ms < 0) return;
+    // Samples from different frame clocks aren't comparable: a clock change starts a new history.
+    if (clock && clock !== this.pipelineClock[stage]) {
+      this.pipeline[stage] = [];
+      this.pipelineClock[stage] = clock;
+    }
     const buf = this.pipeline[stage];
-    if (!buf || !Number.isFinite(ms) || ms < 0) return;
     buf.push(ms);
     if (buf.length > this.maxPipelineSamples) buf.shift();
-    if (clock) this.latencyClock = clock;
+    if (stage === 'landmarks') this.latencyClock = this.pipelineClock.landmarks;
   }
 
   /**
@@ -114,6 +120,7 @@ export class PerformanceMonitor {
       captureToOverlayP50: percentile(this.pipeline.overlay, 50),
       captureToOverlayP95: percentile(this.pipeline.overlay, 95),
       latencyClock: this.latencyClock,
+      overlayLatencyClock: this.pipelineClock.overlay,
     };
   }
 
@@ -129,6 +136,7 @@ export class PerformanceMonitor {
     this.lastLatencyMs = 0;
     this.avgLatencyMs = 0;
     this.pipeline = { landmarks: [], overlay: [] };
+    this.pipelineClock = { landmarks: null, overlay: null };
   }
 
   reset() {
@@ -143,6 +151,7 @@ export class PerformanceMonitor {
     this.lastLatencyMs = 0;
     this.avgLatencyMs = 0;
     this.pipeline = { landmarks: [], overlay: [] };
+    this.pipelineClock = { landmarks: null, overlay: null };
     this.latencyClock = null;
   }
 }

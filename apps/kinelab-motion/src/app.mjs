@@ -25,7 +25,7 @@ import { PoseFilter } from './filters/pose-filter.mjs';
 import { KinematicBoneFilter } from './filters/kinematic-filter.mjs';
 import { PoseInterpolator } from './filters/pose-interpolator.mjs';
 import { PerformanceMonitor } from './tracking/performance-monitor.mjs';
-import { supportsVideoFrameCallback, selectFrameTime, missedFrames, sampleClockMs, frameDue } from './tracking/frame-clock.mjs';
+import { supportsVideoFrameCallback, selectFrameTime, missedFrames, FrameSampler } from './tracking/frame-clock.mjs';
 import { isLikelyMobile, resolveModelChoice, modelPreferenceAfterFallback } from './tracking/device-profile.mjs';
 import { AdaptiveController } from './tracking/adaptive-controller.mjs';
 import { MediaPipeRunner } from './tracking/mediapipe-runner.mjs';
@@ -220,7 +220,7 @@ const appState = {
   useVideoFrameCallback: false, // inference runs per camera frame via requestVideoFrameCallback
   vfcHandle: 0,
   lastPresentedFrames: null,
-  lastSampledClock: -Infinity, // media-time clock of the last frame sent to inference
+  frameSampler: null, // FrameSampler: inference cap on camera cadence (set in startCamera)
   lastFrameTime: -Infinity, // MediaPipe VIDEO timestamps must strictly increase, across sessions too
   pendingOverlay: null, // { timeMs, clock } of the newest landmarks not yet drawn
 };
@@ -590,9 +590,7 @@ function onVideoFrame(token, metadata) {
   appState.lastPresentedFrames = metadata?.presentedFrames ?? null;
   const now = performance.now();
   // Cap on the camera's own cadence (60 fps cameras: every other frame), not callback spacing.
-  const clock = sampleClockMs(metadata, selectFrameTime(now, metadata).timeMs);
-  if (!frameDue(clock, appState.lastSampledClock, appState.FRAME_INTERVAL_MS)) return;
-  appState.lastSampledClock = clock;
+  if (!appState.frameSampler.due(metadata, selectFrameTime(now, metadata).timeMs)) return;
   processFrame(video, now, metadata);
 }
 
@@ -783,7 +781,6 @@ function stopCamera() {
   appState.vfcHandle = 0;
   appState.useVideoFrameCallback = false;
   appState.lastPresentedFrames = null;
-  appState.lastSampledClock = -Infinity;
   appState.pendingOverlay = null;
 
   if (recorder.isRecording) {
@@ -888,6 +885,7 @@ async function startCamera() {
     appState.useVideoFrameCallback = supportsVideoFrameCallback(nodes.video);
     if (appState.useVideoFrameCallback) {
       const token = appState.sessionToken;
+      appState.frameSampler = new FrameSampler(appState.FRAME_INTERVAL_MS);
       appState.vfcHandle = nodes.video.requestVideoFrameCallback((_, m) => onVideoFrame(token, m));
     }
     frameLoop();
