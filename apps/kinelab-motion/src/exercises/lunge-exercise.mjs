@@ -3,6 +3,7 @@
  * Tracks alternating or single-leg forward/reverse lunges with depth threshold and return to extension.
  */
 
+import { formatAngle } from '../biomechanics/angle-convention.mjs';
 import { BaseExercise } from './exercise-base.mjs';
 import { JOINTS } from '../biomechanics/landmark-indices.mjs';
 
@@ -161,7 +162,7 @@ export class LungeExercise extends BaseExercise {
     return [
       { label: 'LUNGES', value: state.reps, highlight: true },
       { label: 'LEAD LEG', value: state.leadLeg ? state.leadLeg.toUpperCase() : '—' },
-      { label: 'KNEE ANGLE', value: Number.isFinite(state.leadKneeAngle) ? `${Math.round(state.leadKneeAngle)}°` : '—' },
+      { label: 'KNEE', value: formatAngle('Knee', state.leadKneeAngle) },
     ];
   }
 }

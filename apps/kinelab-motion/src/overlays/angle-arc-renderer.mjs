@@ -2,6 +2,7 @@
  * Angle Arc and Degree Label renderer for live joints.
  */
 
+import { formatAngle } from '../biomechanics/angle-convention.mjs';
 import { ANGLE_DEFINITIONS, reliable } from '../biomechanics/angle-calculations.mjs';
 
 export class AngleArcRenderer {
@@ -83,7 +84,7 @@ export class AngleArcRenderer {
       if (!reliable(pJoint, minVisibility)) continue;
 
       const pj = project(pJoint);
-      const text = `${Math.round(angle)}°`;
+      const text = formatAngle(def.key, angle);
       const textMetrics = ctx.measureText(text);
       const padX = 6 * scale;
       const padY = 4 * scale;

@@ -459,6 +459,22 @@
                   <option value="2d">2D Camera Screen Projection</option>
                 </select>
               </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Camera Setup Guidance</span>
+                  <span class="setting-desc">Uses the phone's tilt sensor to prompt: level the phone, stand 2–3 m away, camera at hip height</span>
+                </div>
+                <input type="checkbox" id="cfg-track-level" checked />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Tilt Correction (beta)</span>
+                  <span class="setting-desc">Removes phone roll from trunk and shank angles. Not yet verified on all devices: check that a vertical trunk reads ~0° with the phone tilted</span>
+                </div>
+                <input type="checkbox" id="cfg-track-tiltfix" />
+              </label>
             </div>
 
             <!-- Overlays Tab -->
@@ -509,6 +525,17 @@
                   <span class="setting-desc">Extrapolates the drawn skeleton up to 40 ms to hide inference lag. Display only; angles and reps use measured landmarks.</span>
                 </div>
                 <input type="checkbox" id="cfg-overlay-predict" />
+              </label>
+
+              <label class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Angle Convention</span>
+                  <span class="setting-desc">Clinical: knee, hip and elbow as flexion (0° = straight), hip measured trunk–thigh. Interior: the raw 3-point angle (180° = straight). Exports always use interior angles</span>
+                </div>
+                <select id="cfg-overlay-convention">
+                  <option value="clinical">Clinical flexion (0° = straight)</option>
+                  <option value="interior">Interior angle (180° = straight)</option>
+                </select>
               </label>
 
               <label class="setting-row">
