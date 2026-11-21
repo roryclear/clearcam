@@ -96,3 +96,65 @@ test('Recorder stores raw angles next to the live angles', () => {
   assert.equal(a.angles.leftKnee, 120);
   assert.equal(b.rawAngles, undefined);
 });
+
+test('smoothSeriesOffline: no bridging across frame-time gaps; irregular frames; zero-MAD spikes (PR #16 review)', () => {
+  // Two constant runs (180° then 90°) separated by a 4 s capture interruption.
+  const t = [];
+  const x = [];
+  for (let i = 0; i < 30; i++) { t.push(i * 33); x.push(180); }
+  for (let i = 0; i < 30; i++) { t.push(5000 + i * 33); x.push(90); }
+  const y = smoothSeriesOffline(t, x, { cutoffHz: 4 });
+  assert.ok(y.slice(0, 30).every(v => Math.abs(v - 180) < 1e-6), `run 1 ${y[29]}`);
+  assert.ok(y.slice(30).every(v => Math.abs(v - 90) < 1e-6), `run 2 ${y[30]}`);
+
+  // Irregular timing (dropped frames): a ramp stays a ramp at its true times.
+  const ti = [];
+  for (let k = 0, tt = 0; k < 120; k++) { ti.push(tt); tt += k % 5 === 4 ? 66 : 33; }
+  const ramp = ti.map(tt => 100 + tt * 0.01);
+  const yr = smoothSeriesOffline(ti, ramp, { cutoffHz: 4 });
+  const mid = yr.slice(20, 100).map((v, k) => Math.abs(v - ramp[k + 20]));
+  assert.ok(Math.max(...mid) < 0.05, `ramp error ${Math.max(...mid)}`);
+
+  // Flat series with one tracking spike: MAD = 0 must not disable rejection.
+  const flat = Array(91).fill(180);
+  flat[45] = 90;
+  const ys = smoothSeriesOffline(flat.map((_, i) => i * 33), flat, { cutoffHz: 4 });
+  assert.ok(Math.min(...ys) > 179.9, `spike leaked: ${Math.min(...ys)}`);
+  assert.deepEqual(hampel(flat, 7), flat, 'default hampel keeps MAD>0 semantics');
+});
+
+test('SessionStorage compact fallback: optional rawAngles never evict older sessions (PR #16 review)', async () => {
+  const { SessionStorage } = await import('../src/sessions/session-storage.mjs');
+  const { stripRawAngles } = await import('../src/sessions/offline-analysis.mjs');
+  class QuotaStorage {
+    constructor(max) { this.max = max; this.data = new Map(); }
+    size() { let n = 0; for (const [k, v] of this.data) n += k.length + v.length; return n; }
+    getItem(k) { return this.data.has(k) ? this.data.get(k) : null; }
+    setItem(k, v) {
+      const prev = this.data.get(k);
+      this.data.set(k, String(v));
+      if (this.size() > this.max) {
+        if (prev === undefined) this.data.delete(k); else this.data.set(k, prev);
+        throw Object.assign(new Error('quota'), { name: 'QuotaExceededError' });
+      }
+    }
+    removeItem(k) { this.data.delete(k); }
+  }
+  const mk = (id, raw) => ({
+    id, recordedAt: '2026-11-21T00:00:00Z', exerciseId: 'squat', frameCount: 60, durationMs: 2000, finalReps: 1,
+    frames: Array.from({ length: 60 }, (_, i) => ({ timeMs: i * 33, angles: { leftKnee: 170.1, rightKnee: 169.4 },
+      ...(raw ? { rawAngles: { leftKnee: 171.3, rightKnee: 168.8 } } : {}) })),
+  });
+  const plain = JSON.stringify(mk('x', false)).length;
+  const store = new QuotaStorage(plain * 2.3);
+  const mgr = new SessionStorage({ storage: store });
+  assert.equal(mgr.saveSession(mk('old', false)), true);
+  // The full session (with rawAngles) only fits by evicting 'old'; the compact one fits beside it.
+  assert.equal(mgr.saveSession(mk('new', true), { compact: stripRawAngles }), true);
+  assert.deepEqual(mgr.getIndex().map(s => s.id).sort(), ['new', 'old']);
+  assert.equal(mgr.getSession('new').frames[0].rawAngles, undefined);
+  // With room, rawAngles are kept.
+  const roomy = new SessionStorage({ storage: new QuotaStorage(Infinity) });
+  assert.equal(roomy.saveSession(mk('a', true), { compact: stripRawAngles }), true);
+  assert.ok(roomy.getSession('a').frames[0].rawAngles);
+});

@@ -426,7 +426,7 @@ Select two saved sessions and a joint. The comparison reports:
 
 | Format | Contains | Does not contain |
 | --- | --- | --- |
-| **JSON** | Session metadata, timestamps, compact landmarks, live angles, angles from unfiltered landmarks (`rawAngles`), phases, statuses and reps | Original camera video |
+| **JSON** | Session metadata, timestamps, compact landmarks, live angles, angles from unfiltered landmarks (`rawAngles`, dropped when storage is too full to keep them without evicting older sessions), phases, statuses and reps | Original camera video |
 | **CSV** | Row per frame with elapsed time, phase, status, reps, eight joint-angle fields | Raw landmark-coordinate arrays or original video |
 
 There is no built-in MP4 export, 3D animation export, PDF clinical report, or cloud backup in the current KineLab module.
@@ -637,7 +637,7 @@ The repository presently references fixed SDK/model URLs, **but this README does
 
 ### Automated tests present in source
 
-The KineLab module contains **27 Node test files and 177 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
+The KineLab module contains **27 Node test files and 181 automated test definitions**, all passing with 100% green coverage on Node.js 20+ with zero npm dependencies.
 
 The test files exercise categories including 3D metric vector geometry, bone-length invariance filtering, 60/120 FPS pose interpolation, depth target audio cues & voice coach, exercise state machines, settings validation, DOM element contracts, sessions, extension behavior, movement challenges, and synthetic measurement scenarios.
 

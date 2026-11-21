@@ -121,3 +121,21 @@ test('FramingAssistant seamlessly supports underscored and hyphenated exercise I
   assert.equal(shoulder.status, 'optimal');
   assert.ok(shoulder.guidance.includes('shoulder abduction'));
 });
+
+test('Setup guidance: off when disabled; distance/height judged only when standing (PR #16 review)', () => {
+  const assistant = new FramingAssistant();
+  const level = { rollDeg: 0.5, pitchDeg: 2 };
+  // Disabled setting: no distance prompt even without sensor data.
+  const far = createDummyLandmarks(FULL_BODY, { scale: 0.4 });
+  assert.match(assistant.evaluate(far, 'squat').guidance, /Move closer/);
+  assert.equal(assistant.evaluate(far, 'squat', { setupGuidance: false }).status, 'optimal');
+  // Squat depth: hips drop low in the frame and the knees bend; no camera-height advice.
+  const deep = createDummyLandmarks(FULL_BODY);
+  deep[JOINTS.leftHip] = { x: 0.35, y: 0.66, z: 0, visibility: 0.9 };
+  deep[JOINTS.rightHip] = { x: 0.35, y: 0.66, z: 0, visibility: 0.9 };
+  deep[JOINTS.leftKnee] = { x: 0.6, y: 0.72, z: 0, visibility: 0.9 };
+  deep[JOINTS.rightKnee] = { x: 0.6, y: 0.72, z: 0, visibility: 0.9 };
+  const res = assistant.evaluate(deep, 'squat', { tilt: level });
+  assert.doesNotMatch(res.guidance ?? '', /camera to hip height/);
+  assert.equal(res.status, 'optimal');
+});

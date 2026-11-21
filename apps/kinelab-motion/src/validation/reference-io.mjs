@@ -9,11 +9,11 @@
  * All readers return { timeMs: number[], columns: { [name]: (number|null)[] } }.
  */
 
-function detectDelimiter(line) {
-  const counts = { ';': 0, '\t': 0, ',': 0 };
-  for (const ch of line) if (ch in counts) counts[ch]++;
-  if (counts['\t'] > 0) return '\t';
-  if (counts[';'] > 0) return ';';
+/** Delimiter from the first table lines (a title row may contain none). */
+function detectDelimiter(lines) {
+  const sample = lines.slice(0, 10);
+  if (sample.some(l => l.includes('\t'))) return '\t';
+  if (sample.some(l => l.includes(';'))) return ';';
   return ',';
 }
 
@@ -41,7 +41,7 @@ function parseTimecode(raw) {
 export function parseKinoveaCsv(text, { timeUnit = 'auto' } = {}) {
   const lines = String(text).replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim() !== '');
   if (!lines.length) throw new Error('empty reference file');
-  const delimiter = detectDelimiter(lines[0]);
+  const delimiter = detectDelimiter(lines);
   const split = l => l.split(delimiter).map(c => c.trim());
   // Header = first row whose first cell is not numeric (Kinovea may prepend a title row).
   let h = 0;

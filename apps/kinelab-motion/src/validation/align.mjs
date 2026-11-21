@@ -14,12 +14,13 @@ export function resample(t, x, grid, { maxGapMs = 150 } = {}) {
   let j = 0;
   for (let g = 0; g < grid.length; g++) {
     const tg = grid[g];
-    while (j + 1 < pts.length && pts[j + 1][0] < tg) j++;
     if (!pts.length || tg < pts[0][0] || tg > pts[pts.length - 1][0]) continue;
+    // a = last sample at or before tg, so an exact match is used even right after a gap.
+    while (j + 1 < pts.length && pts[j + 1][0] <= tg) j++;
     const a = pts[j];
-    const b = pts[Math.min(j + 1, pts.length - 1)];
     if (tg === a[0]) { out[g] = a[1]; continue; }
-    if (b[0] === a[0] || b[0] - a[0] > maxGapMs) continue;
+    const b = pts[j + 1];
+    if (b[0] - a[0] > maxGapMs) continue;
     out[g] = a[1] + ((b[1] - a[1]) * (tg - a[0])) / (b[0] - a[0]);
   }
   return out;

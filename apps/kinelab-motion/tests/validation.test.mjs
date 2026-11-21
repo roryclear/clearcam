@@ -154,3 +154,22 @@ test('validate CLI: pools rep-level pairs across trials', () => {
   assert.equal(pooled.reps, 10);
   close(pooled.agreement.bias, 3, 1.5, 'pooled bias');
 });
+
+test('review fixes: exact sample after a gap; title row before ;/tab tables; uncovered reps excluded (PR #16)', () => {
+  assert.deepEqual(resample([0, 100, 500], [10, 20, 30], [0, 100, 500]), [10, 20, 30]);
+
+  for (const d of [';', '\t']) {
+    const p = parseKinoveaCsv(`Knee angle\nTime (ms)${d}Knee\n0${d}175\n33${d}170\n67${d}165\n`);
+    assert.deepEqual(p.timeMs, [0, 33, 67], `delimiter ${JSON.stringify(d)}`);
+    assert.deepEqual(p.columns.Knee, [175, 170, 165]);
+  }
+
+  // Reference stops during the third rep's descent: that rep must not be scored.
+  const { session, mot } = syntheticSquatSession({ offsetMs: 0, noiseDeg: 0 });
+  const lines = mot.split('\n');
+  const cut = lines.filter(l => !/^\d/.test(l) || Number(l.split('\t')[0]) < (1500 + 2 * 2400 + 600) / 1000).join('\n');
+  const res = compareJoint(session, parseReference(cut, 'ik.mot'), { refColumn: 'knee_angle_r', appKey: 'rightKnee', transform: 'flexion', lagMs: 0 });
+  assert.equal(res.repLevel.reps.length, 2);
+  assert.equal(res.repLevel.excluded, 3);
+  for (const rep of res.repLevel.reps) close(rep.app - rep.ref, 3, 0.6, 'covered rep');
+});

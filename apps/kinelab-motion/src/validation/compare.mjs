@@ -4,6 +4,9 @@
  * number). Frame-level pairs are autocorrelated, so use their RMSE/bias descriptively;
  * the CIs and ICC are meaningful for the rep-level pairs.
  */
+
+/** Share of a rep's grid points where both series must exist for a rep-level pair. */
+export const MIN_REP_COVERAGE = 0.9;
 import { agreement } from './agreement.mjs';
 import { estimateLag, resample } from './align.mjs';
 import { offlineSessionFrames } from '../sessions/offline-analysis.mjs';
@@ -54,13 +57,20 @@ export function compareJoint(session, reference, spec) {
   if (profile && appKey.toLowerCase().endsWith(profile.joint.toLowerCase())) {
     reps = analyzeReps(frames, exerciseId);
     const pick = profile.direction === 'min' ? Math.min : Math.max;
+    // Extremes come from the same paired samples; reps the reference does not cover
+    // (recording started/ended mid-rep, dropout at the peak) are excluded, not scored.
+    let excluded = 0;
     const pairs = reps.map(rep => {
-      const inWin = (t, i, arr) => t >= rep.startMs && t <= rep.endMs && arr[i] !== null;
-      const av = a.filter((v, i) => inWin(grid[i], i, a));
-      const rv = r.filter((v, i) => inWin(grid[i], i, r));
-      return av.length && rv.length ? { app: pick(...av), ref: pick(...rv), quality: rep.quality } : null;
+      const idx = [];
+      for (let i = 0; i < grid.length; i++) if (grid[i] >= rep.startMs && grid[i] <= rep.endMs) idx.push(i);
+      const both = idx.filter(i => a[i] !== null && r[i] !== null);
+      const nearPeak = idx.filter(i => Math.abs(grid[i] - rep.extremeMs) <= 3 * gridMs);
+      const peakCovered = nearPeak.length > 0 && nearPeak.every(i => a[i] !== null && r[i] !== null);
+      if (!idx.length || both.length < MIN_REP_COVERAGE * idx.length || !peakCovered) { excluded++; return null; }
+      return { app: pick(...both.map(i => a[i])), ref: pick(...both.map(i => r[i])), quality: rep.quality };
     }).filter(Boolean);
     repLevel = {
+      excluded,
       reps: pairs.map(p => ({ app: Math.round(p.app * 10) / 10, ref: Math.round(p.ref * 10) / 10, quality: p.quality })),
       agreement: pairs.length >= 3 ? agreement(pairs.map(p => p.app), pairs.map(p => p.ref)) : null,
     };

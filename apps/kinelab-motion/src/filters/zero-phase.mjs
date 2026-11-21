@@ -85,8 +85,10 @@ function median(a) {
  * @param {(number|null)[]} x
  * @param {number} halfWindow samples on each side
  * @param {number} [nSigma=3]
+ * @param {number} [minScale=0] floor for the robust SD, so a spike inside a flat or
+ *   quantized window (MAD = 0) is still rejected
  */
-export function hampel(x, halfWindow, nSigma = 3) {
+export function hampel(x, halfWindow, nSigma = 3, minScale = 0) {
   const out = x.slice();
   for (let i = 0; i < x.length; i++) {
     if (!Number.isFinite(x[i])) continue;
@@ -96,8 +98,8 @@ export function hampel(x, halfWindow, nSigma = 3) {
     }
     if (win.length < 3) continue;
     const med = median(win);
-    const mad = 1.4826 * median(win.map(v => Math.abs(v - med)));
-    if (mad > 0 && Math.abs(x[i] - med) > nSigma * mad) out[i] = med;
+    const scale = Math.max(1.4826 * median(win.map(v => Math.abs(v - med))), minScale);
+    if (scale > 0 && Math.abs(x[i] - med) > nSigma * scale) out[i] = med;
   }
   return out;
 }
@@ -123,16 +125,46 @@ export function fillGaps(t, x, maxGapMs) {
   return out;
 }
 
+/** Linear interpolation of (xs, ys) at x; xs increasing. */
+function interpAt(xs, ys, x) {
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
+  let lo = 0;
+  let hi = xs.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] <= x) lo = mid; else hi = mid;
+  }
+  return ys[lo] + ((ys[hi] - ys[lo]) * (x - xs[lo])) / (xs[hi] - xs[lo]);
+}
+
+/**
+ * Zero-phase low-pass of one run. The filter assumes uniform sampling, so a run with
+ * irregular frame times (dropped frames, callback jitter) is resampled onto a uniform
+ * grid, filtered, and interpolated back to its own timestamps.
+ */
+function filterRun(t, x, dt, cutoffHz, order) {
+  const fs = 1000 / dt;
+  let irregular = false;
+  for (let k = 1; k < t.length; k++) if (Math.abs(t[k] - t[k - 1] - dt) > 0.25 * dt) { irregular = true; break; }
+  if (!irregular) return filtfilt(x, fs, cutoffHz, order);
+  const grid = [];
+  for (let g = t[0]; g <= t[t.length - 1] + 1e-9; g += dt) grid.push(g);
+  const sm = filtfilt(grid.map(g => interpAt(t, x, g)), fs, cutoffHz, order);
+  return t.map(tt => interpAt(grid, sm, tt));
+}
+
 /**
  * Full offline pipeline for one angle series. Returns a new array; entries that were
  * missing in a gap longer than maxGapMs stay null. Each contiguous run is filtered on
- * its own, so long gaps never get bridged by the low-pass.
+ * its own: runs end at missing values and at frame-time gaps longer than maxGapMs, so
+ * the low-pass never bridges a capture interruption.
  * @param {number[]} t timestamps (ms), increasing
  * @param {(number|null)[]} x
  * @param {Object} [opts]
  */
 export function smoothSeriesOffline(t, x, {
-  cutoffHz = 6, order = 4, maxGapMs = 300, hampelWindowMs = 500, hampelSigma = 3,
+  cutoffHz = 6, order = 4, maxGapMs = 300, hampelWindowMs = 500, hampelSigma = 3, hampelMinScale = 1,
 } = {}) {
   const n = x.length;
   if (n !== t.length || n < 3) return x.map(v => (Number.isFinite(v) ? v : null));
@@ -140,17 +172,15 @@ export function smoothSeriesOffline(t, x, {
   for (let i = 1; i < n; i++) if (t[i] > t[i - 1]) dts.push(t[i] - t[i - 1]);
   if (!dts.length) return x.map(v => (Number.isFinite(v) ? v : null));
   const dt = median(dts);
-  const fs = 1000 / dt;
   const half = Math.max(1, Math.round(hampelWindowMs / 2 / dt));
-  const filled = fillGaps(t, hampel(x, half, hampelSigma), maxGapMs);
+  const filled = fillGaps(t, hampel(x, half, hampelSigma, hampelMinScale), maxGapMs);
   const out = filled.slice();
   let i = 0;
   while (i < n) {
     if (filled[i] === null) { i++; continue; }
     let j = i;
-    while (j + 1 < n && filled[j + 1] !== null) j++;
-    const seg = filled.slice(i, j + 1);
-    const sm = filtfilt(seg, fs, cutoffHz, order);
+    while (j + 1 < n && filled[j + 1] !== null && t[j + 1] - t[j] <= maxGapMs) j++;
+    const sm = filterRun(t.slice(i, j + 1), filled.slice(i, j + 1), dt, cutoffHz, order);
     for (let k = 0; k < sm.length; k++) out[i + k] = sm[k];
     i = j + 1;
   }

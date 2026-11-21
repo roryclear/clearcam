@@ -11,6 +11,15 @@
  */
 import { smoothSeriesOffline } from '../filters/zero-phase.mjs';
 
+/**
+ * Session without the optional rawAngles (re-analysis then falls back to the live
+ * angles); used when storage is too full to keep them.
+ */
+export function stripRawAngles(session) {
+  if (!session?.frames?.some(f => f?.rawAngles)) return session;
+  return { ...session, frames: session.frames.map(({ rawAngles, ...f }) => f) };
+}
+
 /** Cutoffs: 4 Hz for raw angles (OpenCap uses 4 Hz for squat/STS), 6 Hz on live angles. */
 export const OFFLINE_CUTOFF_HZ = { raw: 4, live: 6 };
 

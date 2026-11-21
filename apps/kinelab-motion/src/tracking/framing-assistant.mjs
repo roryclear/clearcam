@@ -10,6 +10,7 @@ import { LEVEL_TOLERANCE_DEG, PITCH_TOLERANCE_DEG } from './device-level.mjs';
 const MIN_BODY_FRACTION = 0.4; // seated sit-to-stand starts are ~60% of standing height
 /** Hips this far from the centre row (phone level) mean the camera is not at hip height. */
 const HIP_ROW_TOLERANCE = 0.13;
+const STANDING_KNEE_DEG = 160; // image-plane knee angle; setup prompts only when standing
 
 export const EXERCISE_REQUIREMENTS = Object.freeze({
   'squat': ['upperBody', 'torso', 'lowerBody'],
@@ -55,7 +56,7 @@ export class FramingAssistant {
    * @param {'side'|'front'|'any'} [view.recommendedView] the exercise's camera recommendation
    * @param {{rollDeg:number, pitchDeg:number}|null} [view.tilt] phone tilt (device-level.mjs)
    */
-  evaluate(landmarks, exerciseId = 'free', { yawDeg = null, recommendedView = 'any', tilt = null } = {}) {
+  evaluate(landmarks, exerciseId = 'free', { yawDeg = null, recommendedView = 'any', tilt = null, setupGuidance = true } = {}) {
     if (!Array.isArray(landmarks) || landmarks.length === 0) {
       return {
         status: 'inadequate',
@@ -98,7 +99,7 @@ export class FramingAssistant {
 
     // Camera setup: level phone, whole body at a reasonable size, camera at hip height.
     if (status === 'optimal') {
-      const setup = this._setupGuidance(landmarks, required, tilt);
+      const setup = setupGuidance ? this._setupGuidance(landmarks, required, tilt) : null;
       if (setup) {
         status = 'partial';
         guidance = setup;
@@ -131,7 +132,7 @@ export class FramingAssistant {
     if (tilt && Math.abs(tilt.rollDeg) >= LEVEL_TOLERANCE_DEG) {
       return `Level the phone: tilted ${Math.round(Math.abs(tilt.rollDeg))}° sideways`;
     }
-    if (!required.includes('lowerBody')) return null;
+    if (!required.includes('lowerBody') || !this._standingUpright(landmarks)) return null;
     const ys = [JOINTS.nose, JOINTS.leftEar, JOINTS.rightEar, JOINTS.leftAnkle, JOINTS.rightAnkle]
       .map(i => landmarks[i]).filter(p => this._isReliable(p)).map(p => p.y);
     if (ys.length >= 3 && Math.max(...ys) - Math.min(...ys) < MIN_BODY_FRACTION) {
@@ -147,6 +148,23 @@ export class FramingAssistant {
       }
     }
     return null;
+  }
+
+  // Distance and camera height are judged in the standing posture only: at squat depth
+  // or seated, body span and hip height reflect the movement, not the camera setup.
+  _standingUpright(landmarks) {
+    const knees = [
+      [JOINTS.leftHip, JOINTS.leftKnee, JOINTS.leftAnkle],
+      [JOINTS.rightHip, JOINTS.rightKnee, JOINTS.rightAnkle],
+    ].map(ids => ids.map(i => landmarks[i]))
+      .filter(pts => pts.every(p => this._isReliable(p)))
+      .map(([h, k, a]) => {
+        const u = [h.x - k.x, h.y - k.y];
+        const v = [a.x - k.x, a.y - k.y];
+        const cos = (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v) || 1);
+        return (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+      });
+    return knees.length > 0 && knees.every(deg => deg >= STANDING_KNEE_DEG);
   }
 }
 

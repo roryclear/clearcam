@@ -41,7 +41,7 @@ import { TimelinePlayer } from './sessions/timeline-player.mjs';
 import { ChartRenderer } from './sessions/chart-renderer.mjs';
 import { exportToCSV, exportToJSON, exportRepsToCSV, downloadFile } from './sessions/export-helpers.mjs';
 import { RepTracker, analyzeReps, summarizeSession, profileFor, countedReps } from './exercises/rep-analysis.mjs';
-import { offlineSessionFrames } from './sessions/offline-analysis.mjs';
+import { offlineSessionFrames, stripRawAngles } from './sessions/offline-analysis.mjs';
 import { compareSessions } from './sessions/session-compare.mjs';
 import { defaultAudioSynthesizer } from './integrations/audio-cues.mjs';
 import { defaultVideoStore } from './sessions/video-store.mjs';
@@ -705,6 +705,7 @@ function processFrame(video, callNow, metadata) {
       yawDeg: view.yawDeg,
       recommendedView: appState.activeExerciseInstance?.recommendedCamera,
       tilt: cfg.tracking.levelGuidance ? tilt : null,
+      setupGuidance: cfg.tracking.levelGuidance,
     });
     appState.lastFraming = framing;
 
@@ -1025,6 +1026,7 @@ async function finishRecording() {
 
   const saved = storage.saveSession(sessionData, {
     onEvict: id => { videoStore.deleteVideo(id); },
+    compact: stripRawAngles,
   });
   if (!saved) {
     announce('Session could not be saved: browser storage is full. Delete older sessions or record a shorter clip.', true);
