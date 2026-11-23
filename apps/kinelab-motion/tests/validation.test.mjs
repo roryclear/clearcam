@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -368,4 +368,37 @@ test('CLI: importing the module stays side-effect free', () => {
   const result = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(cli.href)})`], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, '');
+});
+
+test('CLI: validates matching files, recovers the lag and scores every rep', () => {
+  const { session, mot } = syntheticSquatSession({ offsetMs: 300, noiseDeg: 2, seed: 3 });
+  const dir = mkdtempSync(join(tmpdir(), 'kinelab-cli-'));
+  try {
+    const sessionPath = join(dir, 'squat-trial.json');
+    const referencePath = join(dir, 'squat-trial_ik.mot');
+    writeFileSync(sessionPath, JSON.stringify(session));
+    writeFileSync(referencePath, mot);
+    const cli = fileURLToPath(new URL('../bench/validate.mjs', import.meta.url));
+    const result = spawnSync(process.execPath, [
+      cli,
+      '--session', sessionPath,
+      '--ref', referencePath,
+      '--joint', 'knee_angle_r:rightKnee',
+    ], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.trials.length, 1);
+    const [trial] = report.trials;
+    assert.equal(trial.alignment, 'estimated');
+    close(trial.lagMs, 300, 20, 'lag');
+    assert.equal(trial.transform, 'flexion');
+    assert.equal(trial.repLevel.reps.length, 5);
+    assert.equal(trial.repLevel.excluded, 0);
+    const pooled = report.repLevelPooled['knee_angle_r:rightKnee'];
+    assert.equal(pooled.reps, 5);
+    close(pooled.agreement.bias, 3, 1.5, 'pooled bias');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
