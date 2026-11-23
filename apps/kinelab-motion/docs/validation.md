@@ -8,7 +8,7 @@ what this project has actually measured. It claims no clinical-grade precision.
 | Dataset | Verified facts | License | Suitability for single-phone-camera evaluation |
 |---|---|---|---|
 | UI-PRMD (Univ. of Idaho) | 10 rehabilitation exercises × 10 healthy subjects × 10 reps; captured with Vicon motion capture + Kinect skeleton tracking. Source: https://webpages.uidaho.edu/ui-prmd/ | Open Data Commons Public Domain Dedication and License (PDDL) v1.0 — free public use | Useful as a *trajectory-shape* reference (joint-angle patterns over a rep). Its ground truth comes from calibrated mocap/Kinect, which does **not** transfer directly to uncalibrated monocular phone video; use for rep-segmentation and shape comparison, not absolute angle accuracy claims. |
-| RepCount (SVIP Lab) | 1,451 in-the-wild exercise videos, ~19,280 frame-level repetition start/end annotations. Source: https://svip-lab.github.io/dataset/RepCount_dataset.html | License listed as "Unknown" (Papers With Code) at time of writing — treat as research-evaluation only; do not redistribute videos or annotations until terms are confirmed with the authors | Good fit in principle: ordinary monocular videos like a phone camera. Blocked on license confirmation before any bundled use. |
+| RepCount (SVIP Lab) | 1,451 videos and about 19,280 repetition start/end annotations. [Official dataset page](https://svip-lab.github.io/dataset/RepCount_dataset.html) | The authors restrict use to academic research. [TransRAC paper, Broader Impact and Limitations](https://openaccess.thecvf.com/content/CVPR2022/papers/Hu_TransRAC_Encoding_Multi-Scale_Temporal_Correlation_With_Transformers_for_Repetitive_Action_Counting_CVPR_2022_paper.pdf) | Monocular videos with rep boundaries. Clearcam evaluation requires permission for this use or a dataset that permits it. |
 | Public pose benchmarks (e.g. COCO keypoints, MPII) | General 2D keypoint benchmarks, not exercise-repetition corpora | Varies per dataset | Measure detector keypoint quality, not repetition counting or movement classification; not used as exercise ground truth here. |
 
 ## What this project has actually measured
@@ -58,15 +58,17 @@ node apps/kinelab-motion/bench/validate.mjs \
 - Clocks are aligned by maximising cross-correlation over ±2 s (10 ms grid).
 - Output (JSON): per trial and joint, frame-level agreement (descriptive only: frames are autocorrelated) and rep-level agreement of each rep's extreme angle; rep pairs are pooled across trials. A rep is scored only when both series cover ≥90% of its window with recorded app samples never more than 80 ms apart (one dropped 30 fps frame is tolerated: it is part of what the app reports), recorded reference samples never more than 50 ms apart, and both series starting before and ending after the rep; others are counted in `excluded`. When no lag within ±2 s gives enough overlap the trial reports `alignment: "failed"` and is not pooled (pass `--lag-ms` to force one). Statistics: bias, SD, 95% LoA with CIs (bias: t·SD/√n; limits: t·√(3SD²/n)), RMSE, MAE, ICC(A,1) with McGraw–Wong CI, Koo & Li label on the CI lower bound, SEM = SD·√(1 − ICC), MDC95 = 1.96·√2·SEM.
 - Checked against pingouin 0.7.0 / scipy 1.18.1 to 1e-9 (`tests/validation.test.mjs`). Pooling several reps per subject violates independence; for subject-level claims report one value per subject or use a repeated-measures model.
+- The subprocess test in `tests/validation.test.mjs` exercises the CLI with a synthetic session JSON and OpenSim reference file. It scores all five squat repetitions and estimates the injected 300 ms clock offset.
 
 Candidate reference data (not yet downloaded or run): OpenCap LabValidation (SimTK; squat, sit-to-stand; 5 video views with marker mocap and OpenSim IK; requires a SimTK login), REHAB24-6 (Zenodo; shoulder abduction, lunge; non-commercial licence), and an in-house set recorded with Kinovea or a goniometer.
 
 ## Next validation steps (in order)
 
 0. Run `bench/validate.mjs` on OpenCap LabValidation squat/sit-to-stand trials (side and 45° views) and publish the rep-level table here with view, model and n.
-1. Confirm RepCount usage terms with SVIP Lab; if cleared, sample a small
-   set of squat/sit-to-stand videos, run MediaPipe + this engine offline,
-   and report rep-count error (counted vs annotated) per video.
+1. Use a monocular dataset with terms that permit Clearcam evaluation. If SVIP
+   Lab grants permission for RepCount, sample a small set of squat/sit-to-stand
+   videos, run MediaPipe and the exercise engine offline, and report rep-count
+   error per video against the annotations.
 2. Compare UI-PRMD Kinect skeleton angle trajectories against this engine's
    state machines for phase-segmentation agreement only.
 3. Publish the resulting error table here with modality, sample size, and
