@@ -72,7 +72,11 @@ test('End-to-end latency percentiles are reported per stage and cleared on model
   assert.equal(m.captureToLandmarksP50, 20);
   assert.equal(m.latencyClock, 'capture');
   perf.resetInferenceStats();
-  assert.equal(perf.getMetrics().captureToOverlayP50, null);
+  const resetMetrics = perf.getMetrics();
+  assert.equal(resetMetrics.captureToOverlayP50, null);
+  assert.equal(resetMetrics.captureToLandmarksP50, null);
+  assert.equal(resetMetrics.latencyClock, null);
+  assert.equal(resetMetrics.overlayLatencyClock, null);
   assert.equal(percentile([], 50), null);
   perf.recordDroppedFrame(3);
   perf.recordDroppedFrame(0);
