@@ -25,13 +25,46 @@ what this project has actually measured. It claims no clinical-grade precision.
   in order. Note the squat machine has no separate bottom/up phases — depth
   is tracked inside `down`; an earlier draft of this test wrongly assumed
   `bottom`/`up` phases and failed, which is how this was pinned down.
-- Full suite at time of writing: 44 tests, all passing
-  (`node --test apps/kinelab-motion/tests/*.test.mjs`, exit 0).
+- Run the full automated suite with `node --test apps/kinelab-motion/tests/*.test.mjs`.
+
+## UI-PRMD Kinect squat repetition check
+
+The correctly performed deep squat subset (`m01`) contains 100 Kinect clips
+from 10 participants, with one reference repetition per clip. The probe derives
+interior knee angles from parent-relative joint positions and local ZYX
+rotations. It feeds both knees into KineLab's standard `SquatExercise` preset,
+which averages the sides when visibility information is unavailable. The probe
+exercises the state machine with Kinect data. It bypasses MediaPipe, camera
+tracking, and the image-based hip-height cue. [Dataset descriptor](https://doi.org/10.3390/data3010002) and [author archive](https://zenodo.org/records/23104965).
+
+| Input | Exactly one rep | Zero reps | More than one rep |
+|---|---:|---:|---:|
+| Raw Kinect data, 30 fps | 97 | 3 | 0 |
+| Moving-average sensitivity check, 30 fps | 94 | 6 | 0 |
+
+The raw run gave the same counts at 60, 100, and 120 assumed fps. All 97
+counted clips showed `ready > down > ready`. The three misses (`m01_s02_e01`,
+`m01_s02_e02`, `m01_s02_e03`) ended in `down`. The sensitivity check averaged
+five position frames and 20 rotation frames before deriving knee angles, with
+windows shortened at clip boundaries. Its additional misses were `m01_s02_e04`,
+`m01_s02_e07`, and `m01_s02_e09`. The author visualization uses robust local
+regression for its angular smoothing, so these sensitivity results apply to
+the moving average used here. The dataset labels whole repetitions. The phase
+sequences come from the state machine and phase timing remains
+unscored. Sit-to-stand needs a verified mapping for KineLab's trunk–thigh angle.
+
+Download `Segmented Movements.zip` from the author archive and verify the MD5
+`7626dfdd0ceb3a7cebf9e1e0d0cb173f`. Extract the Kinect `m01` inputs and run the
+probe from the repository root.
+
+```bash
+unzip 'Segmented Movements.zip' 'Segmented Movements/Kinect/*/m01_*' -d /tmp/uiprmd
+node apps/kinelab-motion/bench/uiprmd-squat-probe.mjs '/tmp/uiprmd/Segmented Movements/Kinect'
+```
 
 ## Explicitly not claimed
 
-- No accuracy figures against UI-PRMD, RepCount, or any recorded human data:
-  neither dataset has been downloaded or run through this pipeline yet.
+- Camera-based joint-angle accuracy and RepCount performance remain unmeasured.
 - No clinical, medical, or rehabilitation efficacy claim. Angles are
   camera-relative 2D projections from a single uncalibrated camera and vary
   with camera placement; they are movement feedback, not measurement-grade
@@ -69,14 +102,9 @@ Candidate reference data (not yet downloaded or run): OpenCap LabValidation (Sim
    Lab grants permission for RepCount, sample a small set of squat/sit-to-stand
    videos, run MediaPipe and the exercise engine offline, and report rep-count
    error per video against the annotations.
-2. Compare UI-PRMD Kinect tracks with this engine's state machines. The
-   segmented release provides one reference repetition per clip. Use those
-   clips for whole-repetition checks. Measuring agreement on transitions
-   within a repetition requires separately annotated phase boundaries.
-   Verify how the parent-relative Kinect joint coordinates are transformed
-   before deriving interior angles for the state machines.
-   [Dataset descriptor](https://doi.org/10.3390/data3010002) and
-   [archive](https://zenodo.org/records/23104965).
+2. The UI-PRMD whole-repetition comparison is recorded above for squats.
+   Add independent phase annotations to score transitions and verify the
+   trunk–thigh mapping before scoring sit-to-stand clips.
 3. Publish the resulting error table here with modality, sample size, and
    failure cases — including videos where counting failed.
 
