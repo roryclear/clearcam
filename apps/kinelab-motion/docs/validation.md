@@ -69,8 +69,14 @@ Candidate reference data (not yet downloaded or run): OpenCap LabValidation (Sim
    Lab grants permission for RepCount, sample a small set of squat/sit-to-stand
    videos, run MediaPipe and the exercise engine offline, and report rep-count
    error per video against the annotations.
-2. Compare UI-PRMD Kinect skeleton angle trajectories against this engine's
-   state machines for phase-segmentation agreement only.
+2. Compare UI-PRMD Kinect tracks with this engine's state machines. The
+   segmented release provides one reference repetition per clip. Use those
+   clips for whole-repetition checks. Measuring agreement on transitions
+   within a repetition requires separately annotated phase boundaries.
+   Verify how the parent-relative Kinect joint coordinates are transformed
+   before deriving interior angles for the state machines.
+   [Dataset descriptor](https://doi.org/10.3390/data3010002) and
+   [archive](https://zenodo.org/records/23104965).
 3. Publish the resulting error table here with modality, sample size, and
    failure cases — including videos where counting failed.
 
