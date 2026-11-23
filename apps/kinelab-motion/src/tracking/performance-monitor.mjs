@@ -31,7 +31,6 @@ export class PerformanceMonitor {
     this.maxPipelineSamples = 120;
     this.pipeline = { landmarks: [], overlay: [] };
     this.pipelineClock = { landmarks: null, overlay: null };
-    this.latencyClock = null;
   }
 
   /**
@@ -50,7 +49,6 @@ export class PerformanceMonitor {
     const buf = this.pipeline[stage];
     buf.push(ms);
     if (buf.length > this.maxPipelineSamples) buf.shift();
-    if (stage === 'landmarks') this.latencyClock = this.pipelineClock.landmarks;
   }
 
   /**
@@ -119,7 +117,7 @@ export class PerformanceMonitor {
       captureToLandmarksP95: percentile(this.pipeline.landmarks, 95),
       captureToOverlayP50: percentile(this.pipeline.overlay, 50),
       captureToOverlayP95: percentile(this.pipeline.overlay, 95),
-      latencyClock: this.latencyClock,
+      latencyClock: this.pipelineClock.landmarks,
       overlayLatencyClock: this.pipelineClock.overlay,
     };
   }
@@ -152,7 +150,6 @@ export class PerformanceMonitor {
     this.avgLatencyMs = 0;
     this.pipeline = { landmarks: [], overlay: [] };
     this.pipelineClock = { landmarks: null, overlay: null };
-    this.latencyClock = null;
   }
 }
 
