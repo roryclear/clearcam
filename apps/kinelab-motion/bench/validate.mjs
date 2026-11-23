@@ -10,7 +10,8 @@
  * are pooled across trials for the summary. Prints a JSON report to stdout.
  */
 import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseReference, defaultTransform } from '../src/validation/reference-io.mjs';
 import { compareJoint } from '../src/validation/compare.mjs';
 import { agreement } from '../src/validation/agreement.mjs';
@@ -65,7 +66,11 @@ export function runValidation(args, read = p => readFileSync(p, 'utf8')) {
   return { trials, repLevelPooled: summary };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare filesystem paths so URL encoding and Windows separators don't affect entry detection.
+const isDirectEntry = process.argv[1] !== undefined
+  && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isDirectEntry) {
   try {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) {

@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tCritical, fQuantile, incompleteBeta } from '../src/validation/stats.mjs';
 import { blandAltman, iccAgreement, agreement, iccLabel } from '../src/validation/agreement.mjs';
 import { parseKinoveaCsv, parseOpenSimMot, parseReference } from '../src/validation/reference-io.mjs';
@@ -340,4 +345,27 @@ test('review round 8: rep extremes come from recorded timestamps, matching the a
     assert.equal(r.app, reps[i].extremeAngle, `rep ${i + 1} app`);
     assert.equal(r.ref, 90, `rep ${i + 1} ref (sampled bottom)`);
   });
+});
+
+test('CLI: --help prints usage when the checkout path contains spaces', () => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'kinelab-'));
+  const spaced = join(root, 'kinelab motion');
+  const cli = join(spaced, 'bench', 'validate.mjs');
+  try {
+    mkdirSync(join(spaced, 'bench'), { recursive: true });
+    cpSync(fileURLToPath(new URL('../src/', import.meta.url)), join(spaced, 'src'), { recursive: true });
+    cpSync(fileURLToPath(new URL('../bench/validate.mjs', import.meta.url)), cli);
+    const result = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /usage: node bench\/validate\.mjs/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CLI: importing the module stays side-effect free', () => {
+  const cli = new URL('../bench/validate.mjs', import.meta.url);
+  const result = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(cli.href)})`], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, '');
 });
