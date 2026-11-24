@@ -1,4 +1,4 @@
 git+https://github.com/tinygrad/tinygrad.git@ebe4623e93ec3814da5049c95d968de8bd3b28ea
-numpy==2.0.0
+numpy==2.5.0
 opencv-python-headless==4.10.0.84
 selfnotify==0.1.0
