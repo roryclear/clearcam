@@ -71,15 +71,15 @@ https://x.com/RoryClear/status/1959249250811785405
 ## computer requirements
 - Mac, Linux, ~~Windows~~ *ffmpeg fix needed
 - ffmpeg
-- python3.11 or later
+- python3.12 or later
 
 ## run NVR + inference in python from source
 1. pip install -r requirements.txt
-2. python3 clearcam.py
+2. python3.12 clearcam.py
 3. open localhost:8080 in your browser
 4. (optional) enter your Clearcam premium userID in the web UI settings (viewable in iOS app settings page) to receive notifications and clips in the Clearcam iOS and Android app.
-- use DEV=AMD / DEV=NV python3 clearcam.py if your CPU is being used instead of your GPU
-- use BEAM=2 python3 clearcam.py for extra performance (wait time on first run)
+- use DEV=AMD / DEV=NV python3.12 clearcam.py if your CPU is being used instead of your GPU
+- use BEAM=2 python3.12 clearcam.py for extra performance (wait time on first run)
 
 ## Add notifications via your browser (**New**) (Beta)
 1. Open settings in Clearcam
