@@ -387,6 +387,7 @@ class YOLOv9():
     preds = self.scale_boxes(frame.shape[:2], preds, og_shape)
     return preds
 
+  # for chestnut, shrink is cheap (cpu), copyin is expensive (usb3 cpu -> chestnut)
   def cv2_preprocess(self, image, stride=32): # todo for batch
     og_shape = image.shape
     new_shape = (self.res, self.res)
