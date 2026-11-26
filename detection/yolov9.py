@@ -374,8 +374,7 @@ class YOLOv9():
 
   def __call__(self, frame, og_shape=None):
     if og_shape is None: og_shape = frame.shape
-    pre = self.preprocess(frame)
-    x = pre.unsqueeze(0)
+    x = frame.unsqueeze(0)
     x = x[..., ::-1].permute(0, 3, 1, 2) #BGR to RGB!
     x = x / 255.0
     y = []  # outputs
@@ -385,20 +384,21 @@ class YOLOv9():
       x = m(x)
       y.append(x)
     preds = postprocess(x[0])[0]
-    preds = self.scale_boxes(pre.shape[:2], preds, og_shape)
+    preds = self.scale_boxes(frame.shape[:2], preds, og_shape)
     return preds
 
+  # for chestnut, shrink is cheap (cpu), copyin is expensive (usb3 cpu -> chestnut)
   def cv2_preprocess(self, image, stride=32): # todo for batch
+    og_shape = image.shape
     new_shape = (self.res, self.res)
     shape = image.shape[:2]
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
     new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
     dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
-    dw, dh = (np.mod(dw, stride), np.mod(dh, stride))
     dw /= 2
     dh /= 2
-    image = cv2.resize(image, new_unpad, new_unpad, interpolation=cv2.INTER_LINEAR)
-    image = np.pad(image,((int(round(dh - 0.1)), int(round(dh - 0.1))),(int(round(dw - 0.1)), int(round(dw - 0.1))),(0, 0)),mode='constant',constant_values=-0)
+    image = cv2.resize(image, new_unpad, interpolation=cv2.INTER_LINEAR)
+    image = np.pad(image,((int(round(dh - 0.1)), int(round(dh + 0.1))),(int(round(dw - 0.1)), int(round(dw + 0.1))),(0, 0)),mode='constant',constant_values=0)
     return image
 
   def preprocess(self, image, stride=32) -> Tensor:
