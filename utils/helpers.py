@@ -191,11 +191,18 @@ def export_and_upload(cam_name, thumbnail, userID, key, start=None, end=0, lengt
     upload_file(Path(f"{mp4_filename}.aes"), userID)
     os.unlink(mp4_filename)
 
-def jit_infer(fn, *x, jit_cache):
+def jit_infer(fn, *x, jit_cache=None, **kwargs):
+  if "x" in kwargs:
+    x = (kwargs.pop("x"),) + x
+  if jit_cache is None and len(x) >= 2 and isinstance(x[-1], dict):
+    jit_cache = x[-1]
+    x = x[:-1]
+  if jit_cache is None:
+    jit_cache = {}
   shapes = tuple(xi.shape if hasattr(xi, "shape") else xi for xi in x)
   if shapes not in jit_cache:
     @TinyJit
-    def compiled(*x): return fn(*x)
+    def compiled(*args): return fn(*args)
     jit_cache[shapes] = compiled
   return jit_cache[shapes](*x)
 
