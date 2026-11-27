@@ -1293,7 +1293,10 @@ def clip_latest_img(img):
     if "embeddings" not in data: data["embeddings"] = {}
     emb = jit_infer(object_finder.model.precompute_embedding, Tensor(img).unsqueeze(0), jit_cache=jit_cache).numpy()
     data["embeddings"][str(object_queue[0])] = emb
-    with open(object_queue[0].parent / 'embeddings.pkl', "wb") as f: pickle.dump(data, f)
+    pkl_path = object_queue[0].parent / 'embeddings.pkl'
+    tmp_pkl = object_queue[0].parent / 'embeddings.pkl.tmp'
+    with open(tmp_pkl, "wb") as f: pickle.dump(data, f)
+    os.replace(tmp_pkl, pkl_path)
   
     cam_name = object_queue[0].parts[object_queue[0].parts.index("cameras")+1:object_queue[0].parts.index("objects")][0]
     alerts = database.run_get("alerts", cam_name) # todo, get cam_name from file path!
